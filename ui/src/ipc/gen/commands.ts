@@ -24,6 +24,7 @@ export const commands = {
 	probeSessionResize: (nonce: string, generation: string, columns: number, rows: number) => __TAURI_INVOKE<null>("probe_session_resize", { nonce, generation, columns, rows }),
 	probeSessionVisibility: (nonce: string, generation: string, visible: boolean) => __TAURI_INVOKE<null>("probe_session_visibility", { nonce, generation, visible }),
 	probeSessionHiddenOutput: (nonce: string, generation: string) => __TAURI_INVOKE<string>("probe_session_hidden_output", { nonce, generation }),
+	probeSessionWindowCycle: (nonce: string, generation: string) => __TAURI_INVOKE<string>("probe_session_window_cycle", { nonce, generation }),
 	/**  Revoke exactly this viewer generation; registry never closes the session. */
 	probeSessionDetach: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_detach", { nonce, generation }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
@@ -136,6 +137,7 @@ export type SessionEvidence = {
 	inputChecked: boolean,
 	resizeCount: number,
 	pauseCount: number,
+	nativeWindowChecked: boolean,
 	columns: number,
 	rows: number,
 };

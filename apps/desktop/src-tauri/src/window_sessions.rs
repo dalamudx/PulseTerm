@@ -75,6 +75,19 @@ impl WindowSessions {
         if windows.get(label) == Some(&token) {
             windows.remove(label);
         }
+        // Release window metadata before touching active/gate locks. Destroyed is
+        // terminal; CloseRequested may be prevented and is not a revoke signal.
+        drop(windows);
+        if let Some(run) = self
+            .0
+            .active
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .filter(|r| r.owner == token)
+        {
+            run.visibility.close();
+        }
         self.0.registry.close_window(token).map_err(error)
     }
     fn caller(&self, window: &WebviewWindow) -> Result<WindowToken> {
@@ -229,6 +242,7 @@ pub(crate) struct SessionEvidence {
     pub input_checked: bool,
     pub resize_count: u32,
     pub pause_count: u32,
+    pub native_window_checked: bool,
     pub columns: u16,
     pub rows: u16,
 }
@@ -237,6 +251,7 @@ impl SessionEvidence {
         parse_u64(&self.generation)?;
         if self.resize_count > 3
             || self.pause_count > 1
+            || (self.native_window_checked && self.pause_count != 1)
             || !(2..=160).contains(&self.columns)
             || !(2..=60).contains(&self.rows)
         {
@@ -373,6 +388,15 @@ pub(crate) async fn probe_session_hidden_output(
     let (owner, id) = state.owned(&window, &nonce)?;
     let gate = visibility_gate(&state, owner, id)?;
     let generation = parse_u64(&generation)?;
+    hidden_output(&state, owner, id, &gate, generation).await
+}
+async fn hidden_output(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    gate: &crate::viewer_visibility::VisibilityGate,
+    generation: u64,
+) -> Result<String> {
     gate.hidden(generation)?;
     let before = state
         .0
@@ -401,6 +425,82 @@ pub(crate) async fn probe_session_hidden_output(
     })
     .await
     .map_err(error)?
+}
+
+/// Restores only this runtime window incarnation on cancellation/failure. Never
+/// reopens a destroyed window or resumes the terminal stream from Drop.
+struct NativeVisibilityGuard {
+    window: WebviewWindow,
+    state: WindowSessions,
+    owner: WindowToken,
+    armed: bool,
+}
+impl Drop for NativeVisibilityGuard {
+    fn drop(&mut self) {
+        if self.armed && self.state.caller(&self.window).ok() == Some(self.owner) {
+            let _ = self.window.show();
+        }
+    }
+}
+async fn wait_native_visible(
+    window: &WebviewWindow,
+    state: &WindowSessions,
+    owner: WindowToken,
+    visible: bool,
+) -> Result<()> {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if state.caller(window)? != owner {
+                return Err("session.window_replaced".into());
+            }
+            if window.is_visible().map_err(error)? == visible
+                && (!visible || !window.is_minimized().map_err(error)?)
+            {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .map_err(|_| "session.native_visibility_timeout".to_string())?
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_window_cycle(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<String> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    let generation = parse_u64(&generation)?;
+    let gate = visibility_gate(&state, owner, id)?;
+    state.0.registry.state(owner, id).map_err(error)?;
+    gate.begin_native(generation)?;
+    if !window.is_visible().map_err(error)? || window.is_minimized().map_err(error)? {
+        return Err("session.window_not_visible".into());
+    }
+    let mut guard = NativeVisibilityGuard {
+        window: window.clone(),
+        state: state.inner().clone(),
+        owner,
+        armed: true,
+    };
+    window.hide().map_err(error)?;
+    wait_native_visible(&window, &state, owner, false).await?;
+    // This backend deadline and restoration do not depend on animation frames,
+    // document visibility events, or JavaScript running while unmapped.
+    let boundary = hidden_output(&state, owner, id, &gate, generation).await?;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    gate.hidden(generation)?;
+    window.show().map_err(error)?;
+    wait_native_visible(&window, &state, owner, true).await?;
+    if state.0.registry.state(owner, id).map_err(error)?.lifecycle != Lifecycle::Running {
+        return Err("session.closed_while_hidden".into());
+    }
+    gate.finish_native(generation)?;
+    guard.armed = false;
+    Ok(boundary)
 }
 
 /// Revoke exactly this viewer generation; registry never closes the session.
@@ -829,6 +929,7 @@ pub(crate) async fn probe_session(
         input_checked: false,
         resize_count: resizes,
         pause_count: pauses,
+        native_window_checked: visibility.native_checked(),
         columns: final_state.size.columns(),
         rows: final_state.size.rows(),
     })
@@ -890,10 +991,17 @@ mod tests {
             input_checked: true,
             resize_count: 0,
             pause_count: 0,
+            native_window_checked: false,
             columns: 40,
             rows: 12,
         };
         assert!(e.validate().is_ok());
+        e.native_window_checked = true;
+        assert!(e.validate().is_err());
+        e.pause_count = 1;
+        assert!(e.validate().is_ok());
+        e.native_window_checked = false;
+        e.pause_count = 0;
         e.generation = "02".into();
         assert!(e.validate().is_err());
         e.generation = "2".into();

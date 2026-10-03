@@ -482,6 +482,7 @@ impl ProbeReport {
                         s.validate().is_err()
                             || s.resize_count != 3
                             || s.pause_count != 1
+                            || !s.native_window_checked
                             || !s.repair_checked
                             || !s.idle_checked
                             || !s.marker_checked
@@ -587,6 +588,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session_resize,
             crate::window_sessions::probe_session_visibility,
             crate::window_sessions::probe_session_hidden_output,
+            crate::window_sessions::probe_session_window_cycle,
             crate::window_sessions::probe_session_detach,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer

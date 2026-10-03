@@ -241,9 +241,17 @@ mise run probe-pty
 - 两次独立完整Linux运行成功（最后含新router/late callback guard，每次2headless+2DOM+原7transport/cancel）；DOM最后generation=12、3次native resize、1次pause/resume、104×12、parsedBytes=3,113,119、frames=794、peakCreditBytes=4115、digest=`00b088cbb609382c`，DOM 12行buffer投影一致、832×192、renderEvents=791/frameFences=790。report schema4要求visibilityChecked、resizeCount=3/pauseCount=1；headless计数均0。数值只是单次证据，未承诺性能。
 - 完整check/test、89 core/38 app/16 IPC/16 native/109 TS、native clippy -D warnings、bindings drift、原2MiB native压力及5个跨语言binary/headless场景通过，机械UI检测零发现。没有新增依赖/锁文件/vendor/CSP或ignore/许可放宽。尚未验收真实OS窗口拖动/minimize、跨屏DPI/zoom、长期隐藏/恢复失败UX、生产ViewHost/用户shell与Windows/macOS；精确恢复拒绝/延期仍是硬门禁。
 
+## 真实Tauri native hide/show与Destroyed暂停撤销（Linux）
+
+- 新增finite `probe_session_window_cycle`控制，仅owner/nonce/当前paused generation可单次调用；wrong/duplicate cycle拒绝。Rust先回读window可见且非minimized，再hide、有限2秒内回读is_visible=false；hidden_output在native隐藏期间注入固定helper控制、parsed_bytes推进且session仍Running，后台等100ms后show、有限2秒内回读is_visible=true且is_minimized=false，然后标记native收据。窗口恢复由Rust监督，不依赖隐藏期间JS/rAF/document.visibilityState的执行。resume在native_inflight中拒绝，show回读完成后才允许新generation捕获。
+- NativeVisibilityGuard在错误/取消路径仅对仍匹配caller WindowToken的同runtime窗口尝试show；不会重建已销毁窗口、自动resume或关闭PTY。native操作有不确定副作用，不能盲重试。finite gate仍最多一次pause、5秒监督，失败会由probe guard最终清理样例，非长期生产隐藏策略。报告schema4新增nativeWindowChecked，由后台gate而非frontend填写，DOM必须true、headless false；checked=true与pauseCount=0冲突被拒绝，generated命令/DTO与bindings drift已注册。
+- Destroyed回调撤销窗口时立即关闭当前owner gate、清除票据并watch通知；等待者不再要等5秒。closed拒绝所有后续pause/resume/native finish；CloseRequested可被应用阻止、Focused(false)只是失焦，不做同等处理。锁poison也要发布closed、唤醒watch并撤销registry owner。5项新增native回归覆盖已poll waiter、关闭早于wait/晚于early resume、native在途destroy、show收据前禁止resume及metadata panic；报告fixture增加计数/布尔一致性回归。
+- 一次完整Linux WebView运行成功，内含2headless+2DOM及7transport/cancel。每DOM有3native resize、1pause/native hide-show/resume，最终generation=12、104×12、parsedBytes=3,113,119、frames=786、peakCreditBytes=4115、nativeWindowChecked=true、digest=`00b088cbb609382c`；12行DOM投影一致，832×192px、renderEvents=783/frameFences=782。hidden期间Channel无新帧，重绑后包含HIDDEN_SEED，并继续输入、repair、EOF。完整check/test、21native/109TS、native clippy -D warnings、bindings-check及UI机械检测通过；最后仅增强close-poison/报告冲突负向门禁，不重复已通过的native成功链。
+- 环境Xvfb没有WM（openbox/xfwm4/fluxbox均不可用），因此未声称最小化通过；native.hide/show不是minimize，也不是实际用户触发的document.visibility事件。生产自动可见性adapter、OS最小化/恢复、长时间隐藏失败UX、跨屏DPI和Windows/macOS仍待实测。未增加依赖、修改锁文件/CSP/vendor或放宽release gate。
+
 ## 检查结果
 
-- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现16项测试通过（新增visibility票据准入失败/单次generation resume/早信号与显式等待回归）；本轮未修改parser补丁或上游源码。
+- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现21项测试通过（新增Destroyed的wait/early resume/native在途/poison时序及native show收据准入回归）；本轮未修改parser补丁或上游源码。
 - TS：109 项测试通过（新增8项surface generation replacement、旧帧/late consumer success/error、U64及共用envelope验证回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

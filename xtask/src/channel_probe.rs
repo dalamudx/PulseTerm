@@ -126,6 +126,8 @@ fn validate(path: &Path) -> Result<()> {
         || dom["fitChecked"] != true
         || report["domSession"]["resizeCount"] != 3
         || report["domSession"]["pauseCount"] != 1
+        || report["domSession"]["nativeWindowChecked"] != true
+        || report["session"]["nativeWindowChecked"] != false
         || dom["visibilityChecked"] != true
         || report["session"]["resizeCount"] != 0
         || report["session"]["pauseCount"] != 0

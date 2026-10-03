@@ -561,7 +561,7 @@ export async function verifySessionChannel(dom?: {
                 ),
               );
               hiddenBoundary = BigInt(
-                await commands.probeSessionHiddenOutput(nonce, generation),
+                await commands.probeSessionWindowCycle(nonce, generation),
               );
               await new Promise<void>((resolve) => setTimeout(resolve, 100));
               if (
@@ -571,6 +571,9 @@ export async function verifySessionChannel(dom?: {
                 throw new Error("session.hidden_delivery");
               surfaceHidden = false;
               dom.host.hidden = false;
+              await requireRejected(
+                commands.probeSessionWindowCycle(nonce, generation),
+              );
               resumePending = true;
               generations.expectReplacement(generationSeen);
               await commands.probeSessionVisibility(nonce, generation, true);
@@ -794,6 +797,7 @@ export async function verifySessionChannel(dom?: {
         (!resizeChecked ||
           result.resizeCount !== 3 ||
           result.pauseCount !== 1 ||
+          !result.nativeWindowChecked ||
           !visibilityChecked ||
           rebinds !== 4))
     )
