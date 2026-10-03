@@ -100,6 +100,8 @@ type Tab = { id: TabId; root: PaneNode; focusedPane: PaneId; title?: string; col
 
 ## 5. ViewHost：在 React 组件树之外管理视图
 
+**实现状态（基础层）**：`features/terminal/view-host.ts`现有`GenerationViewHost`/`ViewScope`，每pane按后端Begin的u64 generation管理可丢弃surface，不是下方的完整DOM pool。begin只准许更大generation，先同步abort/退役旧scope；retire/父Abort/卸载按身份去重、倒序清理所有resource，一个disposer异常不跳过其它resource且当前host fail closed。异步factory在retire时调用方立即reject，仍监督尾部并dispose晚到对象；旧成功/失败/cleanup不能退役新scope。consumer、renderer/headless、query mask/onData、input queue与idle由scope登记；window visibility/native订阅是跨暂停恢复控制面，仍归pane lifetime。finite sample已接此基础层，每DOM3次resize+1次native恢复共4次重建，主动重复old renderer.dispose验证新.xterm root不被清除。renderer dispose只移除自己root，不清空新host内容；数据仍不入React state。下方key复用、parking、LRU/超时和ViewSlot/StrictMode是目标接口，尚未完成。
+
 **要解决的问题**：窗格在布局树中移动时（拖到另一个分屏、拆分、合并），React 会销毁并重建对应的 DOM，xterm、noVNC 和 WebGL 上下文也会跟着重建。
 
 ```ts

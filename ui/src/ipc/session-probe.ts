@@ -14,6 +14,10 @@ import { screenDigest } from "../features/terminal/screen-digest";
 import { SurfaceVisibility } from "../features/terminal/surface-visibility";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
+import {
+  GenerationViewHost,
+  type ViewScope,
+} from "../features/terminal/view-host";
 import { type AttachBoundary, attachmentEnvelope } from "./attachment";
 import { AttachmentConsumer } from "./attachment-consumer";
 import { decodeFrame } from "./frames";
@@ -95,7 +99,9 @@ export async function verifySessionChannel(dom?: {
   };
   dom?.signal.addEventListener("abort", cancel, { once: true });
   if (dom?.signal.aborted) lifetime.abort();
-  let disposePolicy: (() => void) | undefined;
+  let viewScope: ViewScope | undefined;
+  let priorRenderer: DomRenderer | undefined;
+  let viewRebuilds = 0;
   let decoder = new Utf8Stream();
   let replies = 0;
   let inputQueue: InputQueue | undefined;
@@ -107,6 +113,10 @@ export async function verifySessionChannel(dom?: {
   let final: { revision: bigint; parsedBytes: bigint } | undefined;
   let consumer: AttachmentConsumer | undefined;
   let failed: unknown;
+  const views = new GenerationViewHost(lifetime.signal, (error) => {
+    failed ??= error;
+    cancel();
+  });
   let latest: Promise<unknown> = Promise.resolve();
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const write = async (text: string, signal: AbortSignal) => {
@@ -230,14 +240,12 @@ export async function verifySessionChannel(dom?: {
         oldGeneration = generationSeen;
         rebinds++;
         idle?.dispose();
-        disposePolicy?.();
-        consumer.cancel();
-        renderer?.dispose();
-        terminal?.dispose();
+        priorRenderer = renderer;
+        views.retire(generationSeen);
         consumer = undefined;
         renderer = undefined;
         terminal = undefined;
-        disposePolicy = undefined;
+
         decoder = new Utf8Stream();
         geometry = undefined;
         outputEpoch++;
@@ -256,45 +264,70 @@ export async function verifySessionChannel(dom?: {
           frame.payload.byteLength,
         ).getBigUint64(4, true);
         generationSeen = generation;
+        const view = views.begin(generation);
+        viewScope = view;
         consumer = new AttachmentConsumer(
           generation,
           {
             reset: async (boundary, signal) => {
               if (terminal) throw new Error("session.repeated_reset");
               if (dom) {
-                const { createDomRenderer } = await import(
-                  "../features/probe/dom-renderer"
-                );
-                renderer = createDomRenderer(
-                  dom.host,
-                  boundary,
-                  AbortSignal.any([signal, lifetime.signal]),
-                );
-                terminal = renderer.terminal;
-              } else {
-                const { default: headless } = await import("@xterm/headless");
-                terminal = new headless.Terminal({
-                  cols: boundary.columns,
-                  rows: boundary.rows,
-                  scrollback: 128,
-                  allowProposedApi: true,
+                const created = await view.create(async (viewSignal) => {
+                  const { createDomRenderer } = await import(
+                    "../features/probe/dom-renderer"
+                  );
+                  return createDomRenderer(
+                    dom.host,
+                    boundary,
+                    AbortSignal.any([signal, lifetime.signal, viewSignal]),
+                  );
                 });
+                if (!view.isCurrent()) throw new Error("session.view_retired");
+                renderer = created;
+                terminal = renderer.terminal;
+                if (priorRenderer) {
+                  const root = dom.host.querySelector(".xterm");
+                  priorRenderer.dispose();
+                  if (
+                    !root ||
+                    dom.host.querySelector(".xterm") !== root ||
+                    !view.isCurrent()
+                  )
+                    throw new Error("session.old_disposal_touched_new_view");
+                  viewRebuilds++;
+                  priorRenderer = undefined;
+                }
+              } else {
+                const created = await view.create(async () => {
+                  const { default: headless } = await import("@xterm/headless");
+                  return new headless.Terminal({
+                    cols: boundary.columns,
+                    rows: boundary.rows,
+                    scrollback: 128,
+                    allowProposedApi: true,
+                  });
+                });
+                if (!view.isCurrent()) throw new Error("session.view_retired");
+                terminal = created;
               }
               const provider = new SharedUnicodeProvider();
               terminal.unicode.register(provider);
               terminal.unicode.activeVersion = provider.version;
-              disposePolicy = suppressQueryReplies(terminal);
-              terminal.onData((text) => {
-                if (inputArmed && inputQueue) {
-                  inputText += text;
-                  const job = inputQueue.enqueue(text);
-                  inputJobs.push(job);
-                  void job.catch((error) => {
-                    failed ??= error;
-                    cancel();
-                  });
-                } else replies++;
-              });
+              view.own(suppressQueryReplies(terminal));
+              view.own(
+                terminal.onData((text) => {
+                  if (inputArmed && inputQueue) {
+                    inputText += text;
+                    const job = inputQueue.enqueue(text);
+                    inputJobs.push(job);
+                    void job.catch((error) => {
+                      if (!view.isCurrent()) return;
+                      failed ??= error;
+                      cancel();
+                    });
+                  } else replies++;
+                }),
+              );
               decoder = new Utf8Stream();
               geometry = { columns: boundary.columns, rows: boundary.rows };
             },
@@ -370,11 +403,15 @@ export async function verifySessionChannel(dom?: {
             await commands.probeSessionAck(nonce, gen.toString(), sequence);
           },
         );
+        const boundConsumer = consumer;
+        view.own(() => boundConsumer.cancel());
       }
       const activeConsumer = consumer;
+      const activeView = viewScope;
+      if (!activeView) throw new Error("session.view_scope_missing");
       latest = forCurrentSurface(
         activeConsumer.enqueue(wire),
-        () => activeConsumer === consumer,
+        () => activeConsumer === consumer && activeView.isCurrent(),
         async (receipt) => {
           if (
             frame.kind === 8 &&
@@ -407,13 +444,18 @@ export async function verifySessionChannel(dom?: {
                 commands.probeSessionInput(nonce, previous.generation, "typed"),
               );
             await requireRejected(commands.probeSessionInput(nonce, gen, "\n"));
-            inputQueue = new InputQueue(async (bytes) => {
-              await commands.probeSessionInput(
-                nonce,
-                gen,
-                new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-              );
-            }, lifetime.signal);
+            inputQueue = new InputQueue(
+              async (bytes) => {
+                await commands.probeSessionInput(
+                  nonce,
+                  gen,
+                  new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+                );
+              },
+              AbortSignal.any([lifetime.signal, activeView.signal]),
+            );
+            const queue = inputQueue;
+            activeView.own(() => queue.cancel());
             inputArmed = true;
             try {
               if (renderer) {
@@ -568,9 +610,7 @@ export async function verifySessionChannel(dom?: {
                     inputArmed = false;
                     inputQueue?.cancel();
                     idle?.dispose();
-                    disposePolicy?.();
-                    consumer?.cancel();
-                    renderer?.dispose();
+                    views.retire(BigInt(generation));
                   },
                   pause: async () => {
                     await commands.probeSessionVisibility(
@@ -775,6 +815,7 @@ export async function verifySessionChannel(dom?: {
                 checked();
               },
             });
+            activeView.own(idle);
             // The finite helper is waiting for go, so no subsequent Data can
             // invalidate this Commit boundary while we test the idle scheduler.
             idle.observe(boundary);
@@ -828,13 +869,15 @@ export async function verifySessionChannel(dom?: {
                 void commands
                   .probeSessionRepair(nonce, generation, rendered(b))
                   .then((result) => {
+                    if (!activeView.isCurrent()) return;
                     if (result !== "queued")
                       throw new Error(`session.repair_${result}`);
                     repairAdmitted = true;
                   })
                   .catch((error) => {
+                    if (!activeView.isCurrent()) return;
                     failed ??= error;
-                    consumer?.cancel();
+                    activeConsumer.cancel();
                     void commands.probeSessionResume(nonce).catch(() => {});
                   });
               },
@@ -853,11 +896,13 @@ export async function verifySessionChannel(dom?: {
                 markerChecked = true;
                 repairChecked = true;
                 void commands.probeSessionResume(nonce).catch((error) => {
+                  if (!activeView.isCurrent()) return;
                   failed ??= error;
-                  consumer?.cancel();
+                  activeConsumer.cancel();
                 });
               },
             });
+            activeView.own(idle);
             await commands.probeSessionGo(nonce);
           }
         },
@@ -932,6 +977,9 @@ export async function verifySessionChannel(dom?: {
         throw new Error("session.native_signal_missing");
       renderer.markNativeSignalChecked();
       renderer.markNativePauseChecked();
+      if (viewRebuilds !== 4 || !viewScope?.isCurrent())
+        throw new Error("session.view_host_missing");
+      renderer.markViewHostChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
@@ -946,11 +994,10 @@ export async function verifySessionChannel(dom?: {
     clearTimeout(deadline);
     idle?.dispose();
     cancel();
-    disposePolicy?.();
+    views.dispose();
     lifetime.abort();
     dom?.signal.removeEventListener("abort", cancel);
-    if (renderer) renderer.dispose();
-    else terminal?.dispose();
+
     channel.onmessage = () => {};
     if (dom) {
       dom.host.hidden = false;

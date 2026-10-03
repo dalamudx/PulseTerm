@@ -458,6 +458,7 @@ struct DomEvidence {
     visibility_checked: bool,
     native_signal_checked: bool,
     native_pause_checked: bool,
+    view_host_checked: bool,
 }
 impl DomEvidence {
     fn validate(&self) -> ProbeResult<()> {
@@ -472,6 +473,7 @@ impl DomEvidence {
             || !self.visibility_checked
             || !self.native_signal_checked
             || !self.native_pause_checked
+            || !self.view_host_checked
             || !self.width_px.is_finite()
             || !self.height_px.is_finite()
             || !(1.0..=4096.0).contains(&self.width_px)
@@ -916,6 +918,7 @@ mod tests {
             visibility_checked: true,
             native_signal_checked: true,
             native_pause_checked: true,
+            view_host_checked: true,
         };
         assert!(e.validate().is_ok());
         e.render_events = 0;

@@ -22,6 +22,7 @@ export interface DomRenderer {
   markVisibilityChecked(): void;
   markNativeSignalChecked(): void;
   markNativePauseChecked(): void;
+  markViewHostChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -72,9 +73,11 @@ export function createDomRenderer(
     fitChecked = false,
     visibilityChecked = false,
     nativeSignalChecked = false,
-    nativePauseChecked = false;
+    nativePauseChecked = false,
+    viewHostChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
+  const element = terminal.element;
   terminal.textarea?.setAttribute("aria-label", "只读 PTY 验证输出");
   const dispose = () => {
     if (disposed) return;
@@ -85,7 +88,8 @@ export function createDomRenderer(
     fit?.dispose();
     render.dispose();
     terminal.dispose();
-    host.replaceChildren();
+    // Remove only our own root; late old disposal must not clear a replacement.
+    if (element?.parentElement === host) element.remove();
   };
   signal.addEventListener("abort", dispose, { once: true });
   return {
@@ -102,6 +106,9 @@ export function createDomRenderer(
     },
     markNativePauseChecked() {
       nativePauseChecked = true;
+    },
+    markViewHostChecked() {
+      viewHostChecked = true;
     },
     watchFit(resize, failed) {
       if (fit || disposed) throw new Error("terminal.fit_duplicate");
@@ -260,6 +267,7 @@ export function createDomRenderer(
         visibilityChecked,
         nativeSignalChecked,
         nativePauseChecked,
+        viewHostChecked,
       };
     },
   };

@@ -295,10 +295,19 @@ mise run probe-pty
 - 最后普通probe-channel（无Openbox/xdotool依赖的路径）完整运行也通过，DOM externalWmChecked=false、headlessfalse、nativeOnly/pause证据仍true、frames=792/renderEvents=789/nativeExit=0；之后全项目check/test通过，39app/89core/16IPC/6xtask/135TS保持。已有external JSON动作log未被覆盖，分别核对mode false/true互斥；本轮不重复已通过的外部WM正向样例。
 - 该测试证明独立外部WM动作能驱动现有native-only pause/resume，仍由有限测试marker协调时间，不声称人工鼠标点击titlebar、真实长时间外部最小化、其它WM/Wayland/Windows/macOS或production ViewHost验收。失败路径恢复guard可尝试同窗口GUI恢复，成功external收据必须由外部controller日志和实际runtime状态共同证明。
 
+## Generation ViewHost作用域与资源生命周期基础（Linux）
+
+- 新增features/terminal/view-host.ts的GenerationViewHost/ViewScope，按pane管理后端ordered Begin提供的u64 generation；拒绝零/负数/旧/重复/越界，不损伤当前scope。begin先退役旧scope再安装新scope，retire只匹配current generation；retirement后last仍单调，父Abort/卸载dispose同步撤销。transition内abort callback重入begin拒绝，防覆盖并泄漏中间scope；resource按身份去重、WeakSet disposeOnce、倒序release，一个异常不跳过剩余，当前cleanup失败闭锁并用稳定错误报告。
+- create提供scope自己的AbortSignal，只在current scope dispatch factory；取消立即reject caller，不等factory，仍观察尾部。晚到成功/注册立即清理一次，晚到失败/cleanup不能杀新scope；already-aborted factory不派发，当前factory失败清理已经登记资源。partial分配尚未返回仍须factory作者清理，不能保证未知factory内部副作用自动回滚。19项TS regressions覆盖完整创建/替换/退休/父abort/late success+failure/cleanup异常、去重/倒序/U64精度/重入及在途创建即时取消与尾部释放，154项TS全部通过，无unhandled rejection。
+- finite AttachmentConsumer实际每Begin建立scope，DOM/headless异步import/创建经scope.create，renderer/headless/query mask/onData/consumer/input queue/idle登记统一cleanup。onData与idle repair旧任务错误按捕获view.isCurrent检查，禁止cancel后来新consumer；frame callback同时比较consumer identity与scope current。native visibility/controller listener跨surface退役仍活到resume并归pane lifetime，不能提前dispose导致丢失restore。renderer dispose只移除自己的element，不再host.replaceChildren误清新renderer；重复dispose幂等。
+- schema4新增DomEvidence.viewHostChecked及server/xtask门禁，真实每DOM3次resize+1native pause/resume共4次scope重建。在new root完成后再次调用priorRenderer.dispose，要求当前root identity和scope current不变，否则失败；末次scope必须current且重建数4才填checked。这不是只验证bool存在；两轮DOM及headless仍保持PTY、old generation拒绝、精确history/repair、input、EOF/12行DOM全部原门禁。
+- 初版scope接入默认hide/show与external WM最小化各一次完整运行通过（每次2headless+2DOM+7transport/cancel），viewHostChecked=true/generation=12/frames=787、parsedBytes=3,113,119/nativeExit0，external mode日志两轮4动作通过。最后补input/idle登记与迟到错误守卫后，默认组合再次通过：frames=785/peakCreditBytes4115、renderEvents=781/frameFences781、104×12/832×192px、digest=`00b088cbb609382c`/12行DOM匹配，viewHostChecked=true；未重复外部WM（新增部分用最新默认真实路径与154TS覆盖）。完整check/test在基础集成后通过39app/89core/16IPC/6xtask/154TS，最后JS资源扩展经tsc/Biome/154TS/默认GUI及bindings-check验证，native全套34/clippy -D warnings与新report fixture通过；Astrolabe依赖索引stale，仅参考，不是LSP clean。
+- 未修改Rust parser/vendor/dependency locks/CSP/许可证审计；未开放user shell。当前是每pane generation资源作用域，不是完整按key复用的ViewHost pool，parking/LRU/time eviction、React ViewSlot/StrictMode双挂载、跨pane reparent、多window长期恢复/IME/DPI及跨平台仍待验收；生产attach精确恢复门禁不变。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现34项测试通过（新增4项external native reserve不等于pause、闭锁/wrong generation/失败revocation/early publication回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
-- TS：135 项测试通过（新增9项native样例过滤/invalid、三来源AND/restore、revision边界与bootstrap有界乱序缓冲回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- TS：154 项测试通过（新增19项generation ViewHost作用域、late factory/cleanup隔离、abort即时完成、资源去重和重入回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
