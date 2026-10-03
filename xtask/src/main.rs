@@ -1,6 +1,7 @@
 //! Repository checks and reproducible technical probes.
 #![forbid(unsafe_code)]
 
+mod attachment_probe;
 mod channel_probe;
 mod pty_probe;
 mod query_probe;
@@ -57,6 +58,7 @@ fn main() -> Result<()> {
         Some("unicode-table") => unicode_table::run(false)?,
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
+        Some("probe-attachment") => attachment_probe::run()?,
         _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty>"),
     }
     Ok(())

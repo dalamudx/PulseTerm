@@ -16,6 +16,18 @@ export function color(cell: IBufferCell, foreground: boolean): string {
   return `idx:${value}`;
 }
 
+export function observeCell(cell: IBufferCell) {
+  return {
+    text: cell.getWidth() === 0 ? "" : cell.getChars() || " ",
+    width: cell.getWidth(),
+    foreground: color(cell, true),
+    background: color(cell, false),
+    bold: cell.isBold() !== 0,
+    italic: cell.isItalic() !== 0,
+    underline: cell.isUnderline() !== 0,
+    inverse: cell.isInverse() !== 0,
+  };
+}
 export function screen(terminal: TerminalType) {
   const buffer = terminal.buffer.active;
   const cells = Array.from({ length: terminal.rows }, (_, row) => {
@@ -50,6 +62,7 @@ export async function runXterm(
   segments: (Uint8Array | { columns: number; rows: number })[],
   cols: number,
   rows: number,
+  captureHistory = false,
 ) {
   const terminal = new Terminal({
     cols,
@@ -82,6 +95,16 @@ export async function runXterm(
     screen: screen(terminal),
     replies,
     modes: { ...terminal.modes },
+    history: captureHistory
+      ? Array.from({ length: terminal.buffer.normal.baseY }, (_, row) => {
+          const line = terminal.buffer.normal.getLine(row);
+          assert.ok(line);
+          return {
+            text: line.translateToString(false),
+            wrapped: line.isWrapped,
+          };
+        })
+      : undefined,
   };
   dispose();
   terminal.dispose();

@@ -1,5 +1,37 @@
 use super::*;
 #[test]
+#[allow(clippy::unwrap_used)]
+fn restore_run_repairs_do_not_recolour_skipped_default_tail() {
+    let mut source = TerminalProbe::new(pulse_core::TermSize::new(24, 6).unwrap(), 64);
+    source.feed("\x1b[4h\x1b[38;2;1;2;3;48;5;200m中\x1b7\x08a".as_bytes());
+    let restore = source.restore_sequence().unwrap();
+    let mut fresh = TerminalProbe::new(pulse_core::TermSize::new(24, 6).unwrap(), 64);
+    fresh.feed(&restore.bytes);
+    assert_eq!(fresh.restore_fingerprint(), source.restore_fingerprint());
+}
+
+#[test]
+fn color_pen_cannot_bypass_generation_budget() {
+    let mut out = Emitter {
+        buf: String::new(),
+        last_print: None,
+        limit: 4,
+        exceeded: false,
+    };
+    let cell = Cell {
+        fg: Color::Spec(alacritty_terminal::vte::ansi::Rgb { r: 1, g: 2, b: 3 }),
+        bg: Color::Indexed(200),
+        ..Cell::default()
+    };
+    write_pen(&mut out, &cell);
+    assert!(out.exceeded, "colour emission must trip the same budget");
+    assert!(
+        out.buf.len() <= 4,
+        "formatting colours bypassed the payload budget"
+    );
+}
+
+#[test]
 fn emitter_checks_all_append_paths_and_stops_after_failure() {
     let mut out = Emitter {
         buf: String::new(),

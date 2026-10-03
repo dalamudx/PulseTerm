@@ -51,6 +51,18 @@ mise run probe
 
 `TerminalProbe::screen_replay` 仅用于可见格子重放，不得用于真实 detach/attach；完整恢复使用 `TerminalProbe::restore_sequence`，覆盖范围与缺口见评估文档。
 
+### 重连协议、压缩与最近历史（新增证据）
+
+详见 [事务协议](../architecture/terminal-attachment.md)。已实现二进制 Attachment v1、generation/offset/额度校验、TS有界事务接收和渲染callback ACK监督，禁止Commit前live/部分渲染。共享固定hex fixture检验u64极值与旧generation ACK。
+
+`diagnostic_bootstrap` 在同一actor命令边界捕获历史/屏幕；源状态不变、超限不返回部分结果。最近2000物理行/4MiB cap，软换行cutoff前移至合法逻辑行边界（可能少于请求）；主屏历史在alt激活仍可读取。不支持的宽字符边界明确拒绝，未做deep paging/resize reflow完整验收。
+
+恢复按连续pen压缩和省略默认尾格，并增加不含RIS的screen-only方式保护历史，显式恢复两buffer的tabstop和scroll margin。发现并修复SGR颜色直接写buf绕过Emitter预算的旧漏洞，新增多色预算回归。`probe-snapshot`现在559个可编码场景，条件M1|M2=311/311，无RIS与完整恢复也必须一致（不能据此宣称所有解析序列一致）。纯文本120×40恢复从约62KB降到5625 bytes，最坏159950 bytes未明显下降；性能时间需release报告，debug约8ms不作产品指标。
+
+3个`probe-attachment`真实headless案例通过：183/196/161个片段，primary中文/emoji不完整UTF-8、alt部分CSI、soft-history；检查10/10/8行历史的每格颜色/属性/wrap，2字节live续流无查询泄漏。新增前端取消、慢sink、额度过载和stale generation测试；仍未接入Tauri窗口/PTy。
+
+EchoTransport及screen_replay已限制到test/validation，独立默认构建负向编译门禁通过，防止Cargo workspace feature统一掩盖错误。全部新任务加入三平台CI，仅Linux本地验证，其他runner尚无执行证据。workspace实际57项pulse-term + 12项IPC + 3项PTY + 1项core + 2项xtask测试，TS50项通过；以实际运行数字为准而非历史总数。
+
 ### 历史内存预算仍未满足
 
 120 列、40 行视口、保留 10,000 行历史时，按 `size_of::<Cell>()` 计算的格子存储下限为 **28,915,200 字节（约 27.6 MiB）**，不含 extra、分配开销或进程内存。

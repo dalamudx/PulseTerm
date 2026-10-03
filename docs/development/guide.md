@@ -57,7 +57,9 @@ mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与�
 mise run unicode-table            # 从锁定 Rust 表生成前端 Unicode 宽度
 mise run unicode-table-check      # 只读漂移检查
 mise run probe-unicode            # 16 组文本、多提供器与分块对比
-mise run probe-snapshot           # 完整恢复（Rust/xterm）、双解析器分歧矩阵与恢复体积
+mise run probe-snapshot           # 完整/屏幕恢复（Rust/xterm）、分歧矩阵与体积
+mise run probe-attachment         # binary事务→历史/续流→真实headless渲染callback ACK
+mise run terminal-api-check       # 独立默认feature构建拒绝Echo及旧视口replay
 mise run terminal-vendor-check    # 检查211个源文件仅有批准的只读getter差异
 mise run terminal-vendor-test     # 独立锁文件运行上游178项测试
 mise run bindings                 # 从 Rust 命令表生成 IPC 类型、命令与事件

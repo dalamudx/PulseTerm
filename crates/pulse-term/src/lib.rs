@@ -4,6 +4,9 @@
 #![forbid(unsafe_code)]
 
 mod ground;
+/// Bounded recent-history VT replay for attachment transactions.
+pub mod history;
+pub use history::{HistoryReplay, MAX_RECENT_ROWS};
 mod palette;
 mod restore;
 mod tracked;
@@ -22,6 +25,7 @@ pub fn scalar_width(codepoint: u32) -> u8 {
         .unwrap_or(0) as u8
 }
 
+#[cfg(any(test, feature = "validation"))]
 use std::fmt::Write;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -231,6 +235,7 @@ impl TerminalProbe {
 
     /// Produce a VT replay of the visible cells for feasibility tests only.
     /// Do not use this for detach/attach until the hidden-state requirements are met.
+    #[cfg(any(test, feature = "validation"))]
     pub fn screen_replay(&self) -> String {
         let mut output = String::from("\x1bc");
         if self.term.mode().contains(TermMode::ALT_SCREEN) {
@@ -425,7 +430,7 @@ fn color_label(color: Color) -> String {
     }
 }
 
-fn sgr_color(output: &mut String, color: Color, foreground: bool) {
+fn sgr_color(output: &mut impl std::fmt::Write, color: Color, foreground: bool) {
     let channel = if foreground { 38 } else { 48 };
     match color {
         Color::Named(NamedColor::Foreground | NamedColor::Background) => {}

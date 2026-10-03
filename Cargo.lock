@@ -4920,6 +4920,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "pulse-core",
+ "pulse-ipc",
  "pulse-pty",
  "pulse-term",
  "serde_json",

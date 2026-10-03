@@ -1,6 +1,8 @@
 //! Session-local binary frames. The enclosing channel supplies frame boundaries.
 #![forbid(unsafe_code)]
 
+/// Versioned reconnect transactions and ordered live data.
+pub mod attach;
 /// Bounded cumulative-ack flow control, independent of any runtime.
 pub mod flow;
 
@@ -17,6 +19,8 @@ pub enum FrameKind {
     Data = 0x01,
     /// VT snapshot.
     Snapshot = 0x02,
+    /// Versioned attachment transaction; binary envelope, never raw VT.
+    Attachment = 0x08,
     /// Terminal title metadata.
     Title = 0x03,
     /// Terminal bell.
@@ -56,6 +60,7 @@ impl TryFrom<u8> for FrameKind {
             0x05 => Self::Mark,
             0x06 => Self::Cwd,
             0x07 => Self::Exit,
+            0x08 => Self::Attachment,
             0x20 => Self::Rect,
             0x21 => Self::H264,
             0x22 => Self::Cursor,

@@ -288,6 +288,7 @@ pub fn run() -> Result<()> {
                 Value::Null,
                 Some(match gap {
                     RestoreGap::OutputTooLarge => "output-too-large",
+                    RestoreGap::HistoryUnsupported => "history-unsupported",
                     RestoreGap::SyncPending => "sync-pending",
                     RestoreGap::PendingSequenceTooLong => "pending-too-long",
                     RestoreGap::InactiveCursorDivergence => "inactive-cursor-divergence",
@@ -333,6 +334,22 @@ pub fn run() -> Result<()> {
                 )
             }
         };
+        let screen_restore_bytes = match original.restore_screen_bounded(1024 * 1024) {
+            Ok(replay) => {
+                if replay.approximations.is_empty() && gap.is_none() {
+                    let mut screen = TerminalProbe::new(restore_size, 128);
+                    screen.feed(b"old-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\nold-history\r\n");
+                    screen.feed(&replay.bytes);
+                    screen.feed(&case.suffix);
+                    screen.finish_input();
+                    if screen.restore_fingerprint() != continued.restore_fingerprint() {
+                        strict_failures.push(format!("{}-screen-only", case.name));
+                    }
+                }
+                json!(replay.bytes)
+            }
+            Err(_) => Value::Null,
+        };
         let hidden_alternate = false; // Getter patch restores the latent cursor slot.
         let strict = gap.is_none() && !main_missing && approximations.is_empty();
         if strict && rust_exact == Some(false) {
@@ -350,7 +367,7 @@ pub fn run() -> Result<()> {
         results.push(json!({
             "name": case.name, "kind": case.kind, "prefix": case.prefix, "suffix": case.suffix,
             "resized": case.resized.map(|size| json!({"columns":size.columns(),"rows":size.rows()})),
-            "restore": restore_bytes, "gap": gap, "mainScreenMissing": main_missing,
+            "restore": restore_bytes, "screenRestore": screen_restore_bytes, "gap": gap, "mainScreenMissing": main_missing,
             "approximations": approximations, "hiddenAlternate": hidden_alternate, "rustExact": rust_exact, "expected": expected,
         }));
     }

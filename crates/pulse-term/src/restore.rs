@@ -5,6 +5,12 @@
 
 use std::fmt::Write;
 
+// Reset only parser/view state, NOT primary scrollback. Include CAN for incomplete
+// sequences, palette overrides, input modes, charsets and the viewport. This is
+// the explicitly supported mode subset (kitty stacks/title stack remain outside
+// the recovery contract). Screen contents are restored by write_grid below.
+const SCREEN_RESET: &str = "\x18\x1b[?1049l\x1b[?6l\x1b[r\x1b[4l\x1b[20l\x1b[?7h\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1007h\x1b[?1042h\x1b[?2004l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[3g\x1b[0m\x1b]8;;\x1b\\\x1b]104\x1b\\\x1b]110\x1b\\\x1b]111\x1b\\\x1b]112\x1b\\";
+
 #[cfg(test)]
 #[path = "restore_budget_tests.rs"]
 mod budget_tests;
@@ -21,11 +27,11 @@ use crate::{TerminalProbe, sgr_color};
 
 /// Output buffer that also remembers the last printed character: vte keeps it
 /// privately for REP (`CSI b`), so the restore must end with the right print.
-struct Emitter {
-    buf: String,
-    last_print: Option<char>,
-    limit: usize,
-    exceeded: bool,
+pub(crate) struct Emitter {
+    pub(crate) buf: String,
+    pub(crate) last_print: Option<char>,
+    pub(crate) limit: usize,
+    pub(crate) exceeded: bool,
 }
 
 impl Write for Emitter {
@@ -40,7 +46,7 @@ impl Write for Emitter {
 }
 
 impl Emitter {
-    fn push_str(&mut self, s: &str) {
+    pub(crate) fn push_str(&mut self, s: &str) {
         if self.exceeded || s.len() > self.limit.saturating_sub(self.buf.len()) {
             self.exceeded = true;
         } else {
@@ -52,7 +58,7 @@ impl Emitter {
         self.push_str(c.encode_utf8(&mut bytes));
     }
     /// A character that goes through the parser's print path.
-    fn print(&mut self, c: char) {
+    pub(crate) fn print(&mut self, c: char) {
         self.push(c);
         self.last_print = Some(c);
     }
@@ -61,6 +67,8 @@ impl Emitter {
 /// A restore cannot be produced right now; retry when the condition clears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestoreGap {
+    /// Recent-history row contains a non-encodable wide-cell anomaly.
+    HistoryUnsupported,
     /// Serialization exceeded the byte budget; no partial replay is returned.
     OutputTooLarge,
     /// A synchronized update (DEC 2026) is buffered and not yet applied.
@@ -95,6 +103,18 @@ impl TerminalProbe {
     /// Generate within a payload byte budget, returning no partial bytes on error.
     /// This limits emitted content, not terminal/grid or allocator overhead.
     pub fn restore_sequence_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
+        self.build_restore(limit, false)
+    }
+
+    /// Rebuild visible/buffer state without RIS, preserving primary scrollback.
+    /// Abort/reset the old decoder before feeding this replay; reject approximate
+    /// frames. History can be seeded into a fresh renderer before this operation.
+    /// Not atomic or a production attach protocol by itself.
+    pub fn restore_screen_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
+        self.build_restore(limit, true)
+    }
+
+    fn build_restore(&self, limit: usize, preserve_history: bool) -> Result<Restore, RestoreGap> {
         use alacritty_terminal::vte::ansi::Timeout;
         if self.parser.sync_timeout().pending_timeout() || self.parser.sync_bytes_count() > 0 {
             return Err(RestoreGap::SyncPending);
@@ -112,7 +132,12 @@ impl TerminalProbe {
             limit,
             exceeded: false,
         };
-        out.push_str("\x1bc");
+        if preserve_history {
+            out.push_str(SCREEN_RESET);
+            write_stops(&mut out, (0..term.columns()).step_by(8));
+        } else {
+            out.push_str("\x1bc");
+        }
 
         for index in 0..=258 {
             if let Some(rgb) = term.colors()[index] {
@@ -151,6 +176,15 @@ impl TerminalProbe {
             // Entering 1049 saves its cursor without any destructive inspection.
             write_grid(&mut out, inactive, &mut approximations);
             write_tab_cells(&mut out, inactive);
+            write_stops(
+                &mut out,
+                self.side
+                    .tabs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, set)| **set)
+                    .map(|(i, _)| i),
+            );
             // xterm stores scroll margins per buffer; alacritty's margins are
             // global. Seed hidden primary margins too, or returning from alt
             // makes subsequent IL/DL/SU/SD use a full-screen region in xterm.
@@ -163,10 +197,20 @@ impl TerminalProbe {
             designate(&mut out, &inactive.cursor);
 
             out.push_str("\x1b[?1049h\x1b(B\x1b)B\x1b*B\x1b+B\x0f");
+            write_stops(&mut out, (0..term.columns()).step_by(8));
         } else {
             // Entering alternate clears its content and replaces its current cursor,
             // but preserves its saved cursor. Rebuild that slot for future re-entry.
             out.push_str("\x1b[?1049h");
+            write_stops(
+                &mut out,
+                self.side
+                    .tabs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, set)| **set)
+                    .map(|(i, _)| i),
+            );
             place_cursor(&mut out, inactive, &inactive.saved_cursor, 0);
             write_template(&mut out, &inactive.saved_cursor.template);
             designate(&mut out, &inactive.saved_cursor);
@@ -202,10 +246,15 @@ impl TerminalProbe {
 
         write_tab_cells(&mut out, grid);
 
-        out.push_str("\x1b[3g");
-        for (column, _) in self.side.tabs.iter().enumerate().filter(|(_, stop)| **stop) {
-            let _ = write!(out, "\x1b[1;{}H\x1bH", column + 1);
-        }
+        write_stops(
+            &mut out,
+            self.side
+                .tabs
+                .iter()
+                .enumerate()
+                .filter(|(_, set)| **set)
+                .map(|(i, _)| i),
+        );
         let (top, bottom) = self.side.scroll_region;
         if (top, bottom) != (0, grid.screen_lines() as i32) {
             let _ = write!(out, "\x1b[{};{}r", top + 1, bottom);
@@ -441,8 +490,28 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
 
 /// SGR reset followed by every attribute of `cell` (used for cells and pens).
 fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'static str>) {
+    // Fresh default blanks on this screen; ED2 does not erase scrollback.
+    out.push_str("\x1b[0m\x1b]8;;\x1b\\\x1b[H\x1b[2J");
+    let blank = Cell::default();
+    let mut pen: Option<Cell> = None;
     for line in 0..grid.screen_lines() as i32 {
-        for column in 0..grid.columns() {
+        let mut next_column = None;
+        // Anomaly repair via DCH/ICH/ECH can recolour its vacated trailing cells.
+        // Do not skip defaults on those rows: rewrite the whole tail explicitly.
+        let row = &grid[Line(line)];
+        let anomalous = (0..grid.columns()).any(|c| {
+            let flags = row[Column(c)].flags;
+            (flags.contains(Flags::WIDE_CHAR_SPACER)
+                && (c == 0 || !row[Column(c - 1)].flags.contains(Flags::WIDE_CHAR)))
+                || (flags.contains(Flags::WIDE_CHAR)
+                    && (c + 1 == grid.columns()
+                        || !row[Column(c + 1)].flags.contains(Flags::WIDE_CHAR_SPACER)))
+        });
+        let mut end = grid.columns();
+        while !anomalous && end > 0 && row[Column(end - 1)] == blank {
+            end -= 1;
+        }
+        for column in 0..end {
             if out.exceeded {
                 return;
             }
@@ -454,6 +523,8 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 if previous_wide {
                     continue;
                 }
+                next_column = None;
+                pen = None;
                 // Orphan spacer (left over by EL/ECH/DCH/ICH): create a pair with
                 // the spacer's pen and remove its head without touching cells
                 // already written on the left.
@@ -483,6 +554,8 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 continue;
             }
             if cell.flags.contains(Flags::WIDE_CHAR) && column + 1 == grid.columns() {
+                next_column = None;
+                pen = None;
                 // Wide char in the last column without spacer (shifted by ICH/IRM):
                 // a normal write would wrap. Write the pair one column earlier and
                 // shift it right with ICH, then restore the left neighbour.
@@ -500,8 +573,23 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 }
                 continue;
             }
-            let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
-            write_cell(out, cell);
+            if next_column != Some(column) {
+                let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
+            }
+            if pen.as_ref().is_some_and(|old| same_plain_pen(old, cell)) {
+                print_cell(out, cell);
+            } else {
+                write_cell(out, cell);
+                pen = Some(cell.clone());
+            }
+            next_column = Some(
+                column
+                    + if cell.flags.contains(Flags::WIDE_CHAR) {
+                        2
+                    } else {
+                        1
+                    },
+            );
             let next_is_spacer = column + 1 < grid.columns()
                 && row[Column(column + 1)]
                     .flags
@@ -510,10 +598,19 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 && !next_is_spacer
                 && column + 1 < grid.columns()
             {
+                next_column = None;
+                pen = None;
                 // Broken wide char (its spacer was erased): drop the new spacer.
                 let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
             }
         }
+    }
+}
+
+fn write_stops(out: &mut Emitter, columns: impl Iterator<Item = usize>) {
+    out.push_str("\x1b[3g");
+    for column in columns {
+        let _ = write!(out, "\x1b[1;{}H\x1bH", column + 1);
     }
 }
 
@@ -531,8 +628,8 @@ fn write_tab_cells(out: &mut Emitter, grid: &Grid<Cell>) {
 
 fn write_pen(out: &mut Emitter, cell: &Cell) {
     out.push_str("\x1b[0m");
-    sgr_color(&mut out.buf, cell.fg, true);
-    sgr_color(&mut out.buf, cell.bg, false);
+    sgr_color(out, cell.fg, true);
+    sgr_color(out, cell.bg, false);
     match cell.underline_color() {
         Some(Color::Spec(rgb)) => {
             let _ = write!(out, "\x1b[58;2;{};{};{}m", rgb.r, rgb.g, rgb.b);
@@ -573,7 +670,7 @@ fn write_template(out: &mut Emitter, template: &Cell) {
     }
 }
 
-fn write_cell(out: &mut Emitter, cell: &Cell) {
+pub(crate) fn write_cell(out: &mut Emitter, cell: &Cell) {
     // Cursor restoration may leave an inherited hyperlink open. Cell rendering
     // must establish its own link rather than leak that pen into blank cells.
     out.push_str("\x1b]8;;\x1b\\");
@@ -582,13 +679,29 @@ fn write_cell(out: &mut Emitter, cell: &Cell) {
     if let Some(link) = &link {
         let _ = write!(out, "\x1b]8;id={};{}\x1b\\", link.id(), link.uri());
     }
-    // A literal tab stored by the parser is a blank physical cell, not an HT action.
+    print_cell(out, cell);
+    if link.is_some() {
+        out.push_str("\x1b]8;;\x1b\\");
+    }
+}
+
+pub(crate) fn same_plain_pen(a: &Cell, b: &Cell) -> bool {
+    let structural = Flags::WIDE_CHAR
+        | Flags::WIDE_CHAR_SPACER
+        | Flags::LEADING_WIDE_CHAR_SPACER
+        | Flags::WRAPLINE;
+    a.fg == b.fg
+        && a.bg == b.bg
+        && a.flags - structural == b.flags - structural
+        && a.underline_color() == b.underline_color()
+        && a.hyperlink().is_none()
+        && b.hyperlink().is_none()
+}
+pub(crate) fn print_cell(out: &mut Emitter, cell: &Cell) {
+    // A stored tab is a physical blank, not an HT command.
     out.print(if cell.c == '\t' { ' ' } else { cell.c });
     for &zero in cell.zerowidth().into_iter().flatten() {
         out.print(zero);
-    }
-    if link.is_some() {
-        out.push_str("\x1b]8;;\x1b\\");
     }
 }
 

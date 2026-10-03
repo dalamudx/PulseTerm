@@ -13,6 +13,7 @@ type Entry = {
   prefix: number[];
   suffix: number[];
   restore: number[] | null;
+  screenRestore: number[] | null;
   gap: string | null;
   mainScreenMissing: boolean;
   hiddenAlternate: boolean;
@@ -78,6 +79,44 @@ for (const entry of report.cases) {
     entry.resized?.rows ?? report.rows,
   );
   const expected = entry.expected as { cells: unknown[][]; cursor: unknown };
+  assert.ok(
+    entry.screenRestore !== null,
+    `screen restore missing: ${entry.name}`,
+  );
+  const seed = new TextEncoder().encode("old-history\r\n".repeat(20));
+  const cols = entry.resized?.columns ?? report.columns;
+  const rows = entry.resized?.rows ?? report.rows;
+  const screenRestored = await runXterm(
+    [seed, bytes(entry.screenRestore), bytes(entry.suffix)],
+    cols,
+    rows,
+  );
+  if (entry.approximations.length === 0 && !entry.mainScreenMissing) {
+    assert.deepEqual(
+      screenRestored.screen,
+      restored.screen,
+      `screen-only differs from full restore: ${entry.name}`,
+    );
+    assert.deepEqual(
+      screenRestored.modes,
+      restored.modes,
+      `screen-only modes differ: ${entry.name}`,
+    );
+    if (entry.kind === "named") {
+      const beforeSuffix = await runXterm(
+        [seed, bytes(entry.screenRestore)],
+        cols,
+        rows,
+        true,
+      );
+      assert.ok(
+        beforeSuffix.history?.some((line) =>
+          line.text.startsWith("old-history"),
+        ),
+        `screen-only erased history: ${entry.name}`,
+      );
+    }
+  }
   const m1 = isDeepStrictEqual(restored.screen, expected);
   const m2 = isDeepStrictEqual(direct.screen, expected);
   const m3 =

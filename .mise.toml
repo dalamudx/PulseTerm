@@ -37,8 +37,12 @@ description = "Compare explicit character and grapheme providers (diagnostic, no
 depends = ["probe"]
 run = "pnpm --filter ui exec tsx scripts/unicode-probe.ts"
 
+[tasks.probe-attachment]
+description = "Validate binary reconnect ordering, history, UTF-8 tails and rendering ACKs"
+run = ["cargo xtask probe-attachment", "pnpm --filter ui exec tsx scripts/attachment-probe.ts"]
+
 [tasks.probe-snapshot]
-description = "Strict continuation gate for complete state restore (currently expected to fail)"
+description = "Check exact restore continuations; report parser disagreements separately"
 run = [
   "cargo xtask probe-snapshot",
   "pnpm --filter ui exec tsx scripts/snapshot-probe.ts",
@@ -52,6 +56,10 @@ run = "node scripts/check-terminal-vendor.mjs"
 [tasks.terminal-vendor-test]
 description = "Run upstream terminal tests with isolated locked dependencies"
 run = "node scripts/check-terminal-vendor.mjs --test"
+
+[tasks.terminal-api-check]
+description = "Prove production terminal API cannot use legacy replay or EchoTransport"
+run = "node scripts/check-terminal-api.mjs"
 
 [tasks.fmt]
 description = "Format Rust and TypeScript code"

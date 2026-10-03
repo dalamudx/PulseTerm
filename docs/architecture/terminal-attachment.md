@@ -1,0 +1,36 @@
+# 终端重连事务 v1（已实现的基础，非生产 attach）
+
+后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。生产窗口绑定、lease、传输暂停及协议额度贯通仍待实现。
+
+## 一个流，一个事务
+
+`pulse-ipc::attach` 和 `ui/src/ipc/attachment.ts` 定义 Begin → History* → Restore+ → Commit → Data*，全部使用 FrameKind::Attachment=8，同一有序二进制通道，同一 CreditWindow。版本1的20字节 envelope 包含 version/part/reserved/generation/offset；Begin 28字节为columns:u16、rows:u16、revision:u64、parsed_bytes:u64、history_len:u32、restore_len:u32，全部小端。
+
+- generation非零，由会话绑定层分配，不是parsed_bytes。ACK必须同时匹配generation和在途sequence；旧绑定ACK不释放新绑定额度。现有32位sequence遵守CreditWindow窗口规则。
+- revision和parsed_bytes在JS中用bigint，不转number。parsed_bytes只表示后端原始输出解析边界，不是ACK，不是转码后的UTF-8字节数。本版Data的offset按发送字节递增，尚不覆盖编码转换后的原始/UTF-8双坐标，不能用于非UTF-8会话的生产边界。
+- 片段body≤64KiB、history≤4MiB、restore≤1MiB。History/Restore section-local offset连续，Data从Begin.parsed_bytes开始连续。乱序、长度不符、未知版本/flag和未Commit的Data终止当前事务，没有部分渲染或丢字节后继续。
+- sender无额度时phase/offset不变。已经生成的帧必须发送或取消整个generation，不能跳过。receiver先按声明长度有界暂存，Commit收到完整内容后才返回ready。
+
+## 解析状态、历史与显示
+
+`SessionHandle::diagnostic_bootstrap` 在actor同一命令序列点捕获recent history和screen-only restore，返回SessionState边界。拒绝已知近似、RestoreGap及额度错误，取消且未开始的请求跳过；不会主动更改解析器。**这不是实时订阅**：调用后数据仍会推进，driver还需要原子冻结/有界留存边界之后的输出，不能直接将此诊断结果用作生产detach/attach。
+
+历史使用主屏，备用屏激活时用只读inactive getter。最近≤2000个物理行，截断若落在软换行逻辑行中则向后缩减到下一hard边界；不为了装满2000行伪造第一行语义。极长软换行占满预算时可以没有可重放历史；深历史另行分页/search。历史颜色/属性及wrap保留，不能编码的wide/leading spacer显式HistoryUnsupported，而非丢内容。
+
+完整fresh restore可用RIS；history后和已有缓存重新同步必须用`restore_screen_bounded`，不含RIS，使用viewport ED2及明确模式/charset/tabstop/scroll margin。xterm每buffer有独立tabstop和scroll margin，主屏/备用屏都建立状态，不能只改active。screen-only不是针对任意旧xterm状态的完整兼容保证，已有测试覆盖模式/历史/同尺寸场景；需继续验证真实更新中的显示同步。
+
+压缩器省略ED2之后的默认空白尾部、相同pen连续运行不重复SGR/链接，每段只定位一次。所有SGR也经Emitter预算，修复颜色helper直接写buf绕过限制的问题。最坏每格不同属性仍约160KB，不宣称所有样例10倍压缩。
+
+## 前端callback监督
+
+`AttachmentConsumer` 以有界队列串行处理帧，包含active帧计数；ready先reset fresh surface → history → screen，live保持同一UTF-8 decoder（不能在每片段或section结束时finish）。staged拷贝入有界暂存后可ACK，Commit/Data等待渲染callback才ACK。队列溢出取消generation，不丢帧。取消中断等待、不发送迟到ACK；native/xterm已开始的write无法撤回，旧surface须丢弃，绝不能给新generation复用。
+
+sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责有界callback写入、AbortSignal和query抑制。receiver暂存≤5MiB + queued wire上限 + driver/sink自有状态，不能把5MiB当全应用RSS上限。并发/已完成快照的保留须由调用方限制。
+
+## 验证与剩余工作
+
+`mise run terminal-api-check` 在workspace之外实际编译default-feature消费端：正常TerminalProbe可用，EchoTransport及screen_replay无法调用；xtask显式开启validation。
+
+`mise run probe-attachment`：Rust构造真实history/state，用7字节片段、每次1个额度窗口、2字节live发送至TS Receiver/Consumer和真实xterm headless；检查history每格颜色/宽度/属性/wrap，UTF-8/CSI跨restore-live续流、无query泄漏及callback ACK。3个案例通过。这里只验证headless，不是WebView/真实PTY/窗口重连。
+
+仍需：后端分歧识别与屏幕摘要、generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY、PTY actor桥接、真实程序录制、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。

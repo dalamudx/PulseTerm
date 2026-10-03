@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# Explicitly opted-in by xtask only; never enable in the desktop dependency.
+validation = []
+
 [dependencies]
 alacritty_terminal.workspace = true
 pulse-core.workspace = true

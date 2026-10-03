@@ -33,6 +33,12 @@ jobs:
         run: mise run test
       - name: Check shared Unicode table
         run: mise run unicode-table-check
+      - name: Check production terminal API isolation
+        run: mise run terminal-api-check
+      - name: Validate ordered reconnect and history replay
+        run: mise run probe-attachment
+      - name: Validate terminal restore continuation
+        run: mise run probe-snapshot
       - name: Compare terminal parsers
         run: mise run probe
       - name: Compare Unicode providers
