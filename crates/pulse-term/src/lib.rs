@@ -3,6 +3,9 @@
 //! regions, tab stops, pending wrap and parser state are not restored.
 #![forbid(unsafe_code)]
 
+/// Window-independent actor and bounded test transport.
+pub mod session;
+
 use std::fmt::Write;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -119,6 +122,11 @@ impl TerminalProbe {
             self.utf8_tail.clear();
             self.parser.advance(&mut self.term, "\u{fffd}".as_bytes());
         }
+    }
+
+    /// Resize the owned terminal state using validated character dimensions.
+    pub fn resize(&mut self, size: TermSize) {
+        self.term.resize(Size(size));
     }
 
     /// Drain authoritative protocol replies; a transport would write these upstream.

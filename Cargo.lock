@@ -2632,6 +2632,8 @@ dependencies = [
  "proptest",
  "pulse-core",
  "serde",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

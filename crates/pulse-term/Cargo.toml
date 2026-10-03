@@ -9,6 +9,8 @@ license.workspace = true
 alacritty_terminal.workspace = true
 pulse-core.workspace = true
 serde.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
