@@ -76,6 +76,7 @@ struct Case {
     kind: &'static str,
     prefix: Vec<u8>,
     suffix: Vec<u8>,
+    resized: Option<TermSize>,
 }
 
 fn named() -> Vec<Case> {
@@ -159,8 +160,51 @@ fn named() -> Vec<Case> {
             kind: "named",
             prefix,
             suffix,
+            resized: None,
         })
         .collect()
+}
+
+fn alternate_cases() -> Result<Vec<Case>> {
+    let prefixes = [
+        (
+            "alt-exit-attributes",
+            "MAIN 中\x1b[31m\x1b7\x1b[?1049hALT",
+            "\x1b[?1049l!\x1b8?",
+        ),
+        (
+            "alt-reenter-saved",
+            "MAIN\x1b[?1049h\x1b[3;4H\x1b[34m\x1b7\x1b[?1049l",
+            "\x1b[?1049h\x1b8ALT\x1b[?1049l!",
+        ),
+        (
+            "alt-link-inheritance",
+            "\x1b]8;;http://x\x1b\\\x1b[?1049h\r",
+            "X\x1b[?1049lY",
+        ),
+        (
+            "alt-hidden-reflow",
+            "0123456789012345678901234567890123456789\r\nSECOND\x1b[?1049hALT",
+            "\x1b[?1049l!",
+        ),
+    ];
+    let mut cases = Vec::new();
+    for (name, prefix, suffix) in prefixes {
+        for (variant, resized) in [
+            ("original", None),
+            ("shrink", Some(TermSize::new(20, 6)?)),
+            ("grow", Some(TermSize::new(44, 12)?)),
+        ] {
+            cases.push(Case {
+                name: format!("{name}-{variant}"),
+                kind: "named",
+                prefix: prefix.as_bytes().to_vec(),
+                suffix: suffix.as_bytes().to_vec(),
+                resized,
+            });
+        }
+    }
+    Ok(cases)
 }
 
 fn random(count: usize) -> Vec<Case> {
@@ -186,6 +230,7 @@ fn random(count: usize) -> Vec<Case> {
                 kind: "random",
                 prefix,
                 suffix,
+                resized: None,
             }
         })
         .collect()
@@ -213,12 +258,23 @@ pub fn run() -> Result<()> {
     let size = TermSize::new(32, 8)?;
     let mut results = Vec::new();
     let mut strict_failures = Vec::new();
-    for case in named().into_iter().chain(random(600)) {
+    for case in named()
+        .into_iter()
+        .chain(alternate_cases()?)
+        .chain(random(600))
+    {
         let mut original = TerminalProbe::new(size, 128);
         original.feed(&case.prefix);
+        if let Some(resized) = case.resized {
+            original.resize(resized);
+        }
+        let restore_size = case.resized.unwrap_or(size);
         let restore = original.restore_sequence();
         let mut continued = TerminalProbe::new(size, 128);
         continued.feed(&case.prefix);
+        if let Some(resized) = case.resized {
+            continued.resize(resized);
+        }
         continued.feed(&case.suffix);
         continued.finish_input();
         let expected = continued.screen();
@@ -228,13 +284,15 @@ pub fn run() -> Result<()> {
                 Some(match gap {
                     RestoreGap::SyncPending => "sync-pending",
                     RestoreGap::PendingSequenceTooLong => "pending-too-long",
+                    RestoreGap::InactiveCursorDivergence => "inactive-cursor-divergence",
+                    RestoreGap::NonEdgePendingWrap => "nonedge-pending-wrap",
                 }),
                 false,
                 Vec::new(),
                 None,
             ),
             Ok(restore) => {
-                let mut restored = TerminalProbe::new(size, 128);
+                let mut restored = TerminalProbe::new(restore_size, 128);
                 restored.feed(&restore.bytes);
                 let after_restore = first_diff(
                     &original.restore_fingerprint(),
@@ -269,13 +327,8 @@ pub fn run() -> Result<()> {
                 )
             }
         };
-        // Re-entering the alternate screen exposes the hidden alternate grid (e.g.
-        // its saved cursor), which alacritty 0.26 keeps private.
-        let enter = b"\x1b[?1049h";
-        let contains = |bytes: &[u8]| bytes.windows(enter.len()).any(|w| w == enter);
-        let hidden_alternate = contains(&case.prefix) && contains(&case.suffix);
-        let strict =
-            gap.is_none() && !main_missing && !hidden_alternate && approximations.is_empty();
+        let hidden_alternate = false; // Getter patch restores the latent cursor slot.
+        let strict = gap.is_none() && !main_missing && approximations.is_empty();
         if strict && rust_exact == Some(false) {
             strict_failures.push(case.name.clone());
         }
@@ -290,6 +343,7 @@ pub fn run() -> Result<()> {
         }
         results.push(json!({
             "name": case.name, "kind": case.kind, "prefix": case.prefix, "suffix": case.suffix,
+            "resized": case.resized.map(|size| json!({"columns":size.columns(),"rows":size.rows()})),
             "restore": restore_bytes, "gap": gap, "mainScreenMissing": main_missing,
             "approximations": approximations, "hiddenAlternate": hidden_alternate, "rustExact": rust_exact, "expected": expected,
         }));

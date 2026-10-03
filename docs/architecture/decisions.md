@@ -6,7 +6,7 @@
 
 | # | 决策 | 状态 | 依据 |
 |---|---|---|---|
-| ADR-001 | 终端状态由 Rust 侧（alacritty_terminal）保存，前端 xterm.js 只是可以销毁重建的显示层 | Accepted | Netcatty #2578（终端状态都在前端，内存失控）；NovaTerm 重现了同样的问题 |
+| ADR-001 | 终端状态由 Rust 侧（alacritty_terminal）保存，前端 xterm.js 只是可以销毁重建的显示层 | Accepted | Netcatty #2578（终端状态都在前端，内存失控）；NovaTerm 重现了同样的问题；用户已批准 alacritty 0.26.0 非活动网格只读 getter 补丁，详见 terminal-restore-evaluation.md §7。此批准不扩展到 GTK 宏依赖 |
 | ADR-002 | v1 之前不自研终端渲染器 | Accepted | NovaTerm 自研渲染器当天就放弃，改回 xterm.js |
 | ADR-003 | 每个会话使用独立的二进制通道，按额度发送；传输过程绝不丢数据，前端跟不上时可以跳过中间画面；会话数据禁止用全局事件传输 | Accepted | NovaTerm 用全局事件广播 base64 输出，队列积压时丢数据 |
 | ADR-004 | Transport 采用由使用方主动读取的输出接口，并提供状态监听；连接路径（Route）和协议解耦 | Accepted | Windows Terminal 的 ITerminalConnection；主动读取天然带背压 |

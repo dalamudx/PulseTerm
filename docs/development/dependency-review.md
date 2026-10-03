@@ -56,6 +56,12 @@ S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all
 
 新增 `portable-pty 0.9.0`（MIT）及原生 I/O 传递依赖，版本通过 Cargo workspace / lockfile 管理。全特性联网审计的来源和 bans 通过；未新增拒绝项，仍是原有 6 个许可证拒绝和 `paste` / `proc-macro-error` 的维护公告。没有替换 GTK 宏、添加 vendor、放宽白名单或添加 ignore。
 
+## 已批准的终端只读补丁
+
+用户批准 alacritty_terminal 0.26.0 的一个只读 inactive_grid getter，当前通过 workspace `[patch.crates-io]` 引入。本轮例外不适用于 GTK 宏链，也不允许修改终端解析行为。保留发布包 Apache许可证、VCS来源、SHA-256文件基线及最小diff，详见 `vendor/README.md`。版本不升级；product Cargo.lock 仅移除该包的registry source/checksum，发布包摘要另有明确记录。
+
+全特性审计没有新增拒绝项：原有6个许可证拒绝和paste/proc-macro-error维护公告仍保留，sources/bans通过。没有添加ignore、放宽白名单或撤销发布门禁。上游测试使用独立冻结的test-only lock，并非product依赖升级。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

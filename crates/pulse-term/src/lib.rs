@@ -846,12 +846,7 @@ mod tests {
         );
         let alt_checked = AtomicUsize::new(0);
         let reasons = std::sync::Mutex::new(std::collections::BTreeMap::<&str, usize>::new());
-        let alt_tokens: Vec<usize> = RESTORE_TOKENS
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.contains("1049"))
-            .map(|(i, _)| i)
-            .collect();
+
         let strategy = (
             proptest::collection::vec(0..RESTORE_TOKENS.len(), 0..80),
             proptest::collection::vec(0..RESTORE_TOKENS.len(), 0..40),
@@ -869,45 +864,8 @@ mod tests {
                         *map.entry(reason).or_default() += 1;
                     }
                 }
-                if restore.main_screen_missing {
-                    // The visible alternate screen must still be exact; continue only
-                    // while the suffix neither leaves nor re-enters it.
+                if original.term.mode().contains(TermMode::ALT_SCREEN) {
                     alt_active.fetch_add(1, Relaxed);
-                    if !restore.approximations.is_empty() {
-                        return Ok(());
-                    }
-                    let mut restored = TerminalProbe::new(size, 64);
-                    restored.feed(&restore.bytes);
-                    if let Some(diff) = fingerprint_diff(
-                        &original.restore_fingerprint(),
-                        &restored.restore_fingerprint(),
-                    ) {
-                        return Err(proptest::test_runner::TestCaseError::fail(format!(
-                            "alternate restore: {diff}; prefix {:?}",
-                            token_names(&prefix)
-                        )));
-                    }
-                    let rep = RESTORE_TOKENS.iter().position(|t| *t == "\x1b[3b");
-                    if suffix
-                        .iter()
-                        .any(|t| alt_tokens.contains(t) || Some(*t) == rep)
-                    {
-                        return Ok(());
-                    }
-                    let suffix = tokens_to_bytes(&suffix);
-                    original.feed(&suffix);
-                    restored.feed(&suffix);
-                    if let Some(diff) = fingerprint_diff(
-                        &original.restore_fingerprint(),
-                        &restored.restore_fingerprint(),
-                    ) {
-                        return Err(proptest::test_runner::TestCaseError::fail(format!(
-                            "alternate continuation: {diff}; prefix {:?}",
-                            token_names(&prefix)
-                        )));
-                    }
-                    alt_checked.fetch_add(1, Relaxed);
-                    return Ok(());
                 }
                 if !restore.approximations.is_empty() {
                     approx.fetch_add(1, Relaxed);
@@ -929,13 +887,9 @@ mod tests {
                         token_names(&prefix)
                     )));
                 }
-                // Re-entering the alternate screen exposes the hidden alternate grid
-                // (e.g. its saved cursor), which alacritty 0.26 keeps private.
                 let alt_entry = RESTORE_TOKENS.iter().position(|t| *t == "\x1b[?1049h");
-                let touched_alt = prefix.iter().any(|&t| Some(t) == alt_entry);
-                if touched_alt && suffix.iter().any(|&t| Some(t) == alt_entry) {
+                if suffix.iter().any(|&t| Some(t) == alt_entry) {
                     alt_reentry.fetch_add(1, Relaxed);
-                    return Ok(());
                 }
                 // REP before any printed character: vte has no preceding char and
                 // cannot be reset to that state (documented gap).
@@ -967,6 +921,9 @@ mod tests {
                     "replies; suffix {:?}",
                     suffix_names
                 );
+                if original.term.mode().contains(TermMode::ALT_SCREEN) {
+                    alt_checked.fetch_add(1, Relaxed);
+                }
                 exact.fetch_add(1, Relaxed);
                 Ok(())
             })
@@ -987,14 +944,126 @@ mod tests {
     }
 
     #[test]
-    fn restore_reports_sync_and_alternate_gaps() {
+    fn inactive_grid_getter_is_non_destructive_and_tracks_resize() {
+        let mut term = terminal();
+        term.feed(b"PRIMARY\x1b[?1049hALT");
+        let before = term.restore_fingerprint();
+        for _ in 0..3 {
+            assert_eq!(
+                term.term.inactive_grid()[Point::new(Line(0), Column(0))].c,
+                'P'
+            );
+        }
+        assert_eq!(before, term.restore_fingerprint());
+        term.resize(TermSize::new(18, 5).unwrap());
+        assert_eq!(
+            (
+                term.term.inactive_grid().columns(),
+                term.term.inactive_grid().screen_lines()
+            ),
+            (18, 5)
+        );
+        term.feed(b"\x1b[?1049l");
+        assert_eq!(term.screen().cells[0][0].text, "P");
+    }
+    #[test]
+    fn divergent_inactive_cursors_defer_instead_of_restoring_wrong_state() {
+        let mut original = TerminalProbe::new(TermSize::new(32, 8).unwrap(), 128);
+        original.feed(b"0123456789012345678901234567890123456789\r\nSECOND\x1b[?1049hALT");
+        original.resize(TermSize::new(44, 12).unwrap());
+        let before = original.restore_fingerprint();
+        assert_eq!(
+            original.restore_sequence(),
+            Err(RestoreGap::InactiveCursorDivergence)
+        );
+        assert_eq!(before, original.restore_fingerprint());
+        original.feed(b"\x1b[?1049l");
+        let restore = original.restore_sequence().unwrap();
+        let mut restored = TerminalProbe::new(TermSize::new(44, 12).unwrap(), 128);
+        restored.feed(&restore.bytes);
+        assert_eq!(
+            original.restore_fingerprint(),
+            restored.restore_fingerprint()
+        );
+    }
+
+    #[test]
+    fn restore_defers_hidden_nonedge_wrap_without_corrupting_source() {
+        let mut original = terminal();
+        original.feed(b"123456789012345678901234\x1b[2Z\x1b[?1049ha");
+        let before = original.restore_fingerprint();
+        assert_eq!(
+            original.restore_sequence().unwrap_err(),
+            RestoreGap::NonEdgePendingWrap
+        );
+        assert_eq!(original.restore_fingerprint(), before);
+        original.feed(b"\x1b[?1049l\r\x1b7");
+        let frame = original.restore_sequence().unwrap();
+        let mut restored = terminal();
+        restored.feed(&frame.bytes);
+        assert_eq!(
+            restored.restore_fingerprint(),
+            original.restore_fingerprint()
+        );
+    }
+    #[test]
+    fn dual_buffer_restore_preserves_hidden_main_and_latent_cursor() {
+        for (prefix, suffix) in [
+            (
+                "PRIMARY 中\x1b[31m\x1b7\x1b[?1049hALT",
+                "\x1b[?1049l!\x1b8?",
+            ),
+            (
+                "MAIN\x1b[?1049h\x1b[3;4H\x1b[34m\x1b7\x1b[?1049l",
+                "\x1b[?1049h\x1b8ALT\x1b[?1049l!",
+            ),
+            ("\x1b]8;;http://x\x1b\\\x1b[?1049h\r", "X\x1b[?1049lY"),
+        ] {
+            for resized in [
+                None,
+                Some(TermSize::new(20, 5).unwrap()),
+                Some(TermSize::new(30, 10).unwrap()),
+            ] {
+                let mut source = terminal();
+                source.feed(prefix.as_bytes());
+                if let Some(size) = resized {
+                    source.resize(size);
+                }
+                let size = resized.unwrap_or(TermSize::new(24, 6).unwrap());
+                let before = source.restore_fingerprint();
+                let restore = source.restore_sequence().unwrap();
+                assert!(!restore.main_screen_missing);
+                assert!(
+                    restore.approximations.is_empty(),
+                    "{:?}",
+                    restore.approximations
+                );
+                assert_eq!(
+                    before,
+                    source.restore_fingerprint(),
+                    "serializer mutated source"
+                );
+                let mut restored = TerminalProbe::new(size, 64);
+                restored.feed(&restore.bytes);
+                assert_eq!(restored.restore_fingerprint(), before);
+                source.take_replies();
+                assert!(restored.take_replies().is_empty());
+                source.feed(suffix.as_bytes());
+                restored.feed(suffix.as_bytes());
+                assert_eq!(restored.restore_fingerprint(), source.restore_fingerprint());
+            }
+        }
+    }
+
+    #[test]
+    fn restore_reports_sync_and_pending_gaps() {
         let mut term = terminal();
         term.feed(b"\x1b[?2026hbuffered");
         assert_eq!(term.restore_sequence(), Err(RestoreGap::SyncPending));
         term.feed(b"\x1b[?2026l");
         assert!(term.restore_sequence().is_ok());
         term.feed(b"main\x1b[?1049halt");
-        assert!(term.restore_sequence().unwrap().main_screen_missing);
+        assert!(!term.restore_sequence().unwrap().main_screen_missing);
         term.feed(b"\x1b]52;c;");
         term.feed(&vec![b'A'; ground::MAX_PENDING]);
         assert_eq!(

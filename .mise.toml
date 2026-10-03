@@ -45,6 +45,14 @@ run = [
   "pnpm --filter ui exec tsx scripts/token-matrix.ts",
 ]
 
+[tasks.terminal-vendor-check]
+description = "Verify locked terminal source differs only by the approved getter"
+run = "node scripts/check-terminal-vendor.mjs"
+
+[tasks.terminal-vendor-test]
+description = "Run upstream terminal tests with isolated locked dependencies"
+run = "node scripts/check-terminal-vendor.mjs --test"
+
 [tasks.fmt]
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]

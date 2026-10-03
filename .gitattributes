@@ -1,3 +1,9 @@
 * text=auto eol=lf
 # VT samples contain meaningful CR/LF and escape bytes: preserve them verbatim.
 tests/fixtures/terminal/*.vt -text -diff
+# Upstream byte hashes must survive Windows checkout (including binary fixtures).
+vendor/alacritty_terminal/** -text
+# VT recordings are protocol bytes, not text formatting defects.
+vendor/alacritty_terminal/tests/ref/**/alacritty.recording -text -diff
+# A unified diff contains literal space-only context lines.
+vendor/*.patch whitespace=-blank-at-eol

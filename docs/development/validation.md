@@ -34,7 +34,7 @@ mise run probe
 - OSC 4/10/11/12 由 backend 使用主题 fallback 与 remote OSC override 应答；在 BEL/ST 边界先收取事件，再继续解析，防止后续 set/reset 改变较早查询的回答。actor 提供有界 palette 与 cell geometry 控制命令。像素尺寸只有实际测量且乘法不溢出才应答；未知时不编造尺寸。这不是完整查询兼容性证明，真实 UI 配色/测量同步仍待接入；矩阵中 OSC 52 无应答仅证明探针的拒绝策略，不证明应用已实现完整的剪贴板权限流程。
 - 原先 ZWJ 的格子布局还随 xterm raw Uint8Array 分块改变。每流 `Utf8Stream` 先保留不完整 UTF-8，空解码不调用 xterm；再使用同一 Unicode 17 scalar provider。`zwj.vt` 已改为严格门禁。16 组共享文本以 1/2/3/7/整流分块检查格子、光标和分块稳定性，shared provider 均通过；Unicode6/11/15 与实验 grapheme provider 仅作差异对比，不用于主链路。
 - `unicode-table-check` 重新从实际 Rust 表生成内容并只读比较；TS 穷举 0..0x10FFFF 的分类指纹和 Rust 生成值一致。表与适配器用的是**标量宽度**，并非现代 grapheme 宽度：例如家庭 emoji 仍占多个宽格子，没有宣称完整 EGC 字形/字体/IME 支持。实验 grapheme addon 只作为 MIT 开发依赖，不进入产品渲染路径。
-- `mise run probe-snapshot` 是完整恢复门禁，并输出双解析器分歧矩阵与恢复体积（`target/probes/snapshot*.json`、`token-matrix*.json`）。此前续流失败的 8 组用例，除非活动主屏外已全部在 Rust 与 xterm 两侧精确通过；3 万组随机流往返无失败。实现只用公开 API、透明 Handler 镜像与边界扫描器，未修改依赖。唯一缺口是非活动网格；另发现 10/62 个序列在 xterm.js 与 alacritty 间解析不同。数据、方案对比与建议见 [完整恢复评估](../architecture/terminal-restore-evaluation.md)。尚未接入生产 attach。
+- `mise run probe-snapshot` 是完整恢复门禁，并输出双解析器分歧矩阵与恢复体积（`target/probes/snapshot*.json`、`token-matrix*.json`）。已按用户批准增加唯一的非活动网格只读getter，恢复隐藏主屏及备用屏保存光标，保留发布包Apache许可证、VCS来源和SHA-256，211文件来源校验、178项上游测试接入CI。源代码故意漂移探针确认校验失败且不覆盖。三万组release属性测试无失败（延期和近似没有算成精确通过），指纹加入隐藏主屏格子/current/saved和备用屏saved cursor。新增shrink/grow、退出/重入及超链接笔回归。不能无损编码的隐藏光标分离和非行尾pending-wrap返回明确RestoreGap，不再静默丢主屏。xterm矩阵有545个可编码非近似场景，条件M1|M2为299/300，random-85仍记录为分歧；不能声称补丁根治解析差异或S2整体通过。本轮仅有Linux验证，尚未接入生产attach。原有10/62个解析序列分歧仍需同步策略。数据、方案对比与建议见 [完整恢复评估](../architecture/terminal-restore-evaluation.md)。尚未接入生产 attach。
 - 非规范 UTF-8/C1 在浏览器的实际行为、组合簇边界的更多控制序列场景、live 字体/IME、历史同步与真实程序录制流仍待验证，总体 S2 未通过。
 
 ### 已修复：UTF-8 分块时漏字符
@@ -111,7 +111,7 @@ mise run probe-pty
 
 ## 检查结果
 
-- Rust：44 项 headless 单元/属性测试通过（新增镜像透明性、边界扫描器、完整恢复往返与缺口报告等 7 项生成式/单元测试）；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- Rust：48 项 headless 单元/属性测试通过（新增非活动屏只读/源状态保持、双屏及尺寸变化、光标分离和非行尾wrap延期回归）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
 - TS：38 项测试通过；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
@@ -120,4 +120,4 @@ mise run probe-pty
 
 ## 尚未验证
 
-S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、GUI 接入与生产进程树回收仍待验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。完整终端状态恢复除非活动网格外已精确（见评估），是否引入一处只读 getter 补丁待确认，尚未接入生产 attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。
+S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、GUI 接入与生产进程树回收仍待验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。已批准的非活动网格只读getter及双屏恢复已接入；隐藏光标分离/非行尾wrap等不能无损编码的状态明确延期，尚未接入生产attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。

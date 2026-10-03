@@ -19,6 +19,7 @@ type Entry = {
   approximations: string[];
   rustExact: boolean | null;
   expected: unknown;
+  resized: { columns: number; rows: number } | null;
 };
 const report = JSON.parse(
   readFileSync(
@@ -63,14 +64,18 @@ for (const entry of report.cases) {
     continue;
   }
   const direct = await runXterm(
-    [bytes(entry.prefix), bytes(entry.suffix)],
+    [
+      bytes(entry.prefix),
+      ...(entry.resized === null ? [] : [entry.resized]),
+      bytes(entry.suffix),
+    ],
     report.columns,
     report.rows,
   );
   const restored = await runXterm(
     [bytes(entry.restore), bytes(entry.suffix)],
-    report.columns,
-    report.rows,
+    entry.resized?.columns ?? report.columns,
+    entry.resized?.rows ?? report.rows,
   );
   const expected = entry.expected as { cells: unknown[][]; cursor: unknown };
   const m1 = isDeepStrictEqual(restored.screen, expected);

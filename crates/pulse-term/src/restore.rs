@@ -50,6 +50,11 @@ pub enum RestoreGap {
     SyncPending,
     /// An unfinished escape sequence is longer than the replay bound.
     PendingSequenceTooLong,
+    /// Resize separated the hidden primary current/saved cursors; 1049 would
+    /// overwrite one during reconstruction. Retry after leaving alternate screen.
+    InactiveCursorDivergence,
+    /// A pending-wrap bit away from the right edge has no direct VT setter.
+    NonEdgePendingWrap,
 }
 
 /// VT bytes plus the parts that could not be expressed.
@@ -57,8 +62,8 @@ pub enum RestoreGap {
 pub struct Restore {
     /// Feed into a freshly created terminal of the same size.
     pub bytes: Vec<u8>,
-    /// The alternate screen is active and alacritty 0.26 has no public access to
-    /// the hidden primary screen; it is restored blank.
+    /// Compatibility diagnostic; always false with the approved inactive getter.
+    /// Unrepresentable hidden cursor states return RestoreGap, never blank data.
     pub main_screen_missing: bool,
     /// States VT sequences cannot express exactly; the restore is approximate.
     pub approximations: Vec<&'static str>,
@@ -101,80 +106,40 @@ impl TerminalProbe {
 
         let mut approximations = Vec::new();
         let alternate = mode.contains(TermMode::ALT_SCREEN);
+        let inactive = term.inactive_grid();
+        let nonedge = |cursor: &alacritty_terminal::grid::Cursor<Cell>| {
+            cursor.input_needs_wrap && cursor.point.column.0 + 1 != term.columns()
+        };
+        if nonedge(&grid.cursor)
+            || nonedge(&grid.saved_cursor)
+            || nonedge(&inactive.saved_cursor)
+            || (alternate && nonedge(&inactive.cursor))
+        {
+            return Err(RestoreGap::NonEdgePendingWrap);
+        }
         if alternate {
-            out.push_str("\x1b[?1049h");
-        }
-        for line in 0..grid.screen_lines() as i32 {
-            for column in 0..grid.columns() {
-                let row = &grid[Line(line)];
-                let cell = &row[Column(column)];
-                let previous_wide =
-                    column > 0 && row[Column(column - 1)].flags.contains(Flags::WIDE_CHAR);
-                if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
-                    if previous_wide {
-                        continue;
-                    }
-                    // Orphan spacer (left over by EL/ECH/DCH/ICH): create a pair with
-                    // the spacer's pen and remove its head without touching cells
-                    // already written on the left.
-                    let mut head = cell.clone();
-                    head.c = '\u{4e2d}';
-                    head.flags.remove(Flags::WIDE_CHAR_SPACER);
-                    head.flags.insert(Flags::WIDE_CHAR);
-                    if column + 1 < grid.columns() {
-                        // Pair at c..c+1, then DCH shifts the spacer into c. Cells on the
-                        // right are not written yet.
-                        let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
-                        write_cell(&mut out, &head);
-                        let _ = write!(out, "\x1b[{};{}H\x1b[P", line + 1, column + 1);
-                    } else if !row[Column(column - 1)]
-                        .flags
-                        .contains(Flags::WIDE_CHAR_SPACER)
-                    {
-                        // Last column: pair at c-1..c, erase the head, rewrite c-1.
-                        let _ = write!(out, "\x1b[{};{}H", line + 1, column);
-                        write_cell(&mut out, &head);
-                        let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column);
-                        write_cell(&mut out, &row[Column(column - 1)]);
-                    } else {
-                        approximations
-                            .push("orphan wide-char spacer after a spacer in the last column");
-                    }
-                    continue;
-                }
-                if cell.flags.contains(Flags::WIDE_CHAR) && column + 1 == grid.columns() {
-                    // Wide char in the last column without spacer (shifted by ICH/IRM):
-                    // a normal write would wrap. Write the pair one column earlier and
-                    // shift it right with ICH, then restore the left neighbour.
-                    if column > 0
-                        && !row[Column(column - 1)]
-                            .flags
-                            .contains(Flags::WIDE_CHAR_SPACER)
-                    {
-                        let _ = write!(out, "\x1b[{};{}H", line + 1, column);
-                        write_cell(&mut out, cell);
-                        let _ = write!(out, "\x1b[{};{}H\x1b[@", line + 1, column);
-                        write_cell(&mut out, &row[Column(column - 1)]);
-                    } else {
-                        approximations.push("wide char in the last column after a spacer");
-                    }
-                    continue;
-                }
-                let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
-                write_cell(&mut out, cell);
-                let next_is_spacer = column + 1 < grid.columns()
-                    && row[Column(column + 1)]
-                        .flags
-                        .contains(Flags::WIDE_CHAR_SPACER);
-                if cell.flags.contains(Flags::WIDE_CHAR)
-                    && !next_is_spacer
-                    && column + 1 < grid.columns()
-                {
-                    // Broken wide char (its spacer was erased): drop the new spacer.
-                    let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
-                }
+            if cursor_key(&inactive.cursor) != cursor_key(&inactive.saved_cursor) {
+                return Err(RestoreGap::InactiveCursorDivergence);
             }
+            // Restore the hidden primary screen before entering the active alternate.
+            // Entering 1049 saves its cursor without any destructive inspection.
+            write_grid(&mut out, inactive, &mut approximations);
+            write_tab_cells(&mut out, inactive);
+            place_cursor(&mut out, inactive, &inactive.cursor, 0);
+            write_template(&mut out, &inactive.cursor.template);
+            designate(&mut out, &inactive.cursor);
+
+            out.push_str("\x1b[?1049h\x1b(B\x1b)B\x1b*B\x1b+B\x0f");
+        } else {
+            // Entering alternate clears its content and replaces its current cursor,
+            // but preserves its saved cursor. Rebuild that slot for future re-entry.
+            out.push_str("\x1b[?1049h");
+            place_cursor(&mut out, inactive, &inactive.saved_cursor, 0);
+            write_template(&mut out, &inactive.saved_cursor.template);
+            designate(&mut out, &inactive.saved_cursor);
+            out.push_str("\x1b7\x1b[?1049l\x1b(B\x1b)B\x1b*B\x1b+B\x0f");
         }
+        write_grid(&mut out, grid, &mut approximations);
 
         // REP state on the alternate screen (no scratch screen available): rewrite,
         // last, one plain cell whose final printed character is the preceding char.
@@ -202,15 +167,7 @@ impl TerminalProbe {
             }
         }
 
-        // Copy-paste tab markers: HT stores '\t' in a blank start cell (even a wide
-        // char spacer) and keeps its attributes. Default tab stops are active here.
-        for line in 0..grid.screen_lines() as i32 {
-            for column in 0..grid.columns() {
-                if grid[Line(line)][Column(column)].c == '\t' {
-                    let _ = write!(out, "\x1b[{};{}H\t", line + 1, column + 1);
-                }
-            }
-        }
+        write_tab_cells(&mut out, grid);
 
         out.push_str("\x1b[3g");
         for (column, _) in self.side.tabs.iter().enumerate().filter(|(_, stop)| **stop) {
@@ -347,7 +304,7 @@ impl TerminalProbe {
         bytes.extend_from_slice(&self.utf8_tail);
         Ok(Restore {
             bytes,
-            main_screen_missing: alternate,
+            main_screen_missing: false,
             approximations,
         })
     }
@@ -375,6 +332,29 @@ impl TerminalProbe {
                 cell_key(&cursor.template)
             );
         }
+        let inactive = term.inactive_grid();
+        if term.mode().contains(TermMode::ALT_SCREEN) {
+            // Hidden primary contents and its cursor become visible on 1049l.
+            out.push_str("inactive-primary:\n");
+            for line in 0..inactive.screen_lines() as i32 {
+                for column in 0..inactive.columns() {
+                    let _ = write!(
+                        out,
+                        "{}|",
+                        cell_key(&inactive[Point::new(Line(line), Column(column))])
+                    );
+                }
+                out.push('\n');
+            }
+            let _ = writeln!(out, "inactive-cursor: {}", cursor_key(&inactive.cursor));
+        }
+        // Alternate content/current cursor is overwritten on next entry, but its
+        // saved cursor survives. Both active states must compare this latent slot.
+        let _ = writeln!(
+            out,
+            "inactive-saved: {}",
+            cursor_key(&inactive.saved_cursor)
+        );
         let _ = writeln!(out, "mode: {:?}", *term.mode() - TermMode::VI);
         // REP state is verified behaviourally (REP in the continuation), because a
         // fresh vte parser can never return to "no preceding character".
@@ -394,7 +374,6 @@ impl TerminalProbe {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn cursor_key(cursor: &Cursor<Cell>) -> String {
     format!(
         "{:?} wrap={} charsets={:?} pen={}",
@@ -422,6 +401,92 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
 }
 
 /// SGR reset followed by every attribute of `cell` (used for cells and pens).
+fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'static str>) {
+    for line in 0..grid.screen_lines() as i32 {
+        for column in 0..grid.columns() {
+            let row = &grid[Line(line)];
+            let cell = &row[Column(column)];
+            let previous_wide =
+                column > 0 && row[Column(column - 1)].flags.contains(Flags::WIDE_CHAR);
+            if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                if previous_wide {
+                    continue;
+                }
+                // Orphan spacer (left over by EL/ECH/DCH/ICH): create a pair with
+                // the spacer's pen and remove its head without touching cells
+                // already written on the left.
+                let mut head = cell.clone();
+                head.c = '\u{4e2d}';
+                head.flags.remove(Flags::WIDE_CHAR_SPACER);
+                head.flags.insert(Flags::WIDE_CHAR);
+                if column + 1 < grid.columns() {
+                    // Pair at c..c+1, then DCH shifts the spacer into c. Cells on the
+                    // right are not written yet.
+                    let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
+                    write_cell(out, &head);
+                    let _ = write!(out, "\x1b[{};{}H\x1b[P", line + 1, column + 1);
+                } else if !row[Column(column - 1)]
+                    .flags
+                    .contains(Flags::WIDE_CHAR_SPACER)
+                {
+                    // Last column: pair at c-1..c, erase the head, rewrite c-1.
+                    let _ = write!(out, "\x1b[{};{}H", line + 1, column);
+                    write_cell(out, &head);
+                    let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column);
+                    write_cell(out, &row[Column(column - 1)]);
+                } else {
+                    approximations
+                        .push("orphan wide-char spacer after a spacer in the last column");
+                }
+                continue;
+            }
+            if cell.flags.contains(Flags::WIDE_CHAR) && column + 1 == grid.columns() {
+                // Wide char in the last column without spacer (shifted by ICH/IRM):
+                // a normal write would wrap. Write the pair one column earlier and
+                // shift it right with ICH, then restore the left neighbour.
+                if column > 0
+                    && !row[Column(column - 1)]
+                        .flags
+                        .contains(Flags::WIDE_CHAR_SPACER)
+                {
+                    let _ = write!(out, "\x1b[{};{}H", line + 1, column);
+                    write_cell(out, cell);
+                    let _ = write!(out, "\x1b[{};{}H\x1b[@", line + 1, column);
+                    write_cell(out, &row[Column(column - 1)]);
+                } else {
+                    approximations.push("wide char in the last column after a spacer");
+                }
+                continue;
+            }
+            let _ = write!(out, "\x1b[{};{}H", line + 1, column + 1);
+            write_cell(out, cell);
+            let next_is_spacer = column + 1 < grid.columns()
+                && row[Column(column + 1)]
+                    .flags
+                    .contains(Flags::WIDE_CHAR_SPACER);
+            if cell.flags.contains(Flags::WIDE_CHAR)
+                && !next_is_spacer
+                && column + 1 < grid.columns()
+            {
+                // Broken wide char (its spacer was erased): drop the new spacer.
+                let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
+            }
+        }
+    }
+}
+
+fn write_tab_cells(out: &mut Emitter, grid: &Grid<Cell>) {
+    // Copy-paste tab markers: HT stores '\t' in a blank start cell (even a wide
+    // char spacer) and keeps its attributes. Default tab stops are active here.
+    for line in 0..grid.screen_lines() as i32 {
+        for column in 0..grid.columns() {
+            if grid[Line(line)][Column(column)].c == '\t' {
+                let _ = write!(out, "\x1b[{};{}H\t", line + 1, column + 1);
+            }
+        }
+    }
+}
+
 fn write_pen(out: &mut Emitter, cell: &Cell) {
     out.push_str("\x1b[0m");
     sgr_color(&mut out.buf, cell.fg, true);
@@ -459,6 +524,7 @@ fn write_pen(out: &mut Emitter, cell: &Cell) {
 
 /// Pen of a cursor, including an open hyperlink (OSC 8) that new cells inherit.
 fn write_template(out: &mut Emitter, template: &Cell) {
+    out.push_str("\x1b]8;;\x1b\\");
     write_pen(out, template);
     if let Some(link) = template.hyperlink() {
         let _ = write!(out, "\x1b]8;id={};{}\x1b\\", link.id(), link.uri());
@@ -466,6 +532,9 @@ fn write_template(out: &mut Emitter, template: &Cell) {
 }
 
 fn write_cell(out: &mut Emitter, cell: &Cell) {
+    // Cursor restoration may leave an inherited hyperlink open. Cell rendering
+    // must establish its own link rather than leak that pen into blank cells.
+    out.push_str("\x1b]8;;\x1b\\");
     write_pen(out, cell);
     let link = cell.hyperlink();
     if let Some(link) = &link {

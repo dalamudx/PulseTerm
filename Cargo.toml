@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["vendor/alacritty_terminal"]
 members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "apps/desktop/src-tauri", "xtask"]
 default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "xtask"]
 
@@ -40,6 +41,10 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
+
+# Approved read-only inactive-grid API patch; see vendor/README.md.
+[patch.crates-io]
+alacritty_terminal = { path = "vendor/alacritty_terminal" }
 
 [profile.release]
 lto = "thin"

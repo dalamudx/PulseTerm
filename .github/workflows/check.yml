@@ -25,6 +25,10 @@ jobs:
         run: mise run bootstrap
       - name: Check code
         run: mise run check
+      - name: Verify approved terminal source patch
+        run: mise run terminal-vendor-check
+      - name: Test upstream terminal source
+        run: mise run terminal-vendor-test
       - name: Test code
         run: mise run test
       - name: Check shared Unicode table

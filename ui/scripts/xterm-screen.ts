@@ -47,7 +47,7 @@ export function screen(terminal: TerminalType) {
 
 /** Feed byte segments in order through the production decoding path. */
 export async function runXterm(
-  segments: Uint8Array[],
+  segments: (Uint8Array | { columns: number; rows: number })[],
   cols: number,
   rows: number,
 ) {
@@ -65,6 +65,10 @@ export async function runXterm(
   terminal.onData((data) => replies.push(data));
   const decoder = new Utf8Stream();
   for (const segment of segments) {
+    if (!(segment instanceof Uint8Array)) {
+      terminal.resize(segment.columns, segment.rows);
+      continue;
+    }
     for (let offset = 0; offset < segment.length; offset += 4096) {
       const decoded = decoder.feed(segment.subarray(offset, offset + 4096));
       if (decoded.length > 0)

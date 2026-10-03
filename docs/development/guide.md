@@ -58,6 +58,8 @@ mise run unicode-table            # 从锁定 Rust 表生成前端 Unicode 宽�
 mise run unicode-table-check      # 只读漂移检查
 mise run probe-unicode            # 16 组文本、多提供器与分块对比
 mise run probe-snapshot           # 完整恢复（Rust/xterm）、双解析器分歧矩阵与恢复体积
+mise run terminal-vendor-check    # 检查211个源文件仅有批准的只读getter差异
+mise run terminal-vendor-test     # 独立锁文件运行上游178项测试
 mise run bindings                 # 从 Rust 命令表生成 IPC 类型、命令与事件
 mise run bindings-check           # 检查生成产物漂移，不覆盖源文件
 mise run audit                    # Rust 许可证/安全公告/来源检查
