@@ -515,6 +515,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             probe_event,
             crate::window_sessions::probe_session,
             crate::window_sessions::probe_session_ack,
+            crate::window_sessions::probe_session_compare,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer
         ])

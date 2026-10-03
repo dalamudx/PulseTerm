@@ -2,10 +2,12 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
 import headless from "@xterm/headless";
+import { IdleComparison } from "../features/terminal/idle-comparison";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
+import type { AttachBoundary } from "./attachment";
 import { AttachmentConsumer } from "./attachment-consumer";
 import { decodeFrame } from "./frames";
 import { commands, type SessionEvidence } from "./gen/commands";
@@ -81,6 +83,8 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
   };
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
+  let idleChecked = false;
+  let idle: IdleComparison | undefined;
   let generationSeen: bigint | undefined;
   channel.onmessage = (data) => {
     try {
@@ -165,8 +169,96 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       latest = consumer
         .enqueue(wire)
         .then(async (receipt) => {
-          if (receipt?.event.kind === "ready")
+          if (receipt?.event.kind === "ready") {
+            const boundary = receipt.event.boundary;
+            if (!terminal || generationSeen === undefined)
+              throw new Error("session.idle_not_ready");
+            const surface = terminal;
+            const generation = generationSeen.toString();
+            const rendered = (b: AttachBoundary) => ({
+              columns: b.columns,
+              rows: b.rows,
+              revision: b.revision.toString(),
+              parsedBytes: b.parsedBytes.toString(),
+              digest: digest(surface),
+            });
+            await requireRejected(
+              commands.probeSessionCompare(
+                nonce,
+                (generationSeen + 1n).toString(),
+                rendered(boundary),
+              ),
+            );
+            if (previous)
+              await requireRejected(
+                commands.probeSessionCompare(
+                  nonce,
+                  previous.generation,
+                  rendered(boundary),
+                ),
+              );
+            const wrong = rendered(boundary);
+            wrong.digest =
+              wrong.digest.slice(0, -1) +
+              (wrong.digest.endsWith("0") ? "1" : "0");
+            if (
+              (await commands.probeSessionCompare(nonce, generation, wrong)) !==
+              "mismatch"
+            )
+              throw new Error("session.mismatch_missed");
+            await requireRejected(
+              commands.probeSessionCompare(
+                nonce,
+                generation,
+                rendered(boundary),
+              ),
+            );
+            let checked!: () => void;
+            const done = new Promise<void>((resolve) => {
+              checked = resolve;
+            });
+            idle = new IdleComparison({
+              compare: async (b, signal) => {
+                if (signal.aborted) throw new Error("session.idle_aborted");
+                const result = await commands.probeSessionCompare(
+                  nonce,
+                  generation,
+                  rendered(b),
+                );
+                if (signal.aborted) throw new Error("session.idle_aborted");
+                return result;
+              },
+              mismatch: () => {
+                failed = new Error("session.idle_mismatch");
+                checked();
+              },
+              matched: () => {
+                idleChecked = true;
+                checked();
+              },
+            });
+            // The finite helper is waiting for go, so no subsequent Data can
+            // invalidate this Commit boundary while we test the idle scheduler.
+            idle.observe(boundary);
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                done,
+                new Promise<never>((_, reject) => {
+                  timer = setTimeout(
+                    () => reject(new Error("session.idle_timeout")),
+                    2500,
+                  );
+                }),
+              ]);
+            } finally {
+              if (timer !== undefined) clearTimeout(timer);
+              idle.dispose();
+            }
+            if (failed || !idleChecked)
+              throw failed ?? new Error("session.idle_unchecked");
             await commands.probeSessionGo(nonce);
+          }
         })
         .catch((error) => {
           failed = error;
@@ -196,12 +288,15 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       !result.sessionSurvived ||
       result.nativeExit !== 0 ||
       result.peakCreditBytes > 8212 ||
-      !delayed
+      !delayed ||
+      !idleChecked
     )
       throw new Error("session.integrity_failed");
+    result.idleChecked = idleChecked;
     previous = { nonce, generation: result.generation };
     return result;
   } finally {
+    idle?.dispose();
     consumer?.cancel();
     disposePolicy?.();
     terminal?.dispose();

@@ -3,12 +3,12 @@ use super::*;
 use pulse_term::session::{self, ChannelTransport, DriverEndpoint, Lifecycle, SessionTask};
 use std::time::Duration;
 use tokio::time::timeout;
-fn session() -> (SessionHandle, SessionTask, DriverEndpoint) {
+pub(super) fn session() -> (SessionHandle, SessionTask, DriverEndpoint) {
     let (transport, driver) = ChannelTransport::bounded_driver();
     let (handle, task) = session::spawn_session(TermSize::new(32, 8).unwrap(), 64, transport);
     (handle, task, driver)
 }
-fn config() -> AttachmentConfig {
+pub(super) fn config() -> AttachmentConfig {
     AttachmentConfig {
         fragment: 1024,
         frames: 1,
@@ -16,7 +16,7 @@ fn config() -> AttachmentConfig {
         ack_timeout: Duration::from_secs(2),
     }
 }
-async fn bootstrap(
+pub(super) async fn bootstrap(
     registry: &SessionRegistry,
     owner: WindowToken,
     id: SessionId,

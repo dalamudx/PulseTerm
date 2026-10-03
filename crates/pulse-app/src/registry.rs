@@ -53,6 +53,7 @@ struct Entry {
     owner: WindowToken,
     handle: SessionHandle,
     capture: Arc<AsyncMutex<()>>,
+    comparison: AsyncMutex<Option<tokio::time::Instant>>,
 }
 struct Binding {
     generation: u64,
@@ -189,6 +190,7 @@ impl SessionRegistry {
                 owner,
                 handle,
                 capture: Arc::new(AsyncMutex::new(())),
+                comparison: AsyncMutex::new(None),
             }),
         );
         Ok(id)
@@ -393,9 +395,12 @@ impl SessionRegistry {
         Ok(())
     }
 }
+#[path = "registry_comparison.rs"]
+mod comparison;
 #[cfg(test)]
 #[path = "registry_reap_tests.rs"]
 mod reap_tests;
+pub use comparison::{RenderedScreen, VisibleComparison};
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;

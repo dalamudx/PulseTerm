@@ -1,0 +1,99 @@
+//! Read-only, generation-scoped comparison. NEVER clears actor divergence hints.
+use super::*;
+use pulse_term::session::Lifecycle;
+use std::time::Duration;
+use tokio::time::{Instant, timeout};
+const MIN_INTERVAL: Duration = Duration::from_millis(500);
+const DEADLINE: Duration = Duration::from_millis(250);
+
+/// Renderer projection after a complete write callback at a known wire boundary.
+/// Do not infer revisions from raw Data bytes; only Commit/Checkpoint supplies them.
+#[derive(Debug, Clone)]
+pub struct RenderedScreen {
+    /// Must match every actor field, including dimensions and revision.
+    pub boundary: SessionState,
+    /// FNV visible digest v1: not an authentication or full-state checksum.
+    pub digest: String,
+}
+/// Sampled evidence, NOT permission to apply a restore or clear actor risk bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisibleComparison {
+    /// Visible projection matched at the requested boundary; risk remains untouched.
+    Equal,
+    /// Visible projection differed at that boundary; recovery may still be deferred.
+    Mismatch,
+    /// Actor advanced or reconfigured. This is not evidence of parser divergence.
+    Stale,
+}
+impl SessionRegistry {
+    fn comparison_entry(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+    ) -> Result<Arc<Entry>, RegistryError> {
+        let state = self.lock()?;
+        let entry = Self::entry(&state, owner, id)?;
+        state
+            .bindings
+            .get(&id)
+            .filter(|b| b.generation == generation)
+            .ok_or(RegistryError::Stale)?;
+        Ok(entry)
+    }
+    /// At most one comparison per session and one admission per 500ms, including
+    /// cancelled/failed calls and binding replacements. Foreign/stale requests
+    /// cannot consume this allowance. No terminal or registry metadata mutex crosses
+    /// await; only the per-session comparison admission guard is held.
+    /// A 250ms deadline bounds an unresponsive actor. Comparison is read-only so a
+    /// revoked in-flight request cannot clear hints in a replacement generation.
+    pub async fn compare_visible(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<VisibleComparison, RegistryError> {
+        let entry = self.comparison_entry(owner, id, generation)?;
+        if rendered.digest.len() != 16
+            || !rendered
+                .digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(SessionError::InvalidDigest.into());
+        }
+        let mut last = entry
+            .comparison
+            .try_lock()
+            .map_err(|_| RegistryError::Busy)?;
+        let now = Instant::now();
+        if last.is_some_and(|at| now.duration_since(at) < MIN_INTERVAL) {
+            return Err(RegistryError::Busy);
+        }
+        *last = Some(now);
+        // Cheap rejection avoids hashing an already-obsolete or finished screen.
+        if rendered.boundary.lifecycle != Lifecycle::Running
+            || *entry.handle.state.borrow() != rendered.boundary
+        {
+            return Ok(VisibleComparison::Stale);
+        }
+        let captured = timeout(DEADLINE, entry.handle.diagnostic_digest()).await;
+        // Revocation/replacement wins even if the actor failed at the same time.
+        self.comparison_entry(owner, id, generation)?;
+        let captured = captured.map_err(|_| RegistryError::Busy)??;
+        if captured.boundary != rendered.boundary
+            || *entry.handle.state.borrow() != captured.boundary
+        {
+            return Ok(VisibleComparison::Stale);
+        }
+        Ok(if captured.digest == rendered.digest {
+            VisibleComparison::Equal
+        } else {
+            VisibleComparison::Mismatch
+        })
+    }
+}
+#[cfg(test)]
+#[path = "registry_comparison_tests.rs"]
+mod tests;

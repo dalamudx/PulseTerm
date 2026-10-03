@@ -15,6 +15,7 @@ export const commands = {
 	probeEvent: (nonce: string) => __TAURI_INVOKE<null>("probe_event", { nonce }),
 	probeSession: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel }),
 	probeSessionAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_session_ack", { nonce, generation, sequence }),
+	probeSessionCompare: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<ComparisonEvidence>("probe_session_compare", { nonce, generation, rendered }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
 	probeSessionPeer: (nonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce }),
 };
@@ -33,6 +34,8 @@ export type BackendStats = {
 	peakFrames: number,
 	peakBytes: number,
 };
+
+export type ComparisonEvidence = "equal" | "mismatch" | "stale";
 
 export type ProbeConfig = {
 	chunkBytes: number,
@@ -78,6 +81,15 @@ export type ProbeReport = {
 
 export type ProbeTransport = "channel" | "websocket";
 
+/**  Explicit small control DTO; terminal bytes remain exclusively on Raw Channel. */
+export type RenderedProjection = {
+	columns: number,
+	rows: number,
+	revision: string,
+	parsedBytes: string,
+	digest: string,
+};
+
 export type SessionEvidence = {
 	generation: string,
 	digest: string,
@@ -89,6 +101,7 @@ export type SessionEvidence = {
 	peerDenied: boolean,
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
+	idleChecked: boolean,
 };
 
 export type SocketTicket = {

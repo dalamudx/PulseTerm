@@ -1,11 +1,13 @@
 //! Local-only session validation. No user shell, remote navigation or frontend owner token.
 use crate::raw_frame::RawFrame;
 use pulse_app::attachment::AttachmentConfig;
-use pulse_app::registry::{SessionId, SessionRegistry, WindowToken};
+use pulse_app::registry::{
+    RenderedScreen, SessionId, SessionRegistry, VisibleComparison, WindowToken,
+};
 use pulse_app::spawn_local;
 use pulse_core::TermSize;
 use pulse_pty::PtyCommand;
-use pulse_term::session::{Lifecycle, SessionHandle};
+use pulse_term::session::{Lifecycle, SessionHandle, SessionState};
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
@@ -187,6 +189,7 @@ pub(crate) struct SessionEvidence {
     pub peer_denied: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
+    pub idle_checked: bool,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -204,6 +207,7 @@ impl SessionEvidence {
             || !self.peer_denied
             || !self.window_revoked
             || !self.session_survived
+            || !self.idle_checked
         {
             return Err("session.invalid_evidence".into());
         }
@@ -226,6 +230,62 @@ pub(crate) fn probe_session_ack(
         .registry
         .acknowledge(owner, id, generation, sequence)
         .map_err(error)
+}
+/// Explicit small control DTO; terminal bytes remain exclusively on Raw Channel.
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct RenderedProjection {
+    pub columns: u16,
+    pub rows: u16,
+    pub revision: String,
+    pub parsed_bytes: String,
+    pub digest: String,
+}
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ComparisonEvidence {
+    Equal,
+    Mismatch,
+    Stale,
+}
+fn parse_counter(value: &str) -> Result<u64> {
+    let parsed = value.parse::<u64>().map_err(error)?;
+    if parsed.to_string() != value {
+        return Err("session.invalid_integer".into());
+    }
+    Ok(parsed)
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_compare(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+    rendered: RenderedProjection,
+) -> Result<ComparisonEvidence> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    let generation = parse_u64(&generation)?;
+    let rendered = RenderedScreen {
+        boundary: SessionState {
+            lifecycle: Lifecycle::Running,
+            size: TermSize::new(rendered.columns, rendered.rows).map_err(error)?,
+            revision: parse_counter(&rendered.revision)?,
+            parsed_bytes: parse_counter(&rendered.parsed_bytes)?,
+        },
+        digest: rendered.digest,
+    };
+    let comparison = state
+        .0
+        .registry
+        .compare_visible(owner, id, generation, rendered)
+        .await
+        .map_err(error)?;
+    Ok(match comparison {
+        VisibleComparison::Equal => ComparisonEvidence::Equal,
+        VisibleComparison::Mismatch => ComparisonEvidence::Mismatch,
+        VisibleComparison::Stale => ComparisonEvidence::Stale,
+    })
 }
 fn parse_u64(value: &str) -> Result<u64> {
     let parsed = value.parse::<u64>().map_err(error)?;
@@ -423,6 +483,7 @@ pub(crate) async fn probe_session(
         peer_denied,
         window_revoked: true,
         session_survived,
+        idle_checked: false, // Frontend completes its controlled idle comparison before go.
     })
 }
 #[cfg(test)]
@@ -462,6 +523,7 @@ mod tests {
             peer_denied: true,
             window_revoked: true,
             session_survived: true,
+            idle_checked: true,
         };
         assert!(e.validate().is_ok());
         e.generation = "02".into();
@@ -473,12 +535,20 @@ mod tests {
         e.peak_credit_bytes = 8213;
         assert!(e.validate().is_err());
         e.peak_credit_bytes = 6092;
+        e.idle_checked = false;
+        assert!(e.validate().is_err());
+        e.idle_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }
     #[test]
     fn exact_control_integers() {
         assert_eq!(parse_u64("18446744073709551615").unwrap(), u64::MAX);
+        assert_eq!(parse_counter("0").unwrap(), 0);
+        assert_eq!(parse_counter("18446744073709551615").unwrap(), u64::MAX);
+        for n in ["00", "01", "+1", " 1", "18446744073709551616"] {
+            assert!(parse_counter(n).is_err());
+        }
         for n in ["0", "01", "+1", " 1", "18446744073709551616"] {
             assert!(parse_u64(n).is_err());
         }

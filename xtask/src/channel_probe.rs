@@ -94,6 +94,7 @@ fn validate(path: &Path) -> Result<()> {
         || session["peerDenied"] != true
         || session["windowRevoked"] != true
         || session["sessionSurvived"] != true
+        || session["idleChecked"] != true
         || session["frames"].as_u64().is_none_or(|n| n < 4)
         || session["peakCreditBytes"]
             .as_u64()
