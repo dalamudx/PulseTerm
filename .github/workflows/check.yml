@@ -20,7 +20,7 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool vim less htop tmux
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool openssh-client openssh-server vim less htop tmux
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -50,6 +50,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mise run probe-ssh
+          sudo mkdir -p /run/sshd
+          mise run probe-ssh-system
           mise exec -- cargo clippy -p xtask --features ssh-probe --all-targets --locked -- -D warnings
           mise exec -- cargo test -p xtask --features ssh-probe --locked
       - name: Exercise native actor and wire acknowledgment backpressure

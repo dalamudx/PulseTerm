@@ -334,6 +334,14 @@ mise run probe-pty
 - 成功报告schema1全部安全/阶段字段经validator再写，开始运行先删旧成功报告；3feature单测验证pinned key匹配、username+credential拒绝、completed单flag不足，xtask feature9 tests与-Dwarnings通过。默认check/test 199TS/39app/89core/16IPC/6xtask通过；最新真实probe成功，server/client/系统child都清理。CI Linux新增explicit feature运行/检查/单测；仅注册不算远端CI或跨平台验收。首次timeout构造放runtime外导致panic，已修正在async block内部；lint test模块搬到EOF，无忽略生产warnings。
 - 新crypto包完整cargo-deny全特性审查仍fail：license原6拒绝、paste/proc-macro-error维护2；sources/bans通过，无新增拒绝或漏洞项，详dependency-review。没有扩大allow/ignore，SSH-key RC风险单列；桌面树不含russh。S4未通过：只取得受控russh双向和OpenSSH10client证据，不是真实sshd7–9/dropbear/旧设备、keyboard-interactive/证书、跳板/forward/Agent/FIDO2/GBK、真实remote PTY或完整transport actor集成。
 
+## S4真实OpenSSH服务端/原生PTY尺寸验证（Linux）
+
+- 新增probe-ssh-system，复用xtask可选ssh-probe依赖，未加生产crate或新Cargo包；Linux当前/usr/sbin/sshd10.0p2/stty/既有/run/sshd。临时config/Ed25519 host+authorized keys/随机loopback端口，固定当前测试account；不改/etc/sshd_config、~/.ssh、passwd或用户权限。UsePAM=yes只使用现有系统account/session策略，认证只publickey；临时StrictModes=no为私有temp授权路径，不是生产策略。ForceCommand仅固定Rust helper，remote原命令非空拒绝、stdin只3类固定test命令且字面shell符号从不执行；agent/tcp/X11/tunnel/用户env转发禁用。
+- russh pinned host key连接真实sshd，错key明确拒绝；公钥认证成功、PTY与shell request回执成功。实际helper通过stty size读取内核slaveTTY，初始24行80列；SSH window-change91×37后再读37行91列，不能只凭send queued或本地payload标记通过。固定Unicode/字面shell符号SYSTEM_ECHO验证；exit命令helper输出SYSTEM_END然后native退出7，client必须继续drain EOF/Close及尾部marker后断开。
+- 正向退出在仍运行的master /proc/pid/task/pid/children上最多3秒等所有owned session children归零，再停止并wait master，分别记录nativeSessionsDrained/nativeDaemonJoined；只操作创建的daemon，不kill现有系统daemon。所有标准请求/等待3–5秒，总25秒；失败child kill_on_drop，fixed helper12秒watchdog，但不把该兜底或master kill冒充正向session排空。临时目录结束清理，report没有实际username/host key/密码/端口。首次未知startup占端口竞争由pinned随机hostkey拒绝，不能连接非owned daemon并假成功。
+- 两次真实运行通过（第二次加入native child drain/完整validator），报告serverVersion OpenSSH_10.0p2/publicKeyAuth/realNativePty/nativeSessionsDrained/nativeDaemonJoined/EOF均true、[80,24]→[91,37]、exit7。后续新增1项真实report负向fixture（false nativePTy/child/eof/master、错尺寸/exit、missing limitations拒绝），feature10tests/clippy-Dwarnings通过；默认全check/test199TS/39app/89core/16IPC/6xtask及原probe-ssh仍通过。
+- 新mise/xtask CLI/CI entry与报告字段已注册；CI Linux系统依赖openssh-client/server及/run/sshd目录明确，但无远端执行证据。本轮Cargo.lock/deny/vendor/CSP不变，原全audit6license/2maintenance阻断继续。S4仍不全通过：实际只有OpenSSH10server与10client，7–9/dropbear/legacy设备、keyboard-interactive/证书、跳板/SFTP/forward/Agent/FIDO2/GBK及生产actor transport尚未验收。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

@@ -75,6 +75,7 @@ mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data 
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
+mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。
@@ -92,6 +93,8 @@ mise run probe-ssh                # optional xtask SSH feature，隔离loopback 
 finite terminal sink现在使用GenerationViewHost/ViewScope按后端Begin管理surface资源：consumer/render/query/onData/input/idle作用域统一清理，异步创建在abort时即时reject，晚到结果清理且不影响新generation。报告schema4新增viewHostChecked，要求每DOM3次resize+pool恢复+native恢复共5次scope重建，重复旧renderer.dispose不得改变新.xterm root。另有实际view-pool.ts/ViewHost与ViewSlot接主React容器（32总/6 parked/5分钟TTL、mounted不淘汰），33项池/票据回归与EOF-only真DOM xterm root迁移/park/复用/LRU/TTL探针；报告新增viewPoolChecked且两DOM结束主pool factory=1。池只通知同步setVisible、backend串行pause/resume由controller负责；finite adapter已用PaneVisibility同步通知当前SurfaceVisibility，实际parking不取消pane/PTY，显式pause→隐藏期间解析HIDDEN_SEED→fenced resume→新Begin后再做native cycle；报告activeParkChecked和pauseCount2均必须满足，headless0。ViewSlotOwner确保React cleanup跟随imperative resume后的最新ticket，过期parked claim不重建factory。未绑定控制面时false仍fail closed；不是生产用户shell/任意长期GUI停车完成。另加finite fit交接6秒scope deadline、phase诊断及取消即时终结，不因缺measurement无限等待或放宽70秒总deadline；native visibility恢复控制面仍跨surface退休保留，不能随scope清理提前解绑restore事件。
 
 `probe-ssh`需系统OpenSSH客户端，仅使用xtask可选ssh-probe feature（russh0.63.3/ring、RSA/压缩/legacy关闭），不把russh接desktop/生产连接。临时生成Ed25519 host/user密钥，server只bind127.0.0.1:0，client显式pinned hostkey，changed key须在认证前拒绝；wrong password/publickey、PTY请求成功回执、window-change91×37、固定UTF8数据回显与exit7/EOF排空、拒绝非固定exec。系统ssh使用-F空配置/独立known_hosts/StrictHostKeyChecking=yes/IdentityAgent=none/无SSH_AUTH_SOCK，执行固定标识而非任意shell，读出精确stdout与exit7后join。server handle与listener正常join、active handlers归零；总25秒、连接/阶段3–5秒，不接受用户endpoint/凭据/命令。输出target/probes/ssh.json，失败先删除旧报告、缺真实字段不能通过；Linux CI注册运行+feature test/clippy不等于远端已执行。当前本机OpenSSH10.0p2 client互通，不证明S4要求的OpenSSH7–9/server矩阵、dropbear/旧设备、MFA/证书/跳板/Agent/FIDO2/GBK通过。
+
+`probe-ssh-system`仅Linux，需要/usr/sbin/sshd、stty和既有/run/sshd。不编辑daemon/global/user SSH配置、不创建/解锁用户；使用当前测试account与既有PAM，临时private config/host key/authorized key/随机127.0.0.1端口启动-D sshd，ForceCommand只允许xtask固定helper，客户端命令和输入从不作为shell source执行。测试daemon的StrictModes=no仅为private temp authorized key路径，tempdir0700/keys0600，不能复制为生产设置或放宽应用pinned hostkey。真实PTY用stty读取80×24→91×37，UTF8字面输入、exit7/EOF排空、disconnect后/proc owned-master children必须清空再kill/join master。输出target/probes/ssh-system.json，10项SSH feature单测/validator门禁；现仅本机OpenSSH10.0p2，7–9/dropbear/硬件/FIDO2等未验收。CI系统安装openssh-server并确保privsep目录，不据注册声称远端运行。
 
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 

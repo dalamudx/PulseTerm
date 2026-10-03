@@ -11,6 +11,8 @@ mod snapshot_probe;
 mod software_probe;
 #[cfg(feature = "ssh-probe")]
 mod ssh_probe;
+#[cfg(feature = "ssh-probe")]
+mod ssh_system_probe;
 mod unicode_probe;
 mod unicode_table;
 
@@ -30,6 +32,10 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    #[cfg(feature = "ssh-probe")]
+    if std::env::args().nth(1).as_deref() == Some("ssh-system-helper") {
+        return ssh_system_probe::helper();
+    }
     if std::env::args().nth(1).as_deref() == Some("local-session-helper-detached") {
         return local_session_probe::detached_helper();
     }
@@ -80,6 +86,12 @@ fn main() -> Result<()> {
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
+        Some("probe-ssh-system") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_system_probe::run()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-ssh-system requires --features ssh-probe");
+        }
         Some("probe-ssh") => {
             #[cfg(feature = "ssh-probe")]
             ssh_probe::run()?;

@@ -187,7 +187,7 @@ fn host_matches(presented: &PublicKeyOrCertificate, expected: &PublicKey) -> boo
     matches!(presented,PublicKeyOrCertificate::PublicKey{key,..}if key==expected)
 }
 
-struct PinnedClient {
+pub(crate) struct PinnedClient {
     expected: PublicKey,
     mismatch: Arc<AtomicBool>,
 }
@@ -216,7 +216,7 @@ impl Drop for ListenerGuard {
         }
     }
 }
-async fn connect(
+pub(crate) async fn connect(
     address: std::net::SocketAddr,
     key: PublicKey,
     mismatch: Arc<AtomicBool>,
@@ -239,7 +239,7 @@ async fn connect(
     )
     .await??)
 }
-async fn success(channel: &mut Channel<client::Msg>) -> Result<bool> {
+pub(crate) async fn success(channel: &mut Channel<client::Msg>) -> Result<bool> {
     tokio::time::timeout(Duration::from_secs(3), async {
         while let Some(message) = channel.wait().await {
             match message {
