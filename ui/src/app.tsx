@@ -60,7 +60,9 @@ export function App() {
         className="terminal-probe"
       >
         <h2 id="terminal-probe-label">DOM 终端验证</h2>
-        <p>固定 PTY 样例 · 40 × 12 · 自动输入与恢复验证，不连接用户 shell</p>
+        <p>
+          固定 PTY 样例 · 初始 40 × 12 · 自动适配、输入与恢复验证，无用户 shell
+        </p>
         <div className="terminal-host" ref={setTerminalHost} />
       </section>
       <div className="table-scroll">

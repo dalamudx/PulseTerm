@@ -223,10 +223,19 @@ mise run probe-pty
 - schema4新增session.inputChecked及dom.keyboardChecked/compositionChecked/pasteBlocked门禁。两次独立完整Linux运行成功（每次2headless+2DOM+原7运输/取消场景）；最后generation=4、parsedBytes=3,113,061、frames=789、peakCreditBytes=8212、digest=`2ba9204154c3b86c`，DOM 12行文本一致、320×192、renderEvents=787/frameFences=785。数值为证据，不作性能承诺。
 - 2项actor回归、1项registry回归、7项TS队列回归及1项native输入validator回归新增；全workspace check/test、native clippy -D warnings、13项native tests、bindings-check、2MiB真实授权/ACK压力通过。没有升级依赖、变更锁文件/CSP/vendor或豁免门禁。生产输入快捷键/广播/粘贴确认/fit/ResizeObserver、真实OS键盘与IME、Windows/macOS仍待验收。
 
+## 自动fit、原生resize回执与新generation恢复（Linux）
+
+- `resize_for_lease`/AttachmentHandle.resize/SessionRegistry.resize_bound在owner+current generation入口及actor回合验证lease/取消watch/调用reply；same-size不发native、不推进revision、不撤销lease，pending resize明确Busy。native ACK成功才更新grid并发Reconfigured；失败保旧grid/lease，既有5秒未ACK失败关闭会话语义保持。准入之后native不可回滚；不能因不确定结果自动retry。resize成功必终止旧binding，registry返回时只重检owner而不误要求旧generation仍存在。
+- `measuredGrid`按实际DOM cell大小与host content box去padding计算整数grid：hidden/0/负/nonfinite/小于2×2不发native，最多160×60。FitScheduler 50ms合并observer风暴，单IPC、6秒不确定截止（native最长5秒），错误/取消不optimistic改renderer、不重试、不允许late结果重绑。9项TS回归覆盖最后观测、等待ACK、无效直接geometry、no-op、hidden、取消和deadline；2项core native-ACK/取消/abandon/失败回归及1项registry跨owner/旧控制/同session新generation回归通过。
+- fixed helper在go前输出已解析`RESIZE_SEED 中文🌍`。两轮DOM初始Commit触发真实ResizeObserver适配40×12→104×12；native ACK后relay只对一次Reconfigured重新capture，同session的新Begin使用新consumer/decoder/DOM renderer，按输出顺序恢复seed和精确尺寸，再执行原query/Marker/Repair/keyboard/EOF门禁。禁止旧ACK/input/resize/detach，新receipt回调校验自身generation。headless两轮无resize；report schema4要求DOM fitChecked及resizeCount=1，并与NativeExit真实resize_count对照，最终columns/rows从actor终态提供，不只相信frontend标志。
+- 综合检查意外发现已有capture发布竞态：actor先oneshot.send新stream，旧lease.status稍后才Replaced，多线程下caller可在间隙醒来。修复增加私有InstalledStream commit oneshot，public diagnostic_subscribe必须等待actor撤销旧lease/安装新lease后才返回。捕获前取消保旧lease；send之后/安装后的取消仍已换绑，不承诺rollback。新增确定性回归人为延迟commit10ms确认API仍pending；原2MiB native冻结/重新捕获的Replaced断言保持不变并通过，不放宽门禁。
+- 三次独立完整Linux WebView运行成功（最后一次包含commit gate，每次2headless+2DOM+7运输/取消场景）；最后DOM generation=6、104×12、832×192 CSS px、parsedBytes=3,113,086、frames=783、peakCreditBytes=8212、digest=`00b088cbb609382c`、renderEvents=780/frameFences=779，12行DOM/buffer逐行一致。截图已读回确认auto-fit可见、不溢出；数字为单次证据，不承诺性能。完整check/test、89 core/38 app/16 IPC/13 native/101 TS、bindings-check、native clippy -D warnings及真实2MiB native probe通过。
+- 这里只验一次初始列宽适配（容器高度当前由固定12行决定），不宣称连续拖动/ResizeObserver持续换绑、独立布局高度改变、跨屏DPI/zoom或生产TermView/IME完成；正式策略应新generation重新测量、合并最新geometry，并保留精确恢复拒绝/延期UX。没有新增依赖、改锁文件/CSP/vendor或放宽发布门禁。
+
 ## 检查结果
 
-- Rust：86 项 pulse-term 单元/属性测试通过（新增2项generation输入的actor lease/取消/abandon/budget回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 37项测试通过（新增generation-bound输入owner/换绑/撤销回归）；额外178项原上游测试通过；原生适配器现13项测试通过（新增固定输入字符/控制符/UTF8字节预算验证）；本轮未修改parser补丁或上游源码。
-- TS：92 项测试通过（新增7项输入队列FIFO/UTF8/预算/撤销/late completion/不确定超时与错误不重试回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现13项测试通过（新增固定输入字符/控制符/UTF8字节预算验证）；本轮未修改parser补丁或上游源码。
+- TS：101 项测试通过（新增9项测量grid与fit scheduler风暴合并/hidden/no-op/取消/不确定native/错误/非法geometry回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

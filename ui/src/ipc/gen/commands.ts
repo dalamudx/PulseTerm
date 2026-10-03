@@ -21,6 +21,7 @@ export const commands = {
 	probeSessionResume: (nonce: string) => __TAURI_INVOKE<null>("probe_session_resume", { nonce }),
 	/**  Finite sample-only input, NOT a general session/user-shell endpoint. */
 	probeSessionInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_session_input", { nonce, generation, text }),
+	probeSessionResize: (nonce: string, generation: string, columns: number, rows: number) => __TAURI_INVOKE<null>("probe_session_resize", { nonce, generation, columns, rows }),
 	/**  Revoke exactly this viewer generation; registry never closes the session. */
 	probeSessionDetach: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_detach", { nonce, generation }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
@@ -54,6 +55,7 @@ export type DomEvidence = {
 	keyboardChecked: boolean,
 	compositionChecked: boolean,
 	pasteBlocked: boolean,
+	fitChecked: boolean,
 };
 
 export type ProbeConfig = {
@@ -129,6 +131,9 @@ export type SessionEvidence = {
 	markerChecked: boolean,
 	repairChecked: boolean,
 	inputChecked: boolean,
+	resizeCount: number,
+	columns: number,
+	rows: number,
 };
 
 export type SocketTicket = {

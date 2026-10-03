@@ -157,6 +157,10 @@ export async function verifySessionChannel(dom?: {
   let geometry: Pick<AttachBoundary, "columns" | "rows"> | undefined;
   let idle: IdleComparison | undefined;
   let generationSeen: bigint | undefined;
+  let resizeAttempted = false,
+    resizeChecked = false;
+  let expectedSize: { columns: number; rows: number } | undefined;
+  let oldGeneration: bigint | undefined;
   channel.onmessage = (data) => {
     try {
       if (!(data instanceof ArrayBuffer)) throw new Error("session.not_binary");
@@ -165,6 +169,39 @@ export async function verifySessionChannel(dom?: {
       if (frame.kind === 8 && frame.payload[1] === 5) {
         outputEpoch++;
         idle?.activity();
+      }
+      if (
+        consumer &&
+        frame.kind === 8 &&
+        frame.sequence === 0 &&
+        frame.payload[1] === 1
+      ) {
+        const next = new DataView(
+          frame.payload.buffer,
+          frame.payload.byteOffset,
+          frame.payload.byteLength,
+        ).getBigUint64(4, true);
+        if (
+          !dom ||
+          !expectedSize ||
+          generationSeen === undefined ||
+          next <= generationSeen ||
+          oldGeneration !== undefined
+        )
+          throw new Error("session.unexpected_generation");
+        oldGeneration = generationSeen;
+        idle?.dispose();
+        disposePolicy?.();
+        consumer.cancel();
+        renderer?.dispose();
+        terminal?.dispose();
+        consumer = undefined;
+        renderer = undefined;
+        terminal = undefined;
+        disposePolicy = undefined;
+        decoder = new Utf8Stream();
+        geometry = undefined;
+        outputEpoch++;
       }
       const admissionEpoch = outputEpoch;
       if (!consumer) {
@@ -299,6 +336,15 @@ export async function verifySessionChannel(dom?: {
         .enqueue(wire)
         .then(async (receipt) => {
           if (
+            frame.kind === 8 &&
+            frame.payload.length >= 12 &&
+            new DataView(
+              frame.payload.buffer,
+              frame.payload.byteOffset,
+            ).getBigUint64(4, true) !== generationSeen
+          )
+            return;
+          if (
             receipt?.event.kind === "data" &&
             repairChecked &&
             !inputStarted &&
@@ -366,6 +412,68 @@ export async function verifySessionChannel(dom?: {
               throw new Error("session.idle_not_ready");
             const surface = terminal;
             const generation = generationSeen.toString();
+            if (dom && renderer && !resizeAttempted) {
+              if (!screenContains("RESIZE_SEED"))
+                throw new Error("session.resize_seed_missing");
+              resizeAttempted = true;
+              await requireRejected(
+                commands.probeSessionResize(
+                  nonce,
+                  (generationSeen + 1n).toString(),
+                  60,
+                  12,
+                ),
+              );
+              renderer.watchFit(
+                async (size) => {
+                  expectedSize = size;
+                  await commands.probeSessionResize(
+                    nonce,
+                    generation,
+                    size.columns,
+                    size.rows,
+                  );
+                },
+                (error) => {
+                  failed ??= error;
+                  cancel();
+                },
+              );
+              return;
+            }
+            if (dom) {
+              if (
+                !expectedSize ||
+                oldGeneration === undefined ||
+                boundary.columns !== expectedSize.columns ||
+                boundary.rows !== expectedSize.rows ||
+                !screenContains("RESIZE_SEED")
+              )
+                throw new Error("session.resize_capture_mismatch");
+              resizeChecked = true;
+              await requireRejected(
+                commands.probeSessionAck(nonce, oldGeneration.toString(), 0),
+              );
+              await requireRejected(
+                commands.probeSessionInput(
+                  nonce,
+                  oldGeneration.toString(),
+                  "typed",
+                ),
+              );
+              await requireRejected(
+                commands.probeSessionResize(
+                  nonce,
+                  oldGeneration.toString(),
+                  40,
+                  12,
+                ),
+              );
+              await requireRejected(
+                commands.probeSessionDetach(nonce, oldGeneration.toString()),
+              );
+            }
+
             const rendered = (b: AttachBoundary) => ({
               columns: b.columns,
               rows: b.rows,
@@ -560,7 +668,8 @@ export async function verifySessionChannel(dom?: {
       !markerChecked ||
       !repairChecked ||
       !inputChecked ||
-      !screenContains("INPUT_OK typed中文🌍")
+      !screenContains("INPUT_OK typed中文🌍") ||
+      (dom !== undefined && (!resizeChecked || result.resizeCount !== 1))
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
@@ -569,6 +678,7 @@ export async function verifySessionChannel(dom?: {
     result.inputChecked = inputChecked;
     if (dom) {
       if (!renderer) throw new Error("session.no_dom_renderer");
+      renderer.markFitChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };

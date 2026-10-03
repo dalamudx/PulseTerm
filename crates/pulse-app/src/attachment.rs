@@ -130,6 +130,17 @@ impl AttachmentHandle {
             .await
             .map_err(AttachmentError::Capture)
     }
+    /// Native ACK commits dimensions, invalidating this stream before reattachment.
+    pub async fn resize(&self, size: pulse_core::TermSize) -> Result<(), AttachmentError> {
+        if *self.cancel.borrow() {
+            return Err(AttachmentError::Detached);
+        }
+        self.session
+            .resize_for_lease(self.lease_id, self.cancel.subscribe(), size)
+            .await
+            .map_err(|e| AttachmentError::Capture(e.into()))
+    }
+
     /// Bound user input: actor checks lease and this cancellation before admission.
     pub async fn input(&self, bytes: Vec<u8>) -> Result<(), AttachmentError> {
         if *self.cancel.borrow() {

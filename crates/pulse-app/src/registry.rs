@@ -258,6 +258,32 @@ impl SessionRegistry {
         entry.handle.input(bytes).await?;
         Ok(())
     }
+    /// Generation-bound native resize. Success revokes the old lease, so callers
+    /// must attach a fresh generation; no post-await old-binding equality is required.
+    /// Owner remains checked; admitted native effects are not rollback-capable.
+    pub async fn resize_bound(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+        size: TermSize,
+    ) -> Result<(), RegistryError> {
+        let binding = {
+            let state = self.lock()?;
+            Self::entry(&state, owner, id)?;
+            state
+                .bindings
+                .get(&id)
+                .filter(|b| b.generation == generation)
+                .ok_or(RegistryError::Stale)?
+                .handle
+                .clone()
+        };
+        binding.resize(size).await?;
+        Self::entry(&*self.lock()?, owner, id)?;
+        Ok(())
+    }
+
     /// Native resize invalidates the view generation through the driver's status.
     pub async fn resize(
         &self,

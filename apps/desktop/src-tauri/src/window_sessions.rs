@@ -108,6 +108,8 @@ pub(crate) fn child() -> std::io::Result<()> {
         std::thread::sleep(Duration::from_secs(40));
         std::process::exit(2);
     });
+    std::io::stdout().write_all("RESIZE_SEED 中文🌍\r\n".as_bytes())?;
+    std::io::stdout().flush()?;
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line)?;
     if line.trim_end() != "go" {
@@ -140,9 +142,19 @@ pub(crate) fn child() -> std::io::Result<()> {
 async fn native() -> Result<(SessionHandle, pulse_app::LocalSessionTask)> {
     let mut command = PtyCommand::new(std::env::current_exe().map_err(error)?);
     command.args.push("--session-probe-child".into());
-    spawn_local(command, TermSize::new(40, 12).map_err(error)?, 128)
+    let (handle, task) = spawn_local(command, TermSize::new(40, 12).map_err(error)?, 128)
         .await
-        .map_err(error)
+        .map_err(error)?;
+    let mut observed = handle.state.clone();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while observed.borrow().parsed_bytes < "RESIZE_SEED 中文🌍\r\n".len() as u64 {
+            observed.changed().await.map_err(error)?;
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(error)??;
+    Ok((handle, task))
 }
 struct RunGuard {
     state: WindowSessions,
@@ -208,10 +220,19 @@ pub(crate) struct SessionEvidence {
     pub marker_checked: bool,
     pub repair_checked: bool,
     pub input_checked: bool,
+    pub resize_count: u32,
+    pub columns: u16,
+    pub rows: u16,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
         parse_u64(&self.generation)?;
+        if self.resize_count > 1
+            || !(2..=160).contains(&self.columns)
+            || !(2..=60).contains(&self.rows)
+        {
+            return Err("session.invalid_geometry".into());
+        }
         parse_u64(&self.revision)?;
         if parse_u64(&self.parsed_bytes)? < 1024 * 1024
             || self.digest.len() != 16
@@ -268,6 +289,33 @@ pub(crate) async fn probe_session_marker(
         .await
         .map_err(error)
 }
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_resize(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+    columns: u16,
+    rows: u16,
+) -> Result<()> {
+    if !(2..=160).contains(&columns) || !(2..=60).contains(&rows) {
+        return Err("session.invalid_geometry".into());
+    }
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state
+        .0
+        .registry
+        .resize_bound(
+            owner,
+            id,
+            parse_u64(&generation)?,
+            TermSize::new(columns, rows).map_err(error)?,
+        )
+        .await
+        .map_err(error)
+}
+
 /// Revoke exactly this viewer generation; registry never closes the session.
 #[tauri::command]
 #[specta::specta]
@@ -599,18 +647,35 @@ pub(crate) async fn probe_session(
         .attach(owner, id, config)
         .await
         .map_err(|_| "session.capture_failed".to_string())?;
-    let generation = attachment.generation;
     let relay = async {
-        while let Some(wire) = attachment.wire.recv().await {
-            channel.send(RawFrame(wire)).map_err(error)?;
+        let mut resizes = 0;
+        loop {
+            let generation = attachment.generation;
+            while let Some(wire) = attachment.wire.recv().await {
+                channel.send(RawFrame(wire)).map_err(error)?;
+            }
+            let result = attachment
+                .completion
+                .await
+                .map_err(|_| "session.relay_cancelled".to_string())?;
+            match result {
+                Ok(receipt) => return Ok((generation, receipt, resizes)),
+                Err(pulse_app::attachment::AttachmentError::Invalidated(
+                    pulse_term::session::StreamEnd::Reconfigured,
+                )) if resizes == 0 => {
+                    resizes += 1;
+                    attachment = state
+                        .0
+                        .registry
+                        .attach(owner, id, config)
+                        .await
+                        .map_err(|_| "session.recapture_failed".to_string())?;
+                }
+                Err(_) => return Err("session.relay_failed".to_string()),
+            }
         }
-        attachment
-            .completion
-            .await
-            .map_err(|_| "session.relay_cancelled".to_string())?
-            .map_err(|_| "session.relay_failed".to_string())
     };
-    let receipt = tokio::time::timeout(Duration::from_secs(60), relay)
+    let (generation, receipt, resizes) = tokio::time::timeout(Duration::from_secs(60), relay)
         .await
         .map_err(error)??;
     let (final_state, screen, native) =
@@ -623,6 +688,9 @@ pub(crate) async fn probe_session(
     }
     if native.cancelled {
         return Err("session.native_cancelled".into());
+    }
+    if native.resize_count != u64::from(resizes) {
+        return Err("session.native_resize_mismatch".into());
     }
     if final_state != receipt.boundary {
         return Err("session.boundary_mismatch".into());
@@ -648,6 +716,9 @@ pub(crate) async fn probe_session(
         marker_checked: false,
         repair_checked: false, // Frontend completes its controlled idle comparison before go.
         input_checked: false,
+        resize_count: resizes,
+        columns: final_state.size.columns(),
+        rows: final_state.size.rows(),
     })
 }
 #[cfg(test)]
@@ -705,6 +776,9 @@ mod tests {
             marker_checked: true,
             repair_checked: true,
             input_checked: true,
+            resize_count: 0,
+            columns: 40,
+            rows: 12,
         };
         assert!(e.validate().is_ok());
         e.generation = "02".into();

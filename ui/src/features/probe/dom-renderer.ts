@@ -2,6 +2,11 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { AttachBoundary } from "../../ipc/attachment";
 import type { DomEvidence } from "../../ipc/gen/commands";
+import {
+  FitScheduler,
+  type Geometry,
+  measuredGrid,
+} from "../terminal/fit-scheduler";
 import { nonceDocument } from "../terminal/nonce-document";
 import { renderFence } from "../terminal/render-fence";
 export interface DomRenderer {
@@ -9,6 +14,11 @@ export interface DomRenderer {
   settle(signal: AbortSignal): Promise<void>;
   evidence(): DomEvidence;
   keyboardSample(signal: AbortSignal): Promise<void>;
+  watchFit(
+    resize: (size: Geometry) => Promise<void>,
+    failed: (error: Error) => void,
+  ): void;
+  markFitChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -54,6 +64,9 @@ export function createDomRenderer(
     event.stopImmediatePropagation();
   };
   host.addEventListener("paste", blockPaste, { capture: true });
+  let fit: FitScheduler | undefined,
+    observer: ResizeObserver | undefined,
+    fitChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
   terminal.textarea?.setAttribute("aria-label", "只读 PTY 验证输出");
@@ -62,6 +75,8 @@ export function createDomRenderer(
     disposed = true;
     signal.removeEventListener("abort", dispose);
     host.removeEventListener("paste", blockPaste, { capture: true });
+    observer?.disconnect();
+    fit?.dispose();
     render.dispose();
     terminal.dispose();
     host.replaceChildren();
@@ -70,6 +85,54 @@ export function createDomRenderer(
   return {
     terminal,
     dispose,
+    markFitChecked() {
+      fitChecked = true;
+    },
+    watchFit(resize, failed) {
+      if (fit || disposed) throw new Error("terminal.fit_duplicate");
+      fit = new FitScheduler(
+        { columns: terminal.cols, rows: terminal.rows },
+        resize,
+        () => {},
+        failed,
+        signal,
+      );
+      const measure = () => {
+        if (
+          disposed ||
+          document.visibilityState !== "visible" ||
+          !host.isConnected
+        ) {
+          fit?.observe(undefined);
+          return;
+        }
+        const screen =
+          terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+        const rect = screen?.getBoundingClientRect();
+        const style = getComputedStyle(host);
+        const availableWidth =
+          host.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight);
+        const availableHeight =
+          host.clientHeight -
+          parseFloat(style.paddingTop) -
+          parseFloat(style.paddingBottom);
+        fit?.observe(
+          rect
+            ? measuredGrid(
+                availableWidth,
+                availableHeight,
+                rect.width / terminal.cols,
+                rect.height / terminal.rows,
+              )
+            : undefined,
+        );
+      };
+      observer = new ResizeObserver(measure);
+      observer.observe(host);
+      measure();
+    },
     async keyboardSample(inputSignal) {
       const textarea = terminal.textarea;
       if (disposed || inputSignal.aborted || !textarea)
@@ -178,6 +241,7 @@ export function createDomRenderer(
         keyboardChecked,
         compositionChecked,
         pasteBlocked,
+        fitChecked,
       };
     },
   };

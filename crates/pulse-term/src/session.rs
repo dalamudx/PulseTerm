@@ -24,6 +24,9 @@ mod marker_tests;
 #[path = "session_repair_tests.rs"]
 mod repair_tests;
 #[cfg(test)]
+#[path = "session_resize_tests.rs"]
+mod resize_tests;
+#[cfg(test)]
 #[path = "session_stream_tests.rs"]
 mod stream_tests;
 use pulse_core::TermSize;
@@ -178,6 +181,10 @@ pub struct SessionRepairRequest {
     /// Binding revocation checked before capture and before queue insertion.
     pub cancelled: watch::Receiver<bool>,
 }
+struct InstalledStream {
+    stream: SessionStream,
+    committed: oneshot::Receiver<()>,
+}
 enum Command {
     Repair {
         request: SessionRepairRequest,
@@ -188,7 +195,7 @@ enum Command {
         history_rows: usize,
         history_budget: usize,
         restore_budget: usize,
-        reply: oneshot::Sender<Result<SessionStream, SessionRestoreError>>,
+        reply: oneshot::Sender<Result<InstalledStream, SessionRestoreError>>,
     },
     Input(Vec<u8>, oneshot::Sender<Result<(), SessionError>>),
     BoundInput {
@@ -198,6 +205,12 @@ enum Command {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
+    BoundResize {
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        size: TermSize,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Palette(
         crate::QueryPalette,
         oneshot::Sender<Result<(), SessionError>>,
@@ -396,9 +409,12 @@ impl SessionHandle {
             restore_budget: restore_budget.min(MAX_RESTORE_BYTES),
             reply,
         })?;
-        result
+        let installed = result.await.map_err(|_| SessionError::Closed)??;
+        installed
+            .committed
             .await
-            .map_err(|_| SessionRestoreError::Session(SessionError::Closed))?
+            .map_err(|_| SessionError::Closed)?;
+        Ok(installed.stream)
     }
 }
 impl SessionHandle {
@@ -448,6 +464,25 @@ impl SessionHandle {
             lease_id,
             cancelled,
             bytes,
+            reply,
+        })?;
+        result.await.map_err(|_| SessionError::Closed)?
+    }
+
+    /// Viewer geometry is authorized against its lease on the actor turn.
+    /// Native ACK, not frontend optimistic resize, commits dimensions and revokes
+    /// the lease. Cancellation after native admission cannot undo a physical resize.
+    pub async fn resize_for_lease(
+        &self,
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        size: TermSize,
+    ) -> Result<(), SessionError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::BoundResize {
+            lease_id,
+            cancelled,
+            size,
             reply,
         })?;
         result.await.map_err(|_| SessionError::Closed)?
@@ -695,6 +730,18 @@ pub fn spawn_session(
                         };let _=reply.send(result);
                     }
 
+                    Some(Command::BoundResize{lease_id,cancelled,size,reply})=>{
+                        if reply.is_closed()||*cancelled.borrow()||cancelled.has_changed().is_err()||lease.as_ref().is_none_or(|l|l.id!=lease_id||l.output.is_closed()){
+                            let _=reply.send(Err(SessionError::StaleLease));
+                        }else if resizing.is_some(){let _=reply.send(Err(SessionError::Busy));}
+                        else if size==current.size{let _=reply.send(Ok(()));}
+                        else{let(sent,native)=oneshot::channel();match transport.input.try_send(TransportWrite::Resize(size,sent)){
+                            Ok(())=>resizing=Some(PendingResize{size,reply,native,deadline:tokio::time::Instant::now()+std::time::Duration::from_secs(5)}),
+                            Err(mpsc::error::TrySendError::Full(_))=>{let _=reply.send(Err(SessionError::Busy));},
+                            Err(mpsc::error::TrySendError::Closed(_))=>{let _=reply.send(Err(SessionError::Transport));},
+                        }}
+                    }
+
                     Some(Command::Resize(size, reply)) => {
                         if resizing.is_some(){let _=reply.send(Err(SessionError::Busy));}else{
                           let(sent,native)=oneshot::channel();
@@ -734,9 +781,11 @@ pub fn spawn_session(
                                     Some(next)=>{
                                         let(new,view)=stream::create(next,bootstrap);
                                         // A cancelled/failed request must not revoke a healthy old lease.
-                                        if reply.send(Ok(view)).is_ok(){
+                                        let(sent,committed)=oneshot::channel();
+                                        if reply.send(Ok(InstalledStream{stream:view,committed})).is_ok(){
                                             stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Replaced,&current);
                                             lease=Some(new);lease_serial=next;
+                                            let _=sent.send(());
                                         }
                                     }
                                 }
