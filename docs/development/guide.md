@@ -56,6 +56,7 @@ mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
 mise run probe-pty-portable       # 三平台finite Rust helper：规范输入/Unicode/native尺寸/EOF
 mise run probe-local-session      # 真实PTY→actor、resize回执、后端query、关闭join
+mise run probe-software           # Unix vim/less/htop/tmux真实输出及input/resize恢复；Linux CI执行
 mise run unicode-table            # 从锁定 Rust 表生成前端 Unicode 宽度
 mise run unicode-table-check      # 只读漂移检查
 mise run probe-unicode            # 16 组文本、多提供器与分块对比

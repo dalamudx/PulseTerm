@@ -5,7 +5,7 @@
 ## 工程基础
 
 - `.mise.toml` 固定 Rust 1.95.0、Node 22.23.3、pnpm 10.34.6、cargo-deny 0.20.2；任务统一使用 `mise run`。
-- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term`、`pulse-pty`、`pulseterm-desktop` 与 `xtask`；原生 GUI 依赖受 `desktop` feature 控制，默认仍可做 headless 核心检查。
+- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term`、`pulse-pty`、`pulse-app`、`pulseterm-desktop` 与 `xtask`；原生 GUI 依赖受 `desktop` feature 控制，默认仍可做 headless 核心检查。
 - `cargo xtask check-deps` 检查已实例化 crate 的直接依赖方向、Tauri 隔离和领域层已知 I/O 依赖；这是初始规则，不是完整的传递依赖/源码安全证明。
 - Rust 禁止 unsafe；生产代码禁止 unwrap/expect；TS 开启 strict 和 noUncheckedIndexedAccess，使用 Biome。
 - GitHub Actions 配置 Linux/Windows/macOS 检查、测试和探针；VT 样例禁止换行归一化。
@@ -139,13 +139,22 @@ mise run probe-pty
 - actor 使用 VTE 的真实同步刷新 deadline，在没有新输出时也会主动排空缓冲，经同一 tracked handler 更新状态与 revision；parsed_bytes 保持原始接收/解析进度，不制造额外输出字节。正常 ESU 或超时会解除 SyncPending。deadline遵循VTE，远端重复BSU会延期，未引入独立总时长限制。EOF 也排空未关闭同步刷新和不完整UTF-8；存在不能送达的上游回复则标记Failed，不伪装Ended。
 - 批量 flush 内的颜色 query/set/reset/RIS 经 handler 捕获查询当时的override，避免较早查询使用后来的动态颜色；RIS遵循上游保留色覆盖，OSC110才明确重置。6 个回归覆盖 idle超时、deadline前不执行/只执行一次、上游应答、EOF尾部与未应答失败、正常ESU和EOF颜色顺序。
 - 扩展30,000组 release 属性测试无失败：日志 exact=18,298、deferred=8,377、approx=2,459、alt-active=4,606（精确续流检查4,018）、alt-reentry=3,967；日志桶不是互斥的全部三万分类，延期/近似不是精确通过。生产 attach、历史/reflow、跨窗口和协议额度仍未验收。
-- 当前 **ChannelTransport 仅有测试驱动**，不是已完成的生产 Transport/PTY async bridge。输入成功只说明队列接受，不代表物理写完；Echo resize 只变更 parser，不代表系统 PTY 已 resize。Registry、多视图关联、额度/落后快照、生产生命周期事件节流和 OS 进程树回收仍待实施。
+- `pulse-app` 已接入有界真实 PTY async bridge（见 S3/S10 一节），原生 resize 收到成功回执后才更新 parser；IO错误明确 Failed，resize回执超时5秒失败且可带外取消。Echo只在validation构建可用；input成功仍仅代表队列接受，不代表物理写完。Registry、多视图关联、传输额度/落后快照、生产生命周期事件节流和OS进程树回收仍待实施。
 - S11 仍未整体验收：没有实际窗口迁移或 UI 销毁/恢复结果，视口投影禁止充当 attach 快照。此实现只建立与视图无关的基础，不宣称已经实现完整会话恢复。
+
+## 真实终端软件录制及恢复回归
+
+`mise run probe-software` 启动 vim/less/htop/tmux 原生PTY：每个程序记录一个键盘输入和一次80×24→91×37 resize边界，共8个受控样例；Rust严格比較restore前后完整已承诺结构及续流，真实headless xterm比较M1/M2/M3与query抑制。本轮8/8均匹配后端。不是WebView/窗口验证，也不是重新同步频率的代表性统计；风险位可有false positives（样例都有MODE/CELLS/GEOMETRY提示）。原.vt只作来源记录，尺寸转换需要software.json。
+
+- 新发现并修复：alacritty的ED2会把当前主屏推入history，即使主屏空白。旧恢复在vim备用屏重建时制造1行空history，后续扩大窗口会把隐藏current/saved cursor都下移1行；现在恢复用逐行EL，不使用ED2。2项回归验证fresh history为0、grow结构一致、live恢复保持原history每格及wrap。
+- 再验三万组release属性无失败：exact=18,602、deferred=8,518、approx=2,048、alt-active=4,538（检查4,395）、alt-reentry=4,073；桶非互斥完整分类。当前Rust/xterm矩阵557个可编码无已知近似样例，M1=391、M2=311、M3=442，条件M1|M2=311/311；基线解析漂移和不可编码案例没有算成功。
+- 采样每程序日志≤2MiB、reader仅2块4096字节，父进程40秒deadline；拒绝不能idle或正常quit的程序，不静默跳过。htop只观察采样进程本身；tmux只用独立socket和12秒有限shell，受控kill后client退出1是明确记录的server-exited，其他程序需0。故障保存prefix/suffix/恢复帧与结构，旧成功报告启动前删除。
+- Linux CI安装这4个工具并注册探针，只上传JSON，不上传原.vt；测试样例不含用户session内容。原依赖门禁不变。当前仍需原子live订阅/流控/窗口绑定、自动idle同步限频、深历史和reflow UX及Windows实际执行。
 
 ## 检查结果
 
-- Rust：63 项 headless 单元/属性测试通过（诊断恢复与预算 9 项、同步超时/EOF/颜色 6 项及已有48项）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
-- TS：38 项测试通过；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：68 项 pulse-term 单元/属性测试通过（增加原生驱动错误/resize回执及历史不污染回归）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- TS：53 项测试通过（加入重连编解码、consumer callback、摘要比较）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

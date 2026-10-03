@@ -105,7 +105,7 @@
 
 1. 已按用户确认采用 A1：只读 getter 暴露非活动网格，恢复主屏内容及备用屏保存光标；补丁来源、原测试和许可证见 `vendor/README.md`。上游 PR 尚未提交，当前仅保留可审阅的最小 diff。
 2. 增加「重新同步」策略：在关联/视图重建、尺寸变化、空闲、及检测到上述分歧序列后用恢复序列重置显示，纠正双解析器漂移。
-3. actor 同步更新超时已接入 VTE 真实 deadline；生产接入前仍需序列化器体积优化、历史同步、真实 vim/htop/tmux 录制流回归、与前端额度协议整合。
+3. actor 已处理同步刷新deadline；序列压缩、recent history、真实vim/less/htop/tmux录制回归与headless额度事务基础已实现（见validation和terminal-attachment）。真实录制暴露ED2制造空history并在grow时偏移隐藏光标的问题，已改逐行EL并回归。生产live边界订阅、完整协议额度贯通、深历史/reflow和窗口仍未验收。当前68项pulse-term/53项TS、三万组release属性及557样例条件恢复311/311通过；后者不代表557个原流皆与Rust一致。
 4. 保留不做的绕过：不把视口相同当作恢复通过；不保留所有隐藏 xterm 实例；不无界保存原始输出重放。
 
 ## 7. 已批准 A1 的实施证据及新增边界

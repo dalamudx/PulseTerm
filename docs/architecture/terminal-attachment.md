@@ -17,9 +17,9 @@
 
 历史使用主屏，备用屏激活时用只读inactive getter。最近≤2000个物理行，截断若落在软换行逻辑行中则向后缩减到下一hard边界；不为了装满2000行伪造第一行语义。极长软换行占满预算时可以没有可重放历史；深历史另行分页/search。历史颜色/属性及wrap保留，不能编码的wide/leading spacer显式HistoryUnsupported，而非丢内容。
 
-完整fresh restore可用RIS；history后和已有缓存重新同步必须用`restore_screen_bounded`，不含RIS，使用viewport ED2及明确模式/charset/tabstop/scroll margin。xterm每buffer有独立tabstop和scroll margin，主屏/备用屏都建立状态，不能只改active。screen-only不是针对任意旧xterm状态的完整兼容保证，已有测试覆盖模式/历史/同尺寸场景；需继续验证真实更新中的显示同步。
+完整fresh restore可用RIS；history后和已有缓存重新同步必须用`restore_screen_bounded`，不含RIS，使用逐行EL擦除viewport及明确模式/charset/tabstop/scroll margin。xterm每buffer有独立tabstop和scroll margin，主屏/备用屏都建立状态，不能只改active。screen-only不是针对任意旧xterm状态的完整兼容保证，已有测试覆盖模式/历史/同尺寸及8个真实软件input/resize续流场景；仍需验证生产显示同步。禁用ED2：它会把alacritty主屏推进history，原恢复多出一行空历史，导致vim后续grow时隐藏光标偏移。新增Rust回归确认EL不制造历史且保留原history。原始.vt不含外部resize事件，复现以software.json的尺寸转换元数据为准。
 
-压缩器省略ED2之后的默认空白尾部、相同pen连续运行不重复SGR/链接，每段只定位一次。所有SGR也经Emitter预算，修复颜色helper直接写buf绕过限制的问题。最坏每格不同属性仍约160KB，不宣称所有样例10倍压缩。
+压缩器省略逐行EL之后的默认空白尾部、相同pen连续运行不重复SGR/链接，每段只定位一次。所有SGR也经Emitter预算，修复颜色helper直接写buf绕过限制的问题。最坏每格不同属性仍约160KB，不宣称所有样例10倍压缩。
 
 ## 前端callback监督
 
@@ -35,4 +35,4 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。可见视图idle/resize/reattach的限频调度和generation校验仍须view driver接入。
 
-仍需：generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY实测、真实程序录制、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
+仍需：generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。

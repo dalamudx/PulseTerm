@@ -8,6 +8,7 @@ mod portable_pty_probe;
 mod pty_probe;
 mod query_probe;
 mod snapshot_probe;
+mod software_probe;
 mod unicode_probe;
 mod unicode_table;
 
@@ -64,6 +65,8 @@ fn main() -> Result<()> {
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-pty-portable") => portable_pty_probe::run()?,
         Some("probe-local-session") => local_session_probe::run()?,
+        Some("probe-software") => software_probe::run()?,
+        Some("probe-software-worker") => software_probe::worker()?,
         Some("probe-pty-portable-worker") => portable_pty_probe::worker()?,
         Some("probe-pty-worker") => pty_probe::worker()?,
         Some("unicode-table") => unicode_table::run(false)?,

@@ -20,7 +20,7 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 vim less htop tmux
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -43,6 +43,9 @@ jobs:
         run: mise run probe
       - name: Compare Unicode providers
         run: pnpm --filter ui exec tsx scripts/unicode-probe.ts
+      - name: Record real terminal software continuation
+        if: runner.os == 'Linux'
+        run: mise run probe-software
       - name: Exercise supervised native session actor
         run: mise run probe-local-session
       - name: Exercise native PTY on all platforms

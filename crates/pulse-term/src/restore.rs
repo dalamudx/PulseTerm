@@ -491,8 +491,13 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
 
 /// SGR reset followed by every attribute of `cell` (used for cells and pens).
 fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'static str>) {
-    // Fresh default blanks on this screen; ED2 does not erase scrollback.
-    out.push_str("\x1b[0m\x1b]8;;\x1b\\\x1b[H\x1b[2J");
+    // ED2 pushes the primary viewport into alacritty history, even if blank.
+    // Erase each row instead: recovery must not manufacture scrollback.
+    out.push_str("\x1b[0m\x1b]8;;\x1b\\");
+    for line in 1..=grid.screen_lines() {
+        let _ = write!(out, "\x1b[{line};1H\x1b[2K");
+    }
+    out.push_str("\x1b[H");
     let blank = Cell::default();
     let mut pen: Option<Cell> = None;
     for line in 0..grid.screen_lines() as i32 {
