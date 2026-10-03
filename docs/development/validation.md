@@ -249,10 +249,19 @@ mise run probe-pty
 - 一次完整Linux WebView运行成功，内含2headless+2DOM及7transport/cancel。每DOM有3native resize、1pause/native hide-show/resume，最终generation=12、104×12、parsedBytes=3,113,119、frames=786、peakCreditBytes=4115、nativeWindowChecked=true、digest=`00b088cbb609382c`；12行DOM投影一致，832×192px、renderEvents=783/frameFences=782。hidden期间Channel无新帧，重绑后包含HIDDEN_SEED，并继续输入、repair、EOF。完整check/test、21native/109TS、native clippy -D warnings、bindings-check及UI机械检测通过；最后仅增强close-poison/报告冲突负向门禁，不重复已通过的native成功链。
 - 环境Xvfb没有WM（openbox/xfwm4/fluxbox均不可用），因此未声称最小化通过；native.hide/show不是minimize，也不是实际用户触发的document.visibility事件。生产自动可见性adapter、OS最小化/恢复、长时间隐藏失败UX、跨屏DPI和Windows/macOS仍待实测。未增加依赖、修改锁文件/CSP/vendor或放宽release gate。
 
+## 自动容器/页面可见性合并与单generation恢复（Linux）
+
+- 新增可复用SurfaceVisibility（不绑定React）与bindSurfaceVisibility；每generation一个控制器，container/document两来源AND；页面初测/事件测量原子提交两值，不能在容器show、document仍hidden之间制造短暂resume。focus不是来源。host.hidden变更由真实MutationObserver驱动，visibilitychange读取真实document.visibilityState，不篡改浏览器状态；任意ancestor CSS遮挡/DOM解绑并非自动覆盖，解绑必须由ViewHost AbortSignal退出。
+- 收到不可见通知同步取消input/idle/consumer/renderer，再异步pause IPC；即使show提前到达，也等detach成功收据再resume。phase只允许visible→pausing→paused→resuming→handoff；每个控制IPC1.5秒不确定截止，错误/timeout/取消不重试，已准入副作用不可回滚。resume期间又隐藏会fail closed，不拿旧generation发送第二次pause。恢复callback在IPC前只授权一次新Begin，准确恢复门禁不变，controller在handoff后忽略旧来源/结果，新generation负责之后生命周期。
+- fixed DOM探针移除直接pause/resume调用：绑定controller，设置实际host.hidden=true，等待controller.paused；native backend执行窗口hide/隐藏期输出/show后，host.hidden=false让AND测量自动resume。observer在handoff/失败/abort时断开并移除visibilitychange监听；React宿主传入的dom.signal通过lifetime.abort立即取消控制器、renderer及generation detach，而不是等observer猜测卸载。
+- 17项新增TS回归覆盖同步retire/可见no-op、AND、early show必须等pause、来源风暴single-flight、handoff旧通知无效、调用前取消无IPC、在途取消/late结果不动新view、pause/resume错误和1.5秒timeout不重试、resume在途hide、retire失败、already-aborted、真实事件订阅接口与监听清理，以及原子snapshot切换。126项TS、全项目check/test（89core/38app/16IPC等原门禁）与tsc/Biome/Vite通过。本轮不改Rust/DTO/依赖/CSP/vendor，原21native测试证据仍来自前一轮。
+- 两次独立完整Linux WebView通过（最后含原子snapshot和自动监听清理，各2headless+2DOM+7transport/cancel），最终DOM generation=12、3resize/1pause/nativeWindowChecked=true、104×12、parsedBytes=3,113,119、frames=787、peakCreditBytes=8212、digest=`00b088cbb609382c`、renderEvents=785/frameFences=783、12行DOM匹配。期间无旧Channel帧，恢复seed/输入回显/repair/EOF均通过。native shutdown出现GLib-GIO name释放连接已关闭warning，不影响完整report/退出收据，未把它隐藏或作为失败重跑。
+- 浏览器的visibilitychange来源合并在单元模拟源中验证；真实WebView证据是host属性observer自动pause/resume和native hide/show，不声称浏览器必在OS最小化时发事件。系统minimize、应用多pane ViewHost、跨屏DPI/IME/Windows/macOS及长期hidden策略仍未完成；release gate未放宽。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现21项测试通过（新增Destroyed的wait/early resume/native在途/poison时序及native show收据准入回归）；本轮未修改parser补丁或上游源码。
-- TS：109 项测试通过（新增8项surface generation replacement、旧帧/late consumer success/error、U64及共用envelope验证回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- TS：126 项测试通过（新增17项单generation visibility的AND来源、同步retire、串行phase/early show、取消/late结果/timeout、不确定恢复、原子snapshot及observer清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

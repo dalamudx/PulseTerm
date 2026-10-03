@@ -6,6 +6,10 @@ import { IdleComparison } from "../features/terminal/idle-comparison";
 import { InputQueue } from "../features/terminal/input-queue";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
+import {
+  bindSurfaceVisibility,
+  SurfaceVisibility,
+} from "../features/terminal/surface-visibility";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
 import { type AttachBoundary, attachmentEnvelope } from "./attachment";
@@ -168,6 +172,8 @@ export async function verifySessionChannel(dom?: {
   let rebinds = 0,
     wireCount = 0;
   let hiddenBoundary = 0n;
+  let visibility: SurfaceVisibility | undefined;
+  let stopVisibility: (() => void) | undefined;
   let expectedSize: { columns: number; rows: number } | undefined;
   let oldGeneration: bigint | undefined;
   channel.onmessage = (data) => {
@@ -540,12 +546,50 @@ export async function verifySessionChannel(dom?: {
                   false,
                 ),
               );
-              await commands.probeSessionVisibility(nonce, generation, false);
-              surfaceHidden = true;
+              visibility = new SurfaceVisibility(
+                {
+                  retire: () => {
+                    surfaceHidden = true;
+                    inputArmed = false;
+                    inputQueue?.cancel();
+                    idle?.dispose();
+                    disposePolicy?.();
+                    consumer?.cancel();
+                    renderer?.dispose();
+                  },
+                  pause: async () => {
+                    await commands.probeSessionVisibility(
+                      nonce,
+                      generation,
+                      false,
+                    );
+                  },
+                  resume: async () => {
+                    surfaceHidden = false;
+                    resumePending = true;
+                    generations.expectReplacement(BigInt(generation));
+                    await commands.probeSessionVisibility(
+                      nonce,
+                      generation,
+                      true,
+                    );
+                  },
+                  failed: (error) => {
+                    failed ??= error;
+                    cancel();
+                  },
+                },
+                lifetime.signal,
+              );
+              stopVisibility = bindSurfaceVisibility(
+                dom.host,
+                visibility,
+                lifetime.signal,
+              );
+              // No manual pause call: MutationObserver on the real host attribute
+              // retires the local renderer and then serializes registry detach.
               dom.host.hidden = true;
-              disposePolicy?.();
-              consumer?.cancel();
-              renderer.dispose();
+              await visibility.paused;
               const before = wireCount;
               await requireRejected(
                 commands.probeSessionInput(nonce, generation, "typed"),
@@ -569,14 +613,12 @@ export async function verifySessionChannel(dom?: {
                 wireCount !== before
               )
                 throw new Error("session.hidden_delivery");
-              surfaceHidden = false;
-              dom.host.hidden = false;
               await requireRejected(
                 commands.probeSessionWindowCycle(nonce, generation),
               );
-              resumePending = true;
-              generations.expectReplacement(generationSeen);
-              await commands.probeSessionVisibility(nonce, generation, true);
+              dom.host.hidden = false;
+              await visibility.resumed;
+              stopVisibility?.();
               return;
             }
             if (dom && resumePending) {
@@ -817,6 +859,8 @@ export async function verifySessionChannel(dom?: {
   } finally {
     inputArmed = false;
     inputQueue?.cancel();
+    stopVisibility?.();
+    visibility?.dispose();
     clearTimeout(deadline);
     idle?.dispose();
     cancel();
