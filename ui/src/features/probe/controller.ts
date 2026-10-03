@@ -9,6 +9,7 @@ import {
   verifyTypedEvents,
 } from "../../ipc/probe";
 import { verifySessionChannel } from "../../ipc/session-probe";
+import { type PooledViewController, ViewHost } from "../terminal/view-pool";
 
 interface Snapshot {
   running: boolean;
@@ -37,11 +38,54 @@ export const getSnapshot = () => snapshot;
 let initialized = false;
 let terminalHost: HTMLElement | undefined;
 let surfaceLife: AbortController | undefined;
-export function setTerminalHost(host: HTMLDivElement | null): void {
+function setTerminalHost(host: HTMLElement | null): void {
   if (terminalHost === host) return;
   surfaceLife?.abort();
   terminalHost = host ?? undefined;
   surfaceLife = host ? new AbortController() : undefined;
+}
+
+let probePool: ViewHost | undefined;
+let probeFactories = 0;
+export function createProbeViewHost(
+  doc: Document,
+  signal: AbortSignal,
+): ViewHost {
+  const parking = doc.createElement("div");
+  doc.body.appendChild(parking);
+  const pool = new ViewHost(parking, signal, () =>
+    update({ error: "probe.pool_cleanup_failed", status: "failed" }),
+  );
+  const remove = () => parking.remove();
+  signal.addEventListener("abort", remove, { once: true });
+  if (signal.aborted) remove();
+  probePool = pool;
+  return pool;
+}
+/** Finite sample adapter: parking cancels the sample; production pause/resume
+ * remains a separate integration. Constructing a controller never opens a PTY. */
+export function probeViewFactory(
+  element: HTMLElement,
+  signal: AbortSignal,
+): PooledViewController {
+  probeFactories++;
+  element.className = "terminal-host";
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    signal.removeEventListener("abort", dispose);
+    if (terminalHost === element) setTerminalHost(null);
+  };
+  signal.addEventListener("abort", dispose, { once: true });
+  return {
+    setVisible: (visible) => {
+      if (disposed || signal.aborted) throw new Error("probe.pool_closed");
+      if (visible) setTerminalHost(element);
+      else if (terminalHost === element) setTerminalHost(null);
+    },
+    dispose,
+  };
 }
 
 export async function start(): Promise<void> {
@@ -78,6 +122,8 @@ export async function start(): Promise<void> {
       });
       domRuns++;
     }
+    if (probeFactories !== 1 || probePool?.size !== 1)
+      throw new Error("probe.view_pool_factory_count");
     typedEvents = await verifyTypedEvents();
     for (const transport of ["channel", "websocket"] as const) {
       for (const scenario of [

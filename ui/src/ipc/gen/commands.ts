@@ -66,6 +66,7 @@ export type DomEvidence = {
 	nativeSignalChecked: boolean,
 	nativePauseChecked: boolean,
 	viewHostChecked: boolean,
+	viewPoolChecked: boolean,
 };
 
 export type NativeVisibilitySample = {

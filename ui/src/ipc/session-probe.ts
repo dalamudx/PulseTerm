@@ -14,6 +14,7 @@ import { screenDigest } from "../features/terminal/screen-digest";
 import { SurfaceVisibility } from "../features/terminal/surface-visibility";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
+import { armViewDeadline } from "../features/terminal/view-deadline";
 import {
   GenerationViewHost,
   type ViewScope,
@@ -181,6 +182,7 @@ export async function verifySessionChannel(dom?: {
   let generationSeen: bigint | undefined;
   let resizeCount = 0,
     resizeChecked = false;
+  let phase = "bootstrap";
   let pauseStarted = false,
     visibilityChecked = false,
     surfaceHidden = false,
@@ -270,6 +272,7 @@ export async function verifySessionChannel(dom?: {
           generation,
           {
             reset: async (boundary, signal) => {
+              phase = "reset";
               if (terminal) throw new Error("session.repeated_reset");
               if (dom) {
                 const created = await view.create(async (viewSignal) => {
@@ -428,6 +431,7 @@ export async function verifySessionChannel(dom?: {
             !inputStarted &&
             screenContains("INPUT_READY")
           ) {
+            phase = "input";
             inputStarted = true;
             if (generationSeen === undefined)
               throw new Error("session.input_generation");
@@ -490,11 +494,22 @@ export async function verifySessionChannel(dom?: {
           )
             idle?.observe(receipt.event.boundary);
           if (receipt?.event.kind === "ready") {
+            phase = "ready";
             const boundary = receipt.event.boundary;
             if (!terminal || generationSeen === undefined)
               throw new Error("session.idle_not_ready");
             const surface = terminal;
             const generation = generationSeen.toString();
+            const guardFit = () =>
+              armViewDeadline(
+                activeView,
+                6000,
+                `session.fit_no_transition_${resizeCount}`,
+                (error) => {
+                  failed ??= error;
+                  cancel();
+                },
+              );
             if (dom && renderer && resizeCount === 0) {
               if (!screenContains("RESIZE_SEED"))
                 throw new Error("session.resize_seed_missing");
@@ -507,6 +522,8 @@ export async function verifySessionChannel(dom?: {
                   12,
                 ),
               );
+              phase = "fit";
+              guardFit();
               renderer.watchFit(
                 async (size) => {
                   expectedSize = size;
@@ -560,6 +577,8 @@ export async function verifySessionChannel(dom?: {
             }
 
             if (dom && renderer && resizeCount < 3) {
+              phase = "fit";
+              guardFit();
               renderer.watchFit(
                 async (size) => {
                   expectedSize = size;
@@ -593,6 +612,7 @@ export async function verifySessionChannel(dom?: {
               return;
             }
             if (dom && renderer && !pauseStarted) {
+              phase = "visibility";
               pauseStarted = true;
               await requireRejected(
                 commands.probeSessionVisibility(
@@ -795,6 +815,7 @@ export async function verifySessionChannel(dom?: {
             const done = new Promise<void>((resolve) => {
               checked = resolve;
             });
+            phase = "idle";
             idle = new IdleComparison({
               compare: async (b, signal) => {
                 if (signal.aborted) throw new Error("session.idle_aborted");
@@ -842,6 +863,7 @@ export async function verifySessionChannel(dom?: {
                 (generationSeen + 1n).toString(),
               ),
             );
+            phase = "idle";
             idle = new IdleComparison({
               requestMarker: async (signal) => {
                 if (signal.aborted) throw new Error("session.marker_aborted");
@@ -916,7 +938,14 @@ export async function verifySessionChannel(dom?: {
       cancel();
     }
   };
+  let stopAbort: (() => void) | undefined;
   try {
+    if (lifetime.signal.aborted) throw new Error("session.cancelled");
+    const stopped = new Promise<never>((_resolve, reject) => {
+      const abort = () => reject(failed ?? new Error("session.cancelled"));
+      lifetime.signal.addEventListener("abort", abort, { once: true });
+      stopAbort = () => lifetime.signal.removeEventListener("abort", abort);
+    });
     const native = commands
       .probeSession(nonce, channel)
       .catch((error: unknown) => {
@@ -924,10 +953,17 @@ export async function verifySessionChannel(dom?: {
       });
     const result = await Promise.race([
       native,
+      stopped,
       new Promise<never>((_, reject) => {
         deadline = setTimeout(() => {
+          const error =
+            failed ??
+            new Error(
+              `session.frontend_deadline_${phase}_r${resizeCount}_b${rebinds}_${lifetime.signal.aborted ? "aborted" : "active"}`,
+            );
+          failed = error;
           cancel();
-          reject(failed ?? new Error("session.frontend_deadline"));
+          reject(error);
         }, 70000);
       }),
     ]);
@@ -980,11 +1016,19 @@ export async function verifySessionChannel(dom?: {
       if (viewRebuilds !== 4 || !viewScope?.isCurrent())
         throw new Error("session.view_host_missing");
       renderer.markViewHostChecked();
+      const root = dom.host.querySelector<HTMLElement>(".xterm");
+      if (!root) throw new Error("session.pool_root_missing");
+      const { verifyViewPool } = await import(
+        "../features/probe/view-pool-probe"
+      );
+      verifyViewPool(dom.host, root, lifetime.signal);
+      renderer.markViewPoolChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
     return result;
   } finally {
+    stopAbort?.();
     inputArmed = false;
     inputQueue?.cancel();
 

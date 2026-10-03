@@ -211,6 +211,7 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
         || dom["nativeSignalChecked"] != true
         || dom["nativePauseChecked"] != true
         || dom["viewHostChecked"] != true
+        || dom["viewPoolChecked"] != true
         || report["domSession"]["nativeOnlyChecked"] != true
         || report["session"]["nativeOnlyChecked"] != false
         || report["domSession"]["externalWmChecked"].as_bool() != Some(external)

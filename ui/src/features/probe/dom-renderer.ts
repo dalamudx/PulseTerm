@@ -23,6 +23,7 @@ export interface DomRenderer {
   markNativeSignalChecked(): void;
   markNativePauseChecked(): void;
   markViewHostChecked(): void;
+  markViewPoolChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -74,7 +75,8 @@ export function createDomRenderer(
     visibilityChecked = false,
     nativeSignalChecked = false,
     nativePauseChecked = false,
-    viewHostChecked = false;
+    viewHostChecked = false,
+    viewPoolChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
   const element = terminal.element;
@@ -109,6 +111,9 @@ export function createDomRenderer(
     },
     markViewHostChecked() {
       viewHostChecked = true;
+    },
+    markViewPoolChecked() {
+      viewPoolChecked = true;
     },
     watchFit(resize, failed) {
       if (fit || disposed) throw new Error("terminal.fit_duplicate");
@@ -268,6 +273,7 @@ export function createDomRenderer(
         nativeSignalChecked,
         nativePauseChecked,
         viewHostChecked,
+        viewPoolChecked,
       };
     },
   };

@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
 import {
   getSnapshot,
-  setTerminalHost,
+  probeViewFactory,
   start,
   subscribe,
 } from "./features/probe/controller";
+import type { ViewHost } from "./features/terminal/view-pool";
+import { ViewSlot } from "./features/terminal/view-slot";
 import { nativeAvailable } from "./ipc/probe";
 
 const copy = {
@@ -27,7 +29,7 @@ const copy = {
   note: "* 送达时间为时钟校准后的估算。时钟误差、ACK 往返和完整报告保存到 target/probes/channel.json。结果不代表终端解析、桌面渲染或三平台验收。",
 };
 
-export function App() {
+export function App({ viewHost }: { viewHost: ViewHost }) {
   const state = useSyncExternalStore(subscribe, getSnapshot);
   return (
     <main>
@@ -63,7 +65,11 @@ export function App() {
         <p>
           固定 PTY 样例 · 初始 40 × 12 · 自动适配、输入与恢复验证，无用户 shell
         </p>
-        <div className="terminal-host" ref={setTerminalHost} />
+        <ViewSlot
+          pool={viewHost}
+          viewKey="finite-terminal"
+          factory={probeViewFactory}
+        />
       </section>
       <div className="table-scroll">
         <table>
