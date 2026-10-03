@@ -349,6 +349,14 @@ mise run probe-pty
 - ssh.json新增keyboardInteractive五字段且validator硬要求，明确noRealMfaHardware=true；受控protocol已通过不代表真实MFA/PAM/前端Prompt ID生命周期或FIDO2验收。新增1项prompt负向单测，11 SSH-feature tests/clippy-Dwarnings通过；probe-ssh与真实probe-ssh-system都再运行成功（real PTY仍80×24→91×37/nativeExit7/session children drain）。未改Cargo依赖/locks/CSP/allow/ignore。
 - OpenSSH7–9/dropbear/legacy设备、证书/jump/forward/Agent/FIDO2/GBK和生产SSH actor仍待后续验证，S4不标全通过。
 
+## S4逐跳独立host-key校验与direct-tcpip relay（Linux）
+
+- 新probe-ssh-jump使用两个controlled russh endpoints，仅127.0.0.1随机port。outer先pinned/authenticate，direct-tcpip white list仅owned inner exact host/port、不得DNS/外部IP/错port；单owned Semaphore permit从TCP connect准入到worker退出，不在timeout取消后提前释放，第二forward明确拒绝。6秒copy_bidirectional监督和8KiB test packet/output cap；这不是完整SDK缓冲/RSS/backpressure高压证明。
+- inner KEX/client::connect_stream通过outer SSH channel.into_stream，使用不同expected host key，wrong inner key必须实际触发inner Pin hook并失败；cannot inherit trust from authenticated outer。首次实现outer Handler.data对forward ciphertext误Disconnect，错误早于key验证，未把它算成hostkey拒绝；修复为outer数据交channel stream、只有inner应用channel echo，后实际hook reached/negative gate通过。
+- 先拒外部目的地，再wrong inner key/取消outer，要求outer relay+两边connections在listener still alive时独立归零；重新outer/inner authenticated，第二并行forward拒绝；内层应用回显4400 bytes UTF8及字面shell符号精确，EOF/Close均明确收到后，两SSH连接断开、relay+connections在server shutdown前归零，最后join两个listeners。不是发送exit或仅listener停止便声明所有任务已排空。
+- 成功report schema1包含逐跳pins/inner mismatch/destination拒绝/singleForwardCredit1/secondForward拒绝/nestedBytesExact/innerEofAndClose/both connections+relays drain/listener join并validator逐项要求。新增2单测验证exact owned loopback/port与单completed不足，SSH feature13 tests/clippy-Dwarnings通过；全默认check/test199TS/39app/89core/16IPC/6xtask与原K-I/real OpenSSH10server probes再运行成功。CI Linux新增调用，未取得远端CI；Cargo依赖/locks/CSP/audit配置未变。
+- S4仍未全验收：两个controlled endpoints不代表OpenSSH7–9/dropbear/真实多级跳板实现矩阵，生产Route连接池、任意目标/remote-forward、SFTP/Agent/FIDO2/证书/GBK、实际slow consumer SSH窗口压力与actor集成待验证。仍不开放用户endpoint或production credentials。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

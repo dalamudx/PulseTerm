@@ -10,6 +10,8 @@ mod query_probe;
 mod snapshot_probe;
 mod software_probe;
 #[cfg(feature = "ssh-probe")]
+mod ssh_jump_probe;
+#[cfg(feature = "ssh-probe")]
 mod ssh_probe;
 #[cfg(feature = "ssh-probe")]
 mod ssh_system_probe;
@@ -86,6 +88,12 @@ fn main() -> Result<()> {
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
+        Some("probe-ssh-jump") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_jump_probe::run()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-ssh-jump requires --features ssh-probe");
+        }
         Some("probe-ssh-system") => {
             #[cfg(feature = "ssh-probe")]
             ssh_system_probe::run()?;
