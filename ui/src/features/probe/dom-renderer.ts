@@ -21,6 +21,7 @@ export interface DomRenderer {
   markFitChecked(): void;
   markVisibilityChecked(): void;
   markNativeSignalChecked(): void;
+  markNativePauseChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -70,7 +71,8 @@ export function createDomRenderer(
     observer: ResizeObserver | undefined,
     fitChecked = false,
     visibilityChecked = false,
-    nativeSignalChecked = false;
+    nativeSignalChecked = false,
+    nativePauseChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
   terminal.textarea?.setAttribute("aria-label", "只读 PTY 验证输出");
@@ -97,6 +99,9 @@ export function createDomRenderer(
     },
     markNativeSignalChecked() {
       nativeSignalChecked = true;
+    },
+    markNativePauseChecked() {
+      nativePauseChecked = true;
     },
     watchFit(resize, failed) {
       if (fit || disposed) throw new Error("terminal.fit_duplicate");
@@ -254,6 +259,7 @@ export function createDomRenderer(
         fitChecked,
         visibilityChecked,
         nativeSignalChecked,
+        nativePauseChecked,
       };
     },
   };

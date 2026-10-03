@@ -1,7 +1,7 @@
 //! Finite viewer lifecycle metadata. No terminal lock or frontend owner token.
 use std::sync::{
     Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use tokio::sync::watch;
 type Result<T> = std::result::Result<T, String>;
@@ -17,6 +17,7 @@ pub(crate) struct VisibilityGate {
     wake: watch::Sender<u64>,
     closed: AtomicBool,
     native_checked: AtomicBool,
+    external: AtomicU64,
 }
 impl Default for VisibilityGate {
     fn default() -> Self {
@@ -26,6 +27,7 @@ impl Default for VisibilityGate {
             wake,
             closed: AtomicBool::new(false),
             native_checked: AtomicBool::new(false),
+            external: AtomicU64::new(0),
         }
     }
 }
@@ -36,13 +38,18 @@ impl VisibilityGate {
         if paused.is_some() {
             return Err("view.already_paused".into());
         }
+        let external = self.external.load(Ordering::Acquire);
+        if external != 0 && external != generation {
+            return Err("view.stale_external".into());
+        }
         revoke()?;
         *paused = Some(Pause {
             generation,
             resumed: false,
-            native_started: false,
-            native_inflight: false,
+            native_started: external != 0,
+            native_inflight: external != 0,
         });
+        self.wake.send_replace(generation);
         Ok(())
     }
     pub(crate) fn hidden(&self, generation: u64) -> Result<()> {
@@ -86,6 +93,44 @@ impl VisibilityGate {
         *paused = None;
         self.wake.send_replace(0);
     }
+    /// Reserve a native window action, NOT a terminal pause. Only the frontend's
+    /// event-driven pause may detach and publish this generation's pause receipt.
+    pub(crate) fn reserve_external(&self, generation: u64) -> Result<()> {
+        let paused = self.paused.lock().map_err(|_| "view.poisoned")?;
+        self.ensure_open()?;
+        if generation == 0 || paused.is_some() {
+            return Err("view.external_busy".into());
+        }
+        self.external
+            .compare_exchange(0, generation, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| "view.external_busy".to_string())?;
+        Ok(())
+    }
+    pub(crate) async fn wait_external_pause(&self, generation: u64) -> Result<()> {
+        let mut wake = self.wake.subscribe();
+        loop {
+            {
+                let paused = self.paused.lock().map_err(|_| "view.poisoned")?;
+                self.ensure_open()?;
+                if self.external.load(Ordering::Acquire) != generation {
+                    return Err("view.stale_external".into());
+                }
+                if paused
+                    .as_ref()
+                    .is_some_and(|p| p.generation == generation && !p.resumed && p.native_inflight)
+                {
+                    return Ok(());
+                }
+            }
+            wake.changed()
+                .await
+                .map_err(|_| "view.closed".to_string())?;
+        }
+    }
+    pub(crate) fn external_checked(&self) -> bool {
+        self.external.load(Ordering::Acquire) != 0 && self.native_checked()
+    }
+
     pub(crate) fn begin_native(&self, generation: u64) -> Result<()> {
         let mut paused = self.paused.lock().map_err(|_| "view.poisoned")?;
         self.ensure_open()?;
@@ -220,6 +265,64 @@ mod tests {
         assert!(wake.has_changed().is_ok_and(|changed| changed));
         assert!(gate.resume(1).is_err());
     }
+    #[tokio::test]
+    async fn native_reservation_cannot_publish_pause_or_resume_by_itself() {
+        let gate = VisibilityGate::default();
+        assert!(gate.reserve_external(2).is_ok());
+        assert!(gate.reserve_external(2).is_err());
+        assert!(gate.reserve_external(3).is_err());
+        assert!(gate.hidden(2).is_err());
+        assert!(gate.resume(2).is_err());
+        assert!(!gate.external_checked());
+        let mut paused = Box::pin(gate.wait_external_pause(2));
+        assert!(futures_util::poll!(&mut paused).is_pending());
+        assert!(gate.pause(1, || Ok(())).is_err());
+        assert!(gate.pause(2, || Ok(())).is_ok());
+        assert!(paused.await.is_ok());
+        assert!(gate.begin_native(2).is_err());
+        assert!(gate.resume(2).is_err());
+        assert!(gate.finish_native(2).is_ok());
+        assert!(gate.external_checked());
+        assert!(gate.resume(2).is_ok());
+        assert!(gate.wait_resume(2).await.is_ok());
+        assert!(gate.reserve_external(2).is_err());
+    }
+    #[tokio::test]
+    async fn closing_unpaused_native_action_immediately_rejects_waiting_and_late_pause() {
+        let gate = VisibilityGate::default();
+        assert!(gate.reserve_external(1).is_ok());
+        let mut wait = Box::pin(gate.wait_external_pause(1));
+        assert!(futures_util::poll!(&mut wait).is_pending());
+        gate.close();
+        assert!(wait.await.is_err());
+        assert!(gate.pause(1, || Ok(())).is_err());
+        assert!(gate.finish_native(1).is_err());
+        assert!(!gate.external_checked());
+    }
+    #[tokio::test]
+    async fn external_pause_early_publication_and_failed_revoke_cannot_fabricate_receipts() {
+        let gate = VisibilityGate::default();
+        assert!(gate.reserve_external(4).is_ok());
+        assert!(gate.pause(4, || Err("denied".into())).is_err());
+        assert!(gate.hidden(4).is_err());
+        assert!(gate.finish_native(4).is_err());
+        assert!(gate.wait_external_pause(3).await.is_err());
+        assert!(gate.pause(4, || Ok(())).is_ok());
+        assert!(gate.wait_external_pause(4).await.is_ok());
+        assert!(gate.finish_native(3).is_err());
+        assert!(!gate.external_checked());
+    }
+    #[test]
+    fn native_external_reservation_rejects_zero_or_already_paused_state() {
+        let gate = VisibilityGate::default();
+        assert!(gate.reserve_external(0).is_err());
+        assert!(gate.pause(1, || Ok(())).is_ok());
+        assert!(gate.reserve_external(1).is_err());
+        assert!(gate.begin_native(1).is_ok());
+        assert!(gate.finish_native(1).is_ok());
+        assert!(!gate.external_checked());
+    }
+
     #[test]
     fn invalid_or_failed_pause_cannot_authorize_resume() {
         let gate = VisibilityGate::default();

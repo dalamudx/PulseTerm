@@ -276,6 +276,7 @@ pub(crate) struct SessionEvidence {
     pub pause_count: u32,
     pub native_window_checked: bool,
     pub native_minimize_checked: bool,
+    pub native_only_checked: bool,
     pub columns: u16,
     pub rows: u16,
 }
@@ -286,6 +287,7 @@ impl SessionEvidence {
             || self.pause_count > 1
             || (self.native_window_checked && self.pause_count != 1)
             || (self.native_minimize_checked && !self.native_window_checked)
+            || (self.native_only_checked && !self.native_window_checked)
             || !(2..=160).contains(&self.columns)
             || !(2..=60).contains(&self.rows)
         {
@@ -550,17 +552,45 @@ pub(crate) async fn probe_session_window_cycle(
     nonce: String,
     generation: String,
 ) -> Result<String> {
+    run_native_cycle(window, state.inner(), nonce, generation, false).await
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_native_cycle(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<String> {
+    run_native_cycle(window, state.inner(), nonce, generation, true).await
+}
+async fn run_native_cycle(
+    window: WebviewWindow,
+    state: &WindowSessions,
+    nonce: String,
+    generation: String,
+    external: bool,
+) -> Result<String> {
     let (owner, id) = state.owned(&window, &nonce)?;
     let generation = parse_u64(&generation)?;
-    let gate = visibility_gate(&state, owner, id)?;
+    let gate = visibility_gate(state, owner, id)?;
     state.0.registry.state(owner, id).map_err(error)?;
-    gate.begin_native(generation)?;
+    if external {
+        state
+            .0
+            .registry
+            .check_binding(owner, id, generation)
+            .map_err(error)?;
+        gate.reserve_external(generation)?;
+    } else {
+        gate.begin_native(generation)?;
+    }
     if !window.is_visible().map_err(error)? || window.is_minimized().map_err(error)? {
         return Err("session.window_not_visible".into());
     }
     let mut guard = NativeVisibilityGuard {
         window: window.clone(),
-        state: state.inner().clone(),
+        state: state.clone(),
         owner,
         armed: true,
         minimize: state.0.minimize,
@@ -572,7 +602,7 @@ pub(crate) async fn probe_session_window_cycle(
     }
     wait_native_visible(
         &window,
-        &state,
+        state,
         owner,
         if state.0.minimize {
             NativeVisibility::Minimized
@@ -581,16 +611,21 @@ pub(crate) async fn probe_session_window_cycle(
         },
     )
     .await?;
+    if external {
+        tokio::time::timeout(Duration::from_secs(2), gate.wait_external_pause(generation))
+            .await
+            .map_err(|_| "session.native_pause_timeout".to_string())??;
+    }
     // This backend deadline and restoration do not depend on animation frames,
     // document visibility events, or JavaScript running while unmapped.
-    let boundary = hidden_output(&state, owner, id, &gate, generation).await?;
+    let boundary = hidden_output(state, owner, id, &gate, generation).await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
     gate.hidden(generation)?;
     if state.0.minimize {
         window.unminimize().map_err(error)?;
     }
     window.show().map_err(error)?;
-    wait_native_visible(&window, &state, owner, NativeVisibility::Visible).await?;
+    wait_native_visible(&window, state, owner, NativeVisibility::Visible).await?;
     if state.0.registry.state(owner, id).map_err(error)?.lifecycle != Lifecycle::Running {
         return Err("session.closed_while_hidden".into());
     }
@@ -1027,6 +1062,7 @@ pub(crate) async fn probe_session(
         pause_count: pauses,
         native_window_checked: visibility.native_checked(),
         native_minimize_checked: state.0.minimize && visibility.native_checked(),
+        native_only_checked: visibility.external_checked(),
         columns: final_state.size.columns(),
         rows: final_state.size.rows(),
     })
@@ -1109,6 +1145,7 @@ mod tests {
             pause_count: 0,
             native_window_checked: false,
             native_minimize_checked: false,
+            native_only_checked: false,
             columns: 40,
             rows: 12,
         };

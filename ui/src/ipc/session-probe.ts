@@ -11,10 +11,7 @@ import {
 } from "../features/terminal/native-visibility";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
-import {
-  bindSurfaceVisibility,
-  SurfaceVisibility,
-} from "../features/terminal/surface-visibility";
+import { SurfaceVisibility } from "../features/terminal/surface-visibility";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
 import { type AttachBoundary, attachmentEnvelope } from "./attachment";
@@ -183,7 +180,9 @@ export async function verifySessionChannel(dom?: {
     wireCount = 0;
   let hiddenBoundary = 0n;
   let visibility: SurfaceVisibility | undefined;
-  let stopVisibility: (() => void) | undefined;
+  let nativeCycle: Promise<string> | undefined;
+  let nativeOnlyPaused = false,
+    hiddenWireCount = 0;
   let stopNative: (() => void) | undefined;
   let nativeHidden = false,
     nativeRestored = false;
@@ -563,6 +562,8 @@ export async function verifySessionChannel(dom?: {
               visibility = new SurfaceVisibility(
                 {
                   retire: () => {
+                    nativeOnlyPaused = nativeHidden && !dom.host.hidden;
+                    hiddenWireCount = wireCount;
                     surfaceHidden = true;
                     inputArmed = false;
                     inputQueue?.cancel();
@@ -579,6 +580,17 @@ export async function verifySessionChannel(dom?: {
                     );
                   },
                   resume: async () => {
+                    if (!nativeCycle)
+                      throw new Error("session.missing_native_cycle");
+                    hiddenBoundary = BigInt(await nativeCycle);
+                    if (lifetime.signal.aborted)
+                      throw new Error("session.cancelled");
+                    if (
+                      hiddenBoundary <= boundary.parsedBytes ||
+                      wireCount !== hiddenWireCount ||
+                      !nativeOnlyPaused
+                    )
+                      throw new Error("session.native_only_pause_missing");
                     surfaceHidden = false;
                     resumePending = true;
                     generations.expectReplacement(BigInt(generation));
@@ -645,16 +657,20 @@ export async function verifySessionChannel(dom?: {
               );
               if (pendingNativeSample) applyNative(pendingNativeSample);
 
-              stopVisibility = bindSurfaceVisibility(
-                dom.host,
-                visibility,
-                lifetime.signal,
+              // Isolate native as the ONLY hidden source: no host.hidden update,
+              // no page observer override, and no manual pause/resume invocation.
+              await requireRejected(
+                commands.probeSessionNativeCycle(
+                  nonce,
+                  (generationSeen + 1n).toString(),
+                ),
               );
-              // No manual pause call: MutationObserver on the real host attribute
-              // retires the local renderer and then serializes registry detach.
-              dom.host.hidden = true;
+              nativeCycle = commands.probeSessionNativeCycle(nonce, generation);
+              void nativeCycle.catch((error) => {
+                failed ??= error;
+                cancel();
+              });
               await visibility.paused;
-              const before = wireCount;
               await requireRejected(
                 commands.probeSessionInput(nonce, generation, "typed"),
               );
@@ -662,16 +678,8 @@ export async function verifySessionChannel(dom?: {
                 commands.probeSessionAck(nonce, generation, 0),
               );
               await requireRejected(
-                commands.probeSessionVisibility(
-                  nonce,
-                  (generationSeen + 1n).toString(),
-                  true,
-                ),
+                commands.probeSessionNativeCycle(nonce, generation),
               );
-              hiddenBoundary = BigInt(
-                await commands.probeSessionWindowCycle(nonce, generation),
-              );
-              await new Promise<void>((resolve) => setTimeout(resolve, 100));
               await Promise.race([
                 nativeObserved,
                 new Promise<never>((_, reject) => {
@@ -682,17 +690,9 @@ export async function verifySessionChannel(dom?: {
                 }),
               ]);
               clearTimeout(nativeTimer);
-              if (
-                hiddenBoundary <= boundary.parsedBytes ||
-                wireCount !== before
-              )
-                throw new Error("session.hidden_delivery");
-              await requireRejected(
-                commands.probeSessionWindowCycle(nonce, generation),
-              );
-              dom.host.hidden = false;
+
               await visibility.resumed;
-              stopVisibility?.();
+
               return;
             }
             if (dom && resumePending) {
@@ -914,6 +914,8 @@ export async function verifySessionChannel(dom?: {
           result.resizeCount !== 3 ||
           result.pauseCount !== 1 ||
           !result.nativeWindowChecked ||
+          !result.nativeOnlyChecked ||
+          !nativeOnlyPaused ||
           !visibilityChecked ||
           rebinds !== 4))
     )
@@ -929,6 +931,7 @@ export async function verifySessionChannel(dom?: {
       if (!nativeHidden || !nativeRestored)
         throw new Error("session.native_signal_missing");
       renderer.markNativeSignalChecked();
+      renderer.markNativePauseChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
@@ -936,7 +939,7 @@ export async function verifySessionChannel(dom?: {
   } finally {
     inputArmed = false;
     inputQueue?.cancel();
-    stopVisibility?.();
+
     stopNative?.();
     clearTimeout(nativeTimer);
     visibility?.dispose();

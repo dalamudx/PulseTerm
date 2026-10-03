@@ -367,6 +367,27 @@ impl SessionRegistry {
             completion,
         })
     }
+    /// Read-only runtime admission check. Does not reserve a lease, acknowledge
+    /// output, send input, or promise that asynchronous work will remain current.
+    pub fn check_binding(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+    ) -> Result<(), RegistryError> {
+        let state = self.lock()?;
+        Self::entry(&state, owner, id)?;
+        if state
+            .bindings
+            .get(&id)
+            .is_some_and(|b| b.generation == generation)
+        {
+            Ok(())
+        } else {
+            Err(RegistryError::Stale)
+        }
+    }
+
     /// Wrong-window/stale ACK is rejected BEFORE forwarding; it cannot kill the new
     /// driver. Duplicate/invalid current ACK remains a protocol error supervised there.
     pub fn acknowledge(

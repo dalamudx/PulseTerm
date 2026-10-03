@@ -447,6 +447,7 @@ struct DomEvidence {
     fit_checked: bool,
     visibility_checked: bool,
     native_signal_checked: bool,
+    native_pause_checked: bool,
 }
 impl DomEvidence {
     fn validate(&self) -> ProbeResult<()> {
@@ -460,6 +461,7 @@ impl DomEvidence {
             || !self.fit_checked
             || !self.visibility_checked
             || !self.native_signal_checked
+            || !self.native_pause_checked
             || !self.width_px.is_finite()
             || !self.height_px.is_finite()
             || !(1.0..=4096.0).contains(&self.width_px)
@@ -503,6 +505,7 @@ impl ProbeReport {
                             || s.resize_count != 3
                             || s.pause_count != 1
                             || !s.native_window_checked
+                            || !s.native_only_checked
                             || !s.repair_checked
                             || !s.idle_checked
                             || !s.marker_checked
@@ -610,6 +613,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session_native_snapshot,
             crate::window_sessions::probe_session_hidden_output,
             crate::window_sessions::probe_session_window_cycle,
+            crate::window_sessions::probe_session_native_cycle,
             crate::window_sessions::probe_session_detach,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer
@@ -887,6 +891,7 @@ mod tests {
             fit_checked: true,
             visibility_checked: true,
             native_signal_checked: true,
+            native_pause_checked: true,
         };
         assert!(e.validate().is_ok());
         e.render_events = 0;

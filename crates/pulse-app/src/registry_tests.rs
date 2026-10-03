@@ -44,6 +44,50 @@ pub(super) async fn bootstrap(
     }
 }
 #[tokio::test]
+async fn read_only_binding_admission_checks_owner_and_generation_without_credit_or_io() {
+    let registry = SessionRegistry::new();
+    let owner = registry.open_window().unwrap();
+    let other = registry.open_window().unwrap();
+    let (handle, task, mut driver) = session();
+    let id = registry.register(owner, handle).unwrap();
+    assert!(matches!(
+        registry.check_binding(owner, id, 1),
+        Err(RegistryError::Stale)
+    ));
+    let mut first = registry.attach(owner, id, config()).await.unwrap();
+    bootstrap(&registry, owner, id, &mut first).await;
+    assert!(registry.check_binding(owner, id, first.generation).is_ok());
+    assert!(matches!(
+        registry.check_binding(other, id, first.generation),
+        Err(RegistryError::Forbidden)
+    ));
+    let mut next = registry.attach(owner, id, config()).await.unwrap();
+    assert!(matches!(
+        registry.check_binding(owner, id, first.generation),
+        Err(RegistryError::Stale)
+    ));
+    bootstrap(&registry, owner, id, &mut next).await;
+    assert!(registry.check_binding(owner, id, next.generation).is_ok());
+    registry.detach(owner, id, next.generation).unwrap();
+    assert!(matches!(
+        registry.check_binding(owner, id, next.generation),
+        Err(RegistryError::Stale)
+    ));
+    assert_eq!(
+        registry.state(owner, id).unwrap().lifecycle,
+        Lifecycle::Running
+    );
+    registry.close_window(owner).unwrap();
+    assert!(matches!(
+        registry.check_binding(owner, id, next.generation),
+        Err(RegistryError::Forbidden)
+    ));
+    assert!(driver.input.try_recv().is_err());
+    registry.shutdown().unwrap();
+    assert_eq!(task.join().await.unwrap().lifecycle, Lifecycle::Closed);
+}
+
+#[tokio::test]
 async fn foreign_window_and_foreign_registry_cannot_act_on_session() {
     let registry = SessionRegistry::new();
     let owner = registry.open_window().unwrap();
