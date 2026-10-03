@@ -1,15 +1,24 @@
 # 终端重连事务 v1（已实现的基础，非生产 attach）
 
-后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。生产窗口绑定、lease、传输暂停及协议额度贯通仍待实现。
+后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；生产窗口/权限绑定、多视图策略及协议额度贯通仍待实现。
 
 ## 一个流，一个事务
 
-`pulse-ipc::attach` 和 `ui/src/ipc/attachment.ts` 定义 Begin → History* → Restore+ → Commit → Data*，全部使用 FrameKind::Attachment=8，同一有序二进制通道，同一 CreditWindow。版本1的20字节 envelope 包含 version/part/reserved/generation/offset；Begin 28字节为columns:u16、rows:u16、revision:u64、parsed_bytes:u64、history_len:u32、restore_len:u32，全部小端。
+`pulse-ipc::attach` 和 `ui/src/ipc/attachment.ts` 定义 Begin → History* → Restore+ → Commit → (Data | Checkpoint)*，全部使用 FrameKind::Attachment=8，同一有序二进制通道，同一 CreditWindow。版本1的20字节 envelope 包含 version/part/reserved/generation/offset；Begin 28字节为columns:u16、rows:u16、revision:u64、parsed_bytes:u64、history_len:u32、restore_len:u32，全部小端。
 
 - generation非零，由会话绑定层分配，不是parsed_bytes。ACK必须同时匹配generation和在途sequence；旧绑定ACK不释放新绑定额度。现有32位sequence遵守CreditWindow窗口规则。
 - revision和parsed_bytes在JS中用bigint，不转number。parsed_bytes只表示后端原始输出解析边界，不是ACK，不是转码后的UTF-8字节数。本版Data的offset按发送字节递增，尚不覆盖编码转换后的原始/UTF-8双坐标，不能用于非UTF-8会话的生产边界。
 - 片段body≤64KiB、history≤4MiB、restore≤1MiB。History/Restore section-local offset连续，Data从Begin.parsed_bytes开始连续。乱序、长度不符、未知版本/flag和未Commit的Data终止当前事务，没有部分渲染或丢字节后继续。
 - sender无额度时phase/offset不变。已经生成的帧必须发送或取消整个generation，不能跳过。receiver先按声明长度有界暂存，Commit收到完整内容后才返回ready。
+
+## 原子live诊断lease
+
+`diagnostic_subscribe` 在同一actor回合捕获history/screen并安装唯一有界订阅。先预留8条队列容量再读取/解析transport，Data带start、原始bytes及after-boundary；full时停止解析和transport读取，不丢块，控制/close仍公平。无subscriber时仍独立解析。8×64KiB是lease载荷预算，不含driver/current/native块、grid和allocator开销。
+
+- lease_id是actor-local单调serial，不是全应用generation或授权。成功新capture替换旧lease；取消/失败capture保留旧lease。旧renderer及旧排队消息不能复用到新generation。
+- watch StreamStatus提供无丢失终止原因和boundary：native resize成功、palette/cellpixels改变会Reconfigured；pending resize拒绝新lease，失败保持旧lease。Receiver放弃/close会Detached，不关闭registry session handle。
+- sync deadline的零字节state推进用Fence，映射同stream Part::Checkpoint=6；offset必须等于live cursor，body是little-endian u64 revision且不回退，使用同generation/order/credits。Consumer要求sink处理完成才ACK，缺实现会fail closed；checkpoint本身不证明hidden/parser/history一致。
+- genuine EOF需要消费剩余Data、确认最终boundary并finish UTF-8/同步状态；Replaced/Reconfigured/Failed应取消旧generation。现有wire未定义终止/授权/lease事件，不能把watch终止当作有序EOF帧。production driver仍需此映射和ACK timeout释放lease。stream满时sync Fence也被背压，恢复消费后按序推进。
 
 ## 解析状态、历史与显示
 
@@ -31,8 +40,8 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 `mise run terminal-api-check` 在workspace之外实际编译default-feature消费端：正常TerminalProbe可用，EchoTransport及screen_replay无法调用；xtask显式开启validation。
 
-`mise run probe-attachment`：Rust构造真实history/state，用7字节片段、每次1个额度窗口、2字节live发送至TS Receiver/Consumer和真实xterm headless；检查history每格颜色/宽度/属性/wrap，UTF-8/CSI跨restore-live续流、无query泄漏及callback ACK。3个案例通过。这里只验证headless，不是WebView/真实PTY/窗口重连。
+`mise run probe-attachment`：Rust构造真实history/state，用7字节片段、每次1个额度窗口、2字节live发送至TS Receiver/Consumer和真实xterm headless；检查history每格颜色/宽度/属性/wrap，UTF-8/CSI跨restore-live续流、无query泄漏及callback ACK。4个案例通过，包括actor原子订阅、部分UTF-8、live备用屏退出、BSU超时Fence映射为Checkpoint，并在sink处理时严格比较后端state才ACK。报表中的sender ACK是受控模拟，callback监督已在TS真实headless执行；它不是实际网络/Channel交互，也不是WebView/窗口重连。真实PTY lease压力另由probe-local-session检查。
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。可见视图idle/resize/reattach的限频调度和generation校验仍须view driver接入。
 
-仍需：generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
+仍需：生产generation/权限/渲染器生命周期集成、ACK额度与actor lease端到端贯通、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。

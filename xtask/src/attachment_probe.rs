@@ -8,6 +8,110 @@ use pulse_ipc::{
 use pulse_term::TerminalProbe;
 use serde_json::json;
 use std::fs;
+async fn actor_case(columns: u16, rows: u16) -> Result<serde_json::Value> {
+    use pulse_term::session::{
+        ChannelTransport, Lifecycle, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES, StreamRecord,
+        spawn_session,
+    };
+    use tokio::time::{Duration, timeout};
+    let size = TermSize::new(columns, rows)?;
+    let (transport, driver) = ChannelTransport::bounded_driver();
+    let (handle, task) = spawn_session(size, 128, transport);
+    let mut prefix = Vec::new();
+    for row in 0..20 {
+        prefix.extend_from_slice(format!("row-{row:02}\r\n").as_bytes());
+    }
+    prefix.extend_from_slice(b"main\x1b[?1049halt\xf0\x9f");
+    driver.output.send(prefix.clone()).await?;
+    timeout(Duration::from_secs(2), async {
+        let mut state = handle.state.clone();
+        while state.borrow().parsed_bytes < prefix.len() as u64 {
+            state.changed().await?;
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await??;
+    let mut stream = handle
+        .diagnostic_subscribe(10, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
+        .await?;
+    let mut source = TerminalProbe::new(size, 128);
+    source.feed(&prefix);
+    let history = source.recent_history_projection(stream.bootstrap.history.retained_rows);
+    let retained = stream.bootstrap.history.retained_rows;
+    let total = stream.bootstrap.history.total_rows;
+    let boundary = |state: &pulse_term::session::SessionState| Boundary {
+        columns: state.size.columns(),
+        rows: state.size.rows(),
+        revision: state.revision,
+        parsed_bytes: state.parsed_bytes,
+    };
+    let generation = 0x100000000000007;
+    let mut sender = AttachmentSender::new(
+        generation,
+        boundary(&stream.bootstrap.boundary),
+        stream.bootstrap.history.bytes,
+        stream.bootstrap.restore,
+        7,
+        1,
+        64,
+    )?;
+    let mut frames = Vec::new();
+    while let Some(frame) = sender.next_frame()? {
+        sender.acknowledge(generation, decode(&frame)?.sequence)?;
+        frames.push(frame);
+    }
+    let mut suffix = Vec::new();
+    for bytes in [
+        b"\x98\x80!\x1b[?1049lZ".as_slice(),
+        b"\x1b[?2026hSYNC".as_slice(),
+    ] {
+        driver.output.send(bytes.to_vec()).await?;
+        suffix.extend_from_slice(bytes);
+        let record = timeout(Duration::from_secs(2), stream.output.recv())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("actor tail disappeared"))?;
+        let StreamRecord::Data {
+            start,
+            bytes,
+            boundary: state,
+        } = record
+        else {
+            anyhow::bail!("actor Data expected");
+        };
+        ensure!(
+            start == state.parsed_bytes - bytes.len() as u64,
+            "actor byte cursor inconsistent"
+        );
+        for chunk in bytes.chunks(2) {
+            let frame = sender.data(chunk)?;
+            sender.acknowledge(generation, decode(&frame)?.sequence)?;
+            frames.push(frame);
+        }
+    }
+    let record = timeout(Duration::from_secs(2), stream.output.recv())
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("missing sync fence"))?;
+    let StreamRecord::Fence(state) = record else {
+        anyhow::bail!("expected sync timeout fence");
+    };
+    let frame = sender.checkpoint(boundary(&state))?;
+    sender.acknowledge(generation, decode(&frame)?.sequence)?;
+    frames.push(frame);
+    let expected = handle.inspect().await?;
+    let digest = handle.diagnostic_digest().await?;
+    ensure!(digest.boundary == state, "fence/capture boundary drift");
+    let checkpoints = vec![
+        json!({"revision":state.revision.to_string(),"parsedBytes":state.parsed_bytes.to_string(),"expected":expected}),
+    ];
+    handle.close();
+    ensure!(
+        task.join().await?.lifecycle == Lifecycle::Closed,
+        "actor not closed"
+    );
+    Ok(
+        json!({"name":"actor-atomic-bootstrap-live-fence","prefix":prefix,"suffix":suffix,"frames":frames,"history":history,"expected":expected,"retainedRows":retained,"totalRows":total,"checkpoints":checkpoints}),
+    )
+}
 pub fn run() -> Result<()> {
     let columns = 32;
     let rows = 8;
@@ -81,13 +185,17 @@ pub fn run() -> Result<()> {
         source.feed(&suffix);
         cases.push(json!({"name":name,"prefix":prefix,"suffix":suffix,"frames":frames,"history":expected_history,"expected":source.screen(),"retainedRows":history.retained_rows,"totalRows":history.total_rows}));
     }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    cases.push(runtime.block_on(actor_case(columns, rows))?);
     fs::create_dir_all("target/probes")?;
     fs::write(
         "target/probes/attachment.json",
         serde_json::to_vec_pretty(&json!({"columns":columns,"rows":rows,"cases":cases}))?,
     )?;
     println!(
-        "Prepared 3 binary attachment cases: primary/alternate, history colours/soft wraps, UTF-8/CSI tails"
+        "Prepared 4 binary attachment cases: primary/alternate, history colours/soft wraps, UTF-8/CSI tails"
     );
     Ok(())
 }

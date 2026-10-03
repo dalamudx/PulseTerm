@@ -33,6 +33,8 @@ pub enum Part {
     Commit = 4,
     /// Live VT bytes starting at parsed_bytes from Begin.
     Data = 5,
+    /// Ordered state checkpoint at the current live byte cursor (u64 revision).
+    Checkpoint = 6,
 }
 /// Control/output boundary captured by the terminal owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +112,7 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
         3 => Part::Restore,
         4 => Part::Commit,
         5 => Part::Data,
+        6 => Part::Checkpoint,
         _ => return Err(AttachError::Invalid),
     };
     let read = |at| -> Result<u64, AttachError> {
@@ -250,6 +253,7 @@ impl AttachmentSender {
             }
             Part::Commit => &[],
             Part::Data => return Ok(None),
+            Part::Checkpoint => return Err(AttachError::Phase),
         };
         let payload = Fragment {
             part: self.phase,
@@ -325,6 +329,38 @@ impl AttachmentSender {
         .encode()?;
         self.live_offset = next;
         Ok(out)
+    }
+    /// State advanced without new raw bytes (e.g. synchronized-update expiry).
+    /// Same stream/credits as Data. Wrong cursor or older revision is rejected;
+    /// a NoCredit error leaves all state unchanged. Receiver must process before ACK.
+    pub fn checkpoint(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {
+        if self.phase != Part::Data {
+            return Err(AttachError::Phase);
+        }
+        if boundary.columns != self.boundary.columns
+            || boundary.rows != self.boundary.rows
+            || boundary.parsed_bytes != self.live_offset
+            || boundary.revision < self.boundary.revision
+        {
+            return Err(AttachError::Invalid);
+        }
+        let body = boundary.revision.to_le_bytes();
+        let payload = Fragment {
+            part: Part::Checkpoint,
+            generation: self.generation,
+            offset: self.live_offset,
+            body: &body,
+        }
+        .encode()?;
+        let sequence = self.window.record_send(payload.len())?;
+        let frame = Frame {
+            kind: FrameKind::Attachment,
+            sequence,
+            payload: &payload,
+        }
+        .encode()?;
+        self.boundary.revision = boundary.revision;
+        Ok(frame)
     }
     /// Release credit only for this generation and an outstanding sequence.
     pub fn acknowledge(&mut self, generation: u64, sequence: u32) -> Result<Released, AttachError> {

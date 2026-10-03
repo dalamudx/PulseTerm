@@ -55,13 +55,13 @@ mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
 mise run probe-pty-portable       # 三平台finite Rust helper：规范输入/Unicode/native尺寸/EOF
-mise run probe-local-session      # 真实PTY→actor、resize回执、后端query、关闭join
+mise run probe-local-session      # 真实PTY→actor/lease、2MiB背压/重新捕获、resize/EOF/关闭join
 mise run probe-software           # Unix vim/less/htop/tmux真实输出及input/resize恢复；Linux CI执行
 mise run unicode-table            # 从锁定 Rust 表生成前端 Unicode 宽度
 mise run unicode-table-check      # 只读漂移检查
 mise run probe-unicode            # 16 组文本、多提供器与分块对比
 mise run probe-snapshot           # 完整/屏幕恢复（Rust/xterm）、分歧矩阵与体积
-mise run probe-attachment         # binary事务→历史/续流→真实headless渲染callback ACK
+mise run probe-attachment         # binary事务→原子actor/历史/续流/Fence→headless callback ACK
 mise run terminal-api-check       # 独立默认feature构建拒绝Echo及旧视口replay
 mise run terminal-vendor-check    # 检查211个源文件仅有批准的只读getter差异
 mise run terminal-vendor-test     # 独立锁文件运行上游178项测试

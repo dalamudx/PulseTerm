@@ -6,6 +6,48 @@ import {
   MAX_HISTORY,
 } from "./attachment";
 
+function checkpointWire(
+  sequence: number,
+  revision: bigint,
+  offset = 10n,
+): Uint8Array {
+  const wire = new Uint8Array(34);
+  const view = new DataView(wire.buffer);
+  wire[0] = 8;
+  view.setUint32(2, sequence, true);
+  wire[6] = 1;
+  wire[7] = 6;
+  view.setBigUint64(10, (1n << 60n) + 7n, true);
+  view.setBigUint64(18, offset, true);
+  view.setBigUint64(26, revision, true);
+  return wire;
+}
+it("checkpoint preserves byte cursor and u64 revision, never VT", () => {
+  const receiver = new AttachmentReceiver(epoch);
+  feed(receiver);
+  const rev = (1n << 64n) - 4n;
+  expect(receiver.accept(checkpointWire(fixture.length, rev))?.event).toEqual({
+    kind: "checkpoint",
+    revision: rev,
+    parsedBytes: 10n,
+  });
+  expect(() =>
+    receiver.accept(checkpointWire(fixture.length + 1, rev - 1n)),
+  ).toThrow("revision");
+});
+it("checkpoint requires committed phase, exact cursor and fixed body", () => {
+  for (const wire of [
+    checkpointWire(fixture.length, (1n << 64n) - 4n, 11n),
+    checkpointWire(fixture.length, (1n << 64n) - 4n).slice(0, -1),
+  ]) {
+    const receiver = new AttachmentReceiver(epoch);
+    feed(receiver);
+    expect(() => receiver.accept(wire)).toThrow("checkpoint");
+  }
+  expect(() =>
+    new AttachmentReceiver(epoch).accept(checkpointWire(0, 1n)),
+  ).toThrow("checkpoint");
+});
 const epoch = (1n << 60n) + 7n;
 const fixture = readFileSync(
   new URL("../../../tests/fixtures/frames/attachment.hex", import.meta.url),

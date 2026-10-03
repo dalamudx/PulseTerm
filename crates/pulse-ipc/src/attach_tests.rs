@@ -1,6 +1,59 @@
 use super::*;
 #[test]
 #[allow(clippy::unwrap_used)]
+fn checkpoint_obeys_credit_phase_geometry_and_byte_cursor() {
+    let mut sender = sender(1);
+    let boundary = sender.boundary;
+    assert_eq!(sender.checkpoint(boundary), Err(AttachError::Phase));
+    while let Some(frame) = sender.next_frame().unwrap() {
+        let seq = crate::decode(&frame).unwrap().sequence;
+        sender.acknowledge(7, seq).unwrap();
+    }
+    let current = Boundary {
+        revision: u64::MAX - 3,
+        ..boundary
+    };
+    let frame = sender.checkpoint(current).unwrap();
+    let decoded = crate::decode(&frame).unwrap();
+    let fragment = decode_fragment(decoded.payload).unwrap();
+    assert_eq!(fragment.part, Part::Checkpoint);
+    assert_eq!(fragment.offset, 9);
+    assert_eq!(fragment.body, current.revision.to_le_bytes());
+    assert_eq!(
+        sender.checkpoint(current),
+        Err(AttachError::Flow(FlowError::NoCredit))
+    );
+    sender.acknowledge(7, decoded.sequence).unwrap();
+    for bad in [
+        Boundary { rows: 9, ..current },
+        Boundary {
+            parsed_bytes: 10,
+            ..current
+        },
+        Boundary {
+            revision: current.revision - 1,
+            ..current
+        },
+    ] {
+        assert_eq!(sender.checkpoint(bad), Err(AttachError::Invalid));
+    }
+    let data = sender.data(b"Z").unwrap();
+    sender
+        .acknowledge(7, crate::decode(&data).unwrap().sequence)
+        .unwrap();
+    assert_eq!(sender.checkpoint(current), Err(AttachError::Invalid));
+    assert!(
+        sender
+            .checkpoint(Boundary {
+                parsed_bytes: 10,
+                ..current
+            })
+            .is_ok()
+    );
+}
+
+#[test]
+#[allow(clippy::unwrap_used)]
 fn shared_fixture_matches_encoder_byte_for_byte() {
     let epoch = (1u64 << 60) + 7;
     let mut sender = AttachmentSender::new(

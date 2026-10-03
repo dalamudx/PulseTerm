@@ -39,6 +39,50 @@ function sink(events: string[]): AttachmentSink {
     },
   };
 }
+function checkpointWire(sequence: number): Uint8Array {
+  const wire = new Uint8Array(34);
+  const view = new DataView(wire.buffer);
+  wire[0] = 8;
+  view.setUint32(2, sequence, true);
+  wire[6] = 1;
+  wire[7] = 6;
+  view.setBigUint64(10, generation, true);
+  view.setBigUint64(18, 10n, true);
+  view.setBigUint64(26, (1n << 64n) - 4n, true);
+  return wire;
+}
+it("ordered checkpoint waits for sink state handling before ACK", async () => {
+  const events: string[] = [];
+  const ack: number[] = [];
+  const pending = deferred();
+  const target = sink(events);
+  target.checkpoint = async (revision, offset) => {
+    expect(revision).toBe((1n << 64n) - 4n);
+    expect(offset).toBe(10n);
+    await pending.promise;
+  };
+  const consumer = new AttachmentConsumer(generation, target, (_, seq) => {
+    ack.push(seq);
+  });
+  for (const frame of fixture) await consumer.enqueue(frame);
+  const request = consumer.enqueue(checkpointWire(fixture.length));
+  await Promise.resolve();
+  expect(ack).not.toContain(fixture.length);
+  pending.resolve();
+  await request;
+  expect(ack.at(-1)).toBe(fixture.length);
+});
+it("unsupported checkpoint cancels without claiming state ACK", async () => {
+  const ack: number[] = [];
+  const consumer = new AttachmentConsumer(generation, sink([]), (_, seq) => {
+    ack.push(seq);
+  });
+  for (const wire of fixture) await consumer.enqueue(wire);
+  await expect(
+    consumer.enqueue(checkpointWire(fixture.length)),
+  ).rejects.toThrow("checkpoint_unsupported");
+  expect(ack).not.toContain(fixture.length);
+});
 describe("ordered attachment consumption", () => {
   it("never renders staged fragments and ACKs ready/data only after writes", async () => {
     const events: string[] = [];

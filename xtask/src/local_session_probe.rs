@@ -36,6 +36,106 @@ fn command(mode: &str) -> Result<PtyCommand> {
         .push(("PULSE_PTY_PORTABLE".into(), "explicit-value".into()));
     Ok(command)
 }
+async fn streaming() -> Result<serde_json::Value> {
+    use pulse_term::session::{MAX_HISTORY_BYTES, StreamEnd, StreamRecord};
+    let size = TermSize::new(80, 24)?;
+    let (handle, task) =
+        pulse_app::spawn_local(command("portable-pty-helper-stream")?, size, 128).await?;
+    visible(&handle, "PORTABLE_STREAM_READY").await?;
+    let old = handle
+        .diagnostic_subscribe(20, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
+        .await
+        .map_err(|e| anyhow::anyhow!("native first lease: {e}"))?;
+    handle
+        .input("literal ; $(input) 中\n".as_bytes().to_vec())
+        .await?;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while old.output.len() != pulse_term::session::TRANSPORT_QUEUE_CAPACITY {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .context("native lease never filled")?;
+    let paused = handle.state.borrow().parsed_bytes;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    ensure!(
+        handle.state.borrow().parsed_bytes == paused,
+        "full view did not stop parsing"
+    );
+    ensure!(
+        handle.state.borrow().lifecycle == Lifecycle::Running,
+        "native actor unexpectedly ended"
+    );
+    handle.inspect().await?; // Control remains live under stream pressure.
+    let mut view = handle
+        .diagnostic_subscribe(20, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
+        .await
+        .map_err(|e| anyhow::anyhow!("native reattach: {e}"))?;
+    ensure!(
+        view.lease_id > old.lease_id && old.status.borrow().end == StreamEnd::Replaced,
+        "lease replacement failed"
+    );
+    ensure!(
+        view.bootstrap.boundary.parsed_bytes == paused,
+        "capture drifted while frozen"
+    );
+    let mut replay = pulse_term::TerminalProbe::new(size, 128);
+    replay.feed(&view.bootstrap.history.bytes);
+    replay.feed(&view.bootstrap.restore);
+    let mut offset = view.bootstrap.boundary.parsed_bytes;
+    let mut chunks = 0;
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while let Some(record) = view.output.recv().await {
+            match record {
+                StreamRecord::Data {
+                    start,
+                    bytes,
+                    boundary,
+                } => {
+                    ensure!(
+                        start == offset && boundary.parsed_bytes == start + bytes.len() as u64,
+                        "lost or duplicate native tail"
+                    );
+                    ensure!(boundary.size == size, "unexpected native geometry");
+                    replay.feed(&bytes);
+                    replay.take_replies();
+                    offset = boundary.parsed_bytes;
+                    chunks += 1;
+                }
+                StreamRecord::Fence(boundary) => {
+                    ensure!(boundary.parsed_bytes == offset, "fence manufactured bytes");
+                }
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .context("native live consumption deadline")??;
+    replay.finish_input();
+    let (final_state, exit) = tokio::time::timeout(Duration::from_secs(3), task.join())
+        .await
+        .context("native live join deadline")??;
+    ensure!(
+        exit.exit_code == 0 && final_state.lifecycle == Lifecycle::Ended,
+        "native stream did not exit cleanly"
+    );
+    ensure!(
+        offset == final_state.parsed_bytes
+            && view.status.borrow().end == StreamEnd::Session(Lifecycle::Ended),
+        "native terminal boundary lost"
+    );
+    let text = replay.screen().cells[0]
+        .iter()
+        .map(|cell| cell.text.as_str())
+        .collect::<String>();
+    ensure!(
+        text.starts_with("PORTABLE_STREAM_DONE"),
+        "stream replay lost final reset/marker"
+    );
+    Ok(
+        json!({"atomicBootstrapTail":true,"pausedParsedBytes":paused,"boundedParserBackpressure":true,"controlUnderPressure":true,"replacementGeneration":view.lease_id,"continuousByteOffsets":true,"liveChunks":chunks,"finalParsedBytes":offset,"eofAndDirectChildJoin":true,"platform":std::env::consts::OS}),
+    )
+}
 async fn probe() -> Result<serde_json::Value> {
     let size = TermSize::new(80, 24)?;
     let mode = if cfg!(unix) {
@@ -113,8 +213,9 @@ async fn probe() -> Result<serde_json::Value> {
         status.borrow().lifecycle == Lifecycle::Closed,
         "receipt drop did not cancel actor"
     );
+    let stream = streaming().await?;
     Ok(
-        json!({"schemaVersion":1,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","No view subscription or frozen-tail lease yet","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
+        json!({"stream":stream,"schemaVersion":2,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","Only one diagnostic output lease; no production window/authorization or protocol ACK integration","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
     )
 }
 pub fn run() -> Result<()> {

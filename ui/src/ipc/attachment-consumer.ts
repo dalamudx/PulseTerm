@@ -12,6 +12,12 @@ import { HEADER_LENGTH } from "./frames";
  * reuse it while an old native/xterm write may still complete. All operations
  * must observe signal; split large replays into bounded callback-driven writes. */
 export interface AttachmentSink {
+  /** Process same-boundary state before ACK; absence fails checkpoint frames. */
+  checkpoint?(
+    revision: bigint,
+    parsedBytes: bigint,
+    signal: AbortSignal,
+  ): Promise<void>;
   reset(boundary: AttachBoundary, signal: AbortSignal): Promise<void>;
   write(bytes: Uint8Array, signal: AbortSignal): Promise<void>;
 }
@@ -134,6 +140,16 @@ export class AttachmentConsumer {
               );
             } else if (event.kind === "data") {
               await this.wait(this.sink.write(event.bytes, this.abort.signal));
+            } else if (event.kind === "checkpoint") {
+              if (!this.sink.checkpoint)
+                throw new Error("attach.checkpoint_unsupported");
+              await this.wait(
+                this.sink.checkpoint(
+                  event.revision,
+                  event.parsedBytes,
+                  this.abort.signal,
+                ),
+              );
             }
             await this.wait(
               Promise.resolve(this.ack(receipt.generation, receipt.sequence)),

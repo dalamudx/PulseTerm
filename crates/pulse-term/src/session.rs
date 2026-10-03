@@ -1,4 +1,5 @@
-//! Bounded, window-independent actor foundation with an EchoTransport test driver.
+//! Bounded, window-independent actor with an atomic diagnostic live lease.
+//! Native I/O is assembled in pulse-app; EchoTransport is validation-only.
 //! Screen inspection is a diagnostic projection, NOT a detach/attach snapshot.
 #[cfg(test)]
 #[path = "native_driver_tests.rs"]
@@ -7,9 +8,15 @@ mod native_driver_tests;
 #[path = "reconciliation_actor_tests.rs"]
 mod reconciliation_tests;
 use crate::{ObservedScreen, TerminalProbe};
+#[path = "session_stream.rs"]
+mod stream;
+pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
 #[cfg(test)]
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
+#[cfg(test)]
+#[path = "session_stream_tests.rs"]
+mod stream_tests;
 use pulse_core::TermSize;
 use std::collections::VecDeque;
 #[cfg(test)]
@@ -98,6 +105,9 @@ pub enum SessionError {
     /// Caller must retry or propagate pressure; message was not accepted.
     #[error("session bounded queue is full")]
     Busy,
+    /// A session-local stream serial cannot wrap or be reused.
+    #[error("stream lease serial exhausted")]
+    LeaseExhausted,
     /// Digest must be exactly sixteen lowercase hexadecimal characters.
     #[error("invalid diagnostic digest")]
     InvalidDigest,
@@ -136,6 +146,12 @@ struct PendingResize {
     deadline: tokio::time::Instant,
 }
 enum Command {
+    Subscribe {
+        history_rows: usize,
+        history_budget: usize,
+        restore_budget: usize,
+        reply: oneshot::Sender<Result<SessionStream, SessionRestoreError>>,
+    },
     Input(Vec<u8>, oneshot::Sender<Result<(), SessionError>>),
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
     Palette(
@@ -314,6 +330,29 @@ pub struct SessionHandle {
     pub state: watch::Receiver<SessionState>,
 }
 impl SessionHandle {
+    /// Capture replay and install its bounded live subscriber atomically. Diagnostic
+    /// single-lease API: not a production attach authorization or renderer binding.
+    /// Full output queues pause parsing/transport; controls and close remain fair.
+    /// Geometry/control changes end this lease and require a new generation.
+    pub async fn diagnostic_subscribe(
+        &self,
+        rows: usize,
+        history_budget: usize,
+        restore_budget: usize,
+    ) -> Result<SessionStream, SessionRestoreError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Subscribe {
+            history_rows: rows.min(crate::MAX_RECENT_ROWS),
+            history_budget: history_budget.min(MAX_HISTORY_BYTES),
+            restore_budget: restore_budget.min(MAX_RESTORE_BYTES),
+            reply,
+        })?;
+        result
+            .await
+            .map_err(|_| SessionRestoreError::Session(SessionError::Closed))?
+    }
+}
+impl SessionHandle {
     /// Try bounded command admission, then wait for actor acceptance. Input may be
     /// cancelled later on explicit close; success is NOT a physical-write receipt.
     pub async fn input(&self, bytes: Vec<u8>) -> Result<(), SessionError> {
@@ -469,6 +508,9 @@ pub fn spawn_session(
         let mut replies = VecDeque::<Vec<u8>>::new();
         let mut reply_bytes = 0;
         let mut resizing: Option<PendingResize> = None;
+        let mut lease: Option<stream::Lease> = None;
+        let mut stream_permit: Option<mpsc::OwnedPermit<StreamRecord>> = None;
+        let mut lease_serial = 0u64;
         loop {
             // Check cancellation before each bounded processing turn, then use
             // fair selection so sustained output cannot starve resize/inspect.
@@ -476,15 +518,23 @@ pub fn spawn_session(
                 current.lifecycle = Lifecycle::Closed;
                 break;
             }
+            let stream_sender = lease.as_ref().map(|lease| lease.output.clone());
+            let closing_sender = stream_sender.clone();
             let sync_deadline = terminal.sync_deadline();
             let resize_deadline = resizing.as_ref().map(|pending| pending.deadline);
             tokio::select! {
+                _=async {match closing_sender {Some(sender)=>sender.closed().await,None=>std::future::pending().await}}, if lease.is_some()=>{
+                    stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Detached,&current);
+                }
+                slot=async {match stream_sender {Some(sender)=>sender.reserve_owned().await,None=>std::future::pending().await}}, if lease.is_some() && stream_permit.is_none()=>{
+                    match slot {Ok(slot)=>stream_permit=Some(slot),Err(_)=>stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Detached,&current)}
+                }
                 failure=async {match &mut transport.failed{Some(failed)=>failed.changed().await, None=>std::future::pending().await}}=>{
                   if transport.failed.as_ref().is_some_and(|f|*f.borrow()){current.lifecycle=Lifecycle::Failed;break;}
                   if failure.is_err(){transport.failed=None;}
                 }
                 native=async {match &mut resizing{Some(pending)=>(&mut pending.native).await, None=>std::future::pending().await}}=>{
-                    if let Some(PendingResize{size,reply,..})=resizing.take(){let result=native.unwrap_or(Err(SessionError::Transport));if result.is_ok(){terminal.resize(size);current.size=size;current.revision+=1;state.send_replace(current.clone());}let _=reply.send(result);}
+                    if let Some(PendingResize{size,reply,..})=resizing.take(){let result=native.unwrap_or(Err(SessionError::Transport));if result.is_ok(){terminal.resize(size);current.size=size;current.revision+=1;state.send_replace(current.clone());stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Reconfigured,&current);}let _=reply.send(result);}
                 }
                 _=async {match resize_deadline{Some(deadline)=>tokio::time::sleep_until(deadline).await,None=>std::future::pending().await}}=>{
                     if let Some(pending)=resizing.take(){let _=pending.reply.send(Err(SessionError::Transport));}
@@ -495,10 +545,11 @@ pub fn spawn_session(
                         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
                         None => std::future::pending::<()>().await,
                     }
-                } => {
+                }, if lease.is_none() || stream_permit.is_some() => {
                     if terminal.expire_sync(std::time::Instant::now()) {
                         if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
                         current.revision += 1; state.send_replace(current.clone());
+                        if let Some(permit)=stream_permit.take(){permit.send(StreamRecord::Fence(current.clone()));}
                     }
                 }
                 _ = cancelled.changed() => { current.lifecycle = Lifecycle::Closed; break; }
@@ -514,13 +565,15 @@ pub fn spawn_session(
                 }
                 // Output remains readable while flushing replies so a driver stuck
                 // behind its output queue cannot deadlock against input pressure.
-                output = transport.output.recv(), if resizing.is_none() => {
+                output = transport.output.recv(), if resizing.is_none() && (lease.is_none() || stream_permit.is_some()) => {
                     match output {
                         Some(bytes) if bytes.len() <= MAX_CHUNK => {
+                            let start=current.parsed_bytes;
                             terminal.feed(&bytes);
                             current.parsed_bytes += bytes.len() as u64;
                             if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
                             current.revision += 1; state.send_replace(current.clone());
+                            if let Some(permit)=stream_permit.take(){permit.send(StreamRecord::Data {start,bytes,boundary:current.clone()});}
                         }
                         Some(_) => { current.lifecycle = Lifecycle::Failed; break; }
                         None => {
@@ -556,11 +609,11 @@ pub fn spawn_session(
                     }
                     Some(Command::Palette(palette, reply)) => {
                         terminal.set_query_palette(palette); current.revision += 1;
-                        state.send_replace(current.clone()); let _ = reply.send(Ok(()));
+                        state.send_replace(current.clone()); stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Reconfigured,&current); let _ = reply.send(Ok(()));
                     }
                     Some(Command::CellPixels(pixels, reply)) => {
                         terminal.set_cell_pixels(pixels); current.revision += 1;
-                        state.send_replace(current.clone()); let _ = reply.send(Ok(()));
+                        state.send_replace(current.clone()); stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Reconfigured,&current); let _ = reply.send(Ok(()));
                     }
                     Some(Command::Restore(limit, reply)) => {
                         if !reply.is_closed() {
@@ -573,15 +626,28 @@ pub fn spawn_session(
                             let _ = reply.send(result);
                         }
                     }
+                    Some(Command::Subscribe{history_rows,history_budget,restore_budget,reply})=>{
+                        if !reply.is_closed(){
+                            let result=if resizing.is_some(){Err(SessionRestoreError::Session(SessionError::Busy))}else{stream::prepare(&terminal,&current,history_rows,history_budget,restore_budget)};
+                            match result{
+                                Err(error)=>{let _=reply.send(Err(error));},
+                                Ok(bootstrap)=>match lease_serial.checked_add(1){
+                                    None=>{let _=reply.send(Err(SessionError::LeaseExhausted.into()));},
+                                    Some(next)=>{
+                                        let(new,view)=stream::create(next,bootstrap);
+                                        // A cancelled/failed request must not revoke a healthy old lease.
+                                        if reply.send(Ok(view)).is_ok(){
+                                            stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Replaced,&current);
+                                            lease=Some(new);lease_serial=next;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Some(Command::Bootstrap { history_rows, history_budget, restore_budget, reply }) => {
                         if !reply.is_closed() {
-                            let result = terminal.restore_screen_bounded(restore_budget)
-                                .map_err(SessionRestoreError::Gap)
-                                .and_then(|restore| {
-                                    if !restore.approximations.is_empty() { return Err(SessionRestoreError::Approximate(restore.approximations)); }
-                                    let history = terminal.recent_history_bounded(history_rows, history_budget).map_err(SessionRestoreError::Gap)?;
-                                    Ok(SessionBootstrap { boundary: current.clone(), history, restore: restore.bytes })
-                                });
+                            let result=stream::prepare(&terminal,&current,history_rows,history_budget,restore_budget);
                             let _ = reply.send(result);
                         }
                     }
@@ -609,6 +675,12 @@ pub fn spawn_session(
         }
         current.revision += 1;
         state.send_replace(current.clone());
+        stream::invalidate(
+            &mut lease,
+            &mut stream_permit,
+            StreamEnd::Session(current.lifecycle),
+            &current,
+        );
         (current, terminal.screen())
     });
     (handle, SessionTask(task))

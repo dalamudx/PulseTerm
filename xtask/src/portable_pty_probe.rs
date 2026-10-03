@@ -46,6 +46,22 @@ pub fn helper(mode: &str) -> Result<()> {
             std::io::stdout().flush()?;
             std::process::exit(7);
         }
+        "stream" => {
+            print!("\x1bcPORTABLE_STREAM_READY");
+            std::io::stdout().flush()?;
+            let mut line = String::new();
+            std::io::stdin().read_line(&mut line)?;
+            ensure!(
+                line.trim_end_matches(['\r', '\n']) == LINE,
+                "stream input altered"
+            );
+            let mut output = std::io::stdout().lock();
+            for _ in 0..2048 {
+                output.write_all(&[b'X'; 1024])?;
+            }
+            output.write_all(b"\x1bcPORTABLE_STREAM_DONE")?;
+            output.flush()?;
+        }
         "hold" => {
             print!("\x1bcPORTABLE_HOLD\r\n");
             std::io::stdout().flush()?;

@@ -14,6 +14,7 @@ interface Case {
   totalRows: number;
   history: unknown;
   expected: unknown;
+  checkpoints?: { revision: string; parsedBytes: string; expected: unknown }[];
 }
 const report = JSON.parse(
   readFileSync(
@@ -36,12 +37,27 @@ for (const entry of report.cases) {
   terminal.onData((s) => replies.push(s));
   let decoder = new Utf8Stream();
   let rendered = 0;
+  let checkpoints = 0;
   let readyRendered = false;
   let acked = 0;
   const generation = 0x100000000000007n;
   const consumer = new AttachmentConsumer(
     generation,
     {
+      async checkpoint(revision, parsedBytes, signal) {
+        assert.ok(!signal.aborted);
+        const expected = entry.checkpoints?.[checkpoints];
+        assert.ok(expected, `${entry.name}: unknown checkpoint`);
+        assert.equal(revision, BigInt(expected.revision));
+        assert.equal(parsedBytes, BigInt(expected.parsedBytes));
+        await new Promise<void>((done) => terminal.write("", done));
+        assert.deepEqual(
+          screen(terminal),
+          expected.expected,
+          `${entry.name}: checkpoint backend state`,
+        );
+        checkpoints++;
+      },
       async reset(boundary, signal) {
         assert.ok(!signal.aborted);
         assert.equal(boundary.columns, report.columns);
@@ -101,6 +117,7 @@ for (const entry of report.cases) {
       entry.expected,
       `${entry.name}: final screen`,
     );
+    assert.equal(checkpoints, entry.checkpoints?.length ?? 0);
     assert.deepEqual(replies, [], `${entry.name}: no replay query leakage`);
     assert.equal(acked, entry.frames.length);
     assert.equal(consumer.queuedBytes, 0);

@@ -151,10 +151,19 @@ mise run probe-pty
 - 采样每程序日志≤2MiB、reader仅2块4096字节，父进程40秒deadline；拒绝不能idle或正常quit的程序，不静默跳过。htop只观察采样进程本身；tmux只用独立socket和12秒有限shell，受控kill后client退出1是明确记录的server-exited，其他程序需0。故障保存prefix/suffix/恢复帧与结构，旧成功报告启动前删除。
 - Linux CI安装这4个工具并注册探针，只上传JSON，不上传原.vt；测试样例不含用户session内容。原依赖门禁不变。当前仍需原子live订阅/流控/窗口绑定、自动idle同步限频、深历史和reflow UX及Windows实际执行。
 
+## 原子bootstrap/live订阅与Checkpoint
+
+- 新增公开 SessionStream/StreamRecord/StreamStatus 与 diagnostic_subscribe：同actor回合建立history/screen边界和唯一bounded live lease；full先停止解析，再沿transport/native队列回传背压。drop订阅恢复无视图处理，不关闭session。成功替换旧lease，cancel/错误capture保留旧lease；id不是授权/global generation。
+- 9项单测覆盖partial UTF-8/备用屏续流、full下控制close/detach、取消/失败capture和替换、pending/native resize、EOF替换字符及sync Fence。控制配置/成功resize结束旧geometry lease，driver须建新generation。
+- wire Checkpoint=6携带u64 revision，offset为当前live cursor，同32位sequence和发送额度。Receiver拒绝旧revision、错误cursor/phase/长度；sink处理完成才ACK，缺实现取消。新增4项TS及1项Rust验证精度、callback及phase/geometry/credits。
+- probe-local-session真实2MiB输出在Linux填满8条lease后，80ms停读parsed_bytes不前进，inspect仍可用；原子重新capture后旧leaseReplaced，连续offset重放全部边界后流。本轮paused=29,743、最终parsed=2,097,221、live=508块（OS分块会变化），最终marker/Ended/direct child join通过。不是RSS/进程树、网络ACK或窗口验收。
+- probe-attachment第四个案例：actor原子lease→binary→TS/headless，在部分UTF-8和备用屏后续流，sync Fence映射Checkpoint，sink严格比较后端屏幕后ACK。check/77项term/13项IPC/57项TS、API隔离及vendor211文件门禁通过；Astrolabe Rust无错误，无依赖变化。
+- 仍非production attach：一个诊断订阅、没有Tauri权限/真实窗口绑定、ACK额度贯通及wire终态映射，未覆盖非UTF-8双坐标。撤销旧generation/排队帧、EOF finish、slow view timeout、auto idle同步限频及多视图策略仍须production driver实现；不代表三平台/S2/S11整体通过。
+
 ## 检查结果
 
-- Rust：68 项 pulse-term 单元/属性测试通过（增加原生驱动错误/resize回执及历史不污染回归）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
-- TS：53 项测试通过（加入重连编解码、consumer callback、摘要比较）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 13项通过（加入Checkpoint阶段/额度/边界回归）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- TS：57 项测试通过（新增4项Checkpoint精度、边界及callback ACK/unsupported拒绝）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
