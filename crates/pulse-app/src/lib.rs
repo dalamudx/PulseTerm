@@ -1,5 +1,6 @@
 //! Runtime-neutral application composition for supervised local terminal sessions.
 #![forbid(unsafe_code)]
+pub mod attachment;
 use pulse_core::TermSize;
 use pulse_pty::{PtyCommand, PtySession};
 use pulse_term::session::{

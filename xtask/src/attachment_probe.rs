@@ -8,6 +8,52 @@ use pulse_ipc::{
 use pulse_term::TerminalProbe;
 use serde_json::json;
 use std::fs;
+async fn supervised_case(columns: u16, rows: u16) -> Result<serde_json::Value> {
+    use pulse_app::attachment::{AttachmentConfig, attach};
+    use pulse_term::session::{ChannelTransport, Lifecycle, spawn_session};
+    let size = TermSize::new(columns, rows)?;
+    let (transport, driver) = ChannelTransport::bounded_driver();
+    let (session, task) = spawn_session(size, 128, transport);
+    let generation = 0x100000000000007;
+    let (ack, mut wire, binding) = attach(
+        &session,
+        generation,
+        AttachmentConfig {
+            fragment: 7,
+            frames: 1,
+            bytes: 64,
+            ack_timeout: std::time::Duration::from_secs(2),
+        },
+    )
+    .await?;
+    let suffix = b"main\x1b[?1049halt\x1b[?1049l!\xf0\x9f";
+    driver.output.send(suffix.to_vec()).await?;
+    drop(driver);
+    let mut frames = Vec::new();
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while let Some(frame) = wire.recv().await {
+            ack.acknowledge(generation, decode(&frame)?.sequence)?;
+            frames.push(frame);
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await??;
+    let receipt = binding.join().await?;
+    ensure!(
+        task.join().await?.lifecycle == Lifecycle::Ended,
+        "supervised actor EOF"
+    );
+    let mut source = TerminalProbe::new(size, 128);
+    source.feed(suffix);
+    source.finish_input();
+    ensure!(
+        receipt.boundary.parsed_bytes == suffix.len() as u64,
+        "EOF cursor"
+    );
+    Ok(
+        json!({"name":"supervised-driver-eof-tail","prefix":[],"suffix":suffix,"frames":frames,"history":[],"expected":source.screen(),"retainedRows":0,"totalRows":0}),
+    )
+}
 async fn actor_case(columns: u16, rows: u16) -> Result<serde_json::Value> {
     use pulse_term::session::{
         ChannelTransport, Lifecycle, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES, StreamRecord,
@@ -189,13 +235,14 @@ pub fn run() -> Result<()> {
         .enable_all()
         .build()?;
     cases.push(runtime.block_on(actor_case(columns, rows))?);
+    cases.push(runtime.block_on(supervised_case(columns, rows))?);
     fs::create_dir_all("target/probes")?;
     fs::write(
         "target/probes/attachment.json",
         serde_json::to_vec_pretty(&json!({"columns":columns,"rows":rows,"cases":cases}))?,
     )?;
     println!(
-        "Prepared 4 binary attachment cases: primary/alternate, history colours/soft wraps, UTF-8/CSI tails"
+        "Prepared 5 binary attachment cases: supervised EOF, primary/alternate, history colours/soft wraps, UTF-8/CSI tails"
     );
     Ok(())
 }

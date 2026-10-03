@@ -21,7 +21,7 @@ export type AttachmentEvent =
       restore: Uint8Array;
     }
   | { kind: "data"; bytes: Uint8Array; offset: bigint }
-  | { kind: "checkpoint"; revision: bigint; parsedBytes: bigint };
+  | { kind: "checkpoint" | "end"; revision: bigint; parsedBytes: bigint };
 /** ACK only after consuming/copying staging bytes, or completing ready/data
  * rendering. Stale generations return null and do not receive a current ACK. */
 export interface AttachmentReceipt {
@@ -34,7 +34,7 @@ export interface AttachmentReceipt {
 export class AttachmentReceiver {
   private next = 0;
   private revision = 0n;
-  private phase: "begin" | "bootstrap" | "live" | "failed" = "begin";
+  private phase: "begin" | "bootstrap" | "live" | "ended" | "failed" = "begin";
   private boundary: AttachBoundary | undefined;
   private history = new Uint8Array();
   private restore = new Uint8Array();
@@ -161,7 +161,7 @@ export class AttachmentReceiver {
         throw new Error("attach.data");
       event = { kind: "data", bytes: body, offset };
       this.liveAt += BigInt(body.length);
-    } else if (part === 6) {
+    } else if (part === 6 || part === 7) {
       if (this.phase !== "live" || offset !== this.liveAt || body.length !== 8)
         throw new Error("attach.checkpoint");
       const revision = new DataView(
@@ -172,7 +172,12 @@ export class AttachmentReceiver {
       if (revision < this.revision)
         throw new Error("attach.checkpoint_revision");
       this.revision = revision;
-      event = { kind: "checkpoint", revision, parsedBytes: offset };
+      event = {
+        kind: part === 6 ? "checkpoint" : "end",
+        revision,
+        parsedBytes: offset,
+      };
+      if (part === 7) this.phase = "ended";
     } else {
       throw new Error("attach.part");
     }

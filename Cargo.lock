@@ -2603,6 +2603,7 @@ name = "pulse-app"
 version = "0.1.0"
 dependencies = [
  "pulse-core",
+ "pulse-ipc",
  "pulse-pty",
  "pulse-term",
  "thiserror 2.0.21",

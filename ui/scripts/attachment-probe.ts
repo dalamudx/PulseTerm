@@ -58,6 +58,11 @@ for (const entry of report.cases) {
         );
         checkpoints++;
       },
+      async finish(_revision, _parsedBytes, signal) {
+        assert.ok(!signal.aborted);
+        const tail = decoder.finish();
+        await new Promise<void>((done) => terminal.write(tail, done));
+      },
       async reset(boundary, signal) {
         assert.ok(!signal.aborted);
         assert.equal(boundary.columns, report.columns);
@@ -78,7 +83,7 @@ for (const entry of report.cases) {
       assert.equal(seq, acked);
       const part = entry.frames[seq]?.[7];
       if (part === 4) {
-        assert.ok(rendered >= 2);
+        assert.ok(rendered >= (entry.retainedRows > 0 ? 2 : 1));
         readyRendered = true;
       }
       if (part === 5) assert.ok(readyRendered);

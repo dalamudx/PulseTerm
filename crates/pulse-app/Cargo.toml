@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 pulse-core.workspace = true
+pulse-ipc.workspace = true
 pulse-pty.workspace = true
 pulse-term.workspace = true
 tokio.workspace = true

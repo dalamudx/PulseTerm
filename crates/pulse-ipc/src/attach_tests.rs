@@ -1,6 +1,43 @@
 use super::*;
 #[test]
 #[allow(clippy::unwrap_used)]
+fn end_requires_commit_valid_boundary_and_ack_credit() {
+    let mut sender = sender(1);
+    let boundary = sender.boundary;
+    assert_eq!(sender.finish(boundary), Err(AttachError::Phase));
+    while let Some(wire) = sender.next_frame().unwrap() {
+        sender
+            .acknowledge(7, crate::decode(&wire).unwrap().sequence)
+            .unwrap();
+    }
+    let wire = sender.data(b"x").unwrap();
+    let end = Boundary {
+        parsed_bytes: boundary.parsed_bytes + 1,
+        ..boundary
+    };
+    assert_eq!(
+        sender.finish(end),
+        Err(AttachError::Flow(FlowError::NoCredit))
+    );
+    sender
+        .acknowledge(7, crate::decode(&wire).unwrap().sequence)
+        .unwrap();
+    assert_eq!(sender.finish(boundary), Err(AttachError::Invalid));
+    let wire = sender.finish(end).unwrap();
+    let frame = crate::decode(&wire).unwrap();
+    let part = decode_fragment(frame.payload).unwrap();
+    assert_eq!(part.part, Part::End);
+    assert_eq!(part.offset, end.parsed_bytes);
+    assert_eq!(part.body, end.revision.to_le_bytes());
+    assert_eq!(sender.data(b"late"), Err(AttachError::Phase));
+    assert_eq!(sender.checkpoint(end), Err(AttachError::Phase));
+    assert_eq!(sender.finish(end), Err(AttachError::Phase));
+    sender.acknowledge(7, frame.sequence).unwrap();
+    assert_eq!(sender.outstanding_bytes(), 0);
+}
+
+#[test]
+#[allow(clippy::unwrap_used)]
 fn checkpoint_obeys_credit_phase_geometry_and_byte_cursor() {
     let mut sender = sender(1);
     let boundary = sender.boundary;

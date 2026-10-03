@@ -39,6 +39,62 @@ function sink(events: string[]): AttachmentSink {
     },
   };
 }
+function endWire(sequence: number): Uint8Array {
+  const wire = checkpointWire(sequence);
+  wire[7] = 7;
+  return wire;
+}
+it("normal End waits for decoder/render completion before ACK and rejects later frames", async () => {
+  const ack: number[] = [];
+  const target = sink([]);
+  const pending = deferred();
+  target.finish = async (revision, offset) => {
+    expect(offset).toBe(10n);
+    expect(revision).toBe((1n << 64n) - 4n);
+    await pending.promise;
+  };
+  const consumer = new AttachmentConsumer(generation, target, (_, seq) => {
+    ack.push(seq);
+  });
+  for (const wire of fixture) await consumer.enqueue(wire);
+  const request = consumer.enqueue(endWire(fixture.length));
+  await Promise.resolve();
+  expect(ack).not.toContain(fixture.length);
+  pending.resolve();
+  await request;
+  expect(ack.at(-1)).toBe(fixture.length);
+  await expect(
+    consumer.enqueue(checkpointWire(fixture.length + 1)),
+  ).rejects.toThrow("checkpoint");
+});
+it("missing EOF sink fails closed without claiming End ACK", async () => {
+  const ack: number[] = [];
+  const consumer = new AttachmentConsumer(generation, sink([]), (_, seq) => {
+    ack.push(seq);
+  });
+  for (const wire of fixture) await consumer.enqueue(wire);
+  await expect(consumer.enqueue(endWire(fixture.length))).rejects.toThrow(
+    "end_unsupported",
+  );
+  expect(ack).not.toContain(fixture.length);
+});
+it("cancelling in-flight EOF never sends a late ACK", async () => {
+  const ack: number[] = [];
+  const target = sink([]);
+  const pending = deferred();
+  target.finish = () => pending.promise;
+  const consumer = new AttachmentConsumer(generation, target, (_, seq) => {
+    ack.push(seq);
+  });
+  for (const wire of fixture) await consumer.enqueue(wire);
+  const request = consumer.enqueue(endWire(fixture.length));
+  await Promise.resolve();
+  consumer.cancel();
+  await expect(request).rejects.toThrow();
+  pending.resolve();
+  await Promise.resolve();
+  expect(ack).not.toContain(fixture.length);
+});
 function checkpointWire(sequence: number): Uint8Array {
   const wire = new Uint8Array(34);
   const view = new DataView(wire.buffer);

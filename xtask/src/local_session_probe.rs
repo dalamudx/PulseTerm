@@ -36,6 +36,102 @@ fn command(mode: &str) -> Result<PtyCommand> {
         .push(("PULSE_PTY_PORTABLE".into(), "explicit-value".into()));
     Ok(command)
 }
+async fn wire_streaming() -> Result<serde_json::Value> {
+    use pulse_app::attachment::{AttachmentConfig, attach};
+    use pulse_ipc::attach::{Part, decode_fragment};
+    let size = TermSize::new(80, 24)?;
+    let (session, task) =
+        pulse_app::spawn_local(command("portable-pty-helper-stream")?, size, 128).await?;
+    visible(&session, "PORTABLE_STREAM_READY").await?;
+    let config = AttachmentConfig {
+        frames: 1,
+        fragment: 8192,
+        bytes: 9000,
+        ack_timeout: Duration::from_secs(5),
+    };
+    let (ack, mut wire, binding) = attach(&session, 0x100000000000007, config).await?;
+    let mut replay = pulse_term::TerminalProbe::new(size, 128);
+    let mut sequence = 0;
+    let mut offset = None;
+    let mut pause = None;
+    let mut end = false;
+    tokio::time::timeout(Duration::from_secs(12), async {
+        while let Some(bytes) = wire.recv().await {
+            let frame = pulse_ipc::decode(&bytes)?;
+            ensure!(frame.sequence == sequence, "wire reorder");
+            sequence += 1;
+            let part = decode_fragment(frame.payload)?;
+            match part.part {
+                Part::Begin => {
+                    offset = Some(u64::from_le_bytes(part.body[12..20].try_into()?));
+                }
+                Part::History | Part::Restore => {
+                    replay.feed(part.body);
+                    replay.take_replies();
+                }
+                Part::Commit => {
+                    session
+                        .input("literal ; $(input) 中\n".as_bytes().to_vec())
+                        .await?;
+                }
+                Part::Data => {
+                    ensure!(Some(part.offset) == offset, "wire duplicate/loss");
+                    offset = Some(part.offset + part.body.len() as u64);
+                    replay.feed(part.body);
+                    replay.take_replies();
+                    if pause.is_none() {
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        let stopped = session.state.borrow().parsed_bytes;
+                        tokio::time::sleep(Duration::from_millis(80)).await;
+                        ensure!(
+                            session.state.borrow().parsed_bytes == stopped,
+                            "ACK pressure did not reach native parser"
+                        );
+                        session.inspect().await?;
+                        pause = Some(stopped);
+                    }
+                }
+                Part::Checkpoint => {
+                    ensure!(Some(part.offset) == offset, "wire checkpoint bytes");
+                }
+                Part::End => {
+                    ensure!(Some(part.offset) == offset, "wire end offset");
+                    replay.finish_input();
+                    end = true;
+                }
+            }
+            ack.acknowledge(part.generation, frame.sequence)?;
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await
+    .context("native wire deadline")??;
+    let receipt = binding.join().await?;
+    let (state, exit) = tokio::time::timeout(Duration::from_secs(3), task.join()).await??;
+    ensure!(
+        end && state.lifecycle == Lifecycle::Ended && exit.exit_code == 0,
+        "wire final native status"
+    );
+    ensure!(
+        Some(state.parsed_bytes) == offset && receipt.boundary == state,
+        "wire final backend boundary"
+    );
+    ensure!(
+        receipt.peak_credit_bytes <= config.bytes,
+        "wire credit bound"
+    );
+    let text = replay.screen().cells[0]
+        .iter()
+        .map(|cell| cell.text.as_str())
+        .collect::<String>();
+    ensure!(
+        text.starts_with("PORTABLE_STREAM_DONE"),
+        "wire final screen"
+    );
+    Ok(
+        json!({"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
+    )
+}
 async fn streaming() -> Result<serde_json::Value> {
     use pulse_term::session::{MAX_HISTORY_BYTES, StreamEnd, StreamRecord};
     let size = TermSize::new(80, 24)?;
@@ -214,8 +310,9 @@ async fn probe() -> Result<serde_json::Value> {
         "receipt drop did not cancel actor"
     );
     let stream = streaming().await?;
+    let wire = wire_streaming().await?;
     Ok(
-        json!({"stream":stream,"schemaVersion":2,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","Only one diagnostic output lease; no production window/authorization or protocol ACK integration","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
+        json!({"wire":wire,"stream":stream,"schemaVersion":3,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","Only one diagnostic output lease; no production window/authorization or protocol ACK integration","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
     )
 }
 pub fn run() -> Result<()> {

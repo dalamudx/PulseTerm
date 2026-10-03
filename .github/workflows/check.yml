@@ -46,7 +46,7 @@ jobs:
       - name: Record real terminal software continuation
         if: runner.os == 'Linux'
         run: mise run probe-software
-      - name: Exercise supervised native session actor
+      - name: Exercise native actor and wire acknowledgment backpressure
         run: mise run probe-local-session
       - name: Exercise native PTY on all platforms
         run: mise run probe-pty-portable

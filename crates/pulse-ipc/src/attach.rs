@@ -1,4 +1,4 @@
-//! Attachment v1: Begin -> History* -> Restore+ -> Commit -> Data*.
+//! Attachment v1: Begin -> History* -> Restore+ -> Commit -> (Data | Checkpoint)* -> End.
 //! All messages use ONE ordered binary stream and the same sending credit window.
 //! A new generation starts a new stream; sequence gaps are fatal, not recoverable
 //! by accepting a later fragment. A caller must serialize control and PTY output
@@ -35,6 +35,8 @@ pub enum Part {
     Data = 5,
     /// Ordered state checkpoint at the current live byte cursor (u64 revision).
     Checkpoint = 6,
+    /// Genuine parser EOF; finish UTF-8 and render before ACK. No further frames.
+    End = 7,
 }
 /// Control/output boundary captured by the terminal owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,6 +115,7 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
         4 => Part::Commit,
         5 => Part::Data,
         6 => Part::Checkpoint,
+        7 => Part::End,
         _ => return Err(AttachError::Invalid),
     };
     let read = |at| -> Result<u64, AttachError> {
@@ -239,7 +242,7 @@ impl AttachmentSender {
     }
     /// Next bootstrap frame, or None once Commit has been emitted.
     pub fn next_frame(&mut self) -> Result<Option<Vec<u8>>, AttachError> {
-        if self.phase == Part::Data {
+        if matches!(self.phase, Part::Data | Part::End) {
             return Ok(None);
         }
         let metadata = self.metadata();
@@ -252,7 +255,7 @@ impl AttachmentSender {
                 &self.restore[self.offset..(self.offset + self.fragment).min(self.restore.len())]
             }
             Part::Commit => &[],
-            Part::Data => return Ok(None),
+            Part::Data | Part::End => return Ok(None),
             Part::Checkpoint => return Err(AttachError::Phase),
         };
         let payload = Fragment {
@@ -286,12 +289,12 @@ impl AttachmentSender {
             Part::History if self.offset == self.history.len() => {
                 self.phase = Part::Restore;
                 self.offset = 0;
-                self.history.clear();
+                self.history = Vec::new();
             }
             Part::Restore if self.offset == self.restore.len() => {
                 self.phase = Part::Commit;
                 self.offset = 0;
-                self.restore.clear();
+                self.restore = Vec::new();
             }
             Part::Commit => {
                 self.phase = Part::Data;
@@ -306,7 +309,7 @@ impl AttachmentSender {
         if self.phase != Part::Data {
             return Err(AttachError::Phase);
         }
-        if bytes.len() > self.fragment {
+        if bytes.is_empty() || bytes.len() > self.fragment {
             return Err(AttachError::Invalid);
         }
         let next = self
@@ -334,6 +337,15 @@ impl AttachmentSender {
     /// Same stream/credits as Data. Wrong cursor or older revision is rejected;
     /// a NoCredit error leaves all state unchanged. Receiver must process before ACK.
     pub fn checkpoint(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {
+        self.state_frame(boundary, Part::Checkpoint)
+    }
+    /// End at the exact final byte cursor. NoCredit leaves phase/state unchanged.
+    pub fn finish(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {
+        let frame = self.state_frame(boundary, Part::End)?;
+        self.phase = Part::End;
+        Ok(frame)
+    }
+    fn state_frame(&mut self, boundary: Boundary, part: Part) -> Result<Vec<u8>, AttachError> {
         if self.phase != Part::Data {
             return Err(AttachError::Phase);
         }
@@ -346,7 +358,7 @@ impl AttachmentSender {
         }
         let body = boundary.revision.to_le_bytes();
         let payload = Fragment {
-            part: Part::Checkpoint,
+            part,
             generation: self.generation,
             offset: self.live_offset,
             body: &body,

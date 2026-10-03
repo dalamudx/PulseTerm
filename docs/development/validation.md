@@ -139,7 +139,7 @@ mise run probe-pty
 - actor 使用 VTE 的真实同步刷新 deadline，在没有新输出时也会主动排空缓冲，经同一 tracked handler 更新状态与 revision；parsed_bytes 保持原始接收/解析进度，不制造额外输出字节。正常 ESU 或超时会解除 SyncPending。deadline遵循VTE，远端重复BSU会延期，未引入独立总时长限制。EOF 也排空未关闭同步刷新和不完整UTF-8；存在不能送达的上游回复则标记Failed，不伪装Ended。
 - 批量 flush 内的颜色 query/set/reset/RIS 经 handler 捕获查询当时的override，避免较早查询使用后来的动态颜色；RIS遵循上游保留色覆盖，OSC110才明确重置。6 个回归覆盖 idle超时、deadline前不执行/只执行一次、上游应答、EOF尾部与未应答失败、正常ESU和EOF颜色顺序。
 - 扩展30,000组 release 属性测试无失败：日志 exact=18,298、deferred=8,377、approx=2,459、alt-active=4,606（精确续流检查4,018）、alt-reentry=3,967；日志桶不是互斥的全部三万分类，延期/近似不是精确通过。生产 attach、历史/reflow、跨窗口和协议额度仍未验收。
-- `pulse-app` 已接入有界真实 PTY async bridge（见 S3/S10 一节），原生 resize 收到成功回执后才更新 parser；IO错误明确 Failed，resize回执超时5秒失败且可带外取消。Echo只在validation构建可用；input成功仍仅代表队列接受，不代表物理写完。Registry、多视图关联、传输额度/落后快照、生产生命周期事件节流和OS进程树回收仍待实施。
+- `pulse-app` 已接入有界真实 PTY async bridge（见 S3/S10 一节），原生 resize 收到成功回执后才更新 parser；IO错误明确 Failed，resize回执超时5秒失败且可带外取消。Echo只在validation构建可用；input成功仍仅代表队列接受，不代表物理写完。传输额度已在pulse-app窗口无关driver贯通；Registry、多视图关联、落后快照策略、生产生命周期事件节流和OS进程树回收仍待实施。
 - S11 仍未整体验收：没有实际窗口迁移或 UI 销毁/恢复结果，视口投影禁止充当 attach 快照。此实现只建立与视图无关的基础，不宣称已经实现完整会话恢复。
 
 ## 真实终端软件录制及恢复回归
@@ -158,12 +158,15 @@ mise run probe-pty
 - wire Checkpoint=6携带u64 revision，offset为当前live cursor，同32位sequence和发送额度。Receiver拒绝旧revision、错误cursor/phase/长度；sink处理完成才ACK，缺实现取消。新增4项TS及1项Rust验证精度、callback及phase/geometry/credits。
 - probe-local-session真实2MiB输出在Linux填满8条lease后，80ms停读parsed_bytes不前进，inspect仍可用；原子重新capture后旧leaseReplaced，连续offset重放全部边界后流。本轮paused=29,743、最终parsed=2,097,221、live=508块（OS分块会变化），最终marker/Ended/direct child join通过。不是RSS/进程树、网络ACK或窗口验收。
 - probe-attachment第四个案例：actor原子lease→binary→TS/headless，在部分UTF-8和备用屏后续流，sync Fence映射Checkpoint，sink严格比较后端屏幕后ACK。check/77项term/13项IPC/57项TS、API隔离及vendor211文件门禁通过；Astrolabe Rust无错误，无依赖变化。
-- 仍非production attach：一个诊断订阅、没有Tauri权限/真实窗口绑定、ACK额度贯通及wire终态映射，未覆盖非UTF-8双坐标。撤销旧generation/排队帧、EOF finish、slow view timeout、auto idle同步限频及多视图策略仍须production driver实现；不代表三平台/S2/S11整体通过。
+- 已新增 `pulse-app::attachment` 的窗口无关wire/ACK监督：config先验、bootstrap转移所有权、固定frame/byte预算、oldest ACK deadline、正常End与callback契约，取消/失效只释放lease不关闭session。7项测试覆盖零/不合理config保留旧lease、2.5MiB输出无ACK冻结→timeout恢复、EOF截断UTF-8、正常final ACK、End缺ACK不能完成、wrong generation/duplicate ACK、receiver drop、reconfigure与旧binding替换；TS3项覆盖End渲染后ACK/缺finish拒绝/取消无迟到ACK。
+- 新probe-local-session wire测量真实2MiB helper→actor→AttachmentSender；1帧、8KiB分片、9000bytes credit，暂停ACK时parsed_bytes冻结且inspect可用，最终2,097,221字节/Ended及child join通过。一轮521帧、credit峰值6,587 bytes、暂停边界24,623（OS分块会变化，不能固定该计数）。ACK来自Rust validator不是前端callback。第五个probe-attachment案例把driver输出回放到headless，End后decoder生成一个替换字符并匹配后端。native压力与headless callback分别实测，不冒充实时WebView/网络往返。
+- CI沿用三平台probe-local-session/probe-attachment任务，已包含新路径；本轮Linux执行。77项term、14项IPC、7项app、60项TS及API隔离/check通过。Cargo.lock只增加pulse-app→pulse-ipc内部edge，无第三方版本/许可证/补丁变化。
+- 仍非production attach：一个诊断订阅、没有Tauri权限/真实窗口绑定，未覆盖非UTF-8双坐标。旧surface/已转交帧撤销、自动idle同步限频、多视图策略和真实WebView callback ACK→PTY组合验收仍待实现；不代表三平台/S2/S11整体通过。
 
 ## 检查结果
 
-- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 13项通过（加入Checkpoint阶段/额度/边界回归）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
-- TS：57 项测试通过（新增4项Checkpoint精度、边界及callback ACK/unsupported拒绝）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 7项ACK driver监督测试通过；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- TS：60 项测试通过（本轮新增3项EOF callback/unsupported/取消迟到ACK拒绝）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

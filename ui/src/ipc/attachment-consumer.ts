@@ -18,6 +18,13 @@ export interface AttachmentSink {
     parsedBytes: bigint,
     signal: AbortSignal,
   ): Promise<void>;
+  /** Genuine EOF: flush the stream decoder and finish rendering before ACK.
+   * Cancellation or resize is NOT EOF; never finish the old decoder for those. */
+  finish?(
+    revision: bigint,
+    parsedBytes: bigint,
+    signal: AbortSignal,
+  ): Promise<void>;
   reset(boundary: AttachBoundary, signal: AbortSignal): Promise<void>;
   write(bytes: Uint8Array, signal: AbortSignal): Promise<void>;
 }
@@ -140,6 +147,15 @@ export class AttachmentConsumer {
               );
             } else if (event.kind === "data") {
               await this.wait(this.sink.write(event.bytes, this.abort.signal));
+            } else if (event.kind === "end") {
+              if (!this.sink.finish) throw new Error("attach.end_unsupported");
+              await this.wait(
+                this.sink.finish(
+                  event.revision,
+                  event.parsedBytes,
+                  this.abort.signal,
+                ),
+              );
             } else if (event.kind === "checkpoint") {
               if (!this.sink.checkpoint)
                 throw new Error("attach.checkpoint_unsupported");
