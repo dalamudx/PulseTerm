@@ -52,6 +52,10 @@ S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all
 
 生成命令、事件和 Raw Channel 在 Linux 实测通过，但 ADR-018 仍是 Proposed。正式采用前需单独审查此维护风险；若不能接受，应评估计划中的 ts-rs 备选，而不是重新 vendor 或自动替换宏。当前不添加 ignore、不放宽许可证规则、不把受控验证结果当作发布许可。
 
+## PTY 原语依赖检查
+
+新增 `portable-pty 0.9.0`（MIT）及原生 I/O 传递依赖，版本通过 Cargo workspace / lockfile 管理。全特性联网审计的来源和 bans 通过；未新增拒绝项，仍是原有 6 个许可证拒绝和 `paste` / `proc-macro-error` 的维护公告。没有替换 GTK 宏、添加 vendor、放宽白名单或添加 ignore。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

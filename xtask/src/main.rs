@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod channel_probe;
+mod pty_probe;
 mod query_probe;
 
 use std::path::{Path, PathBuf};
@@ -20,6 +21,13 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    // PTY helpers preserve the cwd chosen by their parent.
+    if let Some(mode) = std::env::args()
+        .nth(1)
+        .and_then(|arg| arg.strip_prefix("pty-helper-").map(str::to_owned))
+    {
+        return pty_probe::helper(&mode);
+    }
     std::env::set_current_dir(root()?)?;
     match std::env::args().nth(1).as_deref() {
         Some("check") => {
@@ -41,7 +49,9 @@ fn main() -> Result<()> {
         Some("check-deps") => check_deps()?,
         Some("probe") => probe()?,
         Some("probe-channel") => channel_probe::run()?,
-        _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel>"),
+        Some("probe-pty") => pty_probe::run()?,
+        Some("probe-pty-worker") => pty_probe::worker()?,
+        _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty>"),
     }
     Ok(())
 }
@@ -84,6 +94,7 @@ fn check_deps() -> Result<()> {
                 "pulse-core" => &[],
                 "pulse-ipc" => &["pulse-core"],
                 "pulse-term" => &["pulse-core", "pulse-ipc"],
+                "pulse-pty" => &["pulse-core"],
                 _ => continue,
             };
             if dep.starts_with("pulse-") && !allowed.contains(&dep) {

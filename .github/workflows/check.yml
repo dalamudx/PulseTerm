@@ -29,6 +29,9 @@ jobs:
         run: mise run test
       - name: Compare terminal parsers
         run: mise run probe
+      - name: Exercise Unix native PTY
+        if: runner.os != 'Windows'
+        run: mise run probe-pty
       - name: Check native desktop adapter
         run: mise run desktop-check
       - name: Check generated IPC bindings

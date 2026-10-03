@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "apps/desktop/src-tauri", "xtask"]
-default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "xtask"]
+members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 alacritty_terminal = "=0.26.0"
+portable-pty = "=0.9.0"
 anyhow = "1"
 proptest = "1"
 serde = { version = "1", features = ["derive"] }
@@ -29,6 +30,7 @@ uuid = { version = "1", features = ["v4"] }
 pulse-core = { path = "crates/pulse-core", version = "0.1.0" }
 pulse-ipc = { path = "crates/pulse-ipc", version = "0.1.0" }
 pulse-term = { path = "crates/pulse-term", version = "0.1.0" }
+pulse-pty = { path = "crates/pulse-pty", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

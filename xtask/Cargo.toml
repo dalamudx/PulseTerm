@@ -10,6 +10,7 @@ publish = false
 anyhow.workspace = true
 pulse-core.workspace = true
 pulse-term.workspace = true
+pulse-pty.workspace = true
 serde_json.workspace = true
 
 [lints]

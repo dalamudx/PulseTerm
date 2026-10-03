@@ -20,6 +20,10 @@ run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
 description = "Compare Rust terminal state and xterm headless"
 run = ["cargo xtask probe", "pnpm --filter ui probe"]
 
+[tasks.probe-pty]
+description = "Exercise native PTY input, queries, resize, output and teardown"
+run = "cargo xtask probe-pty"
+
 [tasks.fmt]
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]
