@@ -126,7 +126,7 @@ mount(el)
   → fit 计算行列数 → ipc.term.attach(sessionId, viewId, cols, rows, channel)
   → channel.onFrame:
        Data → 每流 Utf8Stream 解码；非空完整标量写入 xterm；额度仍按原始帧字节/序号归还，不按 JS 字符串长度计算
-       Snapshot → 完整状态恢复门禁尚未通过，禁止把现有视口重放用于生产 attach
+       Snapshot → 使用后端 `restore_sequence`（见 terminal-restore-evaluation.md）；备用屏激活时主屏缺失的处理待确认，视口重放禁止用于 attach
        Title/Cwd/Bell/Mark → 更新 sessionStore；命令标记用 xterm decoration 显示
        Exit → 显示“进程已退出”，并提供重启 / 关闭按钮
 onData(s)        → 同一微任务内的输入合并 → ipc.term.input(sessionId, bytes)（广播时发给多个会话）

@@ -39,7 +39,11 @@ run = "pnpm --filter ui exec tsx scripts/unicode-probe.ts"
 
 [tasks.probe-snapshot]
 description = "Strict continuation gate for complete state restore (currently expected to fail)"
-run = "cargo xtask probe-snapshot"
+run = [
+  "cargo xtask probe-snapshot",
+  "pnpm --filter ui exec tsx scripts/snapshot-probe.ts",
+  "pnpm --filter ui exec tsx scripts/token-matrix.ts",
+]
 
 [tasks.fmt]
 description = "Format Rust and TypeScript code"

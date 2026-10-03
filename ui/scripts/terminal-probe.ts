@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
 import headless from "@xterm/headless";
 import { suppressQueryReplies } from "../src/features/terminal/query-policy";
 import { SharedUnicodeProvider } from "../src/features/terminal/unicode-provider";
 import { Utf8Stream } from "../src/features/terminal/utf8-stream";
+import { screen } from "./xterm-screen";
 
 const { Terminal } = headless;
 
@@ -23,39 +23,6 @@ function integer(value: unknown): number {
     typeof value === "number" && Number.isSafeInteger(value) && value > 0,
   );
   return value;
-}
-function color(cell: IBufferCell, foreground: boolean): string {
-  if (foreground ? cell.isFgDefault() : cell.isBgDefault()) return "default";
-  const value = foreground ? cell.getFgColor() : cell.getBgColor();
-  if (foreground ? cell.isFgRGB() : cell.isBgRGB())
-    return `rgb:${(value >>> 16) & 255},${(value >>> 8) & 255},${value & 255}`;
-  return `idx:${value}`;
-}
-function screen(terminal: TerminalType) {
-  const buffer = terminal.buffer.active;
-  const cells = Array.from({ length: terminal.rows }, (_, row) => {
-    const line = buffer.getLine(buffer.baseY + row);
-    assert.ok(line);
-    return Array.from({ length: terminal.cols }, (_, col) => {
-      const cell = line.getCell(col);
-      assert.ok(cell);
-      return {
-        text: cell.getWidth() === 0 ? "" : cell.getChars() || " ",
-        width: cell.getWidth(),
-        foreground: color(cell, true),
-        background: color(cell, false),
-        bold: cell.isBold() !== 0,
-        italic: cell.isItalic() !== 0,
-        underline: cell.isUnderline() !== 0,
-        inverse: cell.isInverse() !== 0,
-      };
-    });
-  });
-  return {
-    cells,
-    cursor: [buffer.cursorX, buffer.cursorY],
-    alternate: buffer.type === "alternate",
-  };
 }
 async function parse(input: string, cols: number, rows: number, chunkSize = 3) {
   const terminal = new Terminal({

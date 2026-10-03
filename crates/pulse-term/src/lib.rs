@@ -1,9 +1,13 @@
-//! Sans-I/O terminal inspection and an intentionally limited screen-replay probe.
-//! This is not yet a production snapshot: inactive buffers, saved cursors, scroll
-//! regions, tab stops, pending wrap and parser state are not restored.
+//! Sans-I/O terminal state owner. `screen_replay` is a limited visible-cell probe;
+//! `restore_sequence` is the evaluated complete-state restore (see
+//! docs/architecture/terminal-restore-evaluation.md for coverage and gaps).
 #![forbid(unsafe_code)]
 
+mod ground;
 mod palette;
+mod restore;
+mod tracked;
+pub use restore::{Restore, RestoreGap};
 /// Window-independent actor and bounded test transport.
 pub mod session;
 pub use palette::QueryPalette;
@@ -99,6 +103,8 @@ pub struct TerminalProbe {
     palette: QueryPalette,
     cell_pixels: Option<(u16, u16)>,
     utf8_tail: Vec<u8>,
+    side: tracked::MirroredState,
+    ground: ground::GroundScanner,
 }
 
 impl TerminalProbe {
@@ -111,6 +117,11 @@ impl TerminalProbe {
             ..Config::default()
         };
         Self {
+            side: tracked::MirroredState::new(
+                usize::from(size.columns()),
+                usize::from(size.rows()),
+            ),
+            ground: ground::GroundScanner::default(),
             term: Term::new(config, &Size(size), ReplyListener(sender)),
             parser: Processor::new(),
             events: replies,
@@ -141,13 +152,16 @@ impl TerminalProbe {
     pub fn finish_input(&mut self) {
         if !self.utf8_tail.is_empty() {
             self.utf8_tail.clear();
-            self.parser.advance(&mut self.term, "\u{fffd}".as_bytes());
+            self.advance("\u{fffd}".as_bytes());
         }
     }
 
     /// Resize the owned terminal state using validated character dimensions.
     pub fn resize(&mut self, size: TermSize) {
+        let old = (self.term.columns(), self.term.screen_lines());
         self.term.resize(Size(size));
+        self.side
+            .on_resize(old, (self.term.columns(), self.term.screen_lines()));
     }
 
     /// Drain authoritative protocol replies; a transport would write these upstream.
@@ -307,6 +321,16 @@ impl TerminalProbe {
             }
         }
     }
+    /// Every parsed byte goes through the transparent mirror and the boundary scanner.
+    fn advance(&mut self, bytes: &[u8]) {
+        let mut handler = tracked::Tracked {
+            term: &mut self.term,
+            side: &mut self.side,
+        };
+        self.parser.advance(&mut handler, bytes);
+        self.ground.feed(bytes);
+    }
+
     fn feed_complete_prefix(&mut self, bytes: &[u8]) {
         let end = complete_utf8_prefix(bytes);
         // Answer at OSC terminators before a later OSC set/reset or RIS can
@@ -315,12 +339,12 @@ impl TerminalProbe {
         let mut start = 0;
         for (index, byte) in bytes[..end].iter().enumerate() {
             if matches!(byte, 0x07 | b'\\' | 0x9c) {
-                self.parser.advance(&mut self.term, &bytes[start..=index]);
+                self.advance(&bytes[start..=index]);
                 self.collect_events();
                 start = index + 1;
             }
         }
-        self.parser.advance(&mut self.term, &bytes[start..end]);
+        self.advance(&bytes[start..end]);
         self.collect_events();
         self.utf8_tail.extend_from_slice(&bytes[end..]);
         debug_assert!(self.utf8_tail.len() <= 3);
@@ -370,6 +394,16 @@ fn sgr_color(output: &mut String, color: Color, foreground: bool) {
     let channel = if foreground { 38 } else { 48 };
     match color {
         Color::Named(NamedColor::Foreground | NamedColor::Background) => {}
+        // Keep the palette class: SGR 30-37/90-97 (named) and 38;5;n (indexed)
+        // differ for bold-as-bright rendering in both alacritty and xterm.js.
+        Color::Named(color) if (color as usize) < 8 => {
+            let base = if foreground { 30 } else { 40 };
+            let _ = write!(output, "\x1b[{}m", base + color as usize);
+        }
+        Color::Named(color) if (color as usize) < 16 => {
+            let base = if foreground { 90 } else { 100 };
+            let _ = write!(output, "\x1b[{}m", base + color as usize - 8);
+        }
         Color::Named(color) => {
             let _ = write!(output, "\x1b[{channel};5;{}m", color as usize);
         }
@@ -599,5 +633,373 @@ mod tests {
         }
         assert_eq!(source.history_lines(), 64);
         assert!(source.grid_cell_bytes() > 0);
+    }
+
+    // ---- Complete-restore evaluation spike ----
+
+    const RESTORE_TOKENS: &[&str] = &[
+        "a",
+        "Z",
+        "q",
+        "中",
+        "é",
+        "e\u{301}",
+        "\r",
+        "\n",
+        "\t",
+        "\x08",
+        "123456789012345678901234",
+        "\x1b[2;5r",
+        "\x1b[r",
+        "\x1b[?6h",
+        "\x1b[?6l",
+        "\x1b[3;7H",
+        "\x1b[H",
+        "\x1b[6;22H",
+        "\x1b7",
+        "\x1b8",
+        "\x1b[s",
+        "\x1b[u",
+        "\x1b(0",
+        "\x1b(B",
+        "\x1b)0",
+        "\x0e",
+        "\x0f",
+        "\x1b[4h",
+        "\x1b[4l",
+        "\x1b[20h",
+        "\x1b[20l",
+        "\x1b[?7l",
+        "\x1b[?7h",
+        "\x1bH",
+        "\x1b[g",
+        "\x1b[3g",
+        "\x1b[5G",
+        "\x1b[1;31m",
+        "\x1b[4:3m",
+        "\x1b[58;5;3m",
+        "\x1b[0m",
+        "\x1b[38;2;1;2;3;48;5;200m",
+        "\x1b[2;8;9m",
+        "\x1b]4;1;#123456\x07",
+        "\x1b]10;#abcdef\x07",
+        "\x1b]104\x07",
+        "\x1b[?1049h",
+        "\x1b[?1049l",
+        "\x1b[?3h",
+        "\x1b[?3l",
+        "\x1b[5 q",
+        "\x1b[?12h",
+        "\x1b[?25l",
+        "\x1b[?2004h",
+        "\x1b[?1002h",
+        "\x1b[?1006h",
+        "\x1b[?1h",
+        "\x1b=",
+        "\x1b>",
+        "\x1b]8;;http://x\x1b\\",
+        "\x1b]8;;\x1b\\",
+        "\x1b[2J",
+        "\x1b[K",
+        "\x1b[L",
+        "\x1b[M",
+        "\x1b[P",
+        "\x1b[@",
+        "\x1bM",
+        "\x1bD",
+        "\x1bE",
+        "\x1b[3S",
+        "\x1b[2T",
+        "\x1bc",
+        "\x1b[3;",
+        "\x1b]2;ti",
+        "\x1b[?2026h",
+        "\x1b[?2026l",
+        "\x1b[3b",
+        "\x1b[3X",
+        "\x1b[2Z",
+        "\x1b[?47h",
+    ];
+
+    /// Concise first difference between two fingerprints, for shrunk failures.
+    fn fingerprint_diff(expected: &str, actual: &str) -> Option<String> {
+        expected
+            .lines()
+            .zip(actual.lines())
+            .enumerate()
+            .find(|(_, (a, b))| a != b)
+            .map(|(index, (a, b))| {
+                let cells_a: Vec<&str> = a.split('|').collect();
+                let cells_b: Vec<&str> = b.split('|').collect();
+                match cells_a.iter().zip(&cells_b).position(|(x, y)| x != y) {
+                    Some(col) if cells_a.len() > 2 => format!(
+                        "line {index} col {col}: expected {} actual {}",
+                        cells_a[col], cells_b[col]
+                    ),
+                    _ => format!("line {index}: expected {a} actual {b}"),
+                }
+            })
+    }
+
+    fn token_names(tokens: &[usize]) -> Vec<String> {
+        tokens
+            .iter()
+            .map(|&i| format!("{:?}", RESTORE_TOKENS[i]))
+            .collect()
+    }
+
+    fn tokens_to_bytes(tokens: &[usize]) -> Vec<u8> {
+        tokens
+            .iter()
+            .flat_map(|&i| RESTORE_TOKENS[i].bytes())
+            .collect()
+    }
+
+    #[test]
+    fn tracked_handler_is_transparent() {
+        use alacritty_terminal::event::VoidListener;
+        let size = TermSize::new(24, 6).unwrap();
+        let mut runner = proptest::test_runner::TestRunner::default();
+        runner
+            .run(
+                &proptest::collection::vec(0..RESTORE_TOKENS.len(), 0..80),
+                |tokens| {
+                    let bytes = tokens_to_bytes(&tokens);
+                    let mut probe = TerminalProbe::new(size, 64);
+                    probe.feed(&bytes);
+                    let mut plain = Term::new(
+                        Config {
+                            scrolling_history: 64,
+                            osc52: Osc52::Disabled,
+                            ..Config::default()
+                        },
+                        &Size(size),
+                        VoidListener,
+                    );
+                    let mut parser: Processor = Processor::new();
+                    parser.advance(&mut plain, &bytes);
+                    let (a, b) = (probe.term.grid(), plain.grid());
+                    for line in 0..6 {
+                        for column in 0..24 {
+                            let point = Point::new(Line(line), Column(column));
+                            // Hyperlink ids are auto-generated from a global counter.
+                            proptest::prop_assert_eq!(
+                                restore::cell_key(&a[point]),
+                                restore::cell_key(&b[point])
+                            );
+                        }
+                    }
+                    proptest::prop_assert_eq!(
+                        restore::cursor_key(&a.cursor),
+                        restore::cursor_key(&b.cursor)
+                    );
+                    proptest::prop_assert_eq!(
+                        restore::cursor_key(&a.saved_cursor),
+                        restore::cursor_key(&b.saved_cursor)
+                    );
+                    proptest::prop_assert_eq!(probe.term.mode(), plain.mode());
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn mirror_follows_resize_and_deccolm() {
+        let mut term = terminal();
+        term.feed(b"\x1b[2;4r\x1b[3g\x1b[1;3H\x1bH");
+        assert_eq!(term.side.scroll_region, (1, 4));
+        term.resize(TermSize::new(24, 6).unwrap());
+        assert_eq!(term.side.scroll_region, (1, 4), "unchanged size is a no-op");
+        term.resize(TermSize::new(30, 8).unwrap());
+        assert_eq!(term.side.scroll_region, (0, 8));
+        assert!(term.side.tabs[2] && !term.side.tabs[8] && term.side.tabs[24]);
+        term.feed(b"\x1b[2;4r\x1b[?3h");
+        assert_eq!(term.side.scroll_region, (0, 8));
+        term.feed(b"\x1b)0\x0e");
+        assert_eq!(
+            term.side.active_charset,
+            alacritty_terminal::vte::ansi::CharsetIndex::G1
+        );
+        term.feed(b"\x1bc");
+        assert_eq!(term.side, tracked::MirroredState::new(30, 8));
+    }
+
+    #[test]
+    fn restore_roundtrip_and_continuation_property() {
+        let size = TermSize::new(24, 6).unwrap();
+        use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+        let cases = std::env::var("PULSE_RESTORE_CASES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1024);
+        let mut runner = proptest::test_runner::TestRunner::new(proptest::test_runner::Config {
+            cases,
+            ..Default::default()
+        });
+        let (exact, gap, approx, alt_active, alt_reentry) = (
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+        );
+        let alt_checked = AtomicUsize::new(0);
+        let reasons = std::sync::Mutex::new(std::collections::BTreeMap::<&str, usize>::new());
+        let alt_tokens: Vec<usize> = RESTORE_TOKENS
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.contains("1049"))
+            .map(|(i, _)| i)
+            .collect();
+        let strategy = (
+            proptest::collection::vec(0..RESTORE_TOKENS.len(), 0..80),
+            proptest::collection::vec(0..RESTORE_TOKENS.len(), 0..40),
+        );
+        runner
+            .run(&strategy, |(prefix, suffix)| {
+                let mut original = TerminalProbe::new(size, 64);
+                original.feed(&tokens_to_bytes(&prefix));
+                let Ok(restore) = original.restore_sequence() else {
+                    gap.fetch_add(1, Relaxed);
+                    return Ok(());
+                };
+                if let Ok(mut map) = reasons.lock() {
+                    for reason in &restore.approximations {
+                        *map.entry(reason).or_default() += 1;
+                    }
+                }
+                if restore.main_screen_missing {
+                    // The visible alternate screen must still be exact; continue only
+                    // while the suffix neither leaves nor re-enters it.
+                    alt_active.fetch_add(1, Relaxed);
+                    if !restore.approximations.is_empty() {
+                        return Ok(());
+                    }
+                    let mut restored = TerminalProbe::new(size, 64);
+                    restored.feed(&restore.bytes);
+                    if let Some(diff) = fingerprint_diff(
+                        &original.restore_fingerprint(),
+                        &restored.restore_fingerprint(),
+                    ) {
+                        return Err(proptest::test_runner::TestCaseError::fail(format!(
+                            "alternate restore: {diff}; prefix {:?}",
+                            token_names(&prefix)
+                        )));
+                    }
+                    let rep = RESTORE_TOKENS.iter().position(|t| *t == "\x1b[3b");
+                    if suffix
+                        .iter()
+                        .any(|t| alt_tokens.contains(t) || Some(*t) == rep)
+                    {
+                        return Ok(());
+                    }
+                    let suffix = tokens_to_bytes(&suffix);
+                    original.feed(&suffix);
+                    restored.feed(&suffix);
+                    if let Some(diff) = fingerprint_diff(
+                        &original.restore_fingerprint(),
+                        &restored.restore_fingerprint(),
+                    ) {
+                        return Err(proptest::test_runner::TestCaseError::fail(format!(
+                            "alternate continuation: {diff}; prefix {:?}",
+                            token_names(&prefix)
+                        )));
+                    }
+                    alt_checked.fetch_add(1, Relaxed);
+                    return Ok(());
+                }
+                if !restore.approximations.is_empty() {
+                    approx.fetch_add(1, Relaxed);
+                    return Ok(());
+                }
+                let mut restored = TerminalProbe::new(size, 64);
+                restored.feed(&restore.bytes);
+                original.take_replies();
+                proptest::prop_assert!(
+                    restored.take_replies().is_empty(),
+                    "restore must not trigger replies"
+                );
+                if let Some(diff) = fingerprint_diff(
+                    &original.restore_fingerprint(),
+                    &restored.restore_fingerprint(),
+                ) {
+                    return Err(proptest::test_runner::TestCaseError::fail(format!(
+                        "after restore: {diff}; prefix {:?}",
+                        token_names(&prefix)
+                    )));
+                }
+                // Re-entering the alternate screen exposes the hidden alternate grid
+                // (e.g. its saved cursor), which alacritty 0.26 keeps private.
+                let alt_entry = RESTORE_TOKENS.iter().position(|t| *t == "\x1b[?1049h");
+                let touched_alt = prefix.iter().any(|&t| Some(t) == alt_entry);
+                if touched_alt && suffix.iter().any(|&t| Some(t) == alt_entry) {
+                    alt_reentry.fetch_add(1, Relaxed);
+                    return Ok(());
+                }
+                // REP before any printed character: vte has no preceding char and
+                // cannot be reset to that state (documented gap).
+                let rep = RESTORE_TOKENS.iter().position(|t| *t == "\x1b[3b");
+                if original.side.last_input.is_none() && suffix.iter().any(|&t| Some(t) == rep) {
+                    return Ok(());
+                }
+                let suffix_names = token_names(&suffix);
+                let suffix = tokens_to_bytes(&suffix);
+                original.feed(&suffix);
+                restored.feed(&suffix);
+                original.finish_input();
+                restored.finish_input();
+                if let Some(diff) = fingerprint_diff(
+                    &original.restore_fingerprint(),
+                    &restored.restore_fingerprint(),
+                ) {
+                    return Err(proptest::test_runner::TestCaseError::fail(format!(
+                        "after continuation: {diff}; prefix {:?}",
+                        token_names(&prefix)
+                    )));
+                }
+                let queries = b"\x1b[6n\x1b[4$p\x1b[?6$p\x1b[?1002$p\x1b]4;1;?\x07";
+                original.feed(queries);
+                restored.feed(queries);
+                proptest::prop_assert_eq!(
+                    restored.take_replies(),
+                    original.take_replies(),
+                    "replies; suffix {:?}",
+                    suffix_names
+                );
+                exact.fetch_add(1, Relaxed);
+                Ok(())
+            })
+            .unwrap();
+        eprintln!(
+            "restore property: exact={} gap(sync/overlong)={} approx={} alt-active={} (visible+continuation checked {}) alt-reentry={}",
+            exact.load(Relaxed),
+            gap.load(Relaxed),
+            approx.load(Relaxed),
+            alt_active.load(Relaxed),
+            alt_checked.load(Relaxed),
+            alt_reentry.load(Relaxed)
+        );
+        eprintln!(
+            "approximation reasons (incl. alternate cases): {:?}",
+            reasons.lock().map(|m| m.clone()).unwrap_or_default()
+        );
+    }
+
+    #[test]
+    fn restore_reports_sync_and_alternate_gaps() {
+        let mut term = terminal();
+        term.feed(b"\x1b[?2026hbuffered");
+        assert_eq!(term.restore_sequence(), Err(RestoreGap::SyncPending));
+        term.feed(b"\x1b[?2026l");
+        assert!(term.restore_sequence().is_ok());
+        term.feed(b"main\x1b[?1049halt");
+        assert!(term.restore_sequence().unwrap().main_screen_missing);
+        term.feed(b"\x1b]52;c;");
+        term.feed(&vec![b'A'; ground::MAX_PENDING]);
+        assert_eq!(
+            term.restore_sequence(),
+            Err(RestoreGap::PendingSequenceTooLong)
+        );
     }
 }
