@@ -15,6 +15,9 @@
 
 `diagnostic_subscribe` 在同一actor回合捕获history/screen并安装唯一有界订阅。先预留8条队列容量再读取/解析transport，Data带start、原始bytes及after-boundary；full时停止解析和transport读取，不丢块，控制/close仍公平。无subscriber时仍独立解析。普通Data每条≤64KiB；此外每lease最多一份≤1MiB精确修复跨queue/driver持有至修复Commit ACK。修复在queue占一条容量，driver持有修复时queue可再存8条Data。不含driver/current/native块、grid和allocator开销。
 
+- viewer输入采用`SessionRegistry::input_bound(owner,id,generation,bytes)`→AttachmentHandle→actor `input_for_lease`：进入时核对runtime owner/current generation，actor回合同步核对当前lease、取消watch、receiver仍存活及调用reply未放弃；resize/pending replies或满transport队列明确Busy。old generation在registry拒绝，旧lease在actor拒绝，caller cancel在actor接受前拒绝。返回前再核对current binding，但不能撤销已经准入的native input，因此成功只是有界admission，不是物理写入回执；不确定错误/超时绝不自动重发。低率控制面仍按字节预算约束，与output ACK不是同一个方向。
+- 有限DOM探针的InputQueue单消息≤1KiB UTF8、最多32项/8KiB包含活动IPC，按FIFO single-flight发送；空/孤立surrogate/超限拒绝，不替换非法文本。一秒不确定截止、取消、native错误或overload拒绝所有pending并停止后续dispatch；晚成功不drain新输入、不重试。host撤销/输入失败调用只撤销current generation的detach；已准入的输入无法回滚。paste阻止，仅合成固定键盘/composition样例，正式粘贴确认/IME/user shell仍待实现。
+
 - lease_id是actor-local单调serial，不是全应用generation或授权。成功新capture替换旧lease；捕获失败或actor处理前取消保留旧lease。actor提交后取消已经发生替换，旧lease不自动回滚，必须重新attach。旧renderer及旧排队消息不能复用到新generation。
 - watch StreamStatus提供无丢失终止原因和boundary：native resize成功、palette/cellpixels改变会Reconfigured；pending resize拒绝新lease，失败保持旧lease。Receiver放弃/close会Detached，不关闭registry session handle。
 - sync deadline的零字节state推进用Fence，映射同stream Part::Checkpoint=6；offset必须等于live cursor，body是little-endian u64 revision且不回退，使用同generation/order/credits。Consumer要求sink处理完成才ACK，缺实现会fail closed；checkpoint本身不证明hidden/parser/history一致。

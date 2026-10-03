@@ -19,6 +19,10 @@ export const commands = {
 	probeSessionRepair: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<RepairEvidence>("probe_session_repair", { nonce, generation, rendered }),
 	probeSessionMarker: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_marker", { nonce, generation }),
 	probeSessionResume: (nonce: string) => __TAURI_INVOKE<null>("probe_session_resume", { nonce }),
+	/**  Finite sample-only input, NOT a general session/user-shell endpoint. */
+	probeSessionInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_session_input", { nonce, generation, text }),
+	/**  Revoke exactly this viewer generation; registry never closes the session. */
+	probeSessionDetach: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_detach", { nonce, generation }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
 	probeSessionPeer: (nonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce }),
 };
@@ -47,6 +51,9 @@ export type DomEvidence = {
 	widthPx: number | null,
 	heightPx: number | null,
 	readonly: boolean,
+	keyboardChecked: boolean,
+	compositionChecked: boolean,
+	pasteBlocked: boolean,
 };
 
 export type ProbeConfig = {
@@ -121,6 +128,7 @@ export type SessionEvidence = {
 	idleChecked: boolean,
 	markerChecked: boolean,
 	repairChecked: boolean,
+	inputChecked: boolean,
 };
 
 export type SocketTicket = {

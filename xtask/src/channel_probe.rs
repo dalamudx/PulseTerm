@@ -99,6 +99,7 @@ fn validate(path: &Path) -> Result<()> {
             || session["idleChecked"] != true
             || session["markerChecked"] != true
             || session["repairChecked"] != true
+            || session["inputChecked"] != true
             || session["frames"].as_u64().is_none_or(|n| n < 4)
             || session["peakCreditBytes"]
                 .as_u64()
@@ -119,6 +120,9 @@ fn validate(path: &Path) -> Result<()> {
     }
     let dom = &report["domEvidence"];
     if dom["readonly"] != true
+        || dom["keyboardChecked"] != true
+        || dom["compositionChecked"] != true
+        || dom["pasteBlocked"] != true
         || dom["rowsChecked"] != 12
         || dom["renderEvents"].as_u64().is_none_or(|n| n == 0)
         || dom["frameFences"].as_u64().is_none_or(|n| n == 0)

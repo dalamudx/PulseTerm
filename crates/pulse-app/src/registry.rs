@@ -214,6 +214,39 @@ impl SessionRegistry {
             .borrow()
             .clone())
     }
+    /// Generation-bound viewer input. Revocation before actor admission forbids it;
+    /// success is NOT a physical-write receipt, nor rollback on later replacement.
+    pub async fn input_bound(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+        bytes: Vec<u8>,
+    ) -> Result<(), RegistryError> {
+        let binding = {
+            let state = self.lock()?;
+            Self::entry(&state, owner, id)?;
+            state
+                .bindings
+                .get(&id)
+                .filter(|b| b.generation == generation)
+                .ok_or(RegistryError::Stale)?
+                .handle
+                .clone()
+        };
+        binding.input(bytes).await?;
+        let state = self.lock()?;
+        Self::entry(&state, owner, id)?;
+        if state
+            .bindings
+            .get(&id)
+            .is_none_or(|b| b.generation != generation)
+        {
+            return Err(RegistryError::Stale);
+        }
+        Ok(())
+    }
+
     /// Admit input on behalf of the trusted current runtime window.
     pub async fn input(
         &self,

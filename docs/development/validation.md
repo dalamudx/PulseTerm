@@ -214,10 +214,19 @@ mise run probe-pty
 - 两次成功的独立Linux运行各含2轮headless+2轮DOM及原7组transport/cancel测量，最后`generation=4`、`parsedBytes=3,113,003`、`frames=780`、`peakCreditBytes=8212`、digest=`b17f4532b0d32770`；DOM `renderEvents=776`、`frameFences=776`、`rowsChecked=12`、320×192 CSS px。时间/帧数是单次证据，不是吞吐或延迟门槛。此前一次报告因错误地把固定样例行数写为8而被拒绝；已改为真实12并保持逐行全量验证。前端70秒会话deadline保留首个renderer错误，后续取消不能覆盖根因；后端仍有既有60秒relay/10秒ACK/helper40秒限制。
 - 完整check/test、native clippy -D warnings、12项native测试及bindings-check通过；85项TS含9项新增fence/nonce回归。`pnpm audit`无已知漏洞；lock仅新增@xterm/xterm 6.0.0单包。未更新Cargo.lock/vendor/CSP策略或依赖豁免。生产DOM交互/用户shell、ResizeObserver/fit、IME/selection、全局resync/隐藏暂停UX以及Windows/macOS仍未验收；不宣称S2/S11通过。
 
+## 有界generation输入与DOM键盘回写（Linux）
+
+- 新增`SessionHandle::input_for_lease`、`AttachmentHandle::input`与`SessionRegistry::input_bound`：runtime owner/current generation检查后，actor处理回合核对当前lease、取消watch、subscriber仍在及reply未abandon。pending resize/replies或满transport队列拒绝，旧lease不能把晚键盘输入发送到新view。返回前再次核对generation；准入后的input无法撤回，成功不是native write收据。常规后端`input`仍用于非viewer可信控制（固定go/resume等），未错误声称它已经generation-bound。
+- `InputQueue`按UTF8实际字节计费：单条≤1024B、活动+排队≤8192B/32项、一个IPC。空/孤立surrogate/单条超限不调用native；overload/取消/错误作废所有pending，一秒截止视为uncertain，不能自动retry或在late success后继续drain。取消/错误向后端请求generation-scoped detach，旧cleanup不能撤销新绑定；detach本身不关闭会话，开发finite helper仍由自身supervisor负责资源回收。
+- 固定helper在半CSI修复后显示INPUT_READY，等待精确`typed中文🌍`一行再显示INPUT_OK、EOF及截断UTF8尾部。有限`probe_session_input`只允许该固定字符集与CR、≤1024 UTF8 bytes，并拒绝LF/ESC/其他字符；不是任意shell/input端点。peer窗口跨owner、wrong/old generation及非法LF均在真实WebView拒绝。
+- 两轮headless通过同队列但不宣称键盘；两轮可见DOM临时启用disableStdin=false，textarea合成keydown/keypress/keyup输入ASCII `typed`、composition提交`中文🌍`及Enter，经xterm公共onData→InputQueue→typed invoke→actor→real PTY。onData序列必须精确为`typed中文🌍\r`（漏字/重复/查询泄漏失败），helper回显INPUT_OK且最终digest/EOF相同。DOM最终仍只读；capture paste listener须阻止合成paste且不产生onData。screenReaderMode保持开启，但合成composition不是OS IME输入/候选框/无障碍读屏器验收。
+- schema4新增session.inputChecked及dom.keyboardChecked/compositionChecked/pasteBlocked门禁。两次独立完整Linux运行成功（每次2headless+2DOM+原7运输/取消场景）；最后generation=4、parsedBytes=3,113,061、frames=789、peakCreditBytes=8212、digest=`2ba9204154c3b86c`，DOM 12行文本一致、320×192、renderEvents=787/frameFences=785。数值为证据，不作性能承诺。
+- 2项actor回归、1项registry回归、7项TS队列回归及1项native输入validator回归新增；全workspace check/test、native clippy -D warnings、13项native tests、bindings-check、2MiB真实授权/ACK压力通过。没有升级依赖、变更锁文件/CSP/vendor或豁免门禁。生产输入快捷键/广播/粘贴确认/fit/ResizeObserver、真实OS键盘与IME、Windows/macOS仍待验收。
+
 ## 检查结果
 
-- Rust：84 项 pulse-term 单元/属性测试通过（新增3项原子修复授权/延期/CSI/UTF8/BSU与history回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 36项测试通过（新增真实EOF退出发布宽限截止/不续期回归）；额外178项原上游测试通过；原生适配器现12项测试通过（新增DOM帧/行数/只读/finite geometry证据验证）；本轮未修改parser补丁或上游源码。
-- TS：85 项测试通过（新增6项DOM animation fence/取消/隐藏/卸载/期限和3项nonce document隔离/缺失拒绝回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：86 项 pulse-term 单元/属性测试通过（新增2项generation输入的actor lease/取消/abandon/budget回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 37项测试通过（新增generation-bound输入owner/换绑/撤销回归）；额外178项原上游测试通过；原生适配器现13项测试通过（新增固定输入字符/控制符/UTF8字节预算验证）；本轮未修改parser补丁或上游源码。
+- TS：92 项测试通过（新增7项输入队列FIFO/UTF8/预算/撤销/late completion/不确定超时与错误不重试回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

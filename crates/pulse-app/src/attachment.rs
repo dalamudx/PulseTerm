@@ -130,6 +130,17 @@ impl AttachmentHandle {
             .await
             .map_err(AttachmentError::Capture)
     }
+    /// Bound user input: actor checks lease and this cancellation before admission.
+    pub async fn input(&self, bytes: Vec<u8>) -> Result<(), AttachmentError> {
+        if *self.cancel.borrow() {
+            return Err(AttachmentError::Detached);
+        }
+        self.session
+            .input_for_lease(self.lease_id, self.cancel.subscribe(), bytes)
+            .await
+            .map_err(|e| AttachmentError::Capture(e.into()))
+    }
+
     /// Actor admission only; Marker delivery and rendering still require wire ACK.
     pub async fn request_marker(&self) -> Result<(), AttachmentError> {
         if *self.cancel.borrow() {

@@ -1,8 +1,9 @@
-// Developer-only real-WebView validation: @xterm/headless is not a DOM renderer.
+// Developer-only finite PTY validation with headless and DOM xterm surfaces.
 import { Channel } from "@tauri-apps/api/core";
 import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
 import type { DomRenderer } from "../features/probe/dom-renderer";
 import { IdleComparison } from "../features/terminal/idle-comparison";
+import { InputQueue } from "../features/terminal/input-queue";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
@@ -75,12 +76,22 @@ export async function verifySessionChannel(dom?: {
   const cancel = () => {
     lifetime.abort();
     consumer?.cancel();
+    if (generationSeen !== undefined)
+      void commands
+        .probeSessionDetach(nonce, generationSeen.toString())
+        .catch(() => {});
   };
   dom?.signal.addEventListener("abort", cancel, { once: true });
   if (dom?.signal.aborted) lifetime.abort();
   let disposePolicy: (() => void) | undefined;
   let decoder = new Utf8Stream();
   let replies = 0;
+  let inputQueue: InputQueue | undefined;
+  let inputStarted = false,
+    inputArmed = false,
+    inputChecked = false;
+  let inputText = "";
+  const inputJobs: Promise<void>[] = [];
   let final: { revision: bigint; parsedBytes: bigint } | undefined;
   let consumer: AttachmentConsumer | undefined;
   let failed: unknown;
@@ -104,6 +115,15 @@ export async function verifySessionChannel(dom?: {
     for (let at = 0; at < data.length; at += 4096)
       await write(decoder.feed(data.subarray(at, at + 4096)), signal);
     await renderer?.settle(AbortSignal.any([signal, lifetime.signal]));
+  };
+  const screenContains = (text: string) => {
+    const b = terminal?.buffer.active;
+    return b
+      ? Array.from(
+          { length: terminal?.rows ?? 0 },
+          (_, i) => b.getLine(b.baseY + i)?.translateToString(true) ?? "",
+        ).some((line) => line.includes(text))
+      : false;
   };
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
@@ -188,7 +208,17 @@ export async function verifySessionChannel(dom?: {
               terminal.unicode.register(provider);
               terminal.unicode.activeVersion = provider.version;
               disposePolicy = suppressQueryReplies(terminal);
-              terminal.onData(() => replies++);
+              terminal.onData((text) => {
+                if (inputArmed && inputQueue) {
+                  inputText += text;
+                  const job = inputQueue.enqueue(text);
+                  inputJobs.push(job);
+                  void job.catch((error) => {
+                    failed ??= error;
+                    cancel();
+                  });
+                } else replies++;
+              });
               decoder = new Utf8Stream();
               geometry = { columns: boundary.columns, rows: boundary.rows };
             },
@@ -268,6 +298,51 @@ export async function verifySessionChannel(dom?: {
       latest = consumer
         .enqueue(wire)
         .then(async (receipt) => {
+          if (
+            receipt?.event.kind === "data" &&
+            repairChecked &&
+            !inputStarted &&
+            screenContains("INPUT_READY")
+          ) {
+            inputStarted = true;
+            if (generationSeen === undefined)
+              throw new Error("session.input_generation");
+            const gen = generationSeen.toString();
+            await requireRejected(
+              commands.probeSessionInput(
+                nonce,
+                (generationSeen + 1n).toString(),
+                "typed",
+              ),
+            );
+            if (previous)
+              await requireRejected(
+                commands.probeSessionInput(nonce, previous.generation, "typed"),
+              );
+            await requireRejected(commands.probeSessionInput(nonce, gen, "\n"));
+            inputQueue = new InputQueue(async (bytes) => {
+              await commands.probeSessionInput(
+                nonce,
+                gen,
+                new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+              );
+            }, lifetime.signal);
+            inputArmed = true;
+            try {
+              if (renderer) {
+                await renderer.keyboardSample(lifetime.signal);
+                await Promise.all(inputJobs);
+                if (inputText !== "typed中文🌍\r")
+                  throw new Error("session.keyboard_path");
+              } else {
+                await inputQueue.enqueue("typed中文🌍\r");
+              }
+              inputChecked = true;
+            } finally {
+              inputArmed = false;
+            }
+          }
+
           if (
             receipt?.event.kind === "marker" &&
             admissionEpoch === outputEpoch &&
@@ -441,11 +516,11 @@ export async function verifySessionChannel(dom?: {
         })
         .catch((error) => {
           failed ??= error;
-          consumer?.cancel();
+          cancel();
         });
     } catch (error) {
       failed ??= error;
-      consumer?.cancel();
+      cancel();
     }
   };
   try {
@@ -458,7 +533,7 @@ export async function verifySessionChannel(dom?: {
       native,
       new Promise<never>((_, reject) => {
         deadline = setTimeout(() => {
-          consumer?.cancel();
+          cancel();
           reject(failed ?? new Error("session.frontend_deadline"));
         }, 70000);
       }),
@@ -483,12 +558,15 @@ export async function verifySessionChannel(dom?: {
       !delayed ||
       !idleChecked ||
       !markerChecked ||
-      !repairChecked
+      !repairChecked ||
+      !inputChecked ||
+      !screenContains("INPUT_OK typed中文🌍")
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
     result.markerChecked = markerChecked;
     result.repairChecked = repairChecked;
+    result.inputChecked = inputChecked;
     if (dom) {
       if (!renderer) throw new Error("session.no_dom_renderer");
       dom.complete(renderer.evidence());
@@ -496,9 +574,11 @@ export async function verifySessionChannel(dom?: {
     previous = { nonce, generation: result.generation };
     return result;
   } finally {
+    inputArmed = false;
+    inputQueue?.cancel();
     clearTimeout(deadline);
     idle?.dispose();
-    consumer?.cancel();
+    cancel();
     disposePolicy?.();
     lifetime.abort();
     dom?.signal.removeEventListener("abort", cancel);

@@ -126,7 +126,15 @@ pub(crate) fn child() -> std::io::Result<()> {
     if line.trim_end() != "m" {
         return Err(std::io::Error::other("invalid resume input"));
     }
-    out.write_all(b"mEOF\x1b[0m\xe4\xb8")?;
+    out.write_all(b"mINPUT_READY\r\n")?;
+    out.flush()?;
+    line.clear();
+    std::io::stdin().lock().read_line(&mut line)?;
+    if line.trim_end() != "typed中文🌍" {
+        return Err(std::io::Error::other("invalid keyboard sample"));
+    }
+    out.write_all("INPUT_OK typed中文🌍\r\n".as_bytes())?;
+    out.write_all(b"EOF\x1b[0m\xe4\xb8")?;
     out.flush()
 }
 async fn native() -> Result<(SessionHandle, pulse_app::LocalSessionTask)> {
@@ -199,6 +207,7 @@ pub(crate) struct SessionEvidence {
     pub idle_checked: bool,
     pub marker_checked: bool,
     pub repair_checked: bool,
+    pub input_checked: bool,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -219,6 +228,7 @@ impl SessionEvidence {
             || !self.idle_checked
             || !self.marker_checked
             || !self.repair_checked
+            || !self.input_checked
         {
             return Err("session.invalid_evidence".into());
         }
@@ -258,6 +268,51 @@ pub(crate) async fn probe_session_marker(
         .await
         .map_err(error)
 }
+/// Revoke exactly this viewer generation; registry never closes the session.
+#[tauri::command]
+#[specta::specta]
+pub(crate) fn probe_session_detach(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<()> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state
+        .0
+        .registry
+        .detach(owner, id, parse_u64(&generation)?)
+        .map_err(error)
+}
+
+fn validate_probe_input(text: &str) -> Result<()> {
+    if text.is_empty() || text.len() > 1024 || !text.chars().all(|c| "typed中文🌍\r".contains(c))
+    {
+        return Err("session.invalid_input".into());
+    }
+    Ok(())
+}
+
+/// Finite sample-only input, NOT a general session/user-shell endpoint.
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_input(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+    text: String,
+) -> Result<()> {
+    validate_probe_input(&text)?;
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state
+        .0
+        .registry
+        .input_bound(owner, id, parse_u64(&generation)?, text.into_bytes())
+        .await
+        .map_err(error)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn probe_session_resume(
@@ -411,6 +466,12 @@ pub(crate) async fn probe_session_peer(
         .input(owner, id, b"go\n".to_vec())
         .await
         .is_err()
+        && state
+            .0
+            .registry
+            .input_bound(owner, id, 1, b"typed".to_vec())
+            .await
+            .is_err()
         && state.0.registry.acknowledge(owner, id, 1, 0).is_err()
         && state.0.registry.request_marker(owner, id, 1).await.is_err()
         && state
@@ -586,12 +647,27 @@ pub(crate) async fn probe_session(
         idle_checked: false,
         marker_checked: false,
         repair_checked: false, // Frontend completes its controlled idle comparison before go.
+        input_checked: false,
     })
 }
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    #[test]
+    fn finite_input_validation_uses_utf8_byte_budget_and_rejects_controls() {
+        for input in ["typed", "中文🌍", "\r"] {
+            assert!(validate_probe_input(input).is_ok());
+        }
+        for input in ["", "\n", "\u{1b}[31m", "typed;rm", "x", "\u{fffd}"] {
+            assert!(validate_probe_input(input).is_err());
+        }
+        assert!(validate_probe_input(&"t".repeat(1024)).is_ok());
+        assert!(validate_probe_input(&"t".repeat(1025)).is_err());
+        assert!(validate_probe_input(&"中".repeat(341)).is_ok());
+        assert!(validate_probe_input(&"中".repeat(342)).is_err());
+    }
+
     #[test]
     fn origins_are_local_only() {
         for url in [
@@ -628,6 +704,7 @@ mod tests {
             idle_checked: true,
             marker_checked: true,
             repair_checked: true,
+            input_checked: true,
         };
         assert!(e.validate().is_ok());
         e.generation = "02".into();
@@ -645,6 +722,9 @@ mod tests {
         e.idle_checked = false;
         assert!(e.validate().is_err());
         e.idle_checked = true;
+        e.input_checked = false;
+        assert!(e.validate().is_err());
+        e.input_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

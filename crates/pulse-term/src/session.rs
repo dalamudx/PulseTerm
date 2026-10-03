@@ -15,6 +15,9 @@ pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
 #[cfg(test)]
+#[path = "session_input_tests.rs"]
+mod input_tests;
+#[cfg(test)]
 #[path = "session_marker_tests.rs"]
 mod marker_tests;
 #[cfg(test)]
@@ -188,6 +191,12 @@ enum Command {
         reply: oneshot::Sender<Result<SessionStream, SessionRestoreError>>,
     },
     Input(Vec<u8>, oneshot::Sender<Result<(), SessionError>>),
+    BoundInput {
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        bytes: Vec<u8>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
     Palette(
         crate::QueryPalette,
@@ -422,6 +431,28 @@ impl SessionHandle {
         self.enqueue(Command::Input(bytes, reply))?;
         result.await.map_err(|_| SessionError::Closed)?
     }
+    /// Viewer input, validated against the current lease on the actor turn.
+    /// Success is queue admission, not a physical native write; admitted input
+    /// cannot be undone on subsequent detach. Caller cancellation before admission rejects.
+    pub async fn input_for_lease(
+        &self,
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        bytes: Vec<u8>,
+    ) -> Result<(), SessionError> {
+        if bytes.is_empty() || bytes.len() > MAX_CHUNK {
+            return Err(SessionError::ChunkTooLarge);
+        }
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::BoundInput {
+            lease_id,
+            cancelled,
+            bytes,
+            reply,
+        })?;
+        result.await.map_err(|_| SessionError::Closed)?
+    }
+
     /// Request native resize; parser dimensions advance only after driver ACK.
     /// An unacknowledged resize fails and closes the session after five seconds.
     pub async fn resize(&self, size: TermSize) -> Result<(), SessionError> {
@@ -656,6 +687,14 @@ pub fn spawn_session(
                         };
                         let _ = reply.send(result);
                     }
+                    Some(Command::BoundInput{lease_id,cancelled,bytes,reply})=>{
+                        let result=if reply.is_closed()||*cancelled.borrow()||cancelled.has_changed().is_err()||lease.as_ref().is_none_or(|l|l.id!=lease_id||l.output.is_closed()){
+                            Err(SessionError::StaleLease)
+                        }else if !replies.is_empty()||resizing.is_some(){Err(SessionError::Busy)}else{
+                            transport.input.try_send(TransportWrite::Input(bytes)).map_err(|e|match e{mpsc::error::TrySendError::Full(_)=>SessionError::Busy,mpsc::error::TrySendError::Closed(_)=>SessionError::Transport})
+                        };let _=reply.send(result);
+                    }
+
                     Some(Command::Resize(size, reply)) => {
                         if resizing.is_some(){let _=reply.send(Err(SessionError::Busy));}else{
                           let(sent,native)=oneshot::channel();

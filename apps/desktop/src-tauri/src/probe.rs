@@ -439,6 +439,9 @@ struct DomEvidence {
     width_px: f64,
     height_px: f64,
     readonly: bool,
+    keyboard_checked: bool,
+    composition_checked: bool,
+    paste_blocked: bool,
 }
 impl DomEvidence {
     fn validate(&self) -> ProbeResult<()> {
@@ -446,6 +449,9 @@ impl DomEvidence {
             || self.frame_fences == 0
             || self.rows_checked != 12
             || !self.readonly
+            || !self.keyboard_checked
+            || !self.composition_checked
+            || !self.paste_blocked
             || !self.width_px.is_finite()
             || !self.height_px.is_finite()
             || !(1.0..=4096.0).contains(&self.width_px)
@@ -571,6 +577,8 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session_repair,
             crate::window_sessions::probe_session_marker,
             crate::window_sessions::probe_session_resume,
+            crate::window_sessions::probe_session_input,
+            crate::window_sessions::probe_session_detach,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer
         ])
@@ -825,6 +833,9 @@ mod tests {
             width_px: 270.0,
             height_px: 128.0,
             readonly: true,
+            keyboard_checked: true,
+            composition_checked: true,
+            paste_blocked: true,
         };
         assert!(e.validate().is_ok());
         e.render_events = 0;
@@ -841,6 +852,15 @@ mod tests {
             assert!(e.validate().is_err());
         }
         e.width_px = 270.0;
+        e.paste_blocked = false;
+        assert!(e.validate().is_err());
+        e.paste_blocked = true;
+        e.keyboard_checked = false;
+        assert!(e.validate().is_err());
+        e.keyboard_checked = true;
+        e.composition_checked = false;
+        assert!(e.validate().is_err());
+        e.composition_checked = true;
         e.readonly = false;
         assert!(e.validate().is_err());
     }

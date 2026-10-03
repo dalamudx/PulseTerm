@@ -1,4 +1,6 @@
 #![allow(clippy::unwrap_used)]
+#[path = "registry_input_tests.rs"]
+mod input_tests;
 use super::*;
 use pulse_term::session::{self, ChannelTransport, DriverEndpoint, Lifecycle, SessionTask};
 use std::time::Duration;
