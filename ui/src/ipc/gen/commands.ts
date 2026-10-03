@@ -153,6 +153,7 @@ export type SessionEvidence = {
 	nativeWindowChecked: boolean,
 	nativeMinimizeChecked: boolean,
 	nativeOnlyChecked: boolean,
+	externalWmChecked: boolean,
 	columns: number,
 	rows: number,
 };

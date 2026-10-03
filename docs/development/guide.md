@@ -73,6 +73,7 @@ mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
 mise run desktop                  # 打开原生开发验证界面（不是完整终端）
 mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data idle Marker及精确屏幕修复，两轮headless+两轮可见DOM及7组测量
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
+mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
 ```
 
 `probe-pty` 当前在 Unix 运行，依赖系统 `/bin/sh` 和 `stty`，不需要显示服务；输出 `target/probes/pty.json`。监督器最长 25 秒，交互 helper 自带 10 秒截止时间。三平台 CI 新增 `probe-pty-portable` 和 `probe-local-session`，不依赖Windows的stty；仅有Linux运行证据，不能把注册成功当作ConPTY验收。Windows helper只测canonical输入和native尺寸回读，不测raw/Win32键盘、child尺寸query或随附conpty.dll。
@@ -82,6 +83,8 @@ mise run probe-window             # Linux独立Xvfb/Openbox的真实native minim
 无显示服务的 Linux 运行 `probe-channel` 需要 `xvfb`、`dbus-x11` 和 coreutils 的 `timeout`；探针监督整个 Xvfb/DBus/WebView 进程组，最长运行 180 秒。Linux 原生构建还需 GTK3/WebKitGTK 开发包，Windows/macOS 使用对应系统开发环境。原生依赖只在 `pulseterm-desktop` 的 `desktop` feature 启用，默认 headless 检查无需 GUI 库。
 
 `probe-window` 当前仅Linux：需`openbox`、`x11-utils`（xprop）、Xvfb、DBus和coreutils timeout。总是新建独立Xvfb display，不更改已有桌面的WM；wrapper等待EWMH `_NET_SUPPORTING_WM_CHECK`最多5秒再启动app，EXIT/INT/TERM清理自己启动的Openbox，外层180秒timeout覆盖整个组。CLI `--probe-window`选择minimize模式（不能通过JS指定），native cycle改为minimize→is_minimized=true→后台输出/100ms→unminimize/show→visible&&!minimized读回，之后复用原来的自动resume/精确重绑。输出`target/probes/window-minimize.json`与`window-manager.log`，不会覆盖普通channel.json。server与xtask分别要求DOM nativeMinimizeChecked=true、headless=false，普通probe-channel模式要求二者false；mode错配/非bool/缺失不能通过。Linux CI独立步骤执行并上传两种JSON及WM log；Openbox仅测试系统前置，未成为打包或Cargo/pnpm依赖。失败不会fallback成CSS隐藏或假成功。已通过native事件作为唯一source独立驱动pause/resume；窗口minimize动作仍由runtime测试命令发起，未实际人工点击标题栏按钮；Wayland/其它WM或Windows/macOS仍未验收。
+
+`probe-window-external` 当前仅Linux私有X11：额外需xdotool。CLI --probe-window-external使应用正常动作路径只写minimize/restore:decimal-generation请求（atomic rename），独立controller wrapper用umask077临时目录传给直系app进程；按该app PID查找唯一可见window，每次getwindowpid核对、timeout2s xdotool minimize/activate，经WM动作改变native状态。不是应用调用minimize/unminimize/show，也不接受任意XID或shell源。应用仍按runtime readback/native-only controller pause/隐藏输出/resume验收；报告window-external.json、window-external-actions.log，externalWmChecked须true且headlessfalse。xtask再要求两轮共4条minimize→同gen restore、generation递增且正整数规范、长度≤128B；普通模式externalWmChecked=false。脚本cleanup停止自己app、删除私有dir，退出码保留；Openbox由外层owned wrapper清理，外层timeout监督整组。Linux CI注册并上传新log，不作为CI已运行证明。xdotool只系统验证前置；不是人工点击按钮、其它WM/Wayland/平台或任意长时间外部最小化验收。
 
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 

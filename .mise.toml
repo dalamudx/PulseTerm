@@ -100,6 +100,11 @@ description = "Validate native minimize/resume under isolated Linux X11/Openbox"
 depends = ["desktop-build"]
 run = "cargo xtask probe-window"
 
+[tasks.probe-window-external]
+description = "Validate external WM-only minimize/resume of the finite terminal view"
+depends = ["desktop-build"]
+run = "cargo xtask probe-window-external"
+
 [tasks.bindings]
 description = "Generate typed IPC commands, events and DTOs from Rust"
 run = "cargo run -p pulseterm-desktop --features desktop --locked -- --export-bindings"

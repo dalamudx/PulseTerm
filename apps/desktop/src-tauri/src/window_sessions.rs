@@ -25,6 +25,7 @@ struct Inner {
     active: Mutex<Option<Active>>,
     slot: Arc<Semaphore>,
     minimize: bool,
+    external_control: Option<std::path::PathBuf>,
 }
 struct Active {
     owner: WindowToken,
@@ -35,11 +36,11 @@ struct Active {
 }
 impl Default for WindowSessions {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(false, None)
     }
 }
 impl WindowSessions {
-    pub(crate) fn new(minimize: bool) -> Self {
+    pub(crate) fn new(minimize: bool, external_control: Option<std::path::PathBuf>) -> Self {
         Self(Arc::new(Inner {
             registry: SessionRegistry::new(),
             windows: Mutex::new(HashMap::new()),
@@ -47,6 +48,7 @@ impl WindowSessions {
             active: Mutex::new(None),
             slot: Arc::new(Semaphore::new(1)),
             minimize,
+            external_control,
         }))
     }
 }
@@ -277,6 +279,7 @@ pub(crate) struct SessionEvidence {
     pub native_window_checked: bool,
     pub native_minimize_checked: bool,
     pub native_only_checked: bool,
+    pub external_wm_checked: bool,
     pub columns: u16,
     pub rows: u16,
 }
@@ -288,6 +291,8 @@ impl SessionEvidence {
             || (self.native_window_checked && self.pause_count != 1)
             || (self.native_minimize_checked && !self.native_window_checked)
             || (self.native_only_checked && !self.native_window_checked)
+            || (self.external_wm_checked
+                && (!self.native_only_checked || !self.native_minimize_checked))
             || !(2..=160).contains(&self.columns)
             || !(2..=60).contains(&self.rows)
         {
@@ -564,6 +569,22 @@ pub(crate) async fn probe_session_native_cycle(
 ) -> Result<String> {
     run_native_cycle(window, state.inner(), nonce, generation, true).await
 }
+// Private temp directory is supplied only by the isolated test wrapper/CLI.
+// Marker contains a fixed action and decimal generation, never shell source.
+fn request_external(state: &WindowSessions, generation: u64, minimize: bool) -> Result<()> {
+    let dir = state
+        .0
+        .external_control
+        .as_ref()
+        .ok_or("session.external_controller_missing")?;
+    let text = format!(
+        "{}:{generation}",
+        if minimize { "minimize" } else { "restore" }
+    );
+    std::fs::write(dir.join("request.tmp"), text).map_err(error)?;
+    std::fs::rename(dir.join("request.tmp"), dir.join("request")).map_err(error)
+}
+
 async fn run_native_cycle(
     window: WebviewWindow,
     state: &WindowSessions,
@@ -595,7 +616,9 @@ async fn run_native_cycle(
         armed: true,
         minimize: state.0.minimize,
     };
-    if state.0.minimize {
+    if state.0.external_control.is_some() {
+        request_external(state, generation, true)?;
+    } else if state.0.minimize {
         window.minimize().map_err(error)?;
     } else {
         window.hide().map_err(error)?;
@@ -621,10 +644,14 @@ async fn run_native_cycle(
     let boundary = hidden_output(state, owner, id, &gate, generation).await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
     gate.hidden(generation)?;
-    if state.0.minimize {
-        window.unminimize().map_err(error)?;
+    if state.0.external_control.is_some() {
+        request_external(state, generation, false)?;
+    } else {
+        if state.0.minimize {
+            window.unminimize().map_err(error)?;
+        }
+        window.show().map_err(error)?;
     }
-    window.show().map_err(error)?;
     wait_native_visible(&window, state, owner, NativeVisibility::Visible).await?;
     if state.0.registry.state(owner, id).map_err(error)?.lifecycle != Lifecycle::Running {
         return Err("session.closed_while_hidden".into());
@@ -1063,6 +1090,7 @@ pub(crate) async fn probe_session(
         native_window_checked: visibility.native_checked(),
         native_minimize_checked: state.0.minimize && visibility.native_checked(),
         native_only_checked: visibility.external_checked(),
+        external_wm_checked: state.0.external_control.is_some() && visibility.external_checked(),
         columns: final_state.size.columns(),
         rows: final_state.size.rows(),
     })
@@ -1146,6 +1174,7 @@ mod tests {
             native_window_checked: false,
             native_minimize_checked: false,
             native_only_checked: false,
+            external_wm_checked: false,
             columns: 40,
             rows: 12,
         };
@@ -1156,6 +1185,12 @@ mod tests {
         assert!(e.validate().is_ok());
         e.native_minimize_checked = true;
         assert!(e.validate().is_ok());
+        e.external_wm_checked = true;
+        assert!(e.validate().is_err());
+        e.native_only_checked = true;
+        assert!(e.validate().is_ok());
+        e.external_wm_checked = false;
+        e.native_only_checked = false;
         e.native_window_checked = false;
         assert!(e.validate().is_err());
         e.native_minimize_checked = false;

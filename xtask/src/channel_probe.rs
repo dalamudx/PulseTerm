@@ -6,17 +6,25 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
-    run_mode(false)
+    run_mode(false, false)
 }
 pub fn run_window() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("probe-window currently requires isolated Linux X11/Openbox");
     }
-    run_mode(true)
+    run_mode(true, false)
 }
-fn run_mode(minimize: bool) -> Result<()> {
+pub fn run_window_external() -> Result<()> {
+    if !cfg!(target_os = "linux") {
+        bail!("external window probe requires isolated X11/Openbox");
+    }
+    run_mode(true, true)
+}
+fn run_mode(minimize: bool, external: bool) -> Result<()> {
     let root = super::root()?;
-    let report = root.join(if minimize {
+    let report = root.join(if external {
+        "target/probes/window-external.json"
+    } else if minimize {
         "target/probes/window-minimize.json"
     } else {
         "target/probes/channel.json"
@@ -53,6 +61,12 @@ fn run_mode(minimize: bool) -> Result<()> {
                 .arg(root.join("scripts/probe-window-x11.sh"))
                 .arg(root.join("target/probes/window-manager.log"));
         }
+        if external {
+            command
+                .arg("sh")
+                .arg(root.join("scripts/probe-window-external-x11.sh"))
+                .arg(root.join("target/probes/window-external-actions.log"));
+        }
         command.arg(&executable);
         command
     } else {
@@ -60,7 +74,9 @@ fn run_mode(minimize: bool) -> Result<()> {
     };
     command
         .args([
-            if minimize {
+            if external {
+                "--probe-window-external"
+            } else if minimize {
                 "--probe-window"
             } else {
                 "--probe"
@@ -90,7 +106,14 @@ fn run_mode(minimize: bool) -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    validate(&report, minimize)?;
+    validate(&report, minimize, external)?;
+    if external {
+        let actions = root.join("target/probes/window-external-actions.log");
+        if std::fs::metadata(&actions)?.len() > 128 {
+            bail!("external action evidence too large");
+        }
+        validate_external_actions(&std::fs::read_to_string(actions)?)?;
+    }
     if !status.success() {
         bail!("WebView probe process failed: {status}");
     }
@@ -101,11 +124,35 @@ fn run_mode(minimize: bool) -> Result<()> {
     Ok(())
 }
 
+fn validate_external_actions(text: &str) -> Result<()> {
+    let rows: Vec<_> = text.lines().collect();
+    if text.len() > 128 || rows.len() != 4 {
+        bail!("external WM evidence must contain two complete action pairs");
+    }
+    let mut previous = 0;
+    for pair in rows.chunks_exact(2) {
+        let generation = pair[0]
+            .strip_prefix("minimize:")
+            .context("external minimize receipt missing")?;
+        let numeric = generation
+            .parse::<u64>()
+            .context("external generation invalid")?;
+        if numeric <= previous
+            || numeric.to_string() != generation
+            || pair[1] != format!("restore:{generation}")
+        {
+            bail!("external WM action ordering or generation mismatch");
+        }
+        previous = numeric;
+    }
+    Ok(())
+}
+
 fn window_mode_matches(report: &Value, minimize: bool) -> bool {
     report["domSession"]["nativeMinimizeChecked"].as_bool() == Some(minimize)
         && report["session"]["nativeMinimizeChecked"].as_bool() == Some(false)
 }
-fn validate(path: &Path, minimize: bool) -> Result<()> {
+fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
     if report["schemaVersion"] != 4
@@ -165,6 +212,8 @@ fn validate(path: &Path, minimize: bool) -> Result<()> {
         || dom["nativePauseChecked"] != true
         || report["domSession"]["nativeOnlyChecked"] != true
         || report["session"]["nativeOnlyChecked"] != false
+        || report["domSession"]["externalWmChecked"].as_bool() != Some(external)
+        || report["session"]["externalWmChecked"] != false
         || report["session"]["resizeCount"] != 0
         || report["session"]["pauseCount"] != 0
         || dom["rowsChecked"] != 12
@@ -224,6 +273,34 @@ fn validate(path: &Path, minimize: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn external_evidence_requires_two_distinct_ordered_minimize_restore_pairs() {
+        assert!(
+            validate_external_actions("minimize:6\nrestore:6\nminimize:11\nrestore:11\n").is_ok()
+        );
+        for bad in [
+            "",
+            "minimize:6\nrestore:6",
+            "minimize:6\nrestore:7\nminimize:11\nrestore:11",
+            "minimize:6\nrestore:6\nminimize:6\nrestore:6",
+            "restore:6\nminimize:6\nminimize:11\nrestore:11",
+        ] {
+            assert!(validate_external_actions(bad).is_err());
+        }
+    }
+    #[test]
+    fn external_evidence_rejects_noncanonical_or_unbounded_generation() {
+        for bad in [
+            "minimize:0\nrestore:0\nminimize:1\nrestore:1",
+            "minimize:06\nrestore:06\nminimize:11\nrestore:11",
+            "minimize:x\nrestore:x\nminimize:11\nrestore:11",
+            "minimize:18446744073709551616\nrestore:18446744073709551616\nminimize:11\nrestore:11",
+        ] {
+            assert!(validate_external_actions(bad).is_err());
+        }
+        assert!(validate_external_actions(&"x".repeat(129)).is_err());
+    }
+
     #[test]
     fn only_requested_native_mode_with_false_headless_claim_is_accepted() {
         for mode in [false, true] {

@@ -166,6 +166,7 @@ struct BenchState {
     active: Mutex<Option<Arc<Run>>>,
     automatic: bool,
     minimize: bool,
+    external_wm: bool,
     report_path: Option<PathBuf>,
 }
 
@@ -395,6 +396,15 @@ fn probe_finish(
         )
     })?;
     report.validate_window_mode(state.minimize)?;
+    if report.completed
+        && !window_mode_matches(
+            state.external_wm,
+            report.dom_session.as_ref().map(|s| s.external_wm_checked),
+            report.session.as_ref().map(|s| s.external_wm_checked),
+        )
+    {
+        return Err("probe.external_mode_mismatch".into());
+    }
     let bytes = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     if bytes.len() > 64 * 1024 {
         return Err("probe.report_too_large".into());
@@ -669,7 +679,19 @@ pub fn run() {
         }
         return;
     }
-    let minimize = args.iter().any(|arg| arg == "--probe-window");
+    let external_wm = args.iter().any(|arg| arg == "--probe-window-external");
+    let minimize = external_wm || args.iter().any(|arg| arg == "--probe-window");
+    let external_control = if external_wm {
+        match std::env::var_os("PULSE_PROBE_WINDOW_CONTROL").map(PathBuf::from) {
+            Some(path) if path.is_absolute() && path.is_dir() => Some(path),
+            _ => {
+                eprintln!("probe.external_controller_missing");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
     let automatic = minimize || args.iter().any(|arg| arg == "--probe");
     let report_path = args
         .iter()
@@ -681,12 +703,13 @@ pub fn run() {
         active: Mutex::new(None),
         automatic,
         minimize,
+        external_wm,
         report_path,
     };
     let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
-        .manage(WindowSessions::new(minimize))
+        .manage(WindowSessions::new(minimize, external_control))
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);
@@ -753,6 +776,7 @@ mod tests {
             active: Mutex::new(None),
             automatic: false,
             minimize: false,
+            external_wm: false,
             report_path: None,
         };
         let id = uuid::Uuid::new_v4().to_string();
