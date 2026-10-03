@@ -342,6 +342,13 @@ mise run probe-pty
 - 两次真实运行通过（第二次加入native child drain/完整validator），报告serverVersion OpenSSH_10.0p2/publicKeyAuth/realNativePty/nativeSessionsDrained/nativeDaemonJoined/EOF均true、[80,24]→[91,37]、exit7。后续新增1项真实report负向fixture（false nativePTy/child/eof/master、错尺寸/exit、missing limitations拒绝），feature10tests/clippy-Dwarnings通过；默认全check/test199TS/39app/89core/16IPC/6xtask及原probe-ssh仍通过。
 - 新mise/xtask CLI/CI entry与报告字段已注册；CI Linux系统依赖openssh-client/server及/run/sshd目录明确，但无远端执行证据。本轮Cargo.lock/deny/vendor/CSP不变，原全audit6license/2maintenance阻断继续。S4仍不全通过：实际只有OpenSSH10server与10client，7–9/dropbear/legacy设备、keyboard-interactive/证书、跳板/SFTP/forward/Agent/FIDO2/GBK及生产actor transport尚未验收。
 
+## S4受控keyboard-interactive挑战/回答/取消（Linux）
+
+- probe-ssh controlled server新增K-I handler，每连接challenge布尔状态，仅当前synthetic user的start发1个固定prompt/echo=false，回应必须exact单答且当前challenge有效；回应时先消费challenge，错误答拒绝、没有challenge不能接受。client校验name/instructions/数量/文本/echo都为受控值，unknown/额外prompt/echo真拒绝且不记录远程内容/回答。所有值是fake测试凭据，不访问实际MFA或用户secret。
+- 真实encrypted loopback先挑战→错synthetic答返回Failure(partial_success=false)，重新start fresh challenge→固定正确答返回Success；另一独立connection start后不给答案直接disconnect/drop。handler Drop对尚未答复challenge计数，必须在全server shutdown之前3秒独立出现cancelled=1（而非用global shutdown冒充取消）；started3/denied1/accepted1硬验证，最终所有active connections仍归零。
+- ssh.json新增keyboardInteractive五字段且validator硬要求，明确noRealMfaHardware=true；受控protocol已通过不代表真实MFA/PAM/前端Prompt ID生命周期或FIDO2验收。新增1项prompt负向单测，11 SSH-feature tests/clippy-Dwarnings通过；probe-ssh与真实probe-ssh-system都再运行成功（real PTY仍80×24→91×37/nativeExit7/session children drain）。未改Cargo依赖/locks/CSP/allow/ignore。
+- OpenSSH7–9/dropbear/legacy设备、证书/jump/forward/Agent/FIDO2/GBK和生产SSH actor仍待后续验证，S4不标全通过。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

@@ -26,6 +26,10 @@ struct Metrics {
     password_denied: AtomicUsize,
     password_accepted: AtomicUsize,
     public_accepted: AtomicUsize,
+    ki_started: AtomicUsize,
+    ki_denied: AtomicUsize,
+    ki_accepted: AtomicUsize,
+    ki_cancelled: AtomicUsize,
     pty: AtomicUsize,
     resize: Mutex<Option<(u32, u32)>>,
 }
@@ -34,10 +38,14 @@ struct ProbeServer {
     allowed: PublicKey,
     connection: bool,
     has_pty: bool,
+    challenge: bool,
 }
 impl Drop for ProbeServer {
     fn drop(&mut self) {
         if self.connection {
+            if self.challenge {
+                self.metrics.ki_cancelled.fetch_add(1, Ordering::SeqCst);
+            }
             self.metrics.active.fetch_sub(1, Ordering::SeqCst);
         }
     }
@@ -51,6 +59,7 @@ impl server::Server for ProbeServer {
             allowed: self.allowed.clone(),
             connection: true,
             has_pty: false,
+            challenge: false,
         }
     }
 }
@@ -71,6 +80,38 @@ impl server::Handler for ProbeServer {
             Ok(server::Auth::reject())
         }
     }
+    async fn auth_keyboard_interactive<'a>(
+        &'a mut self,
+        user: &str,
+        _methods: &str,
+        response: Option<server::Response<'a>>,
+    ) -> std::result::Result<server::Auth, Self::Error> {
+        if user != USER {
+            self.challenge = false;
+            return Ok(server::Auth::reject());
+        }
+        if let Some(mut answer) = response {
+            let active = std::mem::replace(&mut self.challenge, false);
+            let first = answer.next();
+            let sole = answer.next().is_none();
+            if active && sole && first.as_ref().is_some_and(|a| a.as_ref() == b"123456") {
+                self.metrics.ki_accepted.fetch_add(1, Ordering::SeqCst);
+                Ok(server::Auth::Accept)
+            } else {
+                self.metrics.ki_denied.fetch_add(1, Ordering::SeqCst);
+                Ok(server::Auth::reject())
+            }
+        } else {
+            self.challenge = true;
+            self.metrics.ki_started.fetch_add(1, Ordering::SeqCst);
+            Ok(server::Auth::Partial {
+                name: "pulse-probe".into(),
+                instructions: "synthetic challenge only".into(),
+                prompts: std::borrow::Cow::Owned(vec![("Synthetic token: ".into(), false)]),
+            })
+        }
+    }
+
     async fn auth_publickey(
         &mut self,
         user: &str,
@@ -421,6 +462,7 @@ async fn probe() -> Result<serde_json::Value> {
         allowed: user_key.public_key().clone(),
         connection: false,
         has_pty: false,
+        challenge: false,
     };
     let (handle_tx, handle_rx) = oneshot::channel();
     let task = tokio::spawn(async move {
@@ -505,6 +547,7 @@ async fn probe() -> Result<serde_json::Value> {
     pub_session
         .disconnect(Disconnect::ByApplication, "", "en")
         .await?;
+    keyboard_interactive(address, &expected, &metrics).await?;
     let openssh = system_client(address, &expected, &user_key).await?;
     guard.stop.shutdown("test complete".into());
     if let Some(task) = &mut guard.task {
@@ -525,9 +568,104 @@ async fn probe() -> Result<serde_json::Value> {
         "authentication evidence missing"
     );
     Ok(
-        json!({"schemaVersion":1,"russh":"0.63.3","profile":"optional xtask ring/ed25519 probe; no RSA/compression/legacy feature validation","loopbackOnly":true,"changedHostKeyRejectedBeforeAuth":true,"wrongPasswordRejected":true,"passwordAuth":true,"publicKeyAuth":true,"ptyRequestAcknowledged":true,"windowChangeObserved":[91,37],"utf8BinaryRoundtrip":true,"exitStatus":7,"eofAndOutputDrain":true,"arbitraryExecRejected":true,"connectionsAndListenerJoined":true,"systemClient":openssh,"limitations":["Controlled russh server, not real OS PTY or server SSH implementation matrix","OpenSSH 7-9, dropbear, old devices, keyboard-interactive, certificates, jumps, forwarding, Agent/FIDO2 and GBK are not yet accepted","No production SSH transport, known_hosts storage, user prompts or credential-vault integration"],"platform":std::env::consts::OS}),
+        json!({"schemaVersion":1,"russh":"0.63.3","profile":"optional xtask ring/ed25519 probe; no RSA/compression/legacy feature validation","loopbackOnly":true,"changedHostKeyRejectedBeforeAuth":true,"wrongPasswordRejected":true,"passwordAuth":true,"publicKeyAuth":true,"keyboardInteractive":{"syntheticChallenge":true,"wrongAnswerRejected":true,"singleChallengeConsumed":true,"cancelledConnectionDrained":true,"noRealMfaHardware":true},"ptyRequestAcknowledged":true,"windowChangeObserved":[91,37],"utf8BinaryRoundtrip":true,"exitStatus":7,"eofAndOutputDrain":true,"arbitraryExecRejected":true,"connectionsAndListenerJoined":true,"systemClient":openssh,"limitations":["Controlled russh server, not real OS PTY or server SSH implementation matrix","OpenSSH 7-9, dropbear, old devices, real MFA/UI prompt integration, certificates, jumps, forwarding, Agent/FIDO2 and GBK are not yet accepted","No production SSH transport, known_hosts storage, user prompts or credential-vault integration"],"platform":std::env::consts::OS}),
     )
 }
+fn validate_challenge(reply: &client::KeyboardInteractiveAuthResponse) -> Result<()> {
+    match reply {
+        client::KeyboardInteractiveAuthResponse::InfoRequest {
+            name,
+            instructions,
+            prompts,
+        } => {
+            ensure!(
+                name == "pulse-probe"
+                    && instructions == "synthetic challenge only"
+                    && prompts.len() == 1
+                    && prompts[0].prompt == "Synthetic token: "
+                    && !prompts[0].echo,
+                "unknown/unbounded challenge"
+            );
+            Ok(())
+        }
+        _ => anyhow::bail!("missing keyboard-interactive prompt"),
+    }
+}
+async fn keyboard_interactive(
+    address: std::net::SocketAddr,
+    key: &PublicKey,
+    metrics: &Metrics,
+) -> Result<()> {
+    use client::KeyboardInteractiveAuthResponse as Reply;
+    let mut connection = connect(address, key.clone(), Arc::new(AtomicBool::new(false))).await?;
+    let prompt = tokio::time::timeout(
+        Duration::from_secs(3),
+        connection.authenticate_keyboard_interactive_start(USER, None),
+    )
+    .await??;
+    validate_challenge(&prompt)?;
+    ensure!(
+        matches!(
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                connection
+                    .authenticate_keyboard_interactive_respond(vec!["wrong-synthetic".into()])
+            )
+            .await??,
+            Reply::Failure {
+                partial_success: false,
+                ..
+            }
+        ),
+        "wrong challenge response accepted"
+    );
+    let retry = tokio::time::timeout(
+        Duration::from_secs(3),
+        connection.authenticate_keyboard_interactive_start(USER, None),
+    )
+    .await??;
+    validate_challenge(&retry)?;
+    ensure!(
+        matches!(
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                connection.authenticate_keyboard_interactive_respond(vec!["123456".into()])
+            )
+            .await??,
+            Reply::Success
+        ),
+        "correct synthetic challenge rejected"
+    );
+    connection
+        .disconnect(Disconnect::ByApplication, "", "en")
+        .await?;
+    let mut cancelled = connect(address, key.clone(), Arc::new(AtomicBool::new(false))).await?;
+    let prompt = tokio::time::timeout(
+        Duration::from_secs(3),
+        cancelled.authenticate_keyboard_interactive_start(USER, None),
+    )
+    .await??;
+    validate_challenge(&prompt)?;
+    cancelled
+        .disconnect(Disconnect::ByApplication, "", "en")
+        .await?;
+    drop(cancelled);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while metrics.ki_cancelled.load(Ordering::SeqCst) != 1 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .context("cancelled challenge connection did not drain independently")?;
+    ensure!(
+        metrics.ki_started.load(Ordering::SeqCst) == 3
+            && metrics.ki_denied.load(Ordering::SeqCst) == 1
+            && metrics.ki_accepted.load(Ordering::SeqCst) == 1,
+        "keyboard-interactive metrics mismatch"
+    );
+    Ok(())
+}
+
 fn validate_report(r: &serde_json::Value) -> Result<()> {
     ensure!(
         r["schemaVersion"] == 1 && r["russh"] == "0.63.3",
@@ -546,6 +684,18 @@ fn validate_report(r: &serde_json::Value) -> Result<()> {
         "connectionsAndListenerJoined",
     ] {
         ensure!(r[field] == true, "missing SSH observation: {field}");
+    }
+    for field in [
+        "syntheticChallenge",
+        "wrongAnswerRejected",
+        "singleChallengeConsumed",
+        "cancelledConnectionDrained",
+        "noRealMfaHardware",
+    ] {
+        ensure!(
+            r["keyboardInteractive"][field] == true,
+            "missing keyboard-interactive evidence"
+        );
     }
     ensure!(
         r["exitStatus"] == 7 && r["windowChangeObserved"] == json!([91, 37]),
@@ -599,6 +749,44 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     #[test]
+    fn synthetic_challenge_rejects_unknown_name_extra_prompts_and_echo() {
+        use client::{KeyboardInteractiveAuthResponse as Reply, Prompt};
+        let prompt = || Prompt {
+            prompt: "Synthetic token: ".into(),
+            echo: false,
+        };
+        let good = Reply::InfoRequest {
+            name: "pulse-probe".into(),
+            instructions: "synthetic challenge only".into(),
+            prompts: vec![prompt()],
+        };
+        assert!(validate_challenge(&good).is_ok());
+        for bad in [
+            Reply::InfoRequest {
+                name: "foreign".into(),
+                instructions: "synthetic challenge only".into(),
+                prompts: vec![prompt()],
+            },
+            Reply::InfoRequest {
+                name: "pulse-probe".into(),
+                instructions: "synthetic challenge only".into(),
+                prompts: vec![prompt(), prompt()],
+            },
+            Reply::InfoRequest {
+                name: "pulse-probe".into(),
+                instructions: "synthetic challenge only".into(),
+                prompts: vec![Prompt {
+                    prompt: "Synthetic token: ".into(),
+                    echo: true,
+                }],
+            },
+            Reply::Success,
+        ] {
+            assert!(validate_challenge(&bad).is_err());
+        }
+    }
+
+    #[test]
     fn pinned_ed25519_key_equality_is_required() {
         let key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
         let wrong = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
@@ -625,6 +813,7 @@ mod tests {
             allowed: key.public_key().clone(),
             connection: false,
             has_pty: false,
+            challenge: false,
         };
         use russh::server::Handler as _;
         assert!(matches!(
