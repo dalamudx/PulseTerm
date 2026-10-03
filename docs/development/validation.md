@@ -63,6 +63,12 @@ mise run probe
 
 EchoTransport及screen_replay已限制到test/validation，独立默认构建负向编译门禁通过，防止Cargo workspace feature统一掩盖错误。全部新任务加入三平台CI，仅Linux本地验证，其他runner尚无执行证据。workspace实际57项pulse-term + 12项IPC + 3项PTY + 1项core + 2项xtask测试，TS50项通过；以实际运行数字为准而非历史总数。
 
+### 分歧检测与同边界摘要
+
+372个token/base组合中18个差异（10种token）均被保守风险提示覆盖，漏标记会使CI失败；11个可精确编码的状态已在真实headless消费器中验证screen-only修复，另外7个不可表示/延期不能算修复通过。发现并修复恢复器对“宽head的spacer已擦除”和“origin域外current cursor”的精确性误报，actor拒绝这些帧，未修改解析器。
+
+digest v1按统一UTF-8/u32投影计算，372个跨语言摘要fixture均匹配；checksum相等只证明当前visible投影，非hidden/history/全样式/安全认证。actor只在同revision/parsed_bytes/size且digest相同时清risk，旧boundary/错误digest不清；REP跨分块观察和RIS不得静默清风险都有回归。所有新Rust检查通过；快照严格分类现557，条件M1|M2=311/311（此前559中的2个新增不可表示状态没有伪装精确）。可见窗口的idle/attach/resize限频监督仍未接入生产driver。
+
 ### 历史内存预算仍未满足
 
 120 列、40 行视口、保留 10,000 行历史时，按 `size_of::<Cell>()` 计算的格子存储下限为 **28,915,200 字节（约 27.6 MiB）**，不含 extra、分配开销或进程内存。

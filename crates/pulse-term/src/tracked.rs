@@ -34,6 +34,8 @@ pub(crate) struct MirroredState {
     /// Last printed character; vte keeps it privately for REP (`CSI b`) and never
     /// clears it (not even on RIS).
     pub last_input: Option<char>,
+    /// Conservative known divergence hints; cleared only on verified display.
+    pub risk: u32,
     /// Capture query-time overrides while synchronized output is flushed in bulk.
     pub color_queries: VecDeque<Option<Rgb>>,
 }
@@ -47,6 +49,7 @@ impl MirroredState {
                 .map(|i| i.is_multiple_of(INITIAL_TABSTOPS))
                 .collect(),
             last_input: None,
+            risk: 0,
             color_queries: VecDeque::new(),
         }
     }
@@ -66,6 +69,7 @@ impl MirroredState {
             });
         }
         self.scroll_region = (0, lines as i32);
+        self.risk |= crate::reconciliation::GEOMETRY;
     }
 
     /// Mirror of `Term::set_scrolling_region` (also used by DECCOLM).
@@ -104,7 +108,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         fn goto(&mut self, line: i32, col: usize);
         fn goto_line(&mut self, line: i32);
         fn goto_col(&mut self, col: usize);
-        fn insert_blank(&mut self, count: usize);
+
         fn move_up(&mut self, rows: usize);
         fn move_down(&mut self, rows: usize);
         fn identify_terminal(&mut self, intermediate: Option<char>);
@@ -113,7 +117,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         fn move_backward(&mut self, cols: usize);
         fn move_down_and_cr(&mut self, rows: usize);
         fn move_up_and_cr(&mut self, rows: usize);
-        fn put_tab(&mut self, count: u16);
+
         fn backspace(&mut self);
         fn carriage_return(&mut self);
         fn linefeed(&mut self);
@@ -122,16 +126,16 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         fn newline(&mut self);
         fn scroll_up(&mut self, rows: usize);
         fn scroll_down(&mut self, rows: usize);
-        fn insert_blank_lines(&mut self, count: usize);
-        fn delete_lines(&mut self, count: usize);
-        fn erase_chars(&mut self, count: usize);
-        fn delete_chars(&mut self, count: usize);
-        fn move_backward_tabs(&mut self, count: u16);
-        fn move_forward_tabs(&mut self, count: u16);
+
+
+
+
+
+
         fn save_cursor_position(&mut self);
-        fn restore_cursor_position(&mut self);
-        fn clear_line(&mut self, mode: LineClearMode);
-        fn clear_screen(&mut self, mode: ClearMode);
+
+
+
         fn set_tabs(&mut self, interval: u16);
         fn reverse_index(&mut self);
         fn terminal_attribute(&mut self, attr: Attr);
@@ -163,6 +167,50 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         fn set_scp(&mut self, path: ScpCharPath, update: ScpUpdateMode);
     }
 
+    fn put_tab(&mut self, count: u16) {
+        self.side.risk |= crate::reconciliation::TAB;
+        <Term<L> as Handler>::put_tab(&mut *self.term, count);
+    }
+    fn move_backward_tabs(&mut self, count: u16) {
+        self.side.risk |= crate::reconciliation::TAB;
+        <Term<L> as Handler>::move_backward_tabs(&mut *self.term, count);
+    }
+    fn move_forward_tabs(&mut self, count: u16) {
+        self.side.risk |= crate::reconciliation::TAB;
+        <Term<L> as Handler>::move_forward_tabs(&mut *self.term, count);
+    }
+    fn insert_blank_lines(&mut self, count: usize) {
+        self.side.risk |= crate::reconciliation::LINES;
+        <Term<L> as Handler>::insert_blank_lines(&mut *self.term, count);
+    }
+    fn delete_lines(&mut self, count: usize) {
+        self.side.risk |= crate::reconciliation::LINES;
+        <Term<L> as Handler>::delete_lines(&mut *self.term, count);
+    }
+    fn insert_blank(&mut self, count: usize) {
+        self.side.risk |= crate::reconciliation::CELLS;
+        <Term<L> as Handler>::insert_blank(&mut *self.term, count);
+    }
+    fn delete_chars(&mut self, count: usize) {
+        self.side.risk |= crate::reconciliation::CELLS;
+        <Term<L> as Handler>::delete_chars(&mut *self.term, count);
+    }
+    fn erase_chars(&mut self, count: usize) {
+        self.side.risk |= crate::reconciliation::CELLS;
+        <Term<L> as Handler>::erase_chars(&mut *self.term, count);
+    }
+    fn clear_line(&mut self, mode: LineClearMode) {
+        self.side.risk |= crate::reconciliation::CELLS;
+        <Term<L> as Handler>::clear_line(&mut *self.term, mode);
+    }
+    fn clear_screen(&mut self, mode: ClearMode) {
+        self.side.risk |= crate::reconciliation::CELLS;
+        <Term<L> as Handler>::clear_screen(&mut *self.term, mode);
+    }
+    fn restore_cursor_position(&mut self) {
+        self.side.risk |= crate::reconciliation::CURSOR;
+        <Term<L> as Handler>::restore_cursor_position(&mut *self.term);
+    }
     fn input(&mut self, c: char) {
         <Term<L> as Handler>::input(&mut *self.term, c);
         self.side.last_input = Some(c);
@@ -199,10 +247,12 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
 
     fn reset_state(&mut self) {
         <Term<L> as Handler>::reset_state(&mut *self.term);
+        let risk = self.side.risk;
         let last_input = self.side.last_input;
         let queries = std::mem::take(&mut self.side.color_queries);
         *self.side = MirroredState::new(self.term.columns(), self.term.screen_lines());
         self.side.last_input = last_input;
+        self.side.risk = risk;
         self.side.color_queries = queries;
     }
 
@@ -218,6 +268,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
     }
 
     fn set_private_mode(&mut self, mode: PrivateMode) {
+        self.side.risk |= crate::reconciliation::MODE;
         let deccolm = matches!(mode, PrivateMode::Named(NamedPrivateMode::ColumnMode));
         let lines = self.term.screen_lines();
         <Term<L> as Handler>::set_private_mode(&mut *self.term, mode);
@@ -227,6 +278,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
     }
 
     fn unset_private_mode(&mut self, mode: PrivateMode) {
+        self.side.risk |= crate::reconciliation::MODE;
         let deccolm = matches!(mode, PrivateMode::Named(NamedPrivateMode::ColumnMode));
         let lines = self.term.screen_lines();
         <Term<L> as Handler>::unset_private_mode(&mut *self.term, mode);

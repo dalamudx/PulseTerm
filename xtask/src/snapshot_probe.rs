@@ -409,12 +409,13 @@ pub fn run() -> Result<()> {
             term.finish_input();
             let bytes = [prefix, token.as_bytes()].concat();
             matrix.push(
-                json!({"base": base, "token": token, "bytes": bytes, "expected": term.screen()}),
+                json!({"base": base, "token": token, "bytes": bytes, "expected": term.screen(), "risk":term.divergence_risk(), "digest":term.screen_digest(),
+                    "repair":term.restore_screen_bounded(1024*1024).ok().filter(|r|r.approximations.is_empty()).map(|r|r.bytes)}),
             );
         }
     }
     // Restore size and cost for a 120x40 screen (worst case: every cell has its own
-    // colours). The serializer is not optimised (CUP + full SGR per cell).
+    // colours). Pen-run compression cannot collapse per-cell unique attributes.
     let big = TermSize::new(120, 40)?;
     let mut worst_term = TerminalProbe::new(big, 10_000);
     let mut plain_term = TerminalProbe::new(big, 10_000);

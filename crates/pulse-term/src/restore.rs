@@ -293,6 +293,7 @@ impl TerminalProbe {
         }
         let line = grid.cursor.point.line.0;
         if mode.contains(TermMode::ORIGIN) && !(top..bottom).contains(&line) {
+            approximations.push("origin-mode cursor outside region is not representable by xterm");
             // Only DECRC can put the cursor outside the region under DECOM (CUP is
             // relative and clamped). This consumes the DECSC slot.
             place_cursor(&mut out, grid, &grid.cursor, 0);
@@ -600,6 +601,9 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
             {
                 next_column = None;
                 pen = None;
+                // Rust can reproduce this with ECH, but xterm clears the whole
+                // wide pair. Mark it non-exact for the actual display consumer.
+                approximations.push("wide head with erased spacer cannot be represented by xterm");
                 // Broken wide char (its spacer was erased): drop the new spacer.
                 let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
             }

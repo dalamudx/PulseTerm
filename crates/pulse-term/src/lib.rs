@@ -8,6 +8,7 @@ mod ground;
 pub mod history;
 pub use history::{HistoryReplay, MAX_RECENT_ROWS};
 mod palette;
+pub mod reconciliation;
 mod restore;
 mod tracked;
 pub use restore::{Restore, RestoreGap};
@@ -898,7 +899,9 @@ mod tests {
             alacritty_terminal::vte::ansi::CharsetIndex::G1
         );
         term.feed(b"\x1bc");
-        assert_eq!(term.side, tracked::MirroredState::new(30, 8));
+        let mut expected = tracked::MirroredState::new(30, 8);
+        expected.risk = reconciliation::MODE | reconciliation::GEOMETRY;
+        assert_eq!(term.side, expected);
     }
 
     #[test]

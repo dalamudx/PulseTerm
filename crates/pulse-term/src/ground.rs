@@ -23,6 +23,7 @@ pub(crate) struct GroundScanner {
     state: State,
     pending: Vec<u8>,
     overflow: bool,
+    pub rep_seen: bool,
 }
 
 impl Default for GroundScanner {
@@ -31,6 +32,7 @@ impl Default for GroundScanner {
             state: State::Ground,
             pending: Vec::new(),
             overflow: false,
+            rep_seen: false,
         }
     }
 }
@@ -44,6 +46,9 @@ impl GroundScanner {
 
     fn step(&mut self, byte: u8) {
         use State::*;
+        if self.state == Csi && byte == b'b' {
+            self.rep_seen = true;
+        }
         let next = match (self.state, byte) {
             (_, 0x18 | 0x1a) => Ground,
             (_, 0x1b) => Escape,

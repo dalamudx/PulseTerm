@@ -1,5 +1,8 @@
 //! Bounded, window-independent actor foundation with an EchoTransport test driver.
 //! Screen inspection is a diagnostic projection, NOT a detach/attach snapshot.
+#[cfg(test)]
+#[path = "reconciliation_actor_tests.rs"]
+mod reconciliation_tests;
 use crate::{ObservedScreen, TerminalProbe};
 #[cfg(test)]
 #[path = "bootstrap_tests.rs"]
@@ -90,6 +93,9 @@ pub enum SessionError {
     /// Caller must retry or propagate pressure; message was not accepted.
     #[error("session bounded queue is full")]
     Busy,
+    /// Digest must be exactly sixteen lowercase hexadecimal characters.
+    #[error("invalid diagnostic digest")]
+    InvalidDigest,
     /// Actor no longer accepts commands.
     #[error("session is closed")]
     Closed,
@@ -98,6 +104,26 @@ pub enum SessionError {
     Transport,
 }
 
+/// Digest captured at the actor serialization point, not a wire ACK.
+#[derive(Debug)]
+pub struct SessionDigest {
+    /// Actor state that must also match when confirming the renderer.
+    pub boundary: SessionState,
+    /// Conservative risk bits, not proof of actual divergence.
+    pub risk: u32,
+    /// Visible projection digest v1, not security authentication.
+    pub digest: String,
+}
+/// Whether an observed view agrees with the same authoritative actor boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScreenVerification {
+    /// Caller observed an older/different boundary; no flags cleared.
+    Stale,
+    /// Current visible projection differs; no flags cleared.
+    Mismatch,
+    /// Current visible projection matches; clears diagnostic risk only.
+    Equal,
+}
 enum Command {
     Input(Vec<u8>, oneshot::Sender<Result<(), SessionError>>),
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
@@ -110,6 +136,8 @@ enum Command {
         oneshot::Sender<Result<(), SessionError>>,
     ),
     Inspect(oneshot::Sender<ObservedScreen>),
+    Digest(oneshot::Sender<SessionDigest>),
+    Verify(SessionState, String, oneshot::Sender<ScreenVerification>),
     Bootstrap {
         history_rows: usize,
         history_budget: usize,
@@ -297,6 +325,30 @@ impl SessionHandle {
             .await
             .map_err(|_| SessionRestoreError::Session(SessionError::Closed))?
     }
+    /// Capture a visible checksum at the actor boundary. Do not poll on every frame.
+    pub async fn diagnostic_digest(&self) -> Result<SessionDigest, SessionError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Digest(reply))?;
+        result.await.map_err(|_| SessionError::Closed)
+    }
+    /// Confirm only at the identical actor boundary. Binding generation must be
+    /// validated by the view driver before calling; this is not a lease protocol.
+    pub async fn verify_screen(
+        &self,
+        boundary: SessionState,
+        digest: String,
+    ) -> Result<ScreenVerification, SessionError> {
+        if digest.len() != 16
+            || !digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(SessionError::InvalidDigest);
+        }
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Verify(boundary, digest, reply))?;
+        result.await.map_err(|_| SessionError::Closed)
+    }
     /// Return a visible-screen diagnostic, never a complete restore snapshot.
     pub async fn inspect(&self) -> Result<ObservedScreen, SessionError> {
         let (reply, result) = oneshot::channel();
@@ -457,6 +509,17 @@ pub fn spawn_session(
                                     Ok(SessionBootstrap { boundary: current.clone(), history, restore: restore.bytes })
                                 });
                             let _ = reply.send(result);
+                        }
+                    }
+                    Some(Command::Digest(reply)) => {
+                        if !reply.is_closed(){ let _=reply.send(SessionDigest{boundary:current.clone(),risk:terminal.divergence_risk(),digest:terminal.screen_digest()}); }
+                    }
+                    Some(Command::Verify(boundary,digest,reply)) => {
+                        if !reply.is_closed(){
+                            let result=if boundary!=current {ScreenVerification::Stale}
+                            else if digest!=terminal.screen_digest(){ScreenVerification::Mismatch}
+                            else {terminal.side.risk=0;terminal.ground.rep_seen=false;ScreenVerification::Equal};
+                            let _=reply.send(result);
                         }
                     }
                     Some(Command::Inspect(reply)) => { let _ = reply.send(terminal.screen()); }
