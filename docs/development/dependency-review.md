@@ -66,6 +66,12 @@ S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all
 
 新增devDependency `@xterm/xterm 6.0.0`，与现有`@xterm/headless`同版；pnpm锁仅新增该包、没有新增传递依赖或升级旧包。已读发布包LICENSE（MIT，保留xterm.js/SourceLair/Christopher Jeffrey版权）；integrity `sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==`。DOM源与CSS仅在开发验证surface启动时动态加载；未来分发须包含该版权许可及现有第三方声明。pnpm audit当前无已知漏洞，不替代完整许可证审查。CSP使用Tauri本地页nonce，未放开unsafe-inline或script-src。Cargo.lock、vendor、白名单和公告ignore未变，原有发布阻断继续有效。
 
+## S4可选SSH探针依赖
+
+xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10、tempfile3；russh default-features=false仅ring，不启用RSA/compression/DES/DSA。desktop依赖树不包含russh，production SSH模块仍未启用。crypto传递依赖含ssh-key0.7.0-rc.11，这不是稳定生产采用许可；后续需关注RC接口/安全维护与feature组合，ring标志也不代表所有RustCrypto算法都被排除。Cargo.lock新增传递包与既有依赖名字版本限定，比较HEAD旧package name/version没有移除或升级已有锁定版本，GTK宏链/approved terminal vendor不变。
+
+完整全特性联网cargo-deny复核：sources/bans通过（更多重复crypto版本警告），license拒绝仍原6包，advisories仍paste/proc-macro-error两维护公告，无新拒绝项或漏洞条目；没有添加allow/ignore。optional开发依赖仍必须audit，probe成功不能许可打包或生产credential网络端点。系统OpenSSH软件本体许可、系统库分发另行审查，不由Cargo allowlist替代。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

@@ -74,6 +74,7 @@ mise run desktop                  # 打开原生开发验证界面（不是完�
 mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data idle Marker及精确屏幕修复，两轮headless+两轮可见DOM及7组测量
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
+mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。
@@ -89,6 +90,8 @@ mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复�
 `probe-window-external` 当前仅Linux私有X11：额外需xdotool。CLI --probe-window-external使应用正常动作路径只写minimize/restore:decimal-generation请求（atomic rename），独立controller wrapper用umask077临时目录传给直系app进程；按该app PID查找唯一可见window，每次getwindowpid核对、timeout2s xdotool minimize/activate，经WM动作改变native状态。不是应用调用minimize/unminimize/show，也不接受任意XID或shell源。应用仍按runtime readback/native-only controller pause/隐藏输出/resume验收；报告window-external.json、window-external-actions.log，externalWmChecked须true且headlessfalse。xtask再要求两轮共4条minimize→同gen restore、generation递增且正整数规范、长度≤128B；普通模式externalWmChecked=false。脚本cleanup停止自己app、删除私有dir，退出码保留；Openbox由外层owned wrapper清理，外层timeout监督整组。Linux CI注册并上传新log，不作为CI已运行证明。xdotool只系统验证前置；不是人工点击按钮、其它WM/Wayland/平台或任意长时间外部最小化验收。
 
 finite terminal sink现在使用GenerationViewHost/ViewScope按后端Begin管理surface资源：consumer/render/query/onData/input/idle作用域统一清理，异步创建在abort时即时reject，晚到结果清理且不影响新generation。报告schema4新增viewHostChecked，要求每DOM3次resize+pool恢复+native恢复共5次scope重建，重复旧renderer.dispose不得改变新.xterm root。另有实际view-pool.ts/ViewHost与ViewSlot接主React容器（32总/6 parked/5分钟TTL、mounted不淘汰），33项池/票据回归与EOF-only真DOM xterm root迁移/park/复用/LRU/TTL探针；报告新增viewPoolChecked且两DOM结束主pool factory=1。池只通知同步setVisible、backend串行pause/resume由controller负责；finite adapter已用PaneVisibility同步通知当前SurfaceVisibility，实际parking不取消pane/PTY，显式pause→隐藏期间解析HIDDEN_SEED→fenced resume→新Begin后再做native cycle；报告activeParkChecked和pauseCount2均必须满足，headless0。ViewSlotOwner确保React cleanup跟随imperative resume后的最新ticket，过期parked claim不重建factory。未绑定控制面时false仍fail closed；不是生产用户shell/任意长期GUI停车完成。另加finite fit交接6秒scope deadline、phase诊断及取消即时终结，不因缺measurement无限等待或放宽70秒总deadline；native visibility恢复控制面仍跨surface退休保留，不能随scope清理提前解绑restore事件。
+
+`probe-ssh`需系统OpenSSH客户端，仅使用xtask可选ssh-probe feature（russh0.63.3/ring、RSA/压缩/legacy关闭），不把russh接desktop/生产连接。临时生成Ed25519 host/user密钥，server只bind127.0.0.1:0，client显式pinned hostkey，changed key须在认证前拒绝；wrong password/publickey、PTY请求成功回执、window-change91×37、固定UTF8数据回显与exit7/EOF排空、拒绝非固定exec。系统ssh使用-F空配置/独立known_hosts/StrictHostKeyChecking=yes/IdentityAgent=none/无SSH_AUTH_SOCK，执行固定标识而非任意shell，读出精确stdout与exit7后join。server handle与listener正常join、active handlers归零；总25秒、连接/阶段3–5秒，不接受用户endpoint/凭据/命令。输出target/probes/ssh.json，失败先删除旧报告、缺真实字段不能通过；Linux CI注册运行+feature test/clippy不等于远端已执行。当前本机OpenSSH10.0p2 client互通，不证明S4要求的OpenSSH7–9/server矩阵、dropbear/旧设备、MFA/证书/跳板/Agent/FIDO2/GBK通过。
 
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 

@@ -77,6 +77,10 @@ run = "node scripts/check-terminal-api.mjs"
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]
 
+[tasks.probe-ssh]
+description = "Validate isolated loopback SSH host keys, authentication and PTY channels"
+run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh"
+
 [tasks.desktop-build]
 description = "Build the native WebView validation app"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]

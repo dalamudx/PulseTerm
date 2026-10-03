@@ -9,6 +9,8 @@ mod pty_probe;
 mod query_probe;
 mod snapshot_probe;
 mod software_probe;
+#[cfg(feature = "ssh-probe")]
+mod ssh_probe;
 mod unicode_probe;
 mod unicode_table;
 
@@ -78,6 +80,12 @@ fn main() -> Result<()> {
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
+        Some("probe-ssh") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_probe::run()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-ssh requires --features ssh-probe");
+        }
         _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty>"),
     }
     Ok(())

@@ -324,7 +324,15 @@ mise run probe-pty
 - finite driver cap由1 pause→2，gate.wait_resume已消费并清空票据，未放宽registry owner/gen检查或rollback；新2项native回归验证pool receipt未消费不能再pause、消费后更大native generation/early resume/old重复拒绝、Destroyed后不得开始下一cycle。DOM report activeParkChecked/pauseCount2/five rebuilds硬要求，headless0。
 - 默认及外部WM各一次完整Linux组合通过（每次2headless+2DOM+7transport/cancel），activeParkChecked/viewPoolChecked/viewHostChecked=true、generation14、3resize/2pause、104×12/832×192px、parsedBytes3,113,152/nativeExit0/digest=`00b088cbb609382c`、12行DOM一致、主pool factory仍1。默认frames791/peak8212/render788/fences787；external frames794/peak4115/render790/fences790/nativeMinimize+externalWm true。有限停车不是生产任意长时间隐藏、真实React开发StrictMode整链、多pane/跨window验收；前次未解释初始化stall继续保留phase/6秒fit诊断，未在这两次再现。
 - probe-local-session schema4新增detached：独立固定Rust helper保持stdin待命，真实registry binding Commit后detach，旧input exit被拒绝，backend trusted控制注入DETACHED_FIRST Unicode marker，等待实测6000ms仍Running，再注入DETACHED_NEXT并准确新generation capture，Rust replay全部cells与actor inspect一致，之后current bound exit/有序End ACK/nativeExit0/直接子join成功。证明backend无view本身不受GUI5秒有限策略关闭，不是跨平台/长期GUI恢复通过。report.detached renderer明确Rust validator而非frontend callbacks，Windows注册不是ConPTY执行证据。
-- 全项目check/test 199TS/39app/89core/16IPC/6xtask、36native/clippy-D warnings、bindings-check与GUI及长期native probe通过，机械UI检查仍待本checkpoint最后复核；未新增依赖或修改locks/CSP/vendor/审计ignore。生产attach精确性门禁保持，未给不支持状态输出近似帧。
+- 全项目check/test 199TS/39app/89core/16IPC/6xtask、36native/clippy-D warnings、bindings-check与GUI及长期native probe通过，机械UI检查随后通过；未新增依赖或修改locks/CSP/vendor/审计ignore。生产attach精确性门禁保持，未给不支持状态输出近似帧。
+
+## S4初始隔离SSH协议探针（Linux）
+
+- 新增mise probe-ssh与xtask optional ssh-probe feature，russh0.63.3 default-features=false/ring，rand0.10配匹ssh-key0.7RC的rand_core0.10（0.9示例混用不符合真实API，实际编译修正）；仅xtask test feature，不连接用户endpoint、不启desktop生产SSH。纯控制server只listen127.0.0.1:0，固定synthetic身份/密码/exec，不执行任何shell；临时Ed25519 keys，client pinned完整PublicKey且明确拒绝host certificate，changed key必须设置mismatch并在任何auth handler被调用前失败。
+- 真实TCP验证wrong password拒绝、正确password/publickey认证、PTY成功回执、window-change91×37被server观察、Unicode+字面shell符号数据回显精确、exit_status7后继续drain至EOF/Close且尾部SSH_END完整；nonfixed exec请求failure回执，client断开。server正常shutdown/listener task join并等待active handlers归零，失败Drop也请求shutdown/abort listener，不能以仅listener stop当连接排空证据。
+- 本机系统OpenSSH10.0p2作为独立client连接controlled russh server：-F空配置、BatchMode/IdentitiesOnly/IdentityAgent=none、StrictHostKeyChecking=yes、独立临时known_hosts、host key ssh-ed25519、清SSH_AUTH_SOCK、不读用户config/agent。private key仅在tempdir（Unix file0600）写盘，读取stdout上限1KiB、5秒不确定期限，kill_on_drop；fixed exec stdout SSH_EXEC_OK及nativeExit7、stdout排空/join通过。未生成已存在用户凭据或改用户~/.ssh。
+- 成功报告schema1全部安全/阶段字段经validator再写，开始运行先删旧成功报告；3feature单测验证pinned key匹配、username+credential拒绝、completed单flag不足，xtask feature9 tests与-Dwarnings通过。默认check/test 199TS/39app/89core/16IPC/6xtask通过；最新真实probe成功，server/client/系统child都清理。CI Linux新增explicit feature运行/检查/单测；仅注册不算远端CI或跨平台验收。首次timeout构造放runtime外导致panic，已修正在async block内部；lint test模块搬到EOF，无忽略生产warnings。
+- 新crypto包完整cargo-deny全特性审查仍fail：license原6拒绝、paste/proc-macro-error维护2；sources/bans通过，无新增拒绝或漏洞项，详dependency-review。没有扩大allow/ignore，SSH-key RC风险单列；桌面树不含russh。S4未通过：只取得受控russh双向和OpenSSH10client证据，不是真实sshd7–9/dropbear/旧设备、keyboard-interactive/证书、跳板/forward/Agent/FIDO2/GBK、真实remote PTY或完整transport actor集成。
 
 ## 检查结果
 
