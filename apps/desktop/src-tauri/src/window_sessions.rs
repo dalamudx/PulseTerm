@@ -287,8 +287,8 @@ impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
         parse_u64(&self.generation)?;
         if self.resize_count > 3
-            || self.pause_count > 1
-            || (self.native_window_checked && self.pause_count != 1)
+            || self.pause_count > 2
+            || (self.native_window_checked && self.pause_count == 0)
             || (self.native_minimize_checked && !self.native_window_checked)
             || (self.native_only_checked && !self.native_window_checked)
             || (self.external_wm_checked
@@ -1019,7 +1019,7 @@ pub(crate) async fn probe_session(
                         .await
                         .map_err(|_| "session.recapture_failed".to_string())?;
                 }
-                Err(pulse_app::attachment::AttachmentError::Detached) if pauses == 0 => {
+                Err(pulse_app::attachment::AttachmentError::Detached) if pauses < 2 => {
                     tokio::time::timeout(
                         Duration::from_secs(5),
                         visibility.wait_resume(generation),

@@ -316,10 +316,20 @@ mise run probe-pty
 - 最新上述有界监督版默认hide/show与external WM最小化各一次完整运行通过（各2headless+2DOM+7transport/cancel），viewPoolChecked/viewHostChecked=true，generation12、3resize/1pause、104×12/832×192px、parsedBytes3,113,119/nativeExit0/digest=`00b088cbb609382c`/12行DOM一致。默认frames782/peak4115/render780/fences778/externalWm=false；external frames793/peak4115/render791/fences789/externalWm=true，四动作日志minimize6/restore6/minimize11/restore11且无Openbox/xdotool遗留。
 - 本轮没有新增Rust/pnpm依赖、改锁文件/CSP/vendor或audit白名单。池和React ticket基础已实现，不标生产PTY停车/长时间hidden恢复、开发React StrictMode完整系统循环、多pane并发实际后端状态、cross-window DOM迁移/IME/DPI/Wayland/Windows/macOS或三平台性能完成；首次未解释DOM stall需持续跟踪。
 
+## 活跃pool停车、fenced resume与真实后端长期detach（Linux）
+
+- ViewLease新增resume(slot)，只保留该ticket自己park后的同entry claim；挂载被替换/TTL/evict/已用claim不能重新factory或窃取新view。ViewSlotOwner分开React mount scope与内部pool lease，imperative park/resume更新当前lease，最终React cleanup跟随最新lease；旧ref cleanup/旧claim不伤新owner，mount observer失败rollback park。8项新增pool/slot回归，现33项通过。
+- PaneVisibility绑定当前attachment控制面并同步pool false/true通知；false先SurfaceVisibility.retire本地consumer/render/input/idle，当前pane lifetime及backend SessionRegistry不关闭。old stop/abort与已取消晚bind不解除新observer，snapshot/notification失败明确清理，重复来源不重复detach/resume。9项bridge回归；没有活跃control bind时park仍fail closed取消finite样例，不虚构可恢复状态。
+- 实际主React pool在第三resize后park，检查真实hidden ancestor/PaneVisibility=false，等待owner/nonce/generation pause票据，旧input/ACK拒绝，后台native PTY接受hidden控制后parsed_bytes增加、100ms旧Channel无新帧；原slot.owner.resume经claim重挂相同controller，container true驱动controller授权准确new Begin，恢复HIDDEN_SEED且pane signal未abort。随后native hide/WM minimize作为唯一native来源独立第二pause/resume，window状态严格回读；之后原query/repair/keyboard/EOF全门禁继续。
+- finite driver cap由1 pause→2，gate.wait_resume已消费并清空票据，未放宽registry owner/gen检查或rollback；新2项native回归验证pool receipt未消费不能再pause、消费后更大native generation/early resume/old重复拒绝、Destroyed后不得开始下一cycle。DOM report activeParkChecked/pauseCount2/five rebuilds硬要求，headless0。
+- 默认及外部WM各一次完整Linux组合通过（每次2headless+2DOM+7transport/cancel），activeParkChecked/viewPoolChecked/viewHostChecked=true、generation14、3resize/2pause、104×12/832×192px、parsedBytes3,113,152/nativeExit0/digest=`00b088cbb609382c`、12行DOM一致、主pool factory仍1。默认frames791/peak8212/render788/fences787；external frames794/peak4115/render790/fences790/nativeMinimize+externalWm true。有限停车不是生产任意长时间隐藏、真实React开发StrictMode整链、多pane/跨window验收；前次未解释初始化stall继续保留phase/6秒fit诊断，未在这两次再现。
+- probe-local-session schema4新增detached：独立固定Rust helper保持stdin待命，真实registry binding Commit后detach，旧input exit被拒绝，backend trusted控制注入DETACHED_FIRST Unicode marker，等待实测6000ms仍Running，再注入DETACHED_NEXT并准确新generation capture，Rust replay全部cells与actor inspect一致，之后current bound exit/有序End ACK/nativeExit0/直接子join成功。证明backend无view本身不受GUI5秒有限策略关闭，不是跨平台/长期GUI恢复通过。report.detached renderer明确Rust validator而非frontend callbacks，Windows注册不是ConPTY执行证据。
+- 全项目check/test 199TS/39app/89core/16IPC/6xtask、36native/clippy-D warnings、bindings-check与GUI及长期native probe通过，机械UI检查仍待本checkpoint最后复核；未新增依赖或修改locks/CSP/vendor/审计ignore。生产attach精确性门禁保持，未给不支持状态输出近似帧。
+
 ## 检查结果
 
-- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现34项测试通过（新增4项external native reserve不等于pause、闭锁/wrong generation/失败revocation/early publication回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
-- TS：182 项测试通过（新增25项ViewHost pool/React ref ticket/异步cleanup信用回归和3项finite scope deadline回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- TS：199 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

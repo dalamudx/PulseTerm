@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
   getSnapshot,
   probeViewFactory,
+  registerProbeSlot,
   start,
   subscribe,
 } from "./features/probe/controller";
@@ -69,6 +70,7 @@ export function App({ viewHost }: { viewHost: ViewHost }) {
           pool={viewHost}
           viewKey="finite-terminal"
           factory={probeViewFactory}
+          onMount={registerProbeSlot}
         />
       </section>
       <div className="table-scroll">

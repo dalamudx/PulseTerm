@@ -100,7 +100,7 @@ type Tab = { id: TabId; root: PaneNode; focusedPane: PaneId; title?: string; col
 
 ## 5. ViewHost：在 React 组件树之外管理视图
 
-**实现状态（基础层）**：`features/terminal/view-host.ts`现有`GenerationViewHost`/`ViewScope`，每pane按后端Begin的u64 generation管理可丢弃surface，不是下方的完整DOM pool。begin只准许更大generation，先同步abort/退役旧scope；retire/父Abort/卸载按身份去重、倒序清理所有resource，一个disposer异常不跳过其它resource且当前host fail closed。异步factory在retire时调用方立即reject，仍监督尾部并dispose晚到对象；旧成功/失败/cleanup不能退役新scope。consumer、renderer/headless、query mask/onData、input queue与idle由scope登记；window visibility/native订阅是跨暂停恢复控制面，仍归pane lifetime。finite sample已接此基础层，每DOM3次resize+1次native恢复共4次重建，主动重复old renderer.dispose验证新.xterm root不被清除。renderer dispose只移除自己root，不清空新host内容；数据仍不入React state。另已新增view-pool.ts的ViewHost与view-slot.tsx/ViewSlot：按window-local key复用稳定container/controller，React19 ref cleanup持有mount票据；park只撤销挂载票据，把container移到hidden+inert parking并同步通知setVisible(false)，controller lifetime保留。默认最多32份（含未结束async cleanup）、6份parked、5分钟TTL，LRU/TTL只淘汰parked。dispose可异步，1.5秒不确定截止不释放实际未settled任务的额度；错误async setVisible adapter也fail closed且保留尾部额度。主probe容器已用实际ViewSlot，factory不打开PTY；finite adapter park仍取消样例而非生产pause/resume，生产TerminalViewController/活跃会话停车仍待接入。25项池/票据测试覆盖StrictMode式mount→release→mount，但尚未跑开发React严格模式的完整系统会话循环。
+**实现状态（基础层）**：`features/terminal/view-host.ts`现有`GenerationViewHost`/`ViewScope`，每pane按后端Begin的u64 generation管理可丢弃surface，不是下方的完整DOM pool。begin只准许更大generation，先同步abort/退役旧scope；retire/父Abort/卸载按身份去重、倒序清理所有resource，一个disposer异常不跳过其它resource且当前host fail closed。异步factory在retire时调用方立即reject，仍监督尾部并dispose晚到对象；旧成功/失败/cleanup不能退役新scope。consumer、renderer/headless、query mask/onData、input queue与idle由scope登记；window visibility/native订阅是跨暂停恢复控制面，仍归pane lifetime。finite sample已接此基础层，每DOM3次resize+1次pool park恢复+1次native恢复共5次重建，主动重复old renderer.dispose验证新.xterm root不被清除。renderer dispose只移除自己root，不清空新host内容；数据仍不入React state。另已新增view-pool.ts的ViewHost与view-slot.tsx/ViewSlot：按window-local key复用稳定container/controller，React19 ref cleanup持有mount票据；park只撤销挂载票据，把container移到hidden+inert parking并同步通知setVisible(false)，controller lifetime保留。默认最多32份（含未结束async cleanup）、6份parked、5分钟TTL，LRU/TTL只淘汰parked。dispose可异步，1.5秒不确定截止不释放实际未settled任务的额度；错误async setVisible adapter也fail closed且保留尾部额度。主probe容器已用实际ViewSlot，factory不打开PTY；finite adapter已通过PaneVisibility把实际pool false/true同步传入当前SurfaceVisibility，停车期间pane lifetime不断开、Rust继续解析；未绑定控制面时false仍fail closed取消样例。新增ViewLease.resume保留单次parked claim，TTL/换挂载/evict后旧claim拒绝，ViewSlotOwner让React cleanup跟随同slot最新resume票据，不丢到旧ticket。生产通用TerminalViewController/长期隐藏仍待接入。33项池/票据测试覆盖StrictMode式mount→release→mount，但尚未跑开发React严格模式的完整系统会话循环。
 
 **要解决的问题**：窗格在布局树中移动时（拖到另一个分屏、拆分、合并），React 会销毁并重建对应的 DOM，xterm、noVNC 和 WebGL 上下文也会跟着重建。
 
@@ -111,7 +111,7 @@ class ViewHost { // ui/src/features/terminal/view-pool.ts
   sweep(): void;   // TTL/LRU只淘汰parked；内部单次timer也触发sweep
   dispose(): void; // 不直接关闭backend session
 }
-interface ViewLease { element: HTMLElement; signal: AbortSignal; isCurrent(): boolean; release(): boolean; }
+interface ViewLease { element: HTMLElement; signal: AbortSignal; isCurrent(): boolean; release(): boolean; resume(slot: HTMLElement): ViewLease; }
 interface PooledViewController {
   setVisible(visible: boolean): void; // 同步本地退役，controller内串行backend操作
   dispose(): void | Promise<void>;   // async尾部仍占用pool额度直到真实settled
@@ -119,7 +119,7 @@ interface PooledViewController {
 ```
 
 - React侧`<ViewSlot pool={pool} viewKey=… factory={factory} />`用memoized React19 callback ref拿mount ticket，cleanup调用该ticket.release；旧cleanup不能按key撤销新挂载。稳定element/controller跨同document slot重排或parking复用，不因React换父节点重建controller。backend generation改变仍由GenerationViewHost重建surface，这是另一层。
-- setVisible(false)必须同步停止本地input/render/ACK；异步backend pause/resume由controller内串行处理，不能直接给pool返回Promise。pool本身不发backend命令、不生成generation、不关session，淘汰只abort controller lifetime并调用frontend disposer。生产adapter须detach-only、准确new Begin恢复；finite probe adapter目前park取消样例。
+- setVisible(false)必须同步停止本地input/render/ACK；异步backend pause/resume由controller内串行处理，不能直接给pool返回Promise。pool本身不发backend命令、不生成generation、不关session，淘汰只abort controller lifetime并调用frontend disposer。生产adapter须detach-only、准确new Begin恢复；finite probe adapter当前已按owner/generation有序pause/恢复；没有活跃controller绑定时park才取消样例，生产daemon/长时间恢复仍待接入。
 - 已用ref callback及pool单测模拟StrictMode式mount/cleanup/remount，factory只调用一次；实际App的ViewSlot池两个DOM sample结束后要求主pool仅1entry/factoryCount=1。factory应只创建controller，不能因React mount直接重复open backend session；真实开发StrictMode/生产会话停车的整链仍待验收。
 
 ## 6. TermView（features/terminal）

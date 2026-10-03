@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type PooledViewController, ViewHost } from "./view-pool";
-import { viewSlotRef } from "./view-slot-ref";
+import { ViewSlotOwner, viewSlotRef } from "./view-slot-ref";
 
 class Node {
   hidden = false;
@@ -90,6 +90,95 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+it("mount observer failure parks its ticket and leaves no stale slot owner", () => {
+  const f = fixture(),
+    c = controller(),
+    owner = new ViewSlotOwner(
+      f.pool,
+      "pane",
+      () => c,
+      () => {
+        throw new Error("bad");
+      },
+    );
+  expect(() => owner.ref(f.one as HTMLDivElement)).toThrow(
+    "slot_observer_failed",
+  );
+  expect(owner.isMounted()).toBe(false);
+  expect(c.setVisible.mock.calls).toEqual([[true], [false]]);
+  expect(f.pool.size).toBe(1);
+});
+
+it("parked lease resumes exactly once and an old claim cannot steal the new mount", () => {
+  const f = fixture(),
+    c = controller(),
+    factory = vi.fn(() => c),
+    a = f.pool.mount("pane", f.one, factory);
+  expect(a.release()).toBe(true);
+  const b = a.resume(f.two);
+  expect(b.element).toBe(a.element);
+  expect(() => a.resume(f.one)).toThrow("stale_park");
+  expect(b.isCurrent()).toBe(true);
+  expect(factory).toHaveBeenCalledTimes(1);
+});
+it("other owner mounting a parked key invalidates the prior parked claim", () => {
+  const f = fixture(),
+    a = f.pool.mount("pane", f.one, () => controller());
+  a.release();
+  const b = f.pool.mount("pane", f.two, () => controller());
+  expect(() => a.resume(f.one)).toThrow("stale_park");
+  expect(b.isCurrent()).toBe(true);
+});
+it("TTL expiry cannot resurrect an old parked claim or dispatch a new factory", () => {
+  const f = fixture({ ttlMs: 100 }),
+    factory = vi.fn(() => controller()),
+    a = f.pool.mount("pane", f.one, factory);
+  a.release();
+  f.advance(100);
+  expect(() => a.resume(f.two)).toThrow("stale_park");
+  expect(factory).toHaveBeenCalledTimes(1);
+});
+it("an old claim does not revive a newer entry created after eviction", () => {
+  const f = fixture({ maxParked: 0 }),
+    a = f.pool.mount("pane", f.one, () => controller());
+  a.release();
+  const b = f.pool.mount("pane", f.two, () => controller());
+  expect(() => a.resume(f.one)).toThrow("stale_park");
+  expect(b.isCurrent()).toBe(true);
+});
+it("React cleanup owns the latest lease after imperative park/resume", () => {
+  const f = fixture(),
+    c = controller(),
+    owner = new ViewSlotOwner(f.pool, "pane", () => c),
+    cleanup = owner.ref(f.one as HTMLDivElement);
+  expect(owner.park()).toBe(true);
+  const resumed = owner.resume();
+  cleanup?.();
+  expect(owner.isMounted()).toBe(false);
+  expect(resumed.isCurrent()).toBe(false);
+  expect(resumed.signal.aborted).toBe(true);
+  expect(c.setVisible.mock.calls).toEqual([[true], [false], [true], [false]]);
+});
+it("unmounted slot owner cannot later resume its parked view", () => {
+  const f = fixture(),
+    owner = new ViewSlotOwner(f.pool, "pane", () => controller()),
+    cleanup = owner.ref(f.one as HTMLDivElement);
+  owner.park();
+  cleanup?.();
+  expect(() => owner.resume()).toThrow("slot_not_parked");
+});
+it("stale ref cleanup does not release a newly attached slot in the same owner", () => {
+  const f = fixture(),
+    owner = new ViewSlotOwner(f.pool, "pane", () => controller()),
+    old = owner.ref(f.one as HTMLDivElement),
+    next = owner.ref(f.two as HTMLDivElement);
+  old?.();
+  expect(owner.park()).toBe(true);
+  expect(owner.resume().isCurrent()).toBe(true);
+  next?.();
+  expect(owner.isMounted()).toBe(false);
+});
+
 it("two panes cannot occupy one slot or dispatch a second controller factory", () => {
   const f = fixture(),
     a = f.pool.mount("a", f.one, () => controller()),

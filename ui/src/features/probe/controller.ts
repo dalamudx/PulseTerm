@@ -9,7 +9,9 @@ import {
   verifyTypedEvents,
 } from "../../ipc/probe";
 import { verifySessionChannel } from "../../ipc/session-probe";
+import { PaneVisibility } from "../terminal/pane-visibility";
 import { type PooledViewController, ViewHost } from "../terminal/view-pool";
+import type { ViewSlotOwner } from "../terminal/view-slot-ref";
 
 interface Snapshot {
   running: boolean;
@@ -47,6 +49,11 @@ function setTerminalHost(host: HTMLElement | null): void {
 
 let probePool: ViewHost | undefined;
 let probeFactories = 0;
+const paneVisibility = new PaneVisibility();
+let paneOwner: ViewSlotOwner | undefined;
+export const registerProbeSlot = (owner: ViewSlotOwner) => {
+  paneOwner = owner;
+};
 export function createProbeViewHost(
   doc: Document,
   signal: AbortSignal,
@@ -62,8 +69,8 @@ export function createProbeViewHost(
   probePool = pool;
   return pool;
 }
-/** Finite sample adapter: parking cancels the sample; production pause/resume
- * remains a separate integration. Constructing a controller never opens a PTY. */
+/** Finite adapter relays pool visibility to the active attachment controller.
+ * Without a bound control plane, parking cancels the sample fail closed. */
 export function probeViewFactory(
   element: HTMLElement,
   signal: AbortSignal,
@@ -81,8 +88,9 @@ export function probeViewFactory(
   return {
     setVisible: (visible) => {
       if (disposed || signal.aborted) throw new Error("probe.pool_closed");
+      const handled = paneVisibility.observe(visible);
       if (visible) setTerminalHost(element);
-      else if (terminalHost === element) setTerminalHost(null);
+      else if (!handled && terminalHost === element) setTerminalHost(null);
     },
     dispose,
   };
@@ -116,6 +124,16 @@ export async function start(): Promise<void> {
       domSession = await verifySessionChannel({
         host,
         signal: life.signal,
+        pane: {
+          visibility: paneVisibility,
+          park: () => {
+            if (!paneOwner?.park()) throw new Error("probe.pool_park_failed");
+          },
+          resume: () => {
+            if (!paneOwner) throw new Error("probe.slot_missing");
+            paneOwner.resume();
+          },
+        },
         complete: (e) => {
           domEvidence = e;
         },

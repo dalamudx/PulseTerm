@@ -24,6 +24,7 @@ export interface DomRenderer {
   markNativePauseChecked(): void;
   markViewHostChecked(): void;
   markViewPoolChecked(): void;
+  markActiveParkChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -76,7 +77,8 @@ export function createDomRenderer(
     nativeSignalChecked = false,
     nativePauseChecked = false,
     viewHostChecked = false,
-    viewPoolChecked = false;
+    viewPoolChecked = false,
+    activeParkChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
   const element = terminal.element;
@@ -114,6 +116,9 @@ export function createDomRenderer(
     },
     markViewPoolChecked() {
       viewPoolChecked = true;
+    },
+    markActiveParkChecked() {
+      activeParkChecked = true;
     },
     watchFit(resize, failed) {
       if (fit || disposed) throw new Error("terminal.fit_duplicate");
@@ -274,6 +279,7 @@ export function createDomRenderer(
         nativePauseChecked,
         viewHostChecked,
         viewPoolChecked,
+        activeParkChecked,
       };
     },
   };

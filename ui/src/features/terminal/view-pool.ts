@@ -10,6 +10,8 @@ export interface ViewLease {
   readonly signal: AbortSignal;
   isCurrent(): boolean;
   release(): boolean;
+  /** Single-use parked ownership; cannot steal a later mount or revive eviction. */
+  resume(slot: HTMLElement): ViewLease;
 }
 export interface ViewPoolPolicy {
   maxViews: number;
@@ -22,6 +24,7 @@ interface Entry {
   life: AbortController;
   controller?: PooledViewController;
   mount?: AbortController;
+  parkedClaim?: AbortController;
   slot?: HTMLElement;
   pending: number;
   parkedAt?: number;
@@ -79,6 +82,17 @@ export class ViewHost {
       signal: AbortSignal,
     ) => PooledViewController,
   ): ViewLease {
+    return this.mountInternal(key, slot, factory);
+  }
+  private mountInternal(
+    key: string,
+    slot: HTMLElement,
+    factory: (
+      element: HTMLElement,
+      signal: AbortSignal,
+    ) => PooledViewController,
+    claim?: { entry: Entry; ticket: AbortController },
+  ): ViewLease {
     if (
       typeof key !== "string" ||
       !key ||
@@ -91,6 +105,13 @@ export class ViewHost {
     return this.mutate(() => {
       this.sweepInternal();
       let entry = this.entries.get(key);
+      if (
+        claim &&
+        (entry !== claim.entry ||
+          entry.mount ||
+          entry.parkedClaim !== claim.ticket)
+      )
+        throw new Error("pool.stale_park");
       if (
         [...this.entries.values()].some(
           (e) => e !== entry && e.mount && e.slot === slot,
@@ -125,6 +146,7 @@ export class ViewHost {
       const current = entry;
       const old = current.mount;
       current.mount = undefined;
+      current.parkedClaim = undefined;
       old?.abort();
       const ticket = new AbortController();
       current.mount = ticket;
@@ -155,10 +177,13 @@ export class ViewHost {
         element: current.element,
         signal: ticket.signal,
         isCurrent,
+        resume: (target) =>
+          this.mountInternal(key, target, factory, { entry: current, ticket }),
         release: () => {
           if (!isCurrent()) return false;
           return this.mutate(() => {
             current.mount = undefined;
+            current.parkedClaim = ticket;
             current.slot = undefined;
             ticket.abort();
             current.parkedAt = this.now();
@@ -271,6 +296,7 @@ export class ViewHost {
     if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
     const mount = entry.mount;
     entry.mount = undefined;
+    entry.parkedClaim = undefined;
     entry.slot = undefined;
     mount?.abort();
     entry.life.abort();

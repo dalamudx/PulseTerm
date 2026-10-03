@@ -85,6 +85,11 @@ export async function verifySessionChannel(dom?: {
   host: HTMLElement;
   signal: AbortSignal;
   complete: (e: import("./gen/commands").DomEvidence) => void;
+  pane: {
+    visibility: import("../features/terminal/pane-visibility").PaneVisibility;
+    park: () => void;
+    resume: () => void;
+  };
 }): Promise<SessionEvidence> {
   const nonce = crypto.randomUUID();
   let terminal: ProbeTerminal | undefined;
@@ -183,6 +188,11 @@ export async function verifySessionChannel(dom?: {
   let resizeCount = 0,
     resizeChecked = false;
   let phase = "bootstrap";
+  let poolStarted = false,
+    poolChecked = false,
+    poolResumePending = false;
+  let poolBoundary = 0n;
+  let stopPane: (() => void) | undefined;
   let pauseStarted = false,
     visibilityChecked = false,
     surfaceHidden = false,
@@ -236,13 +246,14 @@ export async function verifySessionChannel(dom?: {
           !expectedSize ||
           generationSeen === undefined ||
           next <= generationSeen ||
-          rebinds >= 4
+          rebinds >= 5
         )
           throw new Error("session.unexpected_generation");
         oldGeneration = generationSeen;
         rebinds++;
         idle?.dispose();
         priorRenderer = renderer;
+        stopPane?.();
         views.retire(generationSeen);
         consumer = undefined;
         renderer = undefined;
@@ -611,6 +622,79 @@ export async function verifySessionChannel(dom?: {
               }
               return;
             }
+            if (dom && poolResumePending) {
+              if (
+                boundary.parsedBytes < poolBoundary ||
+                !screenContains("HIDDEN_SEED") ||
+                !dom.pane.visibility.read()
+              )
+                throw new Error("session.pool_restore_missing");
+              poolResumePending = false;
+              poolChecked = true;
+            }
+            if (dom && renderer && !poolStarted) {
+              phase = "pool_park";
+              poolStarted = true;
+              let before = wireCount;
+              visibility = new SurfaceVisibility(
+                {
+                  retire: () => {
+                    surfaceHidden = true;
+                    before = wireCount;
+                    inputArmed = false;
+                    views.retire(BigInt(generation));
+                  },
+                  pause: async () => {
+                    await commands.probeSessionVisibility(
+                      nonce,
+                      generation,
+                      false,
+                    );
+                  },
+                  resume: async () => {
+                    if (lifetime.signal.aborted)
+                      throw new Error("session.cancelled");
+                    surfaceHidden = false;
+                    poolResumePending = true;
+                    generations.expectReplacement(BigInt(generation));
+                    await commands.probeSessionVisibility(
+                      nonce,
+                      generation,
+                      true,
+                    );
+                  },
+                  failed: (error) => {
+                    failed ??= error;
+                    cancel();
+                  },
+                },
+                lifetime.signal,
+              );
+              stopPane = dom.pane.visibility.bind(
+                (shown) => visibility?.observe("container", shown),
+                lifetime.signal,
+              );
+              dom.pane.park();
+              await visibility.paused;
+              if (dom.pane.visibility.read() || !dom.host.closest("[hidden]"))
+                throw new Error("session.pool_not_parked");
+              await requireRejected(
+                commands.probeSessionInput(nonce, generation, "typed"),
+              );
+              await requireRejected(
+                commands.probeSessionAck(nonce, generation, 0),
+              );
+              poolBoundary = BigInt(
+                await commands.probeSessionHiddenOutput(nonce, generation),
+              );
+              await new Promise<void>((resolve) => setTimeout(resolve, 100));
+              if (poolBoundary <= boundary.parsedBytes || wireCount !== before)
+                throw new Error("session.pool_hidden_delivery");
+              dom.pane.resume();
+              await visibility.resumed;
+              return;
+            }
+
             if (dom && renderer && !pauseStarted) {
               phase = "visibility";
               pauseStarted = true;
@@ -665,6 +749,10 @@ export async function verifySessionChannel(dom?: {
                     cancel();
                   },
                 },
+                lifetime.signal,
+              );
+              stopPane = dom.pane.visibility.bind(
+                (shown) => visibility?.observe("container", shown),
                 lifetime.signal,
               );
               let nativeFilter: NativeVisibilityFilter | undefined;
@@ -993,12 +1081,13 @@ export async function verifySessionChannel(dom?: {
       (dom !== undefined &&
         (!resizeChecked ||
           result.resizeCount !== 3 ||
-          result.pauseCount !== 1 ||
+          result.pauseCount !== 2 ||
           !result.nativeWindowChecked ||
           !result.nativeOnlyChecked ||
           !nativeOnlyPaused ||
           !visibilityChecked ||
-          rebinds !== 4))
+          rebinds !== 5 ||
+          !poolChecked))
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
@@ -1013,7 +1102,7 @@ export async function verifySessionChannel(dom?: {
         throw new Error("session.native_signal_missing");
       renderer.markNativeSignalChecked();
       renderer.markNativePauseChecked();
-      if (viewRebuilds !== 4 || !viewScope?.isCurrent())
+      if (viewRebuilds !== 5 || !viewScope?.isCurrent())
         throw new Error("session.view_host_missing");
       renderer.markViewHostChecked();
       const root = dom.host.querySelector<HTMLElement>(".xterm");
@@ -1023,11 +1112,13 @@ export async function verifySessionChannel(dom?: {
       );
       verifyViewPool(dom.host, root, lifetime.signal);
       renderer.markViewPoolChecked();
+      renderer.markActiveParkChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
     return result;
   } finally {
+    stopPane?.();
     stopAbort?.();
     inputArmed = false;
     inputQueue?.cancel();

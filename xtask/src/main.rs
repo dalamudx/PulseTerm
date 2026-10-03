@@ -28,6 +28,9 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("local-session-helper-detached") {
+        return local_session_probe::detached_helper();
+    }
     if let Some(mode) = std::env::args()
         .nth(1)
         .and_then(|arg| arg.strip_prefix("portable-pty-helper-").map(str::to_owned))

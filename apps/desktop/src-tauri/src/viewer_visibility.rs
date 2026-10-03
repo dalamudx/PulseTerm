@@ -220,6 +220,38 @@ mod tests {
         }
     }
     #[tokio::test]
+    async fn pooled_pause_receipt_is_consumed_before_native_pause_in_fresh_generation() {
+        let gate = VisibilityGate::default();
+        assert!(gate.pause(2, || Ok(())).is_ok());
+        assert!(gate.resume(2).is_ok());
+        assert!(gate.pause(3, || Ok(())).is_err());
+        assert!(gate.wait_resume(2).await.is_ok());
+        assert!(gate.resume(2).is_err());
+        assert!(gate.reserve_external(3).is_ok());
+        assert!(gate.pause(2, || Ok(())).is_err());
+        assert!(gate.pause(3, || Ok(())).is_ok());
+        assert!(gate.wait_external_pause(3).await.is_ok());
+        assert!(gate.resume(3).is_err());
+        assert!(gate.finish_native(3).is_ok());
+        assert!(gate.resume(3).is_ok());
+        assert!(gate.wait_resume(3).await.is_ok());
+        assert!(gate.resume(2).is_err());
+        assert!(gate.resume(3).is_err());
+        assert!(gate.native_checked() && gate.external_checked());
+    }
+    #[tokio::test]
+    async fn destroyed_gate_after_pooled_resume_cannot_publish_next_native_pause() {
+        let gate = VisibilityGate::default();
+        assert!(gate.pause(2, || Ok(())).is_ok());
+        assert!(gate.resume(2).is_ok());
+        assert!(gate.wait_resume(2).await.is_ok());
+        gate.close();
+        assert!(gate.reserve_external(3).is_err());
+        assert!(gate.pause(3, || Ok(())).is_err());
+        assert!(gate.resume(2).is_err());
+    }
+
+    #[tokio::test]
     async fn native_cycle_requires_pause_and_show_receipt_before_resume() {
         let gate = VisibilityGate::default();
         assert!(gate.begin_native(2).is_err());

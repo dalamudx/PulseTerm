@@ -203,7 +203,7 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
         || dom["pasteBlocked"] != true
         || dom["fitChecked"] != true
         || report["domSession"]["resizeCount"] != 3
-        || report["domSession"]["pauseCount"] != 1
+        || report["domSession"]["pauseCount"] != 2
         || report["domSession"]["nativeWindowChecked"] != true
         || report["session"]["nativeWindowChecked"] != false
         || !window_mode_matches(&report, minimize)
@@ -212,6 +212,7 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
         || dom["nativePauseChecked"] != true
         || dom["viewHostChecked"] != true
         || dom["viewPoolChecked"] != true
+        || dom["activeParkChecked"] != true
         || report["domSession"]["nativeOnlyChecked"] != true
         || report["session"]["nativeOnlyChecked"] != false
         || report["domSession"]["externalWmChecked"].as_bool() != Some(external)
