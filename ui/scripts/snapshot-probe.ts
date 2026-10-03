@@ -53,7 +53,7 @@ const firstDiff = (
 };
 const results = [];
 const tally = { strict: 0, m1: 0, m2: 0, m3: 0, m1GivenM2: 0, m2Count: 0 };
-const namedFailures: string[] = [];
+const restoreFailures: string[] = [];
 for (const entry of report.cases) {
   if (entry.restore === null) {
     results.push({
@@ -97,6 +97,7 @@ for (const entry of report.cases) {
       tally.m1GivenM2 += Number(m1);
     }
   }
+  if (strict && m2 && !m1) restoreFailures.push(entry.name);
   const status = !strict
     ? entry.mainScreenMissing
       ? "gap:hidden-primary"
@@ -112,7 +113,6 @@ for (const entry of report.cases) {
     console.log(
       `${status.toUpperCase()} ${entry.name}${m3 ? "" : " (xterm restore != xterm replay)"}`,
     );
-    if (strict && m2 && !m1) namedFailures.push(entry.name);
   }
   results.push({
     name: entry.name,
@@ -140,7 +140,7 @@ writeFileSync(
   JSON.stringify({ tally, results }, null, 2),
 );
 assert.deepEqual(
-  namedFailures,
+  restoreFailures,
   [],
-  "named restore cases fail in xterm although xterm parses the original stream identically",
+  "restore cases fail in xterm although xterm parses the original stream identically",
 );

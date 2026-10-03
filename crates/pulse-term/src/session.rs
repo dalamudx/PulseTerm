@@ -316,7 +316,19 @@ pub fn spawn_session(
                 current.lifecycle = Lifecycle::Closed;
                 break;
             }
+            let sync_deadline = terminal.sync_deadline();
             tokio::select! {
+                _ = async {
+                    match sync_deadline {
+                        Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
+                        None => std::future::pending::<()>().await,
+                    }
+                } => {
+                    if terminal.expire_sync(std::time::Instant::now()) {
+                        if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
+                        current.revision += 1; state.send_replace(current.clone());
+                    }
+                }
                 _ = cancelled.changed() => { current.lifecycle = Lifecycle::Closed; break; }
                 permit = transport.input.reserve(), if !replies.is_empty() => {
                     match permit {
@@ -335,19 +347,16 @@ pub fn spawn_session(
                         Some(bytes) if bytes.len() <= MAX_CHUNK => {
                             terminal.feed(&bytes);
                             current.parsed_bytes += bytes.len() as u64;
-                            for reply in terminal.take_replies() {
-                                if reply.len() > MAX_CHUNK || reply_bytes + reply.len() > MAX_REPLIES {
-                                    current.lifecycle = Lifecycle::Failed; break;
-                                }
-                                reply_bytes += reply.len(); replies.push_back(reply.into_bytes());
-                            }
-                            if current.lifecycle == Lifecycle::Failed { break; }
+                            if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
                             current.revision += 1; state.send_replace(current.clone());
                         }
                         Some(_) => { current.lifecycle = Lifecycle::Failed; break; }
                         None => {
                             terminal.finish_input();
-                            current.lifecycle = if replies.is_empty() { Lifecycle::Ended } else { Lifecycle::Failed };
+                            let bounded = queue_replies(&mut terminal, &mut replies, &mut reply_bytes);
+                            // At EOF an outstanding upstream reply cannot be acknowledged
+                            // by this channel driver; fail explicitly rather than discard.
+                            current.lifecycle = if bounded && replies.is_empty() { Lifecycle::Ended } else { Lifecycle::Failed };
                             break;
                         }
                     }
@@ -400,6 +409,21 @@ pub fn spawn_session(
         (current, terminal.screen())
     });
     (handle, SessionTask(task))
+}
+
+fn queue_replies(
+    terminal: &mut TerminalProbe,
+    replies: &mut VecDeque<Vec<u8>>,
+    total: &mut usize,
+) -> bool {
+    for reply in terminal.take_replies() {
+        if reply.len() > MAX_CHUNK || reply.len() > MAX_REPLIES.saturating_sub(*total) {
+            return false;
+        }
+        *total += reply.len();
+        replies.push_back(reply.into_bytes());
+    }
+    true
 }
 
 #[cfg(test)]
@@ -557,6 +581,97 @@ mod tests {
         assert_eq!(handle.state.borrow().revision, 0);
         handle.close();
         task.join().await.unwrap();
+    }
+    #[tokio::test]
+    async fn idle_sync_timeout_publishes_output_and_unblocks_restore() {
+        let (transport, _) = EchoTransport::spawn();
+        let (handle, task) = spawn_session(size(), 0, transport);
+        let input = b"\x1b[?2026hdelayed";
+        handle.input(input.to_vec()).await.unwrap();
+        parsed(&handle, input.len() as u64).await;
+        let revision = handle.state.borrow().revision;
+        match handle.diagnostic_restore(MAX_RESTORE_BYTES).await {
+            Err(SessionRestoreError::Gap(crate::RestoreGap::SyncPending)) => {
+                let mut state = handle.state.clone();
+                timeout(Duration::from_secs(2), async {
+                    while state.borrow().revision == revision {
+                        state.changed().await.unwrap();
+                    }
+                })
+                .await
+                .unwrap();
+            }
+            Ok(_) => {} // Slow CI may already have delivered the real deadline.
+            other => panic!("unexpected restore outcome: {other:?}"),
+        }
+        let restore = handle.diagnostic_restore(MAX_RESTORE_BYTES).await.unwrap();
+        assert_eq!(restore.boundary.parsed_bytes, input.len() as u64);
+        assert!(
+            handle.inspect().await.unwrap().cells[0]
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<String>()
+                .starts_with("delayed")
+        );
+        handle.close();
+        task.join().await.unwrap();
+    }
+    #[tokio::test]
+    async fn sync_timeout_reply_is_sent_upstream_once() {
+        let (transport, mut observed) = EchoTransport::spawn();
+        let (handle, task) = spawn_session(size(), 0, transport);
+        handle
+            .input(b"\x1b[?2026habc\x1b[6n".to_vec())
+            .await
+            .unwrap();
+        timeout(Duration::from_secs(2), observed.last_reply.changed())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(observed.last_reply(), b"\x1b[1;4R");
+        assert_eq!(observed.reply_bytes(), 6);
+        handle.close();
+        task.join().await.unwrap();
+    }
+    #[tokio::test]
+    async fn eof_flushes_unclosed_sync_and_incomplete_utf8() {
+        let (transport, output) = driven_transport(1);
+        let (_handle, task) = spawn_session(size(), 0, transport);
+        output
+            .send(b"\x1b[?2026htail:\xf0\x9f".to_vec())
+            .await
+            .unwrap();
+        drop(output);
+        let (state, screen) = timeout(Duration::from_secs(2), task.join_with_screen())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.lifecycle, Lifecycle::Ended);
+        assert!(
+            screen.cells[0]
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<String>()
+                .starts_with("tail:\u{fffd}")
+        );
+    }
+    #[tokio::test]
+    async fn eof_does_not_discard_unanswered_sync_query_as_success() {
+        let (transport, output) = driven_transport(1);
+        let (_handle, task) = spawn_session(size(), 0, transport);
+        output
+            .send(b"\x1b[?2026habc\x1b[6n".to_vec())
+            .await
+            .unwrap();
+        drop(output);
+        assert_eq!(
+            timeout(Duration::from_secs(2), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Failed
+        );
     }
     fn size() -> TermSize {
         TermSize::new(32, 8).unwrap()

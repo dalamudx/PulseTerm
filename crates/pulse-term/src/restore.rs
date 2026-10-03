@@ -151,6 +151,13 @@ impl TerminalProbe {
             // Entering 1049 saves its cursor without any destructive inspection.
             write_grid(&mut out, inactive, &mut approximations);
             write_tab_cells(&mut out, inactive);
+            // xterm stores scroll margins per buffer; alacritty's margins are
+            // global. Seed hidden primary margins too, or returning from alt
+            // makes subsequent IL/DL/SU/SD use a full-screen region in xterm.
+            let (top, bottom) = self.side.scroll_region;
+            if (top, bottom) != (0, inactive.screen_lines() as i32) {
+                let _ = write!(out, "\x1b[{};{}r", top + 1, bottom);
+            }
             place_cursor(&mut out, inactive, &inactive.cursor, 0);
             write_template(&mut out, &inactive.cursor.template);
             designate(&mut out, &inactive.cursor);

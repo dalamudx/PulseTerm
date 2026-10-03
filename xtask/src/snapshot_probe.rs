@@ -98,6 +98,11 @@ fn named() -> Vec<Case> {
             b"\x1b[?1049lZ".to_vec(),
         ),
         (
+            "primary-scroll-margins-after-alt-exit",
+            b"q\x1b[2;5r\x1b[?1049halt".to_vec(),
+            b"\x1b[?1049l\x1b[2T".to_vec(),
+        ),
+        (
             "saved-cursor",
             b"\x1b[2;3H\x1b[1;32m\x1b(0\x1b7\x1b[0m\x1b(B\x1b[5;8H".to_vec(),
             b"\x1b8qZ".to_vec(),

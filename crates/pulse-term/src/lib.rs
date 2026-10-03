@@ -148,11 +148,41 @@ impl TerminalProbe {
     }
 
     /// End an input stream, replacing one trailing incomplete UTF-8 scalar with U+FFFD.
-    /// Repeated calls are harmless. This does not reset or serialize ANSI parser state.
+    /// Repeated calls are harmless. Flushes any unclosed synchronized update;
+    /// does not reset or serialize the remaining ANSI parser state.
     pub fn finish_input(&mut self) {
         if !self.utf8_tail.is_empty() {
             self.utf8_tail.clear();
             self.advance("\u{fffd}".as_bytes());
+        }
+        self.flush_sync();
+        self.collect_events();
+    }
+
+    /// Deadline supplied by VTE for the current synchronized update, if any.
+    pub fn sync_deadline(&self) -> Option<std::time::Instant> {
+        self.parser.sync_timeout().sync_timeout()
+    }
+
+    /// Apply a timed-out synchronized update through the same tracked handler.
+    /// The caller schedules this even when no new output arrives. Not EOF.
+    pub fn expire_sync(&mut self, now: std::time::Instant) -> bool {
+        if self.sync_deadline().is_some_and(|deadline| now >= deadline) {
+            self.flush_sync();
+            self.collect_events();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn flush_sync(&mut self) {
+        if self.sync_deadline().is_some() || self.parser.sync_bytes_count() > 0 {
+            let mut handler = tracked::Tracked {
+                term: &mut self.term,
+                side: &mut self.side,
+            };
+            self.parser.stop_sync(&mut handler);
         }
     }
 
@@ -294,7 +324,12 @@ impl TerminalProbe {
                 Event::ColorRequest(index, format)
                     if index < alacritty_terminal::term::color::COUNT =>
                 {
-                    let color = self.term.colors()[index].or_else(|| self.palette.indexed(index));
+                    let override_color = self
+                        .side
+                        .color_queries
+                        .pop_front()
+                        .unwrap_or(self.term.colors()[index]);
+                    let color = override_color.or_else(|| self.palette.indexed(index));
                     if let Some(color) = color {
                         self.replies.push(format(color));
                     }
@@ -625,6 +660,42 @@ mod tests {
         }
     }
 
+    #[test]
+    fn sync_deadline_is_observed_and_expired_once() {
+        let mut term = terminal();
+        term.feed(b"\x1b[?2026habc\x1b[6n");
+        let deadline = term.sync_deadline().unwrap();
+        assert!(!term.expire_sync(deadline - std::time::Duration::from_millis(1)));
+        assert!(matches!(
+            term.restore_sequence(),
+            Err(RestoreGap::SyncPending)
+        ));
+        assert!(term.expire_sync(deadline));
+        assert!(!term.expire_sync(deadline));
+        assert_eq!(term.take_replies(), ["\x1b[1;4R"]);
+        assert!(term.restore_sequence().is_ok());
+    }
+    #[test]
+    fn synchronized_color_queries_keep_query_time_overrides_across_ris() {
+        for ending in [b"\x1b[?2026l".as_slice(), b"".as_slice()] {
+            let mut term = terminal();
+            term.feed(
+                b"\x1b[?2026h\x1b]10;?\x07\x1b]10;#123456\x07\x1b]10;?\x07\x1bc\x1b]10;?\x07\x1b]110\x07\x1b]10;?\x07",
+            );
+            term.feed(ending);
+            term.finish_input();
+            assert_eq!(
+                term.take_replies(),
+                [
+                    "\x1b]10;rgb:ffff/ffff/ffff\x07",
+                    "\x1b]10;rgb:1212/3434/5656\x07",
+                    "\x1b]10;rgb:1212/3434/5656\x07", // RIS retains the upstream color override.
+                    "\x1b]10;rgb:ffff/ffff/ffff\x07"
+                ]
+            );
+            assert!(term.side.color_queries.is_empty());
+        }
+    }
     #[test]
     fn history_is_bounded_without_an_attached_view() {
         let mut source = terminal();

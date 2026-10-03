@@ -109,13 +109,16 @@ mise run probe-pty
 - 新增 `SessionHandle::diagnostic_restore`：在 actor 命令序列点返回 `SessionState` 边界（size、revision、parsed_bytes）与恢复字节。`parsed_bytes` 仅是解析进度，不是传输 ACK 或 attach epoch；palette/cell pixel 控制变化也递增 revision。
 - 默认序列生成和 actor API 的有效载荷上限 1 MiB，actor 请求可进一步收紧预算（大于上限时收敛到上限）。Emitter 的普通追加、格式化写入与字符写入都在生成期间检查预算，待补充 CSI/UTF-8 尾部计入同一预算；超限返回 OutputTooLarge，不返回截断序列。此预算不覆盖 grid、分配器容量/元数据或调用者保留的多个已完成结果；它也不是执行时间上限。
 - actor 诊断 API 显式拒绝已知 approximations，单独返回 RestoreGap，不终止会话；可在程序解除条件后重试。满队列、关闭后的请求不接受，已取消的请求若尚未开始会跳过生成。新增 7 个 actor 测试及 2 个 Emitter/精确尾部预算测试，包括备用屏 + 部分 CSI 续流、主屏退出、零/精确/超大预算、revision、已知近似/非行尾 wrap 的解除和重试。
-- 当前双解析器报告仍为 545 个无已知近似的 Rust 样例中，M1 379、M2 300、M3 428，条件 M1|M2 **299/300**；随机 85 仍有跨解析器恢复分歧（不是本次预算造成，源补丁后的矩阵亦存在）。现有 TS 严格断言覆盖命名样例，随机结果只报告；不能用命令退出 0 宣称全部 xterm 恢复通过。生产 attach、历史/reflow 与协议额度仍未验收。
+- 已修复 random-85：xterm 的 scroll margins 是每屏状态，Rust 是全局状态；恢复隐藏主屏时也设置 margins，再保存光标/切屏。新增最小命名用例 `primary-scroll-margins-after-alt-exit`。当前 546 个可编码无已知近似样例：M1 381、M2 301、M3 430，条件 M1|M2 **301/301**。TS 断言现在覆盖所有命名/随机 `strict && M2 && !M1`，不再只报告随机恢复失败。负向探针临时省略隐藏屏margins时，命令退出1，同时列出命名回归和random-85；源码已恢复后重验。条件计数不涵盖原流本身已有跨解析器分歧的样例，也不是总体 S2 通过。
+- actor 使用 VTE 的真实同步刷新 deadline，在没有新输出时也会主动排空缓冲，经同一 tracked handler 更新状态与 revision；parsed_bytes 保持原始接收/解析进度，不制造额外输出字节。正常 ESU 或超时会解除 SyncPending。deadline遵循VTE，远端重复BSU会延期，未引入独立总时长限制。EOF 也排空未关闭同步刷新和不完整UTF-8；存在不能送达的上游回复则标记Failed，不伪装Ended。
+- 批量 flush 内的颜色 query/set/reset/RIS 经 handler 捕获查询当时的override，避免较早查询使用后来的动态颜色；RIS遵循上游保留色覆盖，OSC110才明确重置。6 个回归覆盖 idle超时、deadline前不执行/只执行一次、上游应答、EOF尾部与未应答失败、正常ESU和EOF颜色顺序。
+- 扩展30,000组 release 属性测试无失败：日志 exact=18,298、deferred=8,377、approx=2,459、alt-active=4,606（精确续流检查4,018）、alt-reentry=3,967；日志桶不是互斥的全部三万分类，延期/近似不是精确通过。生产 attach、历史/reflow、跨窗口和协议额度仍未验收。
 - 当前 **ChannelTransport 仅有测试驱动**，不是已完成的生产 Transport/PTY async bridge。输入成功只说明队列接受，不代表物理写完；Echo resize 只变更 parser，不代表系统 PTY 已 resize。Registry、多视图关联、额度/落后快照、生产生命周期事件节流和 OS 进程树回收仍待实施。
 - S11 仍未整体验收：没有实际窗口迁移或 UI 销毁/恢复结果，视口投影禁止充当 attach 快照。此实现只建立与视图无关的基础，不宣称已经实现完整会话恢复。
 
 ## 检查结果
 
-- Rust：57 项 headless 单元/属性测试通过（本次额外 9 项覆盖 actor 诊断恢复、生成预算、字节尾部、近似/延期重试与排队取消）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- Rust：63 项 headless 单元/属性测试通过（诊断恢复与预算 9 项、同步超时/EOF/颜色 6 项及已有48项）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
 - TS：38 项测试通过；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

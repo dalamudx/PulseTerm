@@ -17,6 +17,7 @@ use alacritty_terminal::vte::ansi::{
     KeyboardModesApplyBehavior, LineClearMode, Mode, ModifyOtherKeys, NamedPrivateMode,
     PrivateMode, Rgb, ScpCharPath, ScpUpdateMode, StandardCharset, TabulationClearMode,
 };
+use std::collections::VecDeque;
 
 /// Tab interval used by alacritty (`INITIAL_TABSTOPS`).
 const INITIAL_TABSTOPS: usize = 8;
@@ -33,6 +34,8 @@ pub(crate) struct MirroredState {
     /// Last printed character; vte keeps it privately for REP (`CSI b`) and never
     /// clears it (not even on RIS).
     pub last_input: Option<char>,
+    /// Capture query-time overrides while synchronized output is flushed in bulk.
+    pub color_queries: VecDeque<Option<Rgb>>,
 }
 
 impl MirroredState {
@@ -44,6 +47,7 @@ impl MirroredState {
                 .map(|i| i.is_multiple_of(INITIAL_TABSTOPS))
                 .collect(),
             last_input: None,
+            color_queries: VecDeque::new(),
         }
     }
 
@@ -139,7 +143,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         fn unset_keypad_application_mode(&mut self);
         fn configure_charset(&mut self, index: CharsetIndex, charset: StandardCharset);
         fn set_color(&mut self, index: usize, color: Rgb);
-        fn dynamic_color_sequence(&mut self, prefix: String, index: usize, terminator: &str);
+
         fn reset_color(&mut self, index: usize);
         fn clipboard_store(&mut self, clipboard: u8, data: &[u8]);
         fn clipboard_load(&mut self, clipboard: u8, terminator: &str);
@@ -186,11 +190,20 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         }
     }
 
+    fn dynamic_color_sequence(&mut self, prefix: String, index: usize, terminator: &str) {
+        if index < alacritty_terminal::term::color::COUNT {
+            self.side.color_queries.push_back(self.term.colors()[index]);
+        }
+        <Term<L> as Handler>::dynamic_color_sequence(&mut *self.term, prefix, index, terminator);
+    }
+
     fn reset_state(&mut self) {
         <Term<L> as Handler>::reset_state(&mut *self.term);
         let last_input = self.side.last_input;
+        let queries = std::mem::take(&mut self.side.color_queries);
         *self.side = MirroredState::new(self.term.columns(), self.term.screen_lines());
         self.side.last_input = last_input;
+        self.side.color_queries = queries;
     }
 
     fn set_scrolling_region(&mut self, top: usize, bottom: Option<usize>) {
