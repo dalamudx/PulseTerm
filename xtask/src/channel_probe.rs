@@ -77,7 +77,11 @@ pub fn run() -> Result<()> {
 fn validate(path: &Path) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
-    if report["completed"] != true || report["cancellation"] != true {
+    if report["schemaVersion"] != 2
+        || report["typedEvents"] != true
+        || report["completed"] != true
+        || report["cancellation"] != true
+    {
         bail!("native probe incomplete: {}", report["error"]);
     }
     let rows = report["measurements"]

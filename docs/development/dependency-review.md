@@ -44,7 +44,13 @@ MPL 为文件级 copyleft，不等同于 GPL/AGPL；开发指南已允许在不�
 
 证据来源：本地 `cargo tree --workspace --all-features -i wry`、已发布 crate 的 Cargo manifests，以及 [Wry 上游 manifest](https://github.com/tauri-apps/wry/blob/dev/Cargo.toml)。没有可升级版本，因此无需声称已完成升级构建/运行测试。
 
-**结论**：单独升级 Wry 暂不能解决 `proc-macro-error 1.0.4`。可行的下一步仍是评估两个旧版宏 crate 的定点补丁，或等待完整原生绑定栈升级；二者均未实施。升级路径与许可证审查互不替代，原有门禁保持失败。
+**结论**：单独升级 Wry 暂不能解决 `proc-macro-error 1.0.4`。按用户指示已撤销宏补丁实验，保留原有 GTK 宏依赖与锁定版本，不再自动替换或 vendor。实验替代库也有维护公告，不能把换名视为问题解决。持续跟踪完整原生绑定栈升级；原有门禁保持失败。
+
+## 类型生成验证引入的维护公告
+
+S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all-features --locked check advisories` 报告 `RUSTSEC-2024-0436`：paste 已停止维护。它用于函数反射的编译期宏，不应据此声称风险为零或自动豁免。原有 `RUSTSEC-2024-0370` 同时保留；Tauri/Wry/GTK 与旧宏版本没有升级或替换。
+
+生成命令、事件和 Raw Channel 在 Linux 实测通过，但 ADR-018 仍是 Proposed。正式采用前需单独审查此维护风险；若不能接受，应评估计划中的 ts-rs 备选，而不是重新 vendor 或自动替换宏。当前不添加 ignore、不放宽许可证规则、不把受控验证结果当作发布许可。
 
 ## 检查边界
 

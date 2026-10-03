@@ -5,6 +5,7 @@ import {
   measure,
   nativeAvailable,
   verifyCancellation,
+  verifyTypedEvents,
 } from "../../ipc/probe";
 
 interface Snapshot {
@@ -38,8 +39,10 @@ export async function start(): Promise<void> {
   update({ running: true, measurements: [], error: null, status: "starting" });
   const results: Measurement[] = [];
   let cancellation = false;
+  let typedEvents = false;
   let failure: string | null = null;
   try {
+    typedEvents = await verifyTypedEvents();
     for (const transport of ["channel", "websocket"] as const) {
       for (const scenario of [
         {
@@ -87,8 +90,9 @@ export async function start(): Promise<void> {
   } finally {
     update({ running: false });
     await finishReport({
-      schemaVersion: 1,
-      completed: failure === null && cancellation,
+      schemaVersion: 2,
+      typedEvents,
+      completed: failure === null && cancellation && typedEvents,
       cancellation,
       measurements: results,
       error: failure,

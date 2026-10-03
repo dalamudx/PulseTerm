@@ -31,6 +31,8 @@ jobs:
         run: mise run probe
       - name: Check native desktop adapter
         run: mise run desktop-check
+      - name: Check generated IPC bindings
+        run: mise run bindings-check
       - name: Test native desktop adapter
         run: mise exec -- cargo test -p pulseterm-desktop --features desktop --locked
       - name: Measure Linux native WebView

@@ -23,7 +23,7 @@
 | ADR-015 | 前端使用 React 19 + Zustand + Tailwind + Radix；通过三条规则弥补和 Solid 的性能差距（数据不进 React 状态、高频数值单独处理、视图在 React 之外管理） | Accepted（2026-10 确认，不做 S20） | 重数据不经过框架；分屏/拖拽/Monaco 等组件生态差距大；Solid 2.0 仍在 RC |
 | ADR-016 | 窗口材质由 `pulse-platform::backdrop` 按系统版本自动选择并降级；Win10 默认纯色；Acrylic 只在 22H2 及以上开放；终端区域默认不透明 | Accepted | window-vibrancy 已知问题：Acrylic/Blur 在部分版本拖动和缩放时卡顿 |
 | ADR-017 | `pulse-app` 及其下层都不依赖 Tauri，为将来的 mux 守护进程和无界面测试留出空间 | Accepted | overview.md §3 |
-| ADR-018 | 前后端的类型定义由工具生成（tauri-specta，备选 ts-rs），禁止手写重复的类型定义 | **Proposed**（tauri-specta 仍是 RC 版本，待 S21 验证） | — |
+| ADR-018 | 前后端的类型定义由工具生成（tauri-specta，备选 ts-rs），禁止手写重复的类型定义 | **Proposed**（S21 已取得 Linux 命令/事件/Raw Channel 证据；RC 依赖门禁与三平台验证待完成） | — |
 | ADR-019 | 项目许可证采用 MIT OR Apache-2.0；禁止引入 GPL 依赖；参考 Netcatty 时遵守 clean-room 约束 | Accepted（2026-10 确认） | 主要依赖均为 MIT/Apache；Netcatty 为 GPL-3.0 |
 | ADR-020 | 产品范围约束：不做 shell、脚本语言、X Server、SPICE/NX，也不内置大型 AI Agent | Accepted | features.md §20 |
 | ADR-021 | 产品名定为 **PulseTerm**（原名 AstraTerm 弃用）；crate 前缀 `pulse-`，命令 `pulseterm`，URL 协议 `pulseterm://`，环境变量前缀 `PULSE_` | Accepted（2026-10 确认） | 同领域已有名为 AstraTerm 的 SSH/AI 运维终端（2026-06 上线）；`astra` 与 DataStax 的 Homebrew `astra` CLI 重名。PulseTerm 在 crates.io、npm、Homebrew、Debian 均无同名包，GitHub 上只有几个零星个人仓库 |
@@ -41,7 +41,7 @@
 |---|---|---|
 | PulseTerm 的商标注册检索（中国、美国、欧盟）和域名购买 | 品牌 | M0 期间完成。包名和命令名已核查，结论见 ADR-021 |
 | 品牌视觉：设计 Logo，并选定默认强调色系（从 Radix 色系中选） | 品牌、默认主题 | M1 之前完成。不再单独设计整套配色（ADR-025）；选定之前默认使用 cyan |
-| tauri-specta 是否可用（ADR-018） | 前后端类型如何生成 | S21 完成后决定 |
+| tauri-specta 是否可正式采用（ADR-018） | 前后端类型如何生成 | 已接入受控验证；待三平台及新增 paste 维护公告审查，见 development/validation.md |
 | 代码签名证书和开发者账号：Windows（OV 证书或 Azure Trusted Signing）、Apple Developer Program | 没有它们就无法发布 Alpha（未签名的程序会被 SmartScreen 和 Gatekeeper 拦截） | M1 之前办妥；申请周期可能要几周，M0 期间就要启动 |
 | 内置字体选型（需要支持子集化、没有保留字体名） | 安装包体积、合规 | M1 之前确定 |
 

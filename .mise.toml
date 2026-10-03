@@ -42,6 +42,14 @@ description = "Measure real WebView Channel and loopback WebSocket"
 depends = ["desktop-build"]
 run = "cargo xtask probe-channel"
 
+[tasks.bindings]
+description = "Generate typed IPC commands, events and DTOs from Rust"
+run = "cargo run -p pulseterm-desktop --features desktop --locked -- --export-bindings"
+
+[tasks.bindings-check]
+description = "Check committed IPC bindings without overwriting them"
+run = "cargo run -p pulseterm-desktop --features desktop --locked -- --check-bindings"
+
 [tasks.audit]
 description = "Audit Rust dependency licenses and advisories"
 run = ["cargo deny --all-features --locked check", "pnpm audit --audit-level moderate"]

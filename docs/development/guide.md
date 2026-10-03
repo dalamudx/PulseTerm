@@ -53,6 +53,8 @@ mise run bootstrap                # 依据 pnpm-lock.yaml 安装依赖
 mise run check                    # Rust 格式/clippy/依赖分层 + TS 类型/Biome
 mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
+mise run bindings                 # 从 Rust 命令表生成 IPC 类型、命令与事件
+mise run bindings-check           # 检查生成产物漂移，不覆盖源文件
 mise run audit                    # Rust 许可证/安全公告/来源检查
 mise run fmt                      # 统一格式
 mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
@@ -61,6 +63,8 @@ mise run probe-channel            # 自动采集真实 WebView 的 Channel/Socke
 ```
 
 无显示服务的 Linux 运行 `probe-channel` 需要 `xvfb`、`dbus-x11` 和 coreutils 的 `timeout`；探针监督整个 Xvfb/DBus/WebView 进程组，最长运行 180 秒。Linux 原生构建还需 GTK3/WebKitGTK 开发包，Windows/macOS 使用对应系统开发环境。原生依赖只在 `pulseterm-desktop` 的 `desktop` feature 启用，默认 headless 检查无需 GUI 库。
+
+IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 
 输出在 `target/probes/`，详见 [验证记录](./validation.md)。使用未激活 mise 的 shell 时，单条工具命令加 `mise exec --` 前缀。CI 同样读取此配置，不在工作流里重复声明 Rust/Node/pnpm 版本。
 

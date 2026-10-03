@@ -1,10 +1,8 @@
 import { decodeFrame } from "../../ipc/frames";
 
-export interface ProbeConfig {
-  chunkBytes: number;
-  frames: number;
-  window: number;
-}
+import type { ProbeConfig } from "../../ipc/gen/commands";
+
+export type { ProbeConfig } from "../../ipc/gen/commands";
 
 /** Synthetic full-byte integrity check. Does not render terminal or desktop pixels. */
 export class FrameVerifier {

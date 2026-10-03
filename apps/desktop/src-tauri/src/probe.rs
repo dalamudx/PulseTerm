@@ -7,7 +7,10 @@ use futures_util::{SinkExt, StreamExt};
 use pulse_ipc::flow::CreditWindow;
 use pulse_ipc::{Frame, FrameKind, MAX_PAYLOAD};
 use serde::{Deserialize, Serialize};
-use tauri::ipc::{Channel, InvokeResponseBody};
+use tauri::ipc::Channel;
+use tauri_specta::Event;
+
+use crate::raw_frame::RawFrame;
 use tauri::{Manager, State};
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
@@ -18,20 +21,20 @@ use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 const WAIT: Duration = Duration::from_secs(10);
 type ProbeResult<T> = Result<T, String>;
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProbeConfig {
-    chunk_bytes: usize,
-    frames: usize,
-    window: usize,
+    chunk_bytes: u32,
+    frames: u32,
+    window: u32,
 }
 
 impl ProbeConfig {
     fn validate(self) -> ProbeResult<Self> {
-        if !(256..=MAX_PAYLOAD).contains(&self.chunk_bytes)
+        if !(256..=MAX_PAYLOAD as u32).contains(&self.chunk_bytes)
             || !(1..=16_384).contains(&self.frames)
             || !(1..=64).contains(&self.window)
-            || self.chunk_bytes * self.frames > 256 * MAX_PAYLOAD
+            || u64::from(self.chunk_bytes) * u64::from(self.frames) > 256 * MAX_PAYLOAD as u64
         {
             return Err("probe.invalid_config".into());
         }
@@ -58,16 +61,19 @@ impl Run {
     fn new(id: String, config: ProbeConfig) -> ProbeResult<Arc<Self>> {
         uuid::Uuid::parse_str(&id).map_err(|_| "probe.invalid_id")?;
         let config = config.validate()?;
-        let window = CreditWindow::new(config.window, config.window * config.chunk_bytes)
-            .map_err(|error| error.to_string())?;
+        let window = CreditWindow::new(
+            config.window as usize,
+            (config.window * config.chunk_bytes) as usize,
+        )
+        .map_err(|error| error.to_string())?;
         Ok(Arc::new(Self {
             id,
             config,
-            credits: Arc::new(Semaphore::new(config.window)),
+            credits: Arc::new(Semaphore::new(config.window as usize)),
             flow: Mutex::new(FlowState {
                 window,
-                sent: VecDeque::with_capacity(config.window),
-                rtts_ms: Vec::with_capacity(config.frames),
+                sent: VecDeque::with_capacity(config.window as usize),
+                rtts_ms: Vec::with_capacity(config.frames as usize),
                 peak_frames: 0,
                 peak_bytes: 0,
             }),
@@ -98,9 +104,9 @@ impl Run {
         let mut flow = self.flow.lock().map_err(|_| "probe.poisoned")?;
         let sequence = flow
             .window
-            .record_send(self.config.chunk_bytes)
+            .record_send(self.config.chunk_bytes as usize)
             .map_err(|e| e.to_string())?;
-        let mut payload = vec![0; self.config.chunk_bytes];
+        let mut payload = vec![0; self.config.chunk_bytes as usize];
         for (index, byte) in payload.iter_mut().enumerate().skip(8) {
             *byte = sequence.wrapping_add(index as u32) as u8;
         }
@@ -124,9 +130,7 @@ impl Run {
     async fn completed(&self, start: Instant) -> ProbeResult<BackendStats> {
         let _permit = timeout(
             WAIT,
-            self.credits
-                .clone()
-                .acquire_many_owned(self.config.window as u32),
+            self.credits.clone().acquire_many_owned(self.config.window),
         )
         .await
         .map_err(|_| "probe.final_ack_timeout")?
@@ -139,21 +143,21 @@ impl Run {
             bytes: self.config.frames * self.config.chunk_bytes,
             elapsed_ms: start.elapsed().as_secs_f64() * 1000.0,
             ack_rtt_p95_ms: flow.rtts_ms.get(index).copied().unwrap_or(0.0),
-            peak_frames: flow.peak_frames,
-            peak_bytes: flow.peak_bytes,
+            peak_frames: flow.peak_frames as u32,
+            peak_bytes: flow.peak_bytes as u32,
         })
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct BackendStats {
-    frames: usize,
-    bytes: usize,
+    frames: u32,
+    bytes: u32,
     elapsed_ms: f64,
     ack_rtt_p95_ms: f64,
-    peak_frames: usize,
-    peak_bytes: usize,
+    peak_frames: u32,
+    peak_bytes: u32,
 }
 
 struct BenchState {
@@ -184,16 +188,19 @@ impl BenchState {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn probe_mode(state: State<'_, BenchState>) -> bool {
     state.automatic
 }
 
 #[tauri::command]
+#[specta::specta]
 fn probe_clock(state: State<'_, BenchState>) -> f64 {
     state.epoch.elapsed().as_secs_f64() * 1000.0
 }
 
 #[tauri::command]
+#[specta::specta]
 fn probe_ack(id: String, sequence: u32, state: State<'_, BenchState>) -> ProbeResult<()> {
     let run = state
         .active
@@ -207,6 +214,7 @@ fn probe_ack(id: String, sequence: u32, state: State<'_, BenchState>) -> ProbeRe
 }
 
 #[tauri::command]
+#[specta::specta]
 fn probe_cancel(id: String, state: State<'_, BenchState>) -> ProbeResult<()> {
     let active = state.active.lock().map_err(|_| "probe.poisoned")?;
     let run = active
@@ -218,10 +226,11 @@ fn probe_cancel(id: String, state: State<'_, BenchState>) -> ProbeResult<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn probe_channel(
     id: String,
     config: ProbeConfig,
-    on_data: Channel<InvokeResponseBody>,
+    on_data: Channel<RawFrame>,
     state: State<'_, BenchState>,
 ) -> ProbeResult<BackendStats> {
     let run = state.begin(id, config)?;
@@ -229,7 +238,7 @@ async fn probe_channel(
     let result = async {
         for _ in 0..config.frames {
             on_data
-                .send(InvokeResponseBody::Raw(run.frame(state.epoch).await?))
+                .send(RawFrame(run.frame(state.epoch).await?))
                 .map_err(|e| e.to_string())?;
         }
         run.completed(start).await
@@ -239,7 +248,7 @@ async fn probe_channel(
     result
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct SocketTicket {
     url: String,
@@ -247,6 +256,7 @@ struct SocketTicket {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn probe_socket(
     id: String,
     config: ProbeConfig,
@@ -367,14 +377,16 @@ async fn socket_stream(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn probe_finish(
-    report: serde_json::Value,
+    report: ProbeReport,
     app: tauri::AppHandle,
     state: State<'_, BenchState>,
 ) -> ProbeResult<()> {
     if state.active.lock().map_err(|_| "probe.poisoned")?.is_some() {
         return Err("probe.busy".into());
     }
+    report.validate()?;
     let bytes = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     if bytes.len() > 64 * 1024 {
         return Err("probe.report_too_large".into());
@@ -386,8 +398,132 @@ fn probe_finish(
         std::fs::write(path, bytes).map_err(|e| e.to_string())?;
     }
     if state.automatic {
-        let failed = report.get("completed").and_then(serde_json::Value::as_bool) != Some(true);
+        let failed = !report.completed;
         app.exit(i32::from(failed));
+    }
+    Ok(())
+}
+
+// Explicit JSON reports avoid recursively reflecting serde_json::Value and reject
+// malformed shapes at the IPC boundary. Bounds are still checked by the probe runner.
+#[derive(Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProbeReport {
+    schema_version: u32,
+    completed: bool,
+    cancellation: bool,
+    typed_events: bool,
+    measurements: Vec<ProbeMeasurement>,
+    error: Option<String>,
+    environment: ProbeEnvironment,
+    limitations: Vec<String>,
+}
+
+impl ProbeReport {
+    fn validate(&self) -> ProbeResult<()> {
+        if self.schema_version != 2
+            || self.measurements.len() > 7
+            || (self.completed
+                && (!self.cancellation
+                    || !self.typed_events
+                    || self.error.is_some()
+                    || self.measurements.len() != 7
+                    || self.measurements.iter().any(|row| !row.verified)))
+        {
+            return Err("probe.invalid_report".into());
+        }
+        for row in &self.measurements {
+            row.config.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProbeMeasurement {
+    label: String,
+    transport: ProbeTransport,
+    config: ProbeConfig,
+    bytes_per_second: f64,
+    delivery_p95_ms: f64,
+    clock_uncertainty_ms: f64,
+    heartbeat_p95_ms: f64,
+    heartbeat_max_ms: f64,
+    backend: BackendStats,
+    verified: bool,
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+enum ProbeTransport {
+    Channel,
+    Websocket,
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProbeEnvironment {
+    user_agent: String,
+    hardware_concurrency: u32,
+}
+
+#[derive(Clone, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+struct ProbeEcho {
+    nonce: String,
+    protocol_version: u8,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn probe_event(nonce: String, app: tauri::AppHandle) -> ProbeResult<()> {
+    uuid::Uuid::parse_str(&nonce).map_err(|_| "probe.invalid_nonce")?;
+    ProbeEcho {
+        nonce,
+        protocol_version: 1,
+    }
+    .emit(&app)
+    .map_err(|error| error.to_string())
+}
+
+fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::new()
+        .commands(tauri_specta::collect_commands![
+            probe_mode,
+            probe_clock,
+            probe_channel,
+            probe_ack,
+            probe_cancel,
+            probe_socket,
+            probe_finish,
+            probe_event
+        ])
+        .events(tauri_specta::collect_events![ProbeEcho])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+}
+
+fn export_bindings(check: bool) -> ProbeResult<()> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let path = root.join("ui/src/ipc/gen/commands.ts");
+    let scratch = root.join(format!("target/bindings-{}.ts", std::process::id()));
+    command_bindings()
+        .export(specta_typescript::Typescript::default(), &scratch)
+        .map_err(|error| error.to_string())?;
+    let generated = std::fs::read_to_string(&scratch).map_err(|error| error.to_string())?;
+    // Normalize only trailing whitespace, keeping generation and checks identical.
+    let generated = format!("{}\n", generated.trim_end());
+    std::fs::remove_file(&scratch).map_err(|error| error.to_string())?;
+    if check {
+        let committed = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+        if committed.replace("\r\n", "\n") != generated.replace("\r\n", "\n") {
+            return Err("IPC bindings are stale; run mise run bindings".into());
+        }
+    } else {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        std::fs::write(&path, generated).map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -395,6 +531,16 @@ fn probe_finish(
 /// Launch the local-only validation app. No product sessions are exposed yet.
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    if args
+        .iter()
+        .any(|arg| arg == "--export-bindings" || arg == "--check-bindings")
+    {
+        if let Err(error) = export_bindings(args.iter().any(|arg| arg == "--check-bindings")) {
+            eprintln!("IPC binding export failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let automatic = args.iter().any(|arg| arg == "--probe");
     let report_path = args
         .iter()
@@ -407,17 +553,14 @@ pub fn run() {
         automatic,
         report_path,
     };
+    let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
-        .invoke_handler(tauri::generate_handler![
-            probe_mode,
-            probe_clock,
-            probe_channel,
-            probe_ack,
-            probe_cancel,
-            probe_socket,
-            probe_finish
-        ])
+        .invoke_handler(bindings.invoke_handler())
+        .setup(move |app| {
+            bindings.mount_events(app);
+            Ok(())
+        })
         .run(tauri::generate_context!());
     if let Err(error) = result {
         eprintln!("Desktop startup failed: {error}");
@@ -506,6 +649,76 @@ mod tests {
     }
 
     #[test]
+    fn control_numbers_are_bounded_without_overflow() {
+        for config in [
+            ProbeConfig {
+                chunk_bytes: u32::MAX,
+                frames: u32::MAX,
+                window: u32::MAX,
+            },
+            ProbeConfig {
+                chunk_bytes: MAX_PAYLOAD as u32,
+                frames: 16_384,
+                window: 64,
+            },
+        ] {
+            assert!(config.validate().is_err());
+        }
+        assert!(
+            ProbeConfig {
+                chunk_bytes: MAX_PAYLOAD as u32,
+                frames: 256,
+                window: 64
+            }
+            .validate()
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn config_serde_matches_generated_wire_spelling() {
+        let value = serde_json::to_value(config()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({ "chunkBytes": 256, "frames": 4, "window": 2 })
+        );
+        assert!(serde_json::from_value::<ProbeConfig>(value).is_ok());
+        assert!(
+            serde_json::from_value::<ProbeConfig>(
+                serde_json::json!({ "chunk_bytes": 256, "frames": 4, "window": 2 })
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn report_validation_requires_version_and_real_evidence() {
+        let mut report = ProbeReport {
+            schema_version: 2,
+            completed: false,
+            cancellation: false,
+            typed_events: false,
+            measurements: vec![],
+            error: Some("probe.failure".into()),
+            environment: ProbeEnvironment {
+                user_agent: "test".into(),
+                hardware_concurrency: 1,
+            },
+            limitations: vec![],
+        };
+        assert!(report.validate().is_ok());
+        report.schema_version = 1;
+        assert!(report.validate().is_err());
+        report.schema_version = 2;
+        report.completed = true;
+        assert!(report.validate().is_err());
+        report.cancellation = true;
+        report.typed_events = true;
+        report.error = None;
+        assert!(report.validate().is_err()); // Still missing measurements.
+    }
+
+    #[test]
     fn config_prevents_unbounded_work() {
         for config in [
             ProbeConfig {
@@ -519,7 +732,7 @@ mod tests {
                 window: 1,
             },
             ProbeConfig {
-                chunk_bytes: MAX_PAYLOAD,
+                chunk_bytes: MAX_PAYLOAD as u32,
                 frames: 1024,
                 window: 1,
             },

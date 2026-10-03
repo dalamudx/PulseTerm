@@ -1,34 +1,28 @@
-import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, isTauri } from "@tauri-apps/api/core";
 import {
   FrameVerifier,
   type ProbeConfig,
   percentile,
 } from "../features/probe/verification";
+import {
+  type BackendStats,
+  commands,
+  events,
+  type ProbeMeasurement,
+  type ProbeReport,
+} from "./gen/commands";
 
 export const nativeAvailable = isTauri();
 
-interface BackendStats {
-  frames: number;
-  bytes: number;
-  elapsedMs: number;
-  ackRttP95Ms: number;
-  peakFrames: number;
-  peakBytes: number;
-}
-export interface Measurement {
-  label: string;
-  transport: "channel" | "websocket";
-  config: ProbeConfig;
-  bytesPerSecond: number;
-  deliveryP95Ms: number;
-  clockUncertaintyMs: number;
-  heartbeatP95Ms: number;
-  heartbeatMaxMs: number;
-  backend: BackendStats;
-  verified: boolean;
-}
+// Serde can serialize nonfinite floats as null; validate at the boundary before
+// narrowing the generated types for UI arithmetic. No duplicate field lists.
+type NonNullFields<T> = { [K in keyof T]: NonNullable<T[K]> };
+type CheckedBackendStats = NonNullFields<BackendStats>;
+export type Measurement = NonNullFields<ProbeMeasurement> & {
+  backend: CheckedBackendStats;
+};
 
-function stats(value: unknown): BackendStats {
+function stats(value: unknown): CheckedBackendStats {
   if (!value || typeof value !== "object") throw new Error("probe.stats");
   const record = value as Record<string, unknown>;
   for (const key of [
@@ -46,7 +40,7 @@ function stats(value: unknown): BackendStats {
     )
       throw new Error("probe.stats");
   }
-  return record as unknown as BackendStats;
+  return record as unknown as CheckedBackendStats;
 }
 
 function runId(): string {
@@ -64,8 +58,10 @@ async function synchronizeClock(): Promise<{
   let best = { offset: 0, uncertainty: Number.POSITIVE_INFINITY };
   for (let sample = 0; sample < 7; sample++) {
     const start = performance.now();
-    const remote = await invoke<number>("probe_clock");
+    const remote = await commands.probeClock();
     const end = performance.now();
+    if (typeof remote !== "number" || !Number.isFinite(remote) || remote < 0)
+      throw new Error("probe.clock");
     if ((end - start) / 2 < best.uncertainty)
       best = {
         offset: (start + end) / 2 - remote,
@@ -95,7 +91,10 @@ export async function measure(
   let ackChain = Promise.resolve();
   let failure: unknown;
   let socket: WebSocket | undefined;
-  const receive = (data: unknown, ack: (sequence: number) => Promise<void>) => {
+  const receive = (
+    data: unknown,
+    ack: (sequence: number) => Promise<unknown>,
+  ) => {
     try {
       if (!(data instanceof ArrayBuffer)) throw new Error("probe.not_binary");
       const sequence = verifier.consume(
@@ -110,33 +109,26 @@ export async function measure(
           })
           .catch((error: unknown) => {
             failure ??= error;
-            void invoke("probe_cancel", { id }).catch(() => {});
+            void commands.probeCancel(id).catch(() => {});
           });
       }
     } catch (error) {
       failure ??= error;
-      void invoke("probe_cancel", { id }).catch(() => {});
+      void commands.probeCancel(id).catch(() => {});
       socket?.close();
     }
   };
   const start = performance.now();
   try {
-    let backend: BackendStats;
+    let backend: CheckedBackendStats;
     if (transport === "channel") {
       const onData = new Channel<ArrayBuffer>();
       onData.onmessage = (data) =>
-        receive(data, (sequence) =>
-          invoke<void>("probe_ack", { id, sequence }),
-        );
-      backend = stats(
-        await invoke<unknown>("probe_channel", { id, config, onData }),
-      );
+        receive(data, (sequence) => commands.probeAck(id, sequence));
+      backend = stats(await commands.probeChannel(id, config, onData));
     } else {
-      const ticket = await invoke<{ url: string; token: string }>(
-        "probe_socket",
-        { id, config },
-      );
-      backend = await new Promise<BackendStats>((resolve, reject) => {
+      const ticket = await commands.probeSocket(id, config);
+      backend = await new Promise<CheckedBackendStats>((resolve, reject) => {
         const connection = new WebSocket(ticket.url, [
           "pulseterm-probe",
           ticket.token,
@@ -197,10 +189,10 @@ export async function verifyCancellation(): Promise<boolean> {
   let cancel: Promise<unknown> | undefined;
   channel.onmessage = () => {
     received++;
-    if (received === 1) cancel = invoke("probe_cancel", { id });
+    if (received === 1) cancel = commands.probeCancel(id);
   };
   try {
-    await invoke("probe_channel", { id, config, onData: channel });
+    await commands.probeChannel(id, config, channel);
     throw new Error("probe.cancel_ignored");
   } catch (error) {
     if (typeof error !== "string" || !error.includes("cancelled")) throw error;
@@ -209,6 +201,35 @@ export async function verifyCancellation(): Promise<boolean> {
   return received > 0 && received <= config.window;
 }
 
-export const automaticMode = () => invoke<boolean>("probe_mode");
-export const finishReport = (report: unknown) =>
-  invoke<void>("probe_finish", { report });
+export async function verifyTypedEvents(): Promise<boolean> {
+  const nonce = runId();
+  let resolve!: () => void;
+  const received = new Promise<void>((done) => {
+    resolve = done;
+  });
+  const unlisten = await events.probeEcho.listen((event) => {
+    if (event.payload.nonce === nonce && event.payload.protocolVersion === 1)
+      resolve();
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await commands.probeEvent(nonce);
+    await Promise.race([
+      received,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("probe.event_timeout")),
+          2000,
+        );
+      }),
+    ]);
+    return true;
+  } finally {
+    clearTimeout(timer);
+    unlisten();
+  }
+}
+
+export const automaticMode = () => commands.probeMode();
+export const finishReport = (report: ProbeReport) =>
+  commands.probeFinish(report);
