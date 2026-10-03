@@ -8,10 +8,11 @@ import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
-import type { AttachBoundary } from "./attachment";
+import { type AttachBoundary, attachmentEnvelope } from "./attachment";
 import { AttachmentConsumer } from "./attachment-consumer";
 import { decodeFrame } from "./frames";
 import { commands, type SessionEvidence } from "./gen/commands";
+import { forCurrentSurface, SurfaceGeneration } from "./surface-generation";
 
 type ProbeTerminal = Pick<
   TerminalType,
@@ -157,8 +158,16 @@ export async function verifySessionChannel(dom?: {
   let geometry: Pick<AttachBoundary, "columns" | "rows"> | undefined;
   let idle: IdleComparison | undefined;
   let generationSeen: bigint | undefined;
-  let resizeAttempted = false,
+  let resizeCount = 0,
     resizeChecked = false;
+  let pauseStarted = false,
+    visibilityChecked = false,
+    surfaceHidden = false,
+    resumePending = false;
+  const generations = new SurfaceGeneration();
+  let rebinds = 0,
+    wireCount = 0;
+  let hiddenBoundary = 0n;
   let expectedSize: { columns: number; rows: number } | undefined;
   let oldGeneration: bigint | undefined;
   channel.onmessage = (data) => {
@@ -166,6 +175,16 @@ export async function verifySessionChannel(dom?: {
       if (!(data instanceof ArrayBuffer)) throw new Error("session.not_binary");
       const wire = new Uint8Array(data);
       const frame = decodeFrame(wire);
+      wireCount++;
+      if (surfaceHidden) return;
+      if (frame.kind !== 8) throw new Error("session.frame_kind");
+      const header = attachmentEnvelope(frame.payload);
+      const route = generations.accept(
+        header.generation,
+        header.part === 1,
+        frame.sequence,
+      );
+      if (route === "stale") return;
       if (frame.kind === 8 && frame.payload[1] === 5) {
         outputEpoch++;
         idle?.activity();
@@ -186,10 +205,11 @@ export async function verifySessionChannel(dom?: {
           !expectedSize ||
           generationSeen === undefined ||
           next <= generationSeen ||
-          oldGeneration !== undefined
+          rebinds >= 4
         )
           throw new Error("session.unexpected_generation");
         oldGeneration = generationSeen;
+        rebinds++;
         idle?.dispose();
         disposePolicy?.();
         consumer.cancel();
@@ -332,9 +352,11 @@ export async function verifySessionChannel(dom?: {
           },
         );
       }
-      latest = consumer
-        .enqueue(wire)
-        .then(async (receipt) => {
+      const activeConsumer = consumer;
+      latest = forCurrentSurface(
+        activeConsumer.enqueue(wire),
+        () => activeConsumer === consumer,
+        async (receipt) => {
           if (
             frame.kind === 8 &&
             frame.payload.length >= 12 &&
@@ -412,10 +434,10 @@ export async function verifySessionChannel(dom?: {
               throw new Error("session.idle_not_ready");
             const surface = terminal;
             const generation = generationSeen.toString();
-            if (dom && renderer && !resizeAttempted) {
+            if (dom && renderer && resizeCount === 0) {
               if (!screenContains("RESIZE_SEED"))
                 throw new Error("session.resize_seed_missing");
-              resizeAttempted = true;
+              resizeChecked = false;
               await requireRejected(
                 commands.probeSessionResize(
                   nonce,
@@ -427,6 +449,8 @@ export async function verifySessionChannel(dom?: {
               renderer.watchFit(
                 async (size) => {
                   expectedSize = size;
+                  resizeCount++;
+                  generations.expectReplacement(generationSeen as bigint);
                   await commands.probeSessionResize(
                     nonce,
                     generation,
@@ -450,7 +474,7 @@ export async function verifySessionChannel(dom?: {
                 !screenContains("RESIZE_SEED")
               )
                 throw new Error("session.resize_capture_mismatch");
-              resizeChecked = true;
+              resizeChecked = resizeCount === 3;
               await requireRejected(
                 commands.probeSessionAck(nonce, oldGeneration.toString(), 0),
               );
@@ -471,6 +495,102 @@ export async function verifySessionChannel(dom?: {
               );
               await requireRejected(
                 commands.probeSessionDetach(nonce, oldGeneration.toString()),
+              );
+            }
+
+            if (dom && renderer && resizeCount < 3) {
+              renderer.watchFit(
+                async (size) => {
+                  expectedSize = size;
+                  resizeCount++;
+                  generations.expectReplacement(generationSeen as bigint);
+                  await commands.probeSessionResize(
+                    nonce,
+                    generation,
+                    size.columns,
+                    size.rows,
+                  );
+                },
+                (error) => {
+                  failed ??= error;
+                  cancel();
+                },
+              );
+              if (resizeCount === 1) {
+                for (const [width, height] of [
+                  [464, 192],
+                  [480, 184],
+                  [496, 176],
+                ]) {
+                  dom.host.style.width = `${width}px`;
+                  dom.host.style.height = `${height}px`;
+                }
+              } else {
+                dom.host.style.width = "";
+                dom.host.style.height = "";
+              }
+              return;
+            }
+            if (dom && renderer && !pauseStarted) {
+              pauseStarted = true;
+              await requireRejected(
+                commands.probeSessionVisibility(
+                  nonce,
+                  (generationSeen + 1n).toString(),
+                  false,
+                ),
+              );
+              await commands.probeSessionVisibility(nonce, generation, false);
+              surfaceHidden = true;
+              dom.host.hidden = true;
+              disposePolicy?.();
+              consumer?.cancel();
+              renderer.dispose();
+              const before = wireCount;
+              await requireRejected(
+                commands.probeSessionInput(nonce, generation, "typed"),
+              );
+              await requireRejected(
+                commands.probeSessionAck(nonce, generation, 0),
+              );
+              await requireRejected(
+                commands.probeSessionVisibility(
+                  nonce,
+                  (generationSeen + 1n).toString(),
+                  true,
+                ),
+              );
+              hiddenBoundary = BigInt(
+                await commands.probeSessionHiddenOutput(nonce, generation),
+              );
+              await new Promise<void>((resolve) => setTimeout(resolve, 100));
+              if (
+                hiddenBoundary <= boundary.parsedBytes ||
+                wireCount !== before
+              )
+                throw new Error("session.hidden_delivery");
+              surfaceHidden = false;
+              dom.host.hidden = false;
+              resumePending = true;
+              generations.expectReplacement(generationSeen);
+              await commands.probeSessionVisibility(nonce, generation, true);
+              return;
+            }
+            if (dom && resumePending) {
+              if (
+                boundary.parsedBytes < hiddenBoundary ||
+                !screenContains("HIDDEN_SEED") ||
+                !screenContains("RESIZE_SEED")
+              )
+                throw new Error("session.hidden_restore_missing");
+              visibilityChecked = true;
+              resumePending = false;
+              await requireRejected(
+                commands.probeSessionVisibility(
+                  nonce,
+                  oldGeneration?.toString() ?? "0",
+                  true,
+                ),
               );
             }
 
@@ -621,11 +741,12 @@ export async function verifySessionChannel(dom?: {
             });
             await commands.probeSessionGo(nonce);
           }
-        })
-        .catch((error) => {
+        },
+        (error) => {
           failed ??= error;
           cancel();
-        });
+        },
+      );
     } catch (error) {
       failed ??= error;
       cancel();
@@ -669,7 +790,12 @@ export async function verifySessionChannel(dom?: {
       !repairChecked ||
       !inputChecked ||
       !screenContains("INPUT_OK typed中文🌍") ||
-      (dom !== undefined && (!resizeChecked || result.resizeCount !== 1))
+      (dom !== undefined &&
+        (!resizeChecked ||
+          result.resizeCount !== 3 ||
+          result.pauseCount !== 1 ||
+          !visibilityChecked ||
+          rebinds !== 4))
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
@@ -679,6 +805,7 @@ export async function verifySessionChannel(dom?: {
     if (dom) {
       if (!renderer) throw new Error("session.no_dom_renderer");
       renderer.markFitChecked();
+      renderer.markVisibilityChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
@@ -695,5 +822,10 @@ export async function verifySessionChannel(dom?: {
     if (renderer) renderer.dispose();
     else terminal?.dispose();
     channel.onmessage = () => {};
+    if (dom) {
+      dom.host.hidden = false;
+      dom.host.style.width = "";
+      dom.host.style.height = "";
+    }
   }
 }

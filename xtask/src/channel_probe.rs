@@ -124,8 +124,11 @@ fn validate(path: &Path) -> Result<()> {
         || dom["compositionChecked"] != true
         || dom["pasteBlocked"] != true
         || dom["fitChecked"] != true
-        || report["domSession"]["resizeCount"] != 1
+        || report["domSession"]["resizeCount"] != 3
+        || report["domSession"]["pauseCount"] != 1
+        || dom["visibilityChecked"] != true
         || report["session"]["resizeCount"] != 0
+        || report["session"]["pauseCount"] != 0
         || dom["rowsChecked"] != 12
         || dom["renderEvents"].as_u64().is_none_or(|n| n == 0)
         || dom["frameFences"].as_u64().is_none_or(|n| n == 0)

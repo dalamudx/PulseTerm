@@ -83,6 +83,8 @@ button:focus-visible {
 }
 .terminal-host {
   min-height: 144px;
+  height: 208px;
+  box-sizing: border-box;
   overflow: auto;
   background: var(--slate-12);
   padding: 8px;

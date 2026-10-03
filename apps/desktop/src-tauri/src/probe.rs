@@ -443,6 +443,7 @@ struct DomEvidence {
     composition_checked: bool,
     paste_blocked: bool,
     fit_checked: bool,
+    visibility_checked: bool,
 }
 impl DomEvidence {
     fn validate(&self) -> ProbeResult<()> {
@@ -454,6 +455,7 @@ impl DomEvidence {
             || !self.composition_checked
             || !self.paste_blocked
             || !self.fit_checked
+            || !self.visibility_checked
             || !self.width_px.is_finite()
             || !self.height_px.is_finite()
             || !(1.0..=4096.0).contains(&self.width_px)
@@ -478,7 +480,8 @@ impl ProbeReport {
                         .is_none_or(|e| e.validate().is_err())
                     || self.dom_session.as_ref().is_none_or(|s| {
                         s.validate().is_err()
-                            || s.resize_count != 1
+                            || s.resize_count != 3
+                            || s.pause_count != 1
                             || !s.repair_checked
                             || !s.idle_checked
                             || !s.marker_checked
@@ -582,6 +585,8 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session_resume,
             crate::window_sessions::probe_session_input,
             crate::window_sessions::probe_session_resize,
+            crate::window_sessions::probe_session_visibility,
+            crate::window_sessions::probe_session_hidden_output,
             crate::window_sessions::probe_session_detach,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer
@@ -841,6 +846,7 @@ mod tests {
             composition_checked: true,
             paste_blocked: true,
             fit_checked: true,
+            visibility_checked: true,
         };
         assert!(e.validate().is_ok());
         e.render_events = 0;

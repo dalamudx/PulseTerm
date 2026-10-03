@@ -34,6 +34,32 @@ export interface AttachmentReceipt {
   sequence: number;
   event: AttachmentEvent;
 }
+export function attachmentEnvelope(payload: Uint8Array): {
+  generation: bigint;
+  part: number;
+  offset: bigint;
+} {
+  if (
+    payload.length < ENVELOPE_LENGTH ||
+    payload.length > ENVELOPE_LENGTH + MAX_FRAGMENT
+  )
+    throw new Error("attach.length");
+  const view = new DataView(
+    payload.buffer,
+    payload.byteOffset,
+    payload.byteLength,
+  );
+  if (view.getUint8(0) !== 1 || view.getUint16(2, true) !== 0)
+    throw new Error("attach.version_or_flags");
+  const generation = view.getBigUint64(4, true);
+  if (generation === 0n) throw new Error("attach.generation");
+  return {
+    generation,
+    part: view.getUint8(1),
+    offset: view.getBigUint64(12, true),
+  };
+}
+
 /** Bounded transaction receiver. Malformed current-generation data poisons this
  * receiver: cancel and start a NEW generation; no rollback/partial render. */
 export class AttachmentReceiver {
@@ -74,24 +100,10 @@ export class AttachmentReceiver {
     const frame = decodeFrame(bytes);
     if (frame.kind !== ATTACHMENT_KIND) throw new Error("attach.kind");
     const payload = frame.payload;
-    if (
-      payload.length < ENVELOPE_LENGTH ||
-      payload.length > ENVELOPE_LENGTH + MAX_FRAGMENT
-    )
-      throw new Error("attach.length");
-    const view = new DataView(
-      payload.buffer,
-      payload.byteOffset,
-      payload.byteLength,
-    );
-    if (view.getUint8(0) !== 1 || view.getUint16(2, true) !== 0)
-      throw new Error("attach.version_or_flags");
-    const generation = view.getBigUint64(4, true);
-    if (generation === 0n) throw new Error("attach.generation");
+    const { generation, part, offset } = attachmentEnvelope(payload);
     if (generation !== this.generation) return null;
     if (frame.sequence !== this.next) throw new Error("attach.sequence");
-    const part = view.getUint8(1);
-    const offset = view.getBigUint64(12, true);
+
     const body = payload.subarray(ENVELOPE_LENGTH);
     let event: AttachmentEvent = { kind: "staged" };
     if (part === 1) {

@@ -22,6 +22,8 @@ export const commands = {
 	/**  Finite sample-only input, NOT a general session/user-shell endpoint. */
 	probeSessionInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_session_input", { nonce, generation, text }),
 	probeSessionResize: (nonce: string, generation: string, columns: number, rows: number) => __TAURI_INVOKE<null>("probe_session_resize", { nonce, generation, columns, rows }),
+	probeSessionVisibility: (nonce: string, generation: string, visible: boolean) => __TAURI_INVOKE<null>("probe_session_visibility", { nonce, generation, visible }),
+	probeSessionHiddenOutput: (nonce: string, generation: string) => __TAURI_INVOKE<string>("probe_session_hidden_output", { nonce, generation }),
 	/**  Revoke exactly this viewer generation; registry never closes the session. */
 	probeSessionDetach: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_detach", { nonce, generation }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
@@ -56,6 +58,7 @@ export type DomEvidence = {
 	compositionChecked: boolean,
 	pasteBlocked: boolean,
 	fitChecked: boolean,
+	visibilityChecked: boolean,
 };
 
 export type ProbeConfig = {
@@ -132,6 +135,7 @@ export type SessionEvidence = {
 	repairChecked: boolean,
 	inputChecked: boolean,
 	resizeCount: number,
+	pauseCount: number,
 	columns: number,
 	rows: number,
 };

@@ -19,6 +19,7 @@ export interface DomRenderer {
     failed: (error: Error) => void,
   ): void;
   markFitChecked(): void;
+  markVisibilityChecked(): void;
   dispose(): void;
 }
 /** Fixed developer surface: input enabled only during the synthetic keyboard sample.
@@ -66,7 +67,8 @@ export function createDomRenderer(
   host.addEventListener("paste", blockPaste, { capture: true });
   let fit: FitScheduler | undefined,
     observer: ResizeObserver | undefined,
-    fitChecked = false;
+    fitChecked = false,
+    visibilityChecked = false;
   const render = terminal.onRender(() => renders++);
   terminal.open(host);
   terminal.textarea?.setAttribute("aria-label", "只读 PTY 验证输出");
@@ -87,6 +89,9 @@ export function createDomRenderer(
     dispose,
     markFitChecked() {
       fitChecked = true;
+    },
+    markVisibilityChecked() {
+      visibilityChecked = true;
     },
     watchFit(resize, failed) {
       if (fit || disposed) throw new Error("terminal.fit_duplicate");
@@ -242,6 +247,7 @@ export function createDomRenderer(
         compositionChecked,
         pasteBlocked,
         fitChecked,
+        visibilityChecked,
       };
     },
   };

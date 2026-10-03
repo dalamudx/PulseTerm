@@ -29,6 +29,7 @@ struct Active {
     nonce: String,
     id: SessionId,
     peer: Option<oneshot::Sender<bool>>,
+    visibility: Arc<crate::viewer_visibility::VisibilityGate>,
 }
 impl Default for WindowSessions {
     fn default() -> Self {
@@ -112,6 +113,12 @@ pub(crate) fn child() -> std::io::Result<()> {
     std::io::stdout().flush()?;
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line)?;
+    while line.trim_end() == "hidden" {
+        std::io::stdout().write_all("HIDDEN_SEED 中文🌍\r\n".as_bytes())?;
+        std::io::stdout().flush()?;
+        line.clear();
+        std::io::stdin().lock().read_line(&mut line)?;
+    }
     if line.trim_end() != "go" {
         return Err(std::io::Error::other("invalid probe input"));
     }
@@ -221,13 +228,15 @@ pub(crate) struct SessionEvidence {
     pub repair_checked: bool,
     pub input_checked: bool,
     pub resize_count: u32,
+    pub pause_count: u32,
     pub columns: u16,
     pub rows: u16,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
         parse_u64(&self.generation)?;
-        if self.resize_count > 1
+        if self.resize_count > 3
+            || self.pause_count > 1
             || !(2..=160).contains(&self.columns)
             || !(2..=60).contains(&self.rows)
         {
@@ -314,6 +323,84 @@ pub(crate) async fn probe_session_resize(
         )
         .await
         .map_err(error)
+}
+
+fn visibility_gate(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+) -> Result<Arc<crate::viewer_visibility::VisibilityGate>> {
+    let active = state.0.active.lock().map_err(error)?;
+    active
+        .as_ref()
+        .filter(|r| r.owner == owner && r.id == id)
+        .map(|r| r.visibility.clone())
+        .ok_or("session.forbidden".into())
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) fn probe_session_visibility(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+    visible: bool,
+) -> Result<()> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    let generation = parse_u64(&generation)?;
+    let gate = visibility_gate(&state, owner, id)?;
+    state.0.registry.state(owner, id).map_err(error)?;
+    if visible {
+        gate.resume(generation)
+    } else {
+        gate.pause(generation, || {
+            state
+                .0
+                .registry
+                .detach(owner, id, generation)
+                .map_err(error)
+        })
+    }
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_hidden_output(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<String> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    let gate = visibility_gate(&state, owner, id)?;
+    let generation = parse_u64(&generation)?;
+    gate.hidden(generation)?;
+    let before = state
+        .0
+        .registry
+        .state(owner, id)
+        .map_err(error)?
+        .parsed_bytes;
+    state
+        .0
+        .registry
+        .input(owner, id, b"hidden\n".to_vec())
+        .await
+        .map_err(error)?;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            gate.hidden(generation)?;
+            let current = state.0.registry.state(owner, id).map_err(error)?;
+            if current.lifecycle != Lifecycle::Running {
+                return Err("session.closed_while_hidden".into());
+            }
+            if current.parsed_bytes >= before + "HIDDEN_SEED 中文🌍\r\n".len() as u64 {
+                return Ok(current.parsed_bytes.to_string());
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .map_err(error)?
 }
 
 /// Revoke exactly this viewer generation; registry never closes the session.
@@ -571,11 +658,13 @@ pub(crate) async fn probe_session(
         handle: handle.clone(),
     };
     let (peer_tx, peer_rx) = oneshot::channel();
+    let visibility = Arc::new(crate::viewer_visibility::VisibilityGate::default());
     *state.0.active.lock().map_err(error)? = Some(Active {
         owner,
         nonce: nonce.clone(),
         id,
         peer: Some(peer_tx),
+        visibility: visibility.clone(),
     });
     let (peer_handle, peer_task) = native().await?;
     // Each window incarnation is installed on the runtime, never from a frontend label.
@@ -649,6 +738,7 @@ pub(crate) async fn probe_session(
         .map_err(|_| "session.capture_failed".to_string())?;
     let relay = async {
         let mut resizes = 0;
+        let mut pauses = 0;
         loop {
             let generation = attachment.generation;
             while let Some(wire) = attachment.wire.recv().await {
@@ -659,10 +749,10 @@ pub(crate) async fn probe_session(
                 .await
                 .map_err(|_| "session.relay_cancelled".to_string())?;
             match result {
-                Ok(receipt) => return Ok((generation, receipt, resizes)),
+                Ok(receipt) => return Ok((generation, receipt, resizes, pauses)),
                 Err(pulse_app::attachment::AttachmentError::Invalidated(
                     pulse_term::session::StreamEnd::Reconfigured,
-                )) if resizes == 0 => {
+                )) if resizes < 3 => {
                     resizes += 1;
                     attachment = state
                         .0
@@ -671,13 +761,34 @@ pub(crate) async fn probe_session(
                         .await
                         .map_err(|_| "session.recapture_failed".to_string())?;
                 }
+                Err(pulse_app::attachment::AttachmentError::Detached) if pauses == 0 => {
+                    tokio::time::timeout(
+                        Duration::from_secs(5),
+                        visibility.wait_resume(generation),
+                    )
+                    .await
+                    .map_err(|_| "session.resume_timeout".to_string())??;
+                    if state.0.registry.state(owner, id).map_err(error)?.lifecycle
+                        != Lifecycle::Running
+                    {
+                        return Err("session.closed_while_hidden".into());
+                    }
+                    pauses += 1;
+                    attachment = state
+                        .0
+                        .registry
+                        .attach(owner, id, config)
+                        .await
+                        .map_err(|_| "session.resume_capture_failed".to_string())?;
+                }
                 Err(_) => return Err("session.relay_failed".to_string()),
             }
         }
     };
-    let (generation, receipt, resizes) = tokio::time::timeout(Duration::from_secs(60), relay)
-        .await
-        .map_err(error)??;
+    let (generation, receipt, resizes, pauses) =
+        tokio::time::timeout(Duration::from_secs(60), relay)
+            .await
+            .map_err(error)??;
     let (final_state, screen, native) =
         tokio::time::timeout(Duration::from_secs(5), task.join_with_screen())
             .await
@@ -717,6 +828,7 @@ pub(crate) async fn probe_session(
         repair_checked: false, // Frontend completes its controlled idle comparison before go.
         input_checked: false,
         resize_count: resizes,
+        pause_count: pauses,
         columns: final_state.size.columns(),
         rows: final_state.size.rows(),
     })
@@ -777,6 +889,7 @@ mod tests {
             repair_checked: true,
             input_checked: true,
             resize_count: 0,
+            pause_count: 0,
             columns: 40,
             rows: 12,
         };

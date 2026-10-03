@@ -5,6 +5,8 @@ mod probe;
 #[cfg(feature = "desktop")]
 mod raw_frame;
 #[cfg(feature = "desktop")]
+mod viewer_visibility;
+#[cfg(feature = "desktop")]
 mod window_sessions;
 
 #[cfg(feature = "desktop")]

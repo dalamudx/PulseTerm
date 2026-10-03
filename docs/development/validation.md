@@ -232,10 +232,19 @@ mise run probe-pty
 - 三次独立完整Linux WebView运行成功（最后一次包含commit gate，每次2headless+2DOM+7运输/取消场景）；最后DOM generation=6、104×12、832×192 CSS px、parsedBytes=3,113,086、frames=783、peakCreditBytes=8212、digest=`00b088cbb609382c`、renderEvents=780/frameFences=779，12行DOM/buffer逐行一致。截图已读回确认auto-fit可见、不溢出；数字为单次证据，不承诺性能。完整check/test、89 core/38 app/16 IPC/13 native/101 TS、bindings-check、native clippy -D warnings及真实2MiB native probe通过。
 - 这里只验一次初始列宽适配（容器高度当前由固定12行决定），不宣称连续拖动/ResizeObserver持续换绑、独立布局高度改变、跨屏DPI/zoom或生产TermView/IME完成；正式策略应新generation重新测量、合并最新geometry，并保留精确恢复拒绝/延期UX。没有新增依赖、改锁文件/CSP/vendor或放宽发布门禁。
 
+## 多阶段observer缩放、容器隐藏恢复与迟到view隔离（Linux）
+
+- fixed DOM每新generation重装ResizeObserver/FitScheduler，容器独立208px高度不再从旧terminal行数倒推。初始40×12→104×12；连续写入3个width/height样例（464×192、480×184、496×176）由observer/50ms合并后只提交一次60×10；恢复自然宽+208px后第三次提交104×12。native ACK后精确capture、旧surface销毁与decoder重建，seed/尺寸必须相同；finite relay cap3，native完成的resize_count须等于重捕获次数，普通错误不得重试。
+- 新增显式owner/nonce/generation授权的pause/resume控制：VisibilityGate先在短元数据锁内完成registry.detach，再发布pause票据；driver Detached只能对同一票据、至多一次、5秒内显式resume重新capture。暂停不关闭registry session，Rust继续处理输出；无票据Detached、旧/重复resume、wrong generation或owner撤销不能授权新view。watch先注册后查票据，早到resume不会丢失；3项native回归覆盖未pause/准入失败、generation/单次消费及显式等待。没有持有terminal grid锁或引入轮询native控制。
+- 每轮DOM第三次resize后显式pause、隐藏host、销毁旧consumer/renderer；固定helper接受trusted内部hidden控制并输出HIDDEN_SEED，后台parsed_bytes继续增加且Lifecycle=Running。100ms期间Raw Channel帧数不增加、旧input/ACK拒绝；重新显示host并显式resume，以新generation恢复RESIZE_SEED/HIDDEN_SEED及对应parsed boundary，然后继续原query/Marker/Repair/键盘/EOF验证。隐藏恢复是受控DOM容器，不是OS窗口minimize/hide或真实document visibility事件。当前hidden-output证明请求最多等2秒，不开放用户命令。
+- `SurfaceGeneration`要求requested replacement后才接受更大Begin，保留U64精度；已撤销generation帧不触发idle活动或ACK。AttachmentConsumer旧Promise完成/错误按consumer identity过滤，late callback错误也不取消新surface。共享attachmentEnvelope负责bounded length/version/flags/zero generation，不复制codec；8项TS回归覆盖无Begin/重复/未请求替换、连续resize/resume、stale frames、late success/error及64位边界。
+- 两次独立完整Linux运行成功（最后含新router/late callback guard，每次2headless+2DOM+原7transport/cancel）；DOM最后generation=12、3次native resize、1次pause/resume、104×12、parsedBytes=3,113,119、frames=794、peakCreditBytes=4115、digest=`00b088cbb609382c`，DOM 12行buffer投影一致、832×192、renderEvents=791/frameFences=790。report schema4要求visibilityChecked、resizeCount=3/pauseCount=1；headless计数均0。数值只是单次证据，未承诺性能。
+- 完整check/test、89 core/38 app/16 IPC/16 native/109 TS、native clippy -D warnings、bindings drift、原2MiB native压力及5个跨语言binary/headless场景通过，机械UI检测零发现。没有新增依赖/锁文件/vendor/CSP或ignore/许可放宽。尚未验收真实OS窗口拖动/minimize、跨屏DPI/zoom、长期隐藏/恢复失败UX、生产ViewHost/用户shell与Windows/macOS；精确恢复拒绝/延期仍是硬门禁。
+
 ## 检查结果
 
-- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现13项测试通过（新增固定输入字符/控制符/UTF8字节预算验证）；本轮未修改parser补丁或上游源码。
-- TS：101 项测试通过（新增9项测量grid与fit scheduler风暴合并/hidden/no-op/取消/不确定native/错误/非法geometry回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现16项测试通过（新增visibility票据准入失败/单次generation resume/早信号与显式等待回归）；本轮未修改parser补丁或上游源码。
+- TS：109 项测试通过（新增8项surface generation replacement、旧帧/late consumer success/error、U64及共用envelope验证回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
