@@ -115,6 +115,11 @@ impl PtySession {
     pub fn take_reader(&mut self) -> Result<Box<dyn Read + Send>, PtyError> {
         self.reader.take().ok_or(PtyError::ReaderTaken)
     }
+    /// Transfer the single writer to a supervised blocking input worker.
+    /// Concurrent termination must be owned by the native controller.
+    pub fn take_writer(&mut self) -> Result<Box<dyn Write + Send>, PtyError> {
+        self.writer.take().ok_or(PtyError::InputClosed)
+    }
     /// Write and flush every byte. Can block if the child stops reading.
     pub fn write_input(&mut self, bytes: &[u8]) -> Result<(), PtyError> {
         let writer = self.writer.as_mut().ok_or(PtyError::InputClosed)?;

@@ -20,6 +20,14 @@ run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
 description = "Compare Rust terminal state and xterm headless"
 run = ["cargo xtask probe", "pnpm --filter ui probe"]
 
+[tasks.probe-local-session]
+description = "Exercise the supervised native PTY to terminal actor bridge"
+run = "cargo xtask probe-local-session"
+
+[tasks.probe-pty-portable]
+description = "Exercise native PTY with a platform-neutral finite Rust helper"
+run = "cargo xtask probe-pty-portable"
+
 [tasks.probe-pty]
 description = "Exercise native PTY input, queries, resize, output and teardown"
 run = "cargo xtask probe-pty"

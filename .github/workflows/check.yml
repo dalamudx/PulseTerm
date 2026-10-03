@@ -43,6 +43,10 @@ jobs:
         run: mise run probe
       - name: Compare Unicode providers
         run: pnpm --filter ui exec tsx scripts/unicode-probe.ts
+      - name: Exercise supervised native session actor
+        run: mise run probe-local-session
+      - name: Exercise native PTY on all platforms
+        run: mise run probe-pty-portable
       - name: Exercise Unix native PTY
         if: runner.os != 'Windows'
         run: mise run probe-pty

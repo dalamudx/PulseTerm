@@ -12,6 +12,8 @@ pulse-core.workspace = true
 pulse-ipc.workspace = true
 pulse-term = { workspace = true, features = ["validation"] }
 pulse-pty.workspace = true
+pulse-app.workspace = true
+tokio.workspace = true
 serde_json.workspace = true
 
 [lints]

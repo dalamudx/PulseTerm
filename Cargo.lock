@@ -2599,6 +2599,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulse-app"
+version = "0.1.0"
+dependencies = [
+ "pulse-core",
+ "pulse-pty",
+ "pulse-term",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "pulse-core"
 version = "0.1.0"
 dependencies = [
@@ -4919,11 +4930,13 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "pulse-app",
  "pulse-core",
  "pulse-ipc",
  "pulse-pty",
  "pulse-term",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

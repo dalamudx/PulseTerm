@@ -110,13 +110,21 @@ mise run probe-pty
 ```
 
 - 新增独立 `pulse-pty`：封装 portable-pty 0.9.0，使用显式 executable / literal argv、cwd、环境覆盖与默认 TERM；提供单 reader、完整写入、字符尺寸读写、非阻塞退出观察、等待、关闭输入、终止并回收直接子进程。不依赖 Tauri、解析器或前端。
-- 原语是**阻塞接口**，不隐藏队列或线程，不能直接运行在 UI/async worker 上。PTY 生产桥接、可取消写入、进程树/Job Object 回收和平台 Shell 探测尚未实现；独立 actor 已有 EchoTransport 证据，但还未接入此阻塞原语。Drop 是直接子进程的尽力清理，不是取消任意阻塞 I/O 的保证；Windows 调用方必须在关闭 ConPTY 期间持续排空 reader。
+- 原语是**阻塞接口**，不隐藏队列或线程，不能直接运行在 UI/async worker 上。已新增pulse-app监督native read/write/control到独立actor的有界桥，但窗口订阅、任意阻塞写入取消、进程树/Job Object回收和平台Shell探测尚未实现。Drop 是直接子进程的尽力清理，不是取消任意阻塞 I/O 的保证；Windows 调用方必须在关闭 ConPTY 期间持续排空 reader。
 - Linux 真实 PTY helper 检查 stdin/stdout 为 TTY、literal argv/cwd/env 未变、输入逐字节未变；resize 到 91×37 后既检查 master readback，也由子进程 `stty size` 观测。中文与光标查询进入 Rust `TerminalProbe`，应答 `CSI 1;7 R` 原样写回 PTY，并由子进程核验，最后检查 Rust 屏幕及尾部输出、退出码 7 和 EOF。
 - 使用固定 `/bin/sh -c` 脚本作系统 Shell 冒烟：确认 TTY、输出 VT 流、Rust 解析结果和正常退出。不是交互/login Shell、OSC 133、vim/tmux 或 Shell 环境探测的兼容性验收。
 - 慢消费者暂停读队列，观测 reader 的 send attempt 停止推进，子进程仍未退出；恢复消费后按顺序逐字节验证 **1 MiB** 确定性输出和结束标记，没有丢弃数据。探针限定 2 个排队块，每块 ≤4 KiB；计入消费者当前块、producer 待发送块与固定 reader scratch，分块暂存上界为 **20 KiB**。这是代码结构的缓冲预算，不是 RSS/整个进程树内存测量，排除 OS buffer、线程栈其余部分、握手捕获及解析器状态。
 - 检查关闭输入幂等、单 reader、重复 terminate 的退出状态稳定、直接存活子进程 Drop 后 EOF、所有正常 reader join、不存在可执行文件时 spawn 失败。本机直接终止 + 排空约 50 ms，用 2 秒上限检查；不能外推到其他系统或子孙进程。
 - helper 独立 10 秒截止时间，worker 外层 25 秒监督，失败不读取上一轮结果；报告要求完整布尔观察、版本、字节/队列预算、精确应答/退出与取消上限，负向单元测试拒绝仅有 completed 标志等不完整报告。
-- 已接入 Linux/macOS CI 的 `probe-pty`，Windows CI 编译原语并运行纯逻辑测试；本轮仅取得 Linux 结果。**S3/S10 尚未通过**：随附 ConPTY 加载、win32-input-mode、Win10/11、PowerShell/WSL 及真实 UI 兼容性待验证。
+- 已接入 Linux/macOS CI 的 `probe-pty`，三平台CI新增finite Rust helper和native actor桥测试；本轮仅取得Linux结果。**S3/S10 尚未通过**：随附 ConPTY 加载、win32-input-mode、Win10/11、PowerShell/WSL 及真实 UI 兼容性待验证。
+
+## 原生actor监督与三平台PTY探针
+
+- 新建既定应用组装层 `pulse-app`，setup在blocking pool，常驻reader/writer/controller专用线程；`ChannelTransport::bounded_driver`提供固定8块output/input通道，每块上限64KiB（另有native reader scratch/current块、writer在途、command/reply预算与OS缓冲）。无Mutex<Term>，无Tauri和新增第三方依赖。
+- native resize由controller确认后才修改parser尺寸，失败保持原state，超过5秒缺ACK明确Failed并cancel；等待ACK时暂停解析（不停止native reader的有界读取）。旧尺寸排队输出仍可能在新size下reflow，这不是跨窗口attach或resize完全顺序性的验收。
+- writer阻塞时controller仍可kill/reap直接child；renderer取消后reader不停止，而是discard/drain直到EOF，避免ConPTY master关闭等待无人排空的output。组合receipt join actor/direct child及三worker；Drop receipt请求close，不能保证进程树或OS-hung syscall的退出。input成功仍只是admission，不是physical write receipt。
+- 6项native-driver单测验证成功/失败resize、pending ACK取消、正常EOF vs fatal I/O、32次fail/EOF竞态，以及真实5秒deadline。`probe-local-session`在Linux用raw helper证明输入/query回写/child尺寸观察、exit7/EOF、native actorrestore、direct cancel/join和receipt Drop关actor。Windows使用canonical Rust helper，不冒充raw模式/child尺寸query/Win32键盘覆盖。
+- `probe-pty-portable`有限Rust helper不依赖stty，验证真实TTY、argv/cwd/env、Unicode canonical输入、native尺寸回读、exit7/EOF和幂等direct termination；helper15秒截止、外层worker40秒监督，report不复用旧成功。本轮Linux通过，已注册三平台CI；Windows/macOS结果待执行，也未引入微软DLL打包决定。
 
 ## 独立会话 actor / EchoTransport（S11 前置基础）
 

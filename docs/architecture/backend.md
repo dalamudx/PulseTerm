@@ -63,7 +63,7 @@ pub struct SessionHandle {
 ```
 
 - **阻塞操作放到专用线程**：
-  - PTY 的读写是同步接口，各用一个线程，用有界的 `mpsc` 和 actor 通信。
+  - PTY 的读写是同步接口，各用一个线程，用有界的 `mpsc` 和 actor 通信。初版已在 `pulse-app::spawn_local` 组装：setup放blocking pool，常驻read/write/control三worker由组合task监督join。actor带外cancel，read在renderer取消后继续discard/drain到EOF以支持ConPTY关闭；native resize回执后才更新parser，5秒无回执明确失败。只监督direct child，尚非process-tree/跨窗口生产attach。
   - RDP 解码是 CPU 密集型，每个桌面会话一个解码线程。
   - 音频和全局键盘钩子各用自己的专用线程。
 - **关闭顺序**：应用退出时，先通过 `CancellationToken` 通知所有会话关闭并最多等待 2 秒；然后保存工作区布局和传输队列；最后关闭数据库。

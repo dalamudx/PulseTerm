@@ -54,6 +54,8 @@ mise run check                    # Rust 格式/clippy/依赖分层 + TS 类型/
 mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
+mise run probe-pty-portable       # 三平台finite Rust helper：规范输入/Unicode/native尺寸/EOF
+mise run probe-local-session      # 真实PTY→actor、resize回执、后端query、关闭join
 mise run unicode-table            # 从锁定 Rust 表生成前端 Unicode 宽度
 mise run unicode-table-check      # 只读漂移检查
 mise run probe-unicode            # 16 组文本、多提供器与分块对比
@@ -71,7 +73,7 @@ mise run desktop                  # 打开原生开发验证界面（不是完�
 mise run probe-channel            # 自动采集真实 WebView 的 Channel/Socket 结果
 ```
 
-`probe-pty` 当前在 Unix 运行，依赖系统 `/bin/sh` 和 `stty`，不需要显示服务；输出 `target/probes/pty.json`。监督器最长 25 秒，交互 helper 自带 10 秒截止时间。Windows CI 仅编译并运行 PTY 纯逻辑测试，不把 Unix 探针当作 ConPTY 验收。
+`probe-pty` 当前在 Unix 运行，依赖系统 `/bin/sh` 和 `stty`，不需要显示服务；输出 `target/probes/pty.json`。监督器最长 25 秒，交互 helper 自带 10 秒截止时间。三平台 CI 新增 `probe-pty-portable` 和 `probe-local-session`，不依赖Windows的stty；仅有Linux运行证据，不能把注册成功当作ConPTY验收。Windows helper只测canonical输入和native尺寸回读，不测raw/Win32键盘、child尺寸query或随附conpty.dll。
 
 无显示服务的 Linux 运行 `probe-channel` 需要 `xvfb`、`dbus-x11` 和 coreutils 的 `timeout`；探针监督整个 Xvfb/DBus/WebView 进程组，最长运行 180 秒。Linux 原生构建还需 GTK3/WebKitGTK 开发包，Windows/macOS 使用对应系统开发环境。原生依赖只在 `pulseterm-desktop` 的 `desktop` feature 启用，默认 headless 检查无需 GUI 库。
 

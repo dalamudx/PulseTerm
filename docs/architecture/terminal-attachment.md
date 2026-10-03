@@ -35,4 +35,4 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。可见视图idle/resize/reattach的限频调度和generation校验仍须view driver接入。
 
-仍需：generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY、PTY actor桥接、真实程序录制、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
+仍需：generation/lease/渲染器生命周期集成、边界冻结与实际backpressure、Windows ConPTY实测、真实程序录制、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。

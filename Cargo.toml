@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 exclude = ["vendor/alacritty_terminal"]
-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "apps/desktop/src-tauri", "xtask"]
-default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "xtask"]
+members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-app", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-app", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -33,6 +33,7 @@ pulse-core = { path = "crates/pulse-core", version = "0.1.0" }
 pulse-ipc = { path = "crates/pulse-ipc", version = "0.1.0" }
 pulse-term = { path = "crates/pulse-term", version = "0.1.0" }
 pulse-pty = { path = "crates/pulse-pty", version = "0.1.0" }
+pulse-app = { path = "crates/pulse-app", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -3,6 +3,8 @@
 
 mod attachment_probe;
 mod channel_probe;
+mod local_session_probe;
+mod portable_pty_probe;
 mod pty_probe;
 mod query_probe;
 mod snapshot_probe;
@@ -25,6 +27,12 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    if let Some(mode) = std::env::args()
+        .nth(1)
+        .and_then(|arg| arg.strip_prefix("portable-pty-helper-").map(str::to_owned))
+    {
+        return portable_pty_probe::helper(&mode);
+    }
     // PTY helpers preserve the cwd chosen by their parent.
     if let Some(mode) = std::env::args()
         .nth(1)
@@ -54,6 +62,9 @@ fn main() -> Result<()> {
         Some("probe") => probe()?,
         Some("probe-channel") => channel_probe::run()?,
         Some("probe-pty") => pty_probe::run()?,
+        Some("probe-pty-portable") => portable_pty_probe::run()?,
+        Some("probe-local-session") => local_session_probe::run()?,
+        Some("probe-pty-portable-worker") => portable_pty_probe::worker()?,
         Some("probe-pty-worker") => pty_probe::worker()?,
         Some("unicode-table") => unicode_table::run(false)?,
         Some("unicode-table-check") => unicode_table::run(true)?,
@@ -103,6 +114,7 @@ fn check_deps() -> Result<()> {
                 "pulse-ipc" => &["pulse-core"],
                 "pulse-term" => &["pulse-core", "pulse-ipc"],
                 "pulse-pty" => &["pulse-core"],
+                "pulse-app" => &["pulse-core", "pulse-pty", "pulse-term", "pulse-ipc"],
                 _ => continue,
             };
             if dep.starts_with("pulse-") && !allowed.contains(&dep) {
