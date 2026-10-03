@@ -95,9 +95,9 @@ mise run probe-channel
 ## 类型、命令与事件生成（S21 的 Linux 控制面证据）
 
 - 精确固定 `specta` / `tauri-specta` 2.0.0-rc.25 与 `specta-typescript` 0.0.12；只启用在桌面适配器，headless 核心没有 Tauri/Specta 依赖。ADR-018 暂保持 Proposed，未自动转为正式采用。
-- 8 个命令与 `ProbeEcho` 事件共用 `command_bindings()`：同一份注册表生成 `ui/src/ipc/gen/commands.ts` 并注册 invoke/event handler。DTO 包含嵌套对象、枚举、数组和 nullable 字段；前端不再手写重复的配置、统计、测量与报告字段。
+- 最初8个、现12个命令与 `ProbeEcho` 事件共用 `command_bindings()`：同一份注册表生成 `ui/src/ipc/gen/commands.ts` 并注册 invoke/event handler。DTO 包含嵌套对象、枚举、数组和 nullable 字段；前端不再手写重复的配置、统计、测量与报告字段。
 - `RawFrame` 不实现 Serialize，仅通过 `IpcResponse` 返回 `InvokeResponseBody::Raw`；反射映射为 `ArrayBuffer`，生成参数为 `Channel<ArrayBuffer>`，不存在 number[] 或 JSON 字节序列的替换。Rust 单元测试和实际 WebView 的逐字节检查均通过。
-- 增加带随机 nonce 的生成命令 → Rust 类型化事件 → 生成事件监听器回环。监听先注册，随后发命令，超时/成功都释放监听；原生报告版本改为 2，必须有 `typedEvents: true`、取消证据及 7 组测量才可标记成功。Linux 实测回环与全部传输组通过。
+- 增加带随机 nonce 的生成命令 → Rust 类型化事件 → 生成事件监听器回环。监听先注册，随后发命令，超时/成功都释放监听；最初原生报告版本改为2，后续窗口组合探针升级为3（详见下文），必须有 `typedEvents: true`、取消证据及 7 组测量才可标记成功。Linux 实测回环与全部传输组通过。
 - `mise run bindings` 写入绑定；`mise run bindings-check` 比较重新生成的临时内容但不覆盖源文件。手动改变绑定注释的行为探针确认检查失败且源文件哈希不变；随后恢复原文。三平台 CI 已加检查，但尚无远端运行证据。
 - **已验证的限制**：rc.25 的递归 `serde_json::Value` 反射会栈溢出，因此未启用 Specta 的 serde_json feature，报告改为显式 DTO；不依赖 generic JSON 反射。`usize` 被精度策略拒绝，控制 DTO 改为有界 u32、内部乘法用 u64 验证，没有放宽 BigInt 禁令。Serde 的浮点输出可能为 null，生成器如实导出 `number | null`；前端仅在有限数运行时检查后用于算术，不用手写接口掩盖 null。
 - 新增 `paste 1.0.15` 维护公告来自 Specta 的函数反射，详见 [依赖审查](./dependency-review.md)。没有添加 ignore 或宏补丁。S21 功能链路的 Linux 证据不代表依赖、三平台或正式采用门禁已通过。
@@ -161,7 +161,7 @@ mise run probe-pty
 - 已新增 `pulse-app::attachment` 的窗口无关wire/ACK监督：config先验、bootstrap转移所有权、固定frame/byte预算、oldest ACK deadline、正常End与callback契约，取消/失效只释放lease不关闭session。7项测试覆盖零/不合理config保留旧lease、2.5MiB输出无ACK冻结→timeout恢复、EOF截断UTF-8、正常final ACK、End缺ACK不能完成、wrong generation/duplicate ACK、receiver drop、reconfigure与旧binding替换；TS3项覆盖End渲染后ACK/缺finish拒绝/取消无迟到ACK。
 - 新probe-local-session wire测量真实2MiB helper→actor→AttachmentSender；1帧、8KiB分片、9000bytes credit，暂停ACK时parsed_bytes冻结且inspect可用，最终2,097,221字节/Ended及child join通过。一轮521帧、credit峰值6,587 bytes、暂停边界24,623（OS分块会变化，不能固定该计数）。ACK来自Rust validator不是前端callback。第五个probe-attachment案例把driver输出回放到headless，End后decoder生成一个替换字符并匹配后端。native压力与headless callback分别实测，不冒充实时WebView/网络往返。
 - CI沿用三平台probe-local-session/probe-attachment任务，已包含新路径；本轮Linux执行。77项term、14项IPC、7项app、60项TS及API隔离/check通过。Cargo.lock只增加pulse-app→pulse-ipc内部edge，无第三方版本/许可证/补丁变化。
-- 仍非production attach：一个诊断订阅、没有Tauri权限/真实窗口绑定，未覆盖非UTF-8双坐标。旧surface/已转交帧撤销、自动idle同步限频、多视图策略和真实WebView callback ACK→PTY组合验收仍待实现；不代表三平台/S2/S11整体通过。
+- 仍非production attach：一个诊断订阅、未覆盖非UTF-8双坐标和任意用户会话。Tauri窗口/命令授权与真实WebView callback ACK→PTY已有下文组合证据；生产旧surface管理、自动idle同步限频和多视图策略仍待实现，不代表三平台/S2/S11整体通过。
 
 ## 应用注册层授权与撤销（后端基础）
 
@@ -170,9 +170,20 @@ mise run probe-pty
 - probe-local-session的2MiB native wire流现在通过registry注册/input/ACK与监督completion；Linux实际helper连续offset、EOF/child join、暂停ACK时parsed_bytes冻结和inspect通过。测试使用可信in-process WindowToken，不能视为Tauri command授权/WebView窗口事件验收。CI现有三平台任务自动包含此路径，Windows本轮未实测。
 - window关闭撤销view但保留application-owned session；新window不会凭相同label继承访问权。跨window迁移/重新授权尚未实现；注册者必须监督native receipt，shutdown不是process-tree join。无第三方依赖、锁文件或parser补丁变更，发布门禁不变。
 
+## Tauri窗口授权与真实PTY/Channel组合（Linux）
+
+- `mise run probe-channel`已升级schema 3：在真实WebKitGTK WebView内连续运行两次native PTY→actor原子lease→registry→Raw Channel→AttachmentConsumer→headless xterm callback→生成ACK命令→backend credit→ordered End链路。四个新增命令由同一Specta表注册/生成；u64控制整数为canonical十进制string，数据始终ArrayBuffer。
+- 固定helper接受唯一`go`输入，输出Unicode、颜色和截断UTF-8后正常退出；客户端在一个live ACK延迟250ms，driver最多1帧/8212 envelope/body credit。一次第二轮实际parsedBytes=3,112,985、frames=780、peakCreditBytes=6092、generation=2、exit=0，前后端最终visible digest/输出边界一致。数字为单次测量，不作为性能门槛。
+- 创建实际隐藏peer WebView，由runtime关联window token；跨owner input/ACK拒绝。实际Destroyed撤销窗口权限，原native actor仍Running，经显式close/join后回收。相同label连续重建无权限继承；第二轮实际拒绝旧nonce、旧generation及错误generation ACK。origin限制只接受无port/credential的本地tauri host，外部/伪造host拒绝。
+- 新增可信registrar `reap_closed`：窗口销毁后只清已结束actor，不可清Running session；70轮关闭/回收单元测试验证window/session容量不累积。失败路径guard关闭peer/helper，有界5秒等待终态回收，child自带40秒硬截止；未知或逾时的join不算完成。
+- 组合测试发现EOF后actor已不接受diagnostic_digest命令。新增`LocalSessionTask::join_with_screen`从actor终态receipt取visible projection后一次计算摘要，与driver End边界比较；该screen不是完整snapshot，不改变SessionState或二进制协议。
+- native控制器原先优先检查stop，actor EOF与已退出child同时就绪时可能错误标记cancelled；现先try_wait，再决定是否终止仍存活child。确定性回归保留已退出child的零/非零状态，stop仍终止存活child，native I/O失败仍按失败处理。修改后3个独立WebView进程全部通过，各执行两次窗口重建；少量重复运行不代表长期稳定性证明。
+- 原7组Channel/WebSocket完整性、慢消费者credit和取消恢复测量仍全部通过。11项native adapter测试、24项pulse-app测试、77项pulse-term测试、14项pulse-ipc测试、60项TS测试、clippy/tsc/Biome与bindings drift通过。Astrolabe用于调用范围，native diagnostics请求超时，不能视为LSP通过。
+- 限制：浏览器内使用headless xterm callback，不测DOM绘制、IME、真实用户shell、生产view重建与跨窗口迁移。自动idle/resize重同步、多视图、深历史与Windows/macOS实际组合仍未验收。Cargo.lock只增加现有workspace crate的桌面依赖边，未升第三方版本、改变补丁或放宽审计。
+
 ## 检查结果
 
-- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 20项测试通过（7项ACK driver及13项registry授权/撤销/资源边界）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 24项测试通过（7项ACK driver、13项registry授权/撤销/资源边界、2项终态回收、2项native exit/stop判定）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
 - TS：60 项测试通过（本轮新增3项EOF callback/unsupported/取消迟到ACK拒绝）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
@@ -181,4 +192,4 @@ mise run probe-pty
 
 ## 尚未验证
 
-S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、GUI 接入与生产进程树回收仍待验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。已批准的非活动网格只读getter及双屏恢复已接入；隐藏光标分离/非行尾wrap等不能无损编码的状态明确延期，尚未接入生产attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。
+S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、生产DOM GUI 接入与进程树回收仍待验证；Linux已有finite helper的真实WebView组合验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。已批准的非活动网格只读getter及双屏恢复已接入；隐藏光标分离/非行尾wrap等不能无损编码的状态明确延期，尚未接入生产attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。

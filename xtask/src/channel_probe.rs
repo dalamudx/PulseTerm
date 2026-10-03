@@ -42,7 +42,7 @@ pub fn run() -> Result<()> {
         .args(["--probe", "--report"])
         .arg(&report)
         .stdin(Stdio::null());
-    // This app exposes only synthetic probe data; keep the WebKit sandbox enabled.
+    // Only synthetic frames and fixed finite-helper output; keep the WebKit sandbox enabled.
     let mut child = command
         .spawn()
         .context("launch native WebView probe (headless Linux requires xvfb and dbus)")?;
@@ -77,12 +77,39 @@ pub fn run() -> Result<()> {
 fn validate(path: &Path) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
-    if report["schemaVersion"] != 2
+    if report["schemaVersion"] != 3
+        || report["sessionRuns"] != 2
         || report["typedEvents"] != true
         || report["completed"] != true
         || report["cancellation"] != true
     {
         bail!("native probe incomplete: {}", report["error"]);
+    }
+    let session = &report["session"];
+    if session["generation"]
+        .as_str()
+        .and_then(|s| s.parse::<u64>().ok())
+        .is_none_or(|n| n == 0)
+        || session["nativeExit"] != 0
+        || session["peerDenied"] != true
+        || session["windowRevoked"] != true
+        || session["sessionSurvived"] != true
+        || session["frames"].as_u64().is_none_or(|n| n < 4)
+        || session["peakCreditBytes"]
+            .as_u64()
+            .is_none_or(|n| n > 8212 || n == 0)
+        || session["parsedBytes"]
+            .as_str()
+            .and_then(|s| s.parse::<u64>().ok())
+            .is_none_or(|n| n < 1024 * 1024)
+        || session["digest"].as_str().is_none_or(|s| {
+            s.len() != 16
+                || !s
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    {
+        bail!("missing native session, window authorization or EOF evidence");
     }
     let rows = report["measurements"]
         .as_array()

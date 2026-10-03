@@ -1,6 +1,6 @@
 {
   "identifier": "validation-main",
-  "description": "Only the local validation window can use the probe commands.",
-  "windows": ["main"],
+  "description": "Only the local main and session-peer developer validation windows use these probe capabilities; session commands also derive ownership and check local origin in Rust.",
+  "windows": ["main", "session-peer"],
   "permissions": ["core:default"]
 }

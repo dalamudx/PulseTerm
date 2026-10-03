@@ -11,6 +11,7 @@ use tauri::ipc::Channel;
 use tauri_specta::Event;
 
 use crate::raw_frame::RawFrame;
+use crate::window_sessions::WindowSessions;
 use tauri::{Manager, State};
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
@@ -413,6 +414,8 @@ struct ProbeReport {
     completed: bool,
     cancellation: bool,
     typed_events: bool,
+    session: Option<crate::window_sessions::SessionEvidence>,
+    session_runs: u32,
     measurements: Vec<ProbeMeasurement>,
     error: Option<String>,
     environment: ProbeEnvironment,
@@ -421,16 +424,28 @@ struct ProbeReport {
 
 impl ProbeReport {
     fn validate(&self) -> ProbeResult<()> {
-        if self.schema_version != 2
+        if self.schema_version != 3
             || self.measurements.len() > 7
             || (self.completed
-                && (!self.cancellation
+                && (self.session_runs != 2
+                    || !self.cancellation
                     || !self.typed_events
+                    || self.session.as_ref().is_none_or(|s| {
+                        !s.peer_denied
+                            || !s.window_revoked
+                            || !s.session_survived
+                            || s.native_exit != 0
+                            || s.peak_credit_bytes > 8212
+                            || s.frames < 4
+                    })
                     || self.error.is_some()
                     || self.measurements.len() != 7
                     || self.measurements.iter().any(|row| !row.verified)))
         {
             return Err("probe.invalid_report".into());
+        }
+        if let Some(session) = &self.session {
+            session.validate()?;
         }
         for row in &self.measurements {
             row.config.validate()?;
@@ -497,7 +512,11 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             probe_cancel,
             probe_socket,
             probe_finish,
-            probe_event
+            probe_event,
+            crate::window_sessions::probe_session,
+            crate::window_sessions::probe_session_ack,
+            crate::window_sessions::probe_session_go,
+            crate::window_sessions::probe_session_peer
         ])
         .events(tauri_specta::collect_events![ProbeEcho])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -531,6 +550,12 @@ fn export_bindings(check: bool) -> ProbeResult<()> {
 /// Launch the local-only validation app. No product sessions are exposed yet.
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "--session-probe-child") {
+        if crate::window_sessions::child().is_err() {
+            std::process::exit(2);
+        }
+        return;
+    }
     if args
         .iter()
         .any(|arg| arg == "--export-bindings" || arg == "--check-bindings")
@@ -556,15 +581,27 @@ pub fn run() {
     let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
+        .manage(WindowSessions::default())
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);
+            let window = app
+                .get_webview_window("main")
+                .ok_or("main window missing")?;
+            app.state::<WindowSessions>().install(&window)?;
             Ok(())
         })
-        .run(tauri::generate_context!());
-    if let Err(error) = result {
-        eprintln!("Desktop startup failed: {error}");
-        std::process::exit(1);
+        .build(tauri::generate_context!());
+    match result {
+        Ok(app) => app.run(|handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                handle.state::<WindowSessions>().shutdown();
+            }
+        }),
+        Err(error) => {
+            eprintln!("Desktop startup failed: {error}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -694,10 +731,12 @@ mod tests {
     #[test]
     fn report_validation_requires_version_and_real_evidence() {
         let mut report = ProbeReport {
-            schema_version: 2,
+            schema_version: 3,
             completed: false,
             cancellation: false,
             typed_events: false,
+            session: None,
+            session_runs: 0,
             measurements: vec![],
             error: Some("probe.failure".into()),
             environment: ProbeEnvironment {
@@ -709,7 +748,7 @@ mod tests {
         assert!(report.validate().is_ok());
         report.schema_version = 1;
         assert!(report.validate().is_err());
-        report.schema_version = 2;
+        report.schema_version = 3;
         report.completed = true;
         assert!(report.validate().is_err());
         report.cancellation = true;

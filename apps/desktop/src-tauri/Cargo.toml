@@ -8,7 +8,7 @@ publish = false
 
 [features]
 default = []
-desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
 
 [[bin]]
 name = "pulseterm-desktop"
@@ -17,6 +17,10 @@ required-features = ["desktop"]
 
 [dependencies]
 pulse-ipc.workspace = true
+pulse-app = { workspace = true, optional = true }
+pulse-core = { workspace = true, optional = true }
+pulse-term = { workspace = true, optional = true }
+pulse-pty = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

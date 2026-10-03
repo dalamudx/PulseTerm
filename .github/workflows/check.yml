@@ -59,7 +59,7 @@ jobs:
         run: mise run bindings-check
       - name: Test native desktop adapter
         run: mise exec -- cargo test -p pulseterm-desktop --features desktop --locked
-      - name: Measure Linux native WebView
+      - name: Validate Linux native sessions, windows and transports
         if: runner.os == 'Linux'
         run: mise run probe-channel
       - name: Audit dependencies

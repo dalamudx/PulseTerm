@@ -13,6 +13,10 @@ export const commands = {
 	probeSocket: (id: string, config: ProbeConfig) => __TAURI_INVOKE<SocketTicket>("probe_socket", { id, config }),
 	probeFinish: (report: ProbeReport) => __TAURI_INVOKE<null>("probe_finish", { report }),
 	probeEvent: (nonce: string) => __TAURI_INVOKE<null>("probe_event", { nonce }),
+	probeSession: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel }),
+	probeSessionAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_session_ack", { nonce, generation, sequence }),
+	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
+	probeSessionPeer: (nonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce }),
 };
 
 /** Events */
@@ -64,6 +68,8 @@ export type ProbeReport = {
 	completed: boolean,
 	cancellation: boolean,
 	typedEvents: boolean,
+	session: SessionEvidence | null,
+	sessionRuns: number,
 	measurements: ProbeMeasurement[],
 	error: string | null,
 	environment: ProbeEnvironment,
@@ -71,6 +77,19 @@ export type ProbeReport = {
 };
 
 export type ProbeTransport = "channel" | "websocket";
+
+export type SessionEvidence = {
+	generation: string,
+	digest: string,
+	revision: string,
+	parsedBytes: string,
+	frames: number,
+	peakCreditBytes: number,
+	nativeExit: number,
+	peerDenied: boolean,
+	windowRevoked: boolean,
+	sessionSurvived: boolean,
+};
 
 export type SocketTicket = {
 	url: string,

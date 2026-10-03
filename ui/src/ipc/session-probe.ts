@@ -1,0 +1,210 @@
+// Developer-only real-WebView validation: @xterm/headless is not a DOM renderer.
+import { Channel } from "@tauri-apps/api/core";
+import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
+import headless from "@xterm/headless";
+import { suppressQueryReplies } from "../features/terminal/query-policy";
+import { screenDigest } from "../features/terminal/screen-digest";
+import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
+import { Utf8Stream } from "../features/terminal/utf8-stream";
+import { AttachmentConsumer } from "./attachment-consumer";
+import { decodeFrame } from "./frames";
+import { commands, type SessionEvidence } from "./gen/commands";
+
+const { Terminal } = headless;
+function color(cell: IBufferCell, foreground: boolean): string {
+  if (foreground ? cell.isFgDefault() : cell.isBgDefault()) return "default";
+  const value = foreground ? cell.getFgColor() : cell.getBgColor();
+  return (foreground ? cell.isFgRGB() : cell.isBgRGB())
+    ? `rgb:${(value >>> 16) & 255},${(value >>> 8) & 255},${value & 255}`
+    : `idx:${value}`;
+}
+function digest(terminal: TerminalType): string {
+  const buffer = terminal.buffer.active;
+  return screenDigest({
+    cells: Array.from({ length: terminal.rows }, (_, row) =>
+      Array.from({ length: terminal.cols }, (_, col) => {
+        const cell = buffer.getLine(buffer.baseY + row)?.getCell(col);
+        if (!cell) throw new Error("session.cell_missing");
+        return {
+          text: cell.getWidth() === 0 ? "" : cell.getChars() || " ",
+          width: cell.getWidth(),
+          foreground: color(cell, true),
+          background: color(cell, false),
+          bold: cell.isBold() !== 0,
+          italic: cell.isItalic() !== 0,
+          underline: cell.isUnderline() !== 0,
+          inverse: cell.isInverse() !== 0,
+        };
+      }),
+    ),
+    cursor: [Math.min(buffer.cursorX, terminal.cols - 1), buffer.cursorY],
+    alternate: buffer.type === "alternate",
+  });
+}
+let previous: { nonce: string; generation: string } | undefined;
+async function requireRejected(action: Promise<unknown>): Promise<void> {
+  let denied = false;
+  try {
+    await action;
+  } catch {
+    denied = true;
+  }
+  if (!denied) throw new Error("session.stale_admitted");
+}
+export async function verifySessionChannel(): Promise<SessionEvidence> {
+  const nonce = crypto.randomUUID();
+  let terminal: TerminalType | undefined;
+  let disposePolicy: (() => void) | undefined;
+  let decoder = new Utf8Stream();
+  let replies = 0;
+  let final: { revision: bigint; parsedBytes: bigint } | undefined;
+  let consumer: AttachmentConsumer | undefined;
+  let failed: unknown;
+  let latest: Promise<unknown> = Promise.resolve();
+  const write = async (text: string, signal: AbortSignal) => {
+    if (signal.aborted) throw new Error("session.cancelled");
+    if (!terminal) throw new Error("session.no_renderer");
+    if (text.length === 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => reject(new Error("session.cancelled"));
+      signal.addEventListener("abort", abort, { once: true });
+      terminal?.write(text, () => {
+        signal.removeEventListener("abort", abort);
+        if (signal.aborted) reject(new Error("session.cancelled"));
+        else resolve();
+      });
+    });
+  };
+  const bytes = async (data: Uint8Array, signal: AbortSignal) => {
+    for (let at = 0; at < data.length; at += 4096)
+      await write(decoder.feed(data.subarray(at, at + 4096)), signal);
+  };
+  const channel = new Channel<ArrayBuffer>();
+  let delayed = false;
+  let generationSeen: bigint | undefined;
+  channel.onmessage = (data) => {
+    try {
+      if (!(data instanceof ArrayBuffer)) throw new Error("session.not_binary");
+      const wire = new Uint8Array(data);
+      const frame = decodeFrame(wire);
+      if (!consumer) {
+        if (
+          frame.kind !== 8 ||
+          frame.sequence !== 0 ||
+          frame.payload.length < 20
+        )
+          throw new Error("session.no_begin");
+        const generation = new DataView(
+          frame.payload.buffer,
+          frame.payload.byteOffset,
+          frame.payload.byteLength,
+        ).getBigUint64(4, true);
+        generationSeen = generation;
+        consumer = new AttachmentConsumer(
+          generation,
+          {
+            reset: async (boundary) => {
+              if (terminal) throw new Error("session.repeated_reset");
+              terminal = new Terminal({
+                cols: boundary.columns,
+                rows: boundary.rows,
+                scrollback: 128,
+                allowProposedApi: true,
+              });
+              const provider = new SharedUnicodeProvider();
+              terminal.unicode.register(provider);
+              terminal.unicode.activeVersion = provider.version;
+              disposePolicy = suppressQueryReplies(terminal);
+              terminal.onData(() => replies++);
+              decoder = new Utf8Stream();
+            },
+            write: bytes,
+            checkpoint: async (_revision, _parsed, signal) =>
+              write("\x1b[?2026l", signal),
+            finish: async (revision, parsedBytes, signal) => {
+              await write(decoder.finish(), signal);
+              final = { revision, parsedBytes };
+            },
+          },
+          async (gen, sequence) => {
+            if (sequence === 0) {
+              await requireRejected(
+                commands.probeSessionAck(
+                  nonce,
+                  (gen + 1n).toString(),
+                  sequence,
+                ),
+              );
+              if (previous) {
+                await requireRejected(
+                  commands.probeSessionAck(
+                    previous.nonce,
+                    previous.generation,
+                    sequence,
+                  ),
+                );
+                await requireRejected(
+                  commands.probeSessionAck(
+                    nonce,
+                    previous.generation,
+                    sequence,
+                  ),
+                );
+              }
+            }
+
+            // Deliberately withhold a live-frame ACK once; the only credit slot must stay bound.
+            if (sequence > 2 && !delayed) {
+              delayed = true;
+              await new Promise<void>((resolve) => setTimeout(resolve, 250));
+            }
+            await commands.probeSessionAck(nonce, gen.toString(), sequence);
+          },
+        );
+      }
+      latest = consumer
+        .enqueue(wire)
+        .then(async (receipt) => {
+          if (receipt?.event.kind === "ready")
+            await commands.probeSessionGo(nonce);
+        })
+        .catch((error) => {
+          failed = error;
+          consumer?.cancel();
+        });
+    } catch (error) {
+      failed = error;
+      consumer?.cancel();
+    }
+  };
+  try {
+    const result = await commands.probeSession(nonce, channel);
+    await latest;
+    if (failed) throw failed;
+    if (
+      !terminal ||
+      !final ||
+      replies !== 0 ||
+      generationSeen?.toString() !== result.generation ||
+      (previous !== undefined &&
+        BigInt(result.generation) <= BigInt(previous.generation)) ||
+      digest(terminal) !== result.digest ||
+      final.revision.toString() !== result.revision ||
+      final.parsedBytes.toString() !== result.parsedBytes ||
+      !result.peerDenied ||
+      !result.windowRevoked ||
+      !result.sessionSurvived ||
+      result.nativeExit !== 0 ||
+      result.peakCreditBytes > 8212 ||
+      !delayed
+    )
+      throw new Error("session.integrity_failed");
+    previous = { nonce, generation: result.generation };
+    return result;
+  } finally {
+    consumer?.cancel();
+    disposePolicy?.();
+    terminal?.dispose();
+    channel.onmessage = () => {};
+  }
+}

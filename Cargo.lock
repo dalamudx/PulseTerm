@@ -2652,7 +2652,11 @@ name = "pulseterm-desktop"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "pulse-app",
+ "pulse-core",
  "pulse-ipc",
+ "pulse-pty",
+ "pulse-term",
  "serde",
  "serde_json",
  "specta",

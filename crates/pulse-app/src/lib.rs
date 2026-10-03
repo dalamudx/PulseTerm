@@ -1,6 +1,7 @@
 //! Runtime-neutral application composition for supervised local terminal sessions.
 #![forbid(unsafe_code)]
 pub mod attachment;
+mod native_control;
 pub mod registry;
 use pulse_core::TermSize;
 use pulse_pty::{PtyCommand, PtySession};
@@ -22,7 +23,8 @@ pub struct LocalSessionError(String);
 pub struct NativeExit {
     /// Native exit code, preserved also for nonzero normal termination.
     pub exit_code: u32,
-    /// Controller received out-of-band cancellation before observing child exit.
+    /// Controller requested termination of a still-running child. A reaped exit
+    /// wins over a simultaneous stop; an already-ended child is not cancellation.
     pub cancelled: bool,
     /// Successful native reads admitted to the fixed-capacity output queue.
     pub read_bytes: u64,
@@ -46,13 +48,21 @@ impl Drop for LocalSessionTask {
 impl LocalSessionTask {
     /// Join actor then direct child, reader, writer and native controller. Caller
     /// owns a finite deadline; cancelling this future requests out-of-band close.
-    pub async fn join(mut self) -> Result<(SessionState, NativeExit), LocalSessionError> {
+    pub async fn join(self) -> Result<(SessionState, NativeExit), LocalSessionError> {
+        let (state, _screen, native) = self.join_with_screen().await?;
+        Ok((state, native))
+    }
+    /// Diagnostic visible screen at the final actor boundary, including EOF decoding.
+    /// Not a complete snapshot. Native workers are joined under the caller's deadline.
+    pub async fn join_with_screen(
+        mut self,
+    ) -> Result<(SessionState, pulse_term::ObservedScreen, NativeExit), LocalSessionError> {
         let actor = self
             .actor
             .take()
             .ok_or_else(|| LocalSessionError("actor receipt consumed".into()))?;
-        let state = actor
-            .join()
+        let (state, screen) = actor
+            .join_with_screen()
             .await
             .map_err(|e| LocalSessionError(e.to_string()))?;
         let native = self
@@ -61,7 +71,7 @@ impl LocalSessionTask {
             .ok_or_else(|| LocalSessionError("native receipt consumed".into()))?
             .await
             .map_err(|e| LocalSessionError(e.to_string()))??;
-        Ok((state, native))
+        Ok((state, screen, native))
     }
 }
 /// Spawn/setup runs on a blocking pool; ongoing I/O uses three supervised native
@@ -185,17 +195,22 @@ fn setup(
                 let mut resizes = 0;
                 let mut cancelled = false;
                 let exit = loop {
-                    if *stop.borrow() || stop.has_changed().is_err() || *failed.borrow() {
-                        cancelled = true;
-                        break pty
-                            .terminate()
-                            .map_err(|e| LocalSessionError(e.to_string()))?;
-                    }
-                    if let Some(exit) = pty
+                    // EOF can stop the actor before this controller samples the child.
+                    // Observe an already-reaped exit before deciding to terminate.
+                    let observed = pty
                         .try_wait()
-                        .map_err(|e| LocalSessionError(e.to_string()))?
-                    {
-                        break exit;
+                        .map_err(|e| LocalSessionError(e.to_string()))?;
+                    let stopping =
+                        *stop.borrow() || stop.has_changed().is_err() || *failed.borrow();
+                    match native_control::action(observed, stopping) {
+                        native_control::Action::Exited(exit) => break exit,
+                        native_control::Action::Terminate => {
+                            cancelled = true;
+                            break pty
+                                .terminate()
+                                .map_err(|e| LocalSessionError(e.to_string()))?;
+                        }
+                        native_control::Action::Wait => {}
                     }
                     match resize_rx.recv_timeout(Duration::from_millis(20)) {
                         Ok((size, reply)) => {

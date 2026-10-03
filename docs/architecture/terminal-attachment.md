@@ -37,7 +37,11 @@
 - 一个application使用一个registry；注册相同actor两次被拒绝，身份由私有command channel比较而非公开watch receiver，避免两个id绕过owner与capture gate。注册层对input/resize/capture/state/resolve/ACK/detach/close先检查owner，未知session和无权限同样Forbidden。generation由backend分配，不复用失败capture的编号；旧ACK/detach在进入driver前返回Stale，不会撤销或释放新binding。晚到monitor完成仅能删除同generation条目。
 - window关闭撤销token和其view binding，不close session；旧token和同label的新window都不能继承session权限。孤立session仍由application持有，只有显式shutdown/session close关闭；安全的跨window迁移/恢复授权尚未实现。cap限制避免无限遗留，但这不是完整workspace迁移UX。
 - close/shutdown与await capture并发时，capture返回后再次检查owner，禁止死window复活view。成功capture提交后取消可能已替换旧lease；没有snapshot rollback。old wire/surface仍须由adapter丢弃，registry不能撤回已执行的xterm write。
-- native 2MiB压力探针已把input/ACK通过registry授权；window生命周期目前是可信in-process模拟，未注册Tauri命令、CSP capability、真实Destroyed/Exit回调，不构成桌面权限验收。
+- native 2MiB压力探针已把input/ACK通过registry授权。`probe-channel`进一步接通Tauri实际调用者WebviewWindow、local origin检查（无外部host/port/credentials）、runtime `Destroyed`与application `Exit`事件，owner不来自frontend label/token。
+- 新增四个developer-only typed命令：probe_session、probe_session_go、probe_session_ack、probe_session_peer。仅运行固定finite Rust helper，不启动任意shell；Raw Channel载荷仍为二进制。真实WebView中的headless xterm callback完成之后才ACK，终态从joined actor的visible projection生成digest，不向已结束actor发命令。
+- 真实隐藏peer window尝试跨owner input/ACK必须被拒绝；销毁后token撤销而其native session仍Running，然后由可信registrar显式close/join。`reap_closed`只清理已终态actor，Running返回Busy，不是frontend command。失败时guard请求撤销peer/关闭helper，后台等候终态最多5秒；固定child另有40秒硬截止。超时不能伪装成完成join。
+- 自动连续运行两次，重建相同peer label，backend generation递增；新run拒绝旧nonce、旧generation及错误generation ACK。两轮均有原生EOF、截断UTF-8排空和同边界digest证据；这仍不验证DOM绘制/selection或生产跨窗口迁移。
+
 
 ## 解析状态、历史与显示
 
@@ -63,4 +67,4 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。可见视图idle/resize/reattach的限频调度和generation校验仍须view driver接入。
 
-仍需：真实runtime window事件/权限适配和渲染器生命周期集成、真实WebView callback ACK至native链路组合实测、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
+仍需：任意用户会话的生产命令/权限与DOM renderer生命周期集成、可见view自动idle同步限频、跨窗口迁移与重新授权、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。当前真实窗口测试仅执行固定finite helper，不能宣称生产attach或S2/S11整体验收。原依赖与发布门禁不变。

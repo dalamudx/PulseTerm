@@ -371,6 +371,21 @@ impl SessionRegistry {
         }
         Ok(())
     }
+    /// Trusted registrar cleanup after joining a terminated actor, including after
+    /// its owner window was revoked. Never expose this as a frontend command.
+    /// Running sessions must survive window destruction; they cannot be reaped.
+    pub fn reap_closed(&self, id: SessionId) -> Result<(), RegistryError> {
+        let mut state = self.lock()?;
+        let entry = state.sessions.get(&id).ok_or(RegistryError::Forbidden)?;
+        if entry.handle.state.borrow().lifecycle == pulse_term::session::Lifecycle::Running {
+            return Err(RegistryError::Busy);
+        }
+        if let Some(binding) = state.bindings.remove(&id) {
+            binding.handle.detach();
+        }
+        state.sessions.remove(&id);
+        Ok(())
+    }
     /// Application shutdown revokes bindings and closes all session handles. Registrar
     /// supervisors still own native worker joins; this call is not an OS-tree join.
     pub fn shutdown(&self) -> Result<(), RegistryError> {
@@ -378,6 +393,9 @@ impl SessionRegistry {
         Ok(())
     }
 }
+#[cfg(test)]
+#[path = "registry_reap_tests.rs"]
+mod reap_tests;
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;

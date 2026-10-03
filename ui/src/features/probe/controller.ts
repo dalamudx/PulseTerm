@@ -1,3 +1,4 @@
+import type { SessionEvidence } from "../../ipc/gen/commands";
 import {
   automaticMode,
   finishReport,
@@ -7,6 +8,7 @@ import {
   verifyCancellation,
   verifyTypedEvents,
 } from "../../ipc/probe";
+import { verifySessionChannel } from "../../ipc/session-probe";
 
 interface Snapshot {
   running: boolean;
@@ -40,8 +42,16 @@ export async function start(): Promise<void> {
   const results: Measurement[] = [];
   let cancellation = false;
   let typedEvents = false;
+  let session: SessionEvidence | null = null;
+  let sessionRuns = 0;
   let failure: string | null = null;
   try {
+    update({ status: "session-channel" });
+    session = await verifySessionChannel();
+    sessionRuns++;
+    update({ status: "session-channel-recreated" });
+    session = await verifySessionChannel();
+    sessionRuns++;
     typedEvents = await verifyTypedEvents();
     for (const transport of ["channel", "websocket"] as const) {
       for (const scenario of [
@@ -90,9 +100,12 @@ export async function start(): Promise<void> {
   } finally {
     update({ running: false });
     await finishReport({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      session,
+      sessionRuns,
       typedEvents,
-      completed: failure === null && cancellation && typedEvents,
+      completed:
+        failure === null && cancellation && typedEvents && session !== null,
       cancellation,
       measurements: results,
       error: failure,
@@ -101,7 +114,7 @@ export async function start(): Promise<void> {
         hardwareConcurrency: navigator.hardwareConcurrency,
       },
       limitations: [
-        "Synthetic transfer only: no terminal parsing or desktop painting",
+        "Session uses real native PTY and browser headless xterm callbacks, not DOM painting",
         "Delivery timing is clock-calibrated estimate; uncertainty is recorded",
         "Heartbeat measures JS timer responsiveness, not input-to-paint latency",
         "A single Linux/container run is not three-platform acceptance",
@@ -113,7 +126,11 @@ export async function start(): Promise<void> {
 }
 
 export async function initialize(): Promise<void> {
-  if (initialized) return;
+  if (
+    initialized ||
+    new URL(window.location.href).searchParams.has("session-peer")
+  )
+    return;
   initialized = true;
   if (nativeAvailable && (await automaticMode())) await start();
 }

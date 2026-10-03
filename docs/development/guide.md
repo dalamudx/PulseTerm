@@ -71,10 +71,12 @@ mise run audit                    # Rust 许可证/安全公告/来源检查
 mise run fmt                      # 统一格式
 mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
 mise run desktop                  # 打开原生开发验证界面（不是完整终端）
-mise run probe-channel            # 自动采集真实 WebView 的 Channel/Socket 结果
+mise run probe-channel            # native PTY/窗口授权/EOF回调ACK，两次重建及7组Channel/Socket测量
 ```
 
 `probe-pty` 当前在 Unix 运行，依赖系统 `/bin/sh` 和 `stty`，不需要显示服务；输出 `target/probes/pty.json`。监督器最长 25 秒，交互 helper 自带 10 秒截止时间。三平台 CI 新增 `probe-pty-portable` 和 `probe-local-session`，不依赖Windows的stty；仅有Linux运行证据，不能把注册成功当作ConPTY验收。Windows helper只测canonical输入和native尺寸回读，不测raw/Win32键盘、child尺寸query或随附conpty.dll。
+
+`probe-channel` 报告schema 3要求两次native session运行、隐藏peer窗口跨owner拒绝、真实Destroyed撤销且会话存活、EOF同边界digest以及原有7组传输测量。每次约3.1MB Unicode输出含截断UTF-8尾部；客户端一次延迟ACK 250ms，额度最多1帧/8212字节（不含6字节outer header），callback完成才ACK。相同label重建与旧nonce/generation ACK也在真实WebView验证。使用浏览器中的`@xterm/headless`，不是Canvas/WebGL/DOM绘制；helper固定且40秒截止，不允许用户指定shell或命令。权限/错误仅使用稳定标识，不把会话内容或底层主机信息写入报告。
 
 无显示服务的 Linux 运行 `probe-channel` 需要 `xvfb`、`dbus-x11` 和 coreutils 的 `timeout`；探针监督整个 Xvfb/DBus/WebView 进程组，最长运行 180 秒。Linux 原生构建还需 GTK3/WebKitGTK 开发包，Windows/macOS 使用对应系统开发环境。原生依赖只在 `pulseterm-desktop` 的 `desktop` feature 启用，默认 headless 检查无需 GUI 库。
 
