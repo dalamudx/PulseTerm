@@ -1,4 +1,4 @@
-export type VisibilitySource = "container" | "document";
+export type VisibilitySource = "container" | "document" | "native";
 export interface VisibilityActions {
   /** Synchronous: cancel input/render/ACK work BEFORE any asynchronous detach. */
   retire(): void;
@@ -26,7 +26,7 @@ function completion(): Completion {
  * is NOT a hidden signal. Pause cannot be skipped even when show arrives early.
  * The new generation owns the next controller after a successful resume handoff. */
 export class SurfaceVisibility {
-  private sources = { container: true, document: true };
+  private sources = { container: true, document: true, native: true };
   private phase:
     | "visible"
     | "pausing"
@@ -52,10 +52,11 @@ export class SurfaceVisibility {
   }
   /** Commit one measurement atomically: source updates must not create a
    * transient visible state between a container show and page hide. */
-  observeSnapshot(sources: Record<VisibilitySource, boolean>): void {
+  observeSnapshot(sources: Partial<Record<VisibilitySource, boolean>>): void {
     if (this.phase === "closed" || this.phase === "handedoff") return;
-    this.sources = { ...sources };
-    const shown = this.sources.container && this.sources.document;
+    this.sources = { ...this.sources, ...sources };
+    const shown =
+      this.sources.container && this.sources.document && this.sources.native;
     if (!shown && this.phase === "resuming") {
       this.fail("visibility.changed_during_resume");
       return;
@@ -101,7 +102,8 @@ export class SurfaceVisibility {
     if (
       this.phase !== "paused" ||
       !this.sources.container ||
-      !this.sources.document
+      !this.sources.document ||
+      !this.sources.native
     )
       return;
     this.phase = "resuming";

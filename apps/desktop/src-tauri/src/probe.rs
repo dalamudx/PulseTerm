@@ -446,6 +446,7 @@ struct DomEvidence {
     paste_blocked: bool,
     fit_checked: bool,
     visibility_checked: bool,
+    native_signal_checked: bool,
 }
 impl DomEvidence {
     fn validate(&self) -> ProbeResult<()> {
@@ -458,6 +459,7 @@ impl DomEvidence {
             || !self.paste_blocked
             || !self.fit_checked
             || !self.visibility_checked
+            || !self.native_signal_checked
             || !self.width_px.is_finite()
             || !self.height_px.is_finite()
             || !(1.0..=4096.0).contains(&self.width_px)
@@ -605,13 +607,17 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session_input,
             crate::window_sessions::probe_session_resize,
             crate::window_sessions::probe_session_visibility,
+            crate::window_sessions::probe_session_native_snapshot,
             crate::window_sessions::probe_session_hidden_output,
             crate::window_sessions::probe_session_window_cycle,
             crate::window_sessions::probe_session_detach,
             crate::window_sessions::probe_session_go,
             crate::window_sessions::probe_session_peer
         ])
-        .events(tauri_specta::collect_events![ProbeEcho])
+        .events(tauri_specta::collect_events![
+            ProbeEcho,
+            crate::native_visibility::NativeVisibilitySample
+        ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
 
@@ -880,6 +886,7 @@ mod tests {
             paste_blocked: true,
             fit_checked: true,
             visibility_checked: true,
+            native_signal_checked: true,
         };
         assert!(e.validate().is_ok());
         e.render_events = 0;

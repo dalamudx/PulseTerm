@@ -23,6 +23,7 @@ export const commands = {
 	probeSessionInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_session_input", { nonce, generation, text }),
 	probeSessionResize: (nonce: string, generation: string, columns: number, rows: number) => __TAURI_INVOKE<null>("probe_session_resize", { nonce, generation, columns, rows }),
 	probeSessionVisibility: (nonce: string, generation: string, visible: boolean) => __TAURI_INVOKE<null>("probe_session_visibility", { nonce, generation, visible }),
+	probeSessionNativeSnapshot: (nonce: string) => __TAURI_INVOKE<NativeVisibilitySample>("probe_session_native_snapshot", { nonce }),
 	probeSessionHiddenOutput: (nonce: string, generation: string) => __TAURI_INVOKE<string>("probe_session_hidden_output", { nonce, generation }),
 	probeSessionWindowCycle: (nonce: string, generation: string) => __TAURI_INVOKE<string>("probe_session_window_cycle", { nonce, generation }),
 	/**  Revoke exactly this viewer generation; registry never closes the session. */
@@ -33,6 +34,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	nativeVisibilitySample: makeEvent<NativeVisibilitySample>("native-visibility-sample"),
 	probeEcho: makeEvent<ProbeEcho>("probe-echo"),
 };
 
@@ -60,6 +62,15 @@ export type DomEvidence = {
 	pasteBlocked: boolean,
 	fitChecked: boolean,
 	visibilityChecked: boolean,
+	nativeSignalChecked: boolean,
+};
+
+export type NativeVisibilitySample = {
+	incarnation: string,
+	revision: number,
+	visible: boolean,
+	minimized: boolean,
+	valid: boolean,
 };
 
 export type ProbeConfig = {

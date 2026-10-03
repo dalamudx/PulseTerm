@@ -1,9 +1,14 @@
 // Developer-only finite PTY validation with headless and DOM xterm surfaces.
 import { Channel } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
 import type { DomRenderer } from "../features/probe/dom-renderer";
 import { IdleComparison } from "../features/terminal/idle-comparison";
 import { InputQueue } from "../features/terminal/input-queue";
+import {
+  NativeVisibilityBuffer,
+  NativeVisibilityFilter,
+} from "../features/terminal/native-visibility";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
 import {
@@ -15,7 +20,12 @@ import { Utf8Stream } from "../features/terminal/utf8-stream";
 import { type AttachBoundary, attachmentEnvelope } from "./attachment";
 import { AttachmentConsumer } from "./attachment-consumer";
 import { decodeFrame } from "./frames";
-import { commands, type SessionEvidence } from "./gen/commands";
+import {
+  commands,
+  events,
+  type NativeVisibilitySample,
+  type SessionEvidence,
+} from "./gen/commands";
 import { forCurrentSurface, SurfaceGeneration } from "./surface-generation";
 
 type ProbeTerminal = Pick<
@@ -174,6 +184,10 @@ export async function verifySessionChannel(dom?: {
   let hiddenBoundary = 0n;
   let visibility: SurfaceVisibility | undefined;
   let stopVisibility: (() => void) | undefined;
+  let stopNative: (() => void) | undefined;
+  let nativeHidden = false,
+    nativeRestored = false;
+  let nativeTimer: ReturnType<typeof setTimeout> | undefined;
   let expectedSize: { columns: number; rows: number } | undefined;
   let oldGeneration: bigint | undefined;
   channel.onmessage = (data) => {
@@ -581,6 +595,56 @@ export async function verifySessionChannel(dom?: {
                 },
                 lifetime.signal,
               );
+              let nativeFilter: NativeVisibilityFilter | undefined;
+              const pendingNative = new NativeVisibilityBuffer();
+              let nativeDone!: () => void;
+              const nativeObserved = new Promise<void>((resolve) => {
+                nativeDone = resolve;
+              });
+              const applyNative = (sample: NativeVisibilitySample) => {
+                if (lifetime.signal.aborted) return;
+                if (!nativeFilter) {
+                  pendingNative.add(sample);
+                  return;
+                }
+                const accepted = nativeFilter.accept(sample);
+                if (!accepted) return;
+                if (!accepted.valid) {
+                  failed ??= new Error("session.native_query_failed");
+                  cancel();
+                  return;
+                }
+                const shown = accepted.visible && !accepted.minimized;
+                if (!shown) nativeHidden = true;
+                else if (nativeHidden) {
+                  nativeRestored = true;
+                  nativeDone();
+                }
+                visibility?.observe("native", shown);
+              };
+              stopNative = await events
+                .nativeVisibilitySample(getCurrentWebviewWindow())
+                .listen((event) => {
+                  try {
+                    applyNative(event.payload);
+                  } catch (error) {
+                    failed ??= error;
+                    cancel();
+                  }
+                });
+              if (lifetime.signal.aborted) throw new Error("session.cancelled");
+              const nativeSnapshot =
+                await commands.probeSessionNativeSnapshot(nonce);
+              nativeFilter = new NativeVisibilityFilter(nativeSnapshot);
+              visibility.observe(
+                "native",
+                nativeSnapshot.visible && !nativeSnapshot.minimized,
+              );
+              const pendingNativeSample = pendingNative.take(
+                nativeSnapshot.incarnation,
+              );
+              if (pendingNativeSample) applyNative(pendingNativeSample);
+
               stopVisibility = bindSurfaceVisibility(
                 dom.host,
                 visibility,
@@ -608,6 +672,16 @@ export async function verifySessionChannel(dom?: {
                 await commands.probeSessionWindowCycle(nonce, generation),
               );
               await new Promise<void>((resolve) => setTimeout(resolve, 100));
+              await Promise.race([
+                nativeObserved,
+                new Promise<never>((_, reject) => {
+                  nativeTimer = setTimeout(
+                    () => reject(new Error("session.native_event_timeout")),
+                    2000,
+                  );
+                }),
+              ]);
+              clearTimeout(nativeTimer);
               if (
                 hiddenBoundary <= boundary.parsedBytes ||
                 wireCount !== before
@@ -852,6 +926,9 @@ export async function verifySessionChannel(dom?: {
       if (!renderer) throw new Error("session.no_dom_renderer");
       renderer.markFitChecked();
       renderer.markVisibilityChecked();
+      if (!nativeHidden || !nativeRestored)
+        throw new Error("session.native_signal_missing");
+      renderer.markNativeSignalChecked();
       dom.complete(renderer.evidence());
     }
     previous = { nonce, generation: result.generation };
@@ -860,6 +937,8 @@ export async function verifySessionChannel(dom?: {
     inputArmed = false;
     inputQueue?.cancel();
     stopVisibility?.();
+    stopNative?.();
+    clearTimeout(nativeTimer);
     visibility?.dispose();
     clearTimeout(deadline);
     idle?.dispose();

@@ -21,6 +21,7 @@ pub(crate) struct WindowSessions(Arc<Inner>);
 struct Inner {
     registry: SessionRegistry,
     windows: Mutex<HashMap<String, WindowToken>>,
+    observers: Mutex<HashMap<WindowToken, Arc<crate::native_visibility::NativeWatcher>>>,
     active: Mutex<Option<Active>>,
     slot: Arc<Semaphore>,
     minimize: bool,
@@ -42,6 +43,7 @@ impl WindowSessions {
         Self(Arc::new(Inner {
             registry: SessionRegistry::new(),
             windows: Mutex::new(HashMap::new()),
+            observers: Mutex::new(HashMap::new()),
             active: Mutex::new(None),
             slot: Arc::new(Semaphore::new(1)),
             minimize,
@@ -68,11 +70,26 @@ impl WindowSessions {
             return Ok(*token);
         }
         let token = self.0.registry.open_window().map_err(error)?;
+        let observer = crate::native_visibility::NativeWatcher::new();
+        self.0
+            .observers
+            .lock()
+            .map_err(error)?
+            .insert(token, observer.clone());
         windows.insert(label.clone(), token);
+        observer.launch(window.clone());
         let state = self.clone();
         window.on_window_event(move |event| {
             if matches!(event, WindowEvent::Destroyed) {
+                observer.close();
                 let _ = state.revoke(&label, token);
+            } else if matches!(
+                event,
+                WindowEvent::Focused(_)
+                    | WindowEvent::Resized(_)
+                    | WindowEvent::ScaleFactorChanged { .. }
+            ) {
+                observer.hint();
             }
         });
         Ok(token)
@@ -85,6 +102,9 @@ impl WindowSessions {
         // Release window metadata before touching active/gate locks. Destroyed is
         // terminal; CloseRequested may be prevented and is not a revoke signal.
         drop(windows);
+        if let Some(observer) = self.0.observers.lock().map_err(error)?.remove(&token) {
+            observer.close();
+        }
         if let Some(run) = self
             .0
             .active
@@ -119,6 +139,11 @@ impl WindowSessions {
         Ok((owner, run.id))
     }
     pub(crate) fn shutdown(&self) {
+        if let Ok(mut observers) = self.0.observers.lock() {
+            for (_, observer) in observers.drain() {
+                observer.close();
+            }
+        }
         let _ = self.0.registry.shutdown();
     }
 }
@@ -347,6 +372,30 @@ pub(crate) async fn probe_session_resize(
         )
         .await
         .map_err(error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_native_snapshot(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+) -> Result<crate::native_visibility::NativeVisibilitySample> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state.0.registry.state(owner, id).map_err(error)?;
+    let observer = state
+        .0
+        .observers
+        .lock()
+        .map_err(error)?
+        .get(&owner)
+        .cloned()
+        .ok_or("session.unknown_window")?;
+    let sample = observer.sample(window.clone()).await?;
+    if state.caller(&window)? != owner {
+        return Err("session.window_replaced".into());
+    }
+    Ok(sample)
 }
 
 fn visibility_gate(

@@ -161,6 +161,7 @@ fn validate(path: &Path, minimize: bool) -> Result<()> {
         || report["session"]["nativeWindowChecked"] != false
         || !window_mode_matches(&report, minimize)
         || dom["visibilityChecked"] != true
+        || dom["nativeSignalChecked"] != true
         || report["session"]["resizeCount"] != 0
         || report["session"]["pauseCount"] != 0
         || dom["rowsChecked"] != 12
