@@ -16,6 +16,8 @@ export const commands = {
 	probeSession: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel }),
 	probeSessionAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_session_ack", { nonce, generation, sequence }),
 	probeSessionCompare: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<ComparisonEvidence>("probe_session_compare", { nonce, generation, rendered }),
+	probeSessionMarker: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_marker", { nonce, generation }),
+	probeSessionResume: (nonce: string) => __TAURI_INVOKE<null>("probe_session_resume", { nonce }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
 	probeSessionPeer: (nonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce }),
 };
@@ -102,6 +104,7 @@ export type SessionEvidence = {
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
 	idleChecked: boolean,
+	markerChecked: boolean,
 };
 
 export type SocketTicket = {

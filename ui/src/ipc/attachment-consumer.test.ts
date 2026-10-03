@@ -95,6 +95,56 @@ it("cancelling in-flight EOF never sends a late ACK", async () => {
   await Promise.resolve();
   expect(ack).not.toContain(fixture.length);
 });
+function markerWire(sequence: number): Uint8Array {
+  const wire = checkpointWire(sequence);
+  wire[7] = 8;
+  return wire;
+}
+it("pure Marker waits for observation before ACK without writing or flushing", async () => {
+  const events: string[] = [];
+  const ack: number[] = [];
+  const pending = deferred();
+  const target = sink(events);
+  target.checkpoint = async () => {
+    throw new Error("must not flush");
+  };
+  target.marker = async (revision, offset) => {
+    expect(revision).toBe((1n << 64n) - 4n);
+    expect(offset).toBe(10n);
+    await pending.promise;
+  };
+  const consumer = new AttachmentConsumer(generation, target, (_, seq) => {
+    ack.push(seq);
+  });
+  for (const frame of fixture) await consumer.enqueue(frame);
+  const before = events.slice();
+  const request = consumer.enqueue(markerWire(fixture.length));
+  await Promise.resolve();
+  expect(ack).not.toContain(fixture.length);
+  pending.resolve();
+  const receipt = await request;
+  expect(receipt?.event.kind).toBe("marker");
+  expect(events).toEqual(before);
+  expect(ack.at(-1)).toBe(fixture.length);
+});
+it("unsupported or cancelled Marker cannot claim an ACK", async () => {
+  for (const cancel of [false, true]) {
+    const ack: number[] = [];
+    const target = sink([]);
+    const pending = deferred();
+    if (cancel) target.marker = () => pending.promise;
+    const consumer = new AttachmentConsumer(generation, target, (_, seq) => {
+      ack.push(seq);
+    });
+    for (const frame of fixture) await consumer.enqueue(frame);
+    const request = consumer.enqueue(markerWire(fixture.length));
+    if (cancel) consumer.cancel();
+    await expect(request).rejects.toThrow();
+    pending.resolve();
+    await Promise.resolve();
+    expect(ack).not.toContain(fixture.length);
+  }
+});
 function checkpointWire(sequence: number): Uint8Array {
   const wire = new Uint8Array(34);
   const view = new DataView(wire.buffer);

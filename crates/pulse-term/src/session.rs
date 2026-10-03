@@ -15,6 +15,9 @@ pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
 #[cfg(test)]
+#[path = "session_marker_tests.rs"]
+mod marker_tests;
+#[cfg(test)]
 #[path = "session_stream_tests.rs"]
 mod stream_tests;
 use pulse_core::TermSize;
@@ -108,6 +111,9 @@ pub enum SessionError {
     /// A session-local stream serial cannot wrap or be reused.
     #[error("stream lease serial exhausted")]
     LeaseExhausted,
+    /// The actor has no open subscriber with this serial.
+    #[error("stale stream lease")]
+    StaleLease,
     /// Digest must be exactly sixteen lowercase hexadecimal characters.
     #[error("invalid diagnostic digest")]
     InvalidDigest,
@@ -146,6 +152,7 @@ struct PendingResize {
     deadline: tokio::time::Instant,
 }
 enum Command {
+    Marker(u64, oneshot::Sender<Result<(), SessionError>>),
     Subscribe {
         history_rows: usize,
         history_budget: usize,
@@ -358,6 +365,14 @@ impl SessionHandle {
     }
 }
 impl SessionHandle {
+    /// Admit a read-only marker into THIS lease's bounded ordered output queue.
+    /// Success is not delivery or ACK. Full queue returns Busy without waiting;
+    /// cancelled requests and stale serials never inject a marker into a new lease.
+    pub async fn diagnostic_marker(&self, lease_id: u64) -> Result<(), SessionError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Marker(lease_id, reply))?;
+        result.await.map_err(|_| SessionError::Closed)?
+    }
     /// Try bounded command admission, then wait for actor acceptance. Input may be
     /// cancelled later on explicit close; success is NOT a physical-write receipt.
     pub async fn input(&self, bytes: Vec<u8>) -> Result<(), SessionError> {
@@ -653,6 +668,25 @@ pub fn spawn_session(
                     Some(Command::Bootstrap { history_rows, history_budget, restore_budget, reply }) => {
                         if !reply.is_closed() {
                             let result=stream::prepare(&terminal,&current,history_rows,history_budget,restore_budget);
+                            let _ = reply.send(result);
+                        }
+                    }
+                    Some(Command::Marker(id,reply)) => {
+                        if !reply.is_closed() {
+                            let result = match lease.as_ref().filter(|l| l.id == id && !l.output.is_closed()) {
+                                None => Err(SessionError::StaleLease),
+                                Some(_) if resizing.is_some() || terminal.sync_deadline().is_some() => Err(SessionError::Busy),
+                                Some(current_lease) => {
+                                    let slot = match stream_permit.take() {
+                                        Some(slot) => Ok(slot),
+                                        None => current_lease.output.clone().try_reserve_owned().map_err(|e| match e {
+                                            mpsc::error::TrySendError::Full(_) => SessionError::Busy,
+                                            mpsc::error::TrySendError::Closed(_) => SessionError::StaleLease,
+                                        }),
+                                    };
+                                    slot.map(|slot| { slot.send(StreamRecord::Marker(current.clone())); })
+                                }
+                            };
                             let _ = reply.send(result);
                         }
                     }

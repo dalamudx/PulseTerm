@@ -95,7 +95,7 @@ async fn wire_streaming() -> Result<serde_json::Value> {
                         pause = Some(stopped);
                     }
                 }
-                Part::Checkpoint => {
+                Part::Checkpoint | Part::Marker => {
                     ensure!(Some(part.offset) == offset, "wire checkpoint bytes");
                 }
                 Part::End => {
@@ -202,7 +202,7 @@ async fn streaming() -> Result<serde_json::Value> {
                     offset = boundary.parsed_bytes;
                     chunks += 1;
                 }
-                StreamRecord::Fence(boundary) => {
+                StreamRecord::Fence(boundary) | StreamRecord::Marker(boundary) => {
                     ensure!(boundary.parsed_bytes == offset, "fence manufactured bytes");
                 }
             }

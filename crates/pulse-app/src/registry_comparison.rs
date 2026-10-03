@@ -41,6 +41,39 @@ impl SessionRegistry {
             .ok_or(RegistryError::Stale)?;
         Ok(entry)
     }
+    /// Admit a pure boundary Marker into the current lease. No state is returned
+    /// here: only the ordered wire callback can establish the renderer boundary.
+    /// Busy/full/sync/resize failures are not success and require bounded retry.
+    /// One request/session/500ms, including cancellation and replacement.
+    pub async fn request_marker(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+    ) -> Result<(), RegistryError> {
+        let (entry, binding) = {
+            let state = self.lock()?;
+            let entry = Self::entry(&state, owner, id)?;
+            let binding = state
+                .bindings
+                .get(&id)
+                .filter(|b| b.generation == generation)
+                .ok_or(RegistryError::Stale)?
+                .handle
+                .clone();
+            (entry, binding)
+        };
+        let mut last = entry.marker.try_lock().map_err(|_| RegistryError::Busy)?;
+        let now = Instant::now();
+        if last.is_some_and(|at| now.duration_since(at) < MIN_INTERVAL) {
+            return Err(RegistryError::Busy);
+        }
+        *last = Some(now);
+        let admitted = timeout(DEADLINE, binding.request_marker()).await;
+        self.comparison_entry(owner, id, generation)?;
+        admitted.map_err(|_| RegistryError::Busy)??;
+        Ok(())
+    }
     /// At most one comparison per session and one admission per 500ms, including
     /// cancelled/failed calls and binding replacements. Foreign/stale requests
     /// cannot consume this allowance. No terminal or registry metadata mutex crosses

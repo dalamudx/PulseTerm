@@ -54,6 +54,7 @@ struct Entry {
     handle: SessionHandle,
     capture: Arc<AsyncMutex<()>>,
     comparison: AsyncMutex<Option<tokio::time::Instant>>,
+    marker: AsyncMutex<Option<tokio::time::Instant>>,
 }
 struct Binding {
     generation: u64,
@@ -191,6 +192,7 @@ impl SessionRegistry {
                 handle,
                 capture: Arc::new(AsyncMutex::new(())),
                 comparison: AsyncMutex::new(None),
+                marker: AsyncMutex::new(None),
             }),
         );
         Ok(id)

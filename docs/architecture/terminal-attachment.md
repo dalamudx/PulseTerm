@@ -1,10 +1,10 @@
 # 终端重连事务 v1（已实现的基础，非生产 attach）
 
-后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；窗口无关的协议额度/ACK监督已在pulse-app贯通；注册层已有可信window token、owner授权和generation撤销；真实Tauri window事件/权限适配、多视图策略仍待实现。
+后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；窗口无关的协议额度/ACK监督已在pulse-app贯通；注册层已有可信window token、owner授权和generation撤销；真实Tauri window事件/权限适配已通过fixed-helper验证；任意用户会话生产接口与多视图策略仍待实现。
 
 ## 一个流，一个事务
 
-`pulse-ipc::attach` 和 `ui/src/ipc/attachment.ts` 定义 Begin → History* → Restore+ → Commit → (Data | Checkpoint)* → End，全部使用 FrameKind::Attachment=8，同一有序二进制通道，同一 CreditWindow。版本1的20字节 envelope 包含 version/part/reserved/generation/offset；Begin 28字节为columns:u16、rows:u16、revision:u64、parsed_bytes:u64、history_len:u32、restore_len:u32，全部小端。
+`pulse-ipc::attach` 和 `ui/src/ipc/attachment.ts` 定义 Begin → History* → Restore+ → Commit → (Data | Checkpoint | Marker)* → End，全部使用 FrameKind::Attachment=8，同一有序二进制通道，同一 CreditWindow。版本1的20字节 envelope 包含 version/part/reserved/generation/offset；Begin 28字节为columns:u16、rows:u16、revision:u64、parsed_bytes:u64、history_len:u32、restore_len:u32，全部小端。
 
 - generation非零，由会话绑定层分配，不是parsed_bytes。ACK必须同时匹配generation和在途sequence；旧绑定ACK不释放新绑定额度。现有32位sequence遵守CreditWindow窗口规则。
 - revision和parsed_bytes在JS中用bigint，不转number。parsed_bytes只表示后端原始输出解析边界，不是ACK，不是转码后的UTF-8字节数。本版Data的offset按发送字节递增，尚不覆盖编码转换后的原始/UTF-8双坐标，不能用于非UTF-8会话的生产边界。
@@ -18,7 +18,8 @@
 - lease_id是actor-local单调serial，不是全应用generation或授权。成功新capture替换旧lease；捕获失败或actor处理前取消保留旧lease。actor提交后取消已经发生替换，旧lease不自动回滚，必须重新attach。旧renderer及旧排队消息不能复用到新generation。
 - watch StreamStatus提供无丢失终止原因和boundary：native resize成功、palette/cellpixels改变会Reconfigured；pending resize拒绝新lease，失败保持旧lease。Receiver放弃/close会Detached，不关闭registry session handle。
 - sync deadline的零字节state推进用Fence，映射同stream Part::Checkpoint=6；offset必须等于live cursor，body是little-endian u64 revision且不回退，使用同generation/order/credits。Consumer要求sink处理完成才ACK，缺实现会fail closed；checkpoint本身不证明hidden/parser/history一致。
-- genuine EOF在actor处理finish后停止输出；driver排空剩余Data/Fence，再发送Part::End=7，offset必须等于最终parsed_bytes，8字节body为revision且不回退。TS consumer要求sink.finish完成decoder尾部及render callback后才ACK；没有finish实现明确拒绝。End后拒绝任何当前generation的Data/Checkpoint/再次End。取消、Failed或resize不发送假EOF，必须丢弃旧surface而非finish它。
+- 按需只读边界用Part::Marker=8：相同8字节revision/offset/order/credit，但与Part6语义不同。它不feed VT、不结束同步更新、不finish UTF-8。Consumer要求显式sink.marker回调完成才ACK，缺实现fail closed。actor验证当前lease_id（非授权generation），有空队列槽才接纳；旧serial、取消、active BSU、pending resize和满队列不能注入新lease。registry校验window owner/current generation后再请求，返回前重新校验；换绑或取消不能重置每session限频。
+- genuine EOF在actor处理finish后停止输出；driver排空剩余Data/Fence/Marker，再发送Part::End=7，offset必须等于最终parsed_bytes，8字节body为revision且不回退。TS consumer要求sink.finish完成decoder尾部及render callback后才ACK；没有finish实现明确拒绝。End后拒绝任何当前generation的Data/Checkpoint/Marker/再次End。取消、Failed或resize不发送假EOF，必须丢弃旧surface而非finish它。
 
 ### 有界ACK监督driver（pulse-app）
 
@@ -67,6 +68,6 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。`SessionRegistry::compare_visible`已提供owner/generation前后校验的只读摘要比较：每session single-flight、500ms限频（包括失败/取消/换绑）、250ms actor截止。旧boundary返回Stale；错误/timeout不是Mismatch。它不调用会清risk的Verify，因此撤销后仍在队列中的检查也不能修改新绑定风险位。Equal只是采样证据，不是后续应用restore的权限。
 
-前端`IdleComparison`对已知Commit/Checkpoint边界在600ms空闲后检查，最多3次尝试；隐藏/新输出入队/销毁/换generation作废迟到结果，350ms证据期限。不结束的IPC占住single-flight，而非超时后不断生成新IPC。Mismatch仅通知调用方，不重绘、不绕过精确恢复门禁。普通Data没有完整revision，`activity()`须清除已知边界，不能用offset猜revision；生产view仍需同通道有序checkpoint请求和原子compare→restore权限检查，才能覆盖每次输出结束后的idle同步。当前真实WebView只在固定helper等待go的Commit边界验证idle，未实现自动重绘或生产DOM绑定。
+前端`IdleComparison`对已知Commit/Checkpoint/Marker边界在600ms空闲后检查，最多3次尝试；隐藏/新输出入队/销毁/换generation作废迟到结果，350ms证据期限。不结束的IPC占住single-flight，而非超时后不断生成新IPC。Mismatch仅通知调用方，不重绘、不绕过精确恢复门禁。普通Data没有完整revision，`activity()`须清除已知边界，不能用offset猜revision；已新增同通道只读Marker请求：新Data入队后600ms空闲请求Marker（最多3次），IPC仅证明admission；观察有序Marker回调且没有后来入队Data时建立边界，再600ms后比较。registry请求采用500ms限频/250ms截止，actor lease身份和队列容量双重校验；active BSU/pending resize/full queue明确Busy，不旁路等待。真实WebView已在fixed helper半条CSI的输出暂停点自动请求Marker、比较并继续到EOF。生产view仍需原子compare→restore权限检查与DOM绑定；未实现自动重绘。
 
 仍需：任意用户会话的生产命令/权限与DOM renderer生命周期集成、可见view自动idle同步限频、跨窗口迁移与重新授权、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。当前真实窗口测试仅执行固定finite helper，不能宣称生产attach或S2/S11整体验收。原依赖与发布门禁不变。

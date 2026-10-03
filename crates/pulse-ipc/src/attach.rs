@@ -1,4 +1,4 @@
-//! Attachment v1: Begin -> History* -> Restore+ -> Commit -> (Data | Checkpoint)* -> End.
+//! Attachment v1: Begin -> History* -> Restore+ -> Commit -> (Data | Checkpoint | Marker)* -> End.
 //! All messages use ONE ordered binary stream and the same sending credit window.
 //! A new generation starts a new stream; sequence gaps are fatal, not recoverable
 //! by accepting a later fragment. A caller must serialize control and PTY output
@@ -37,6 +37,8 @@ pub enum Part {
     Checkpoint = 6,
     /// Genuine parser EOF; finish UTF-8 and render before ACK. No further frames.
     End = 7,
+    /// Pure boundary marker: preserve parser, decoder and synchronized updates.
+    Marker = 8,
 }
 /// Control/output boundary captured by the terminal owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +118,7 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
         5 => Part::Data,
         6 => Part::Checkpoint,
         7 => Part::End,
+        8 => Part::Marker,
         _ => return Err(AttachError::Invalid),
     };
     let read = |at| -> Result<u64, AttachError> {
@@ -130,6 +133,7 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
     if generation == 0
         || (matches!(part, Part::Begin | Part::Commit) && offset != 0)
         || (part == Part::Commit && !body.is_empty())
+        || (matches!(part, Part::Checkpoint | Part::End | Part::Marker) && body.len() != 8)
         || (matches!(part, Part::History | Part::Restore | Part::Data) && body.is_empty())
     {
         return Err(AttachError::Invalid);
@@ -256,7 +260,7 @@ impl AttachmentSender {
             }
             Part::Commit => &[],
             Part::Data | Part::End => return Ok(None),
-            Part::Checkpoint => return Err(AttachError::Phase),
+            Part::Checkpoint | Part::Marker => return Err(AttachError::Phase),
         };
         let payload = Fragment {
             part: self.phase,
@@ -338,6 +342,10 @@ impl AttachmentSender {
     /// a NoCredit error leaves all state unchanged. Receiver must process before ACK.
     pub fn checkpoint(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {
         self.state_frame(boundary, Part::Checkpoint)
+    }
+    /// A read-only boundary at the current cursor; no VT or sync-flush semantics.
+    pub fn marker(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {
+        self.state_frame(boundary, Part::Marker)
     }
     /// End at the exact final byte cursor. NoCredit leaves phase/state unchanged.
     pub fn finish(&mut self, boundary: Boundary) -> Result<Vec<u8>, AttachError> {

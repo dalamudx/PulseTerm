@@ -33,6 +33,43 @@ async fn bootstrap(handle: &AttachmentHandle, wire: &mut mpsc::Receiver<Vec<u8>>
     }
 }
 #[tokio::test]
+async fn marker_follows_data_and_uses_the_same_credit_without_parser_flush() {
+    let (session, actor, driver) = session();
+    let (handle, mut wire, task) = attach(&session, 8, config()).await.unwrap();
+    bootstrap(&handle, &mut wire, 8).await;
+    driver.output.send(b"x\x1b[31".to_vec()).await.unwrap();
+    let data = wire.recv().await.unwrap();
+    let frame = pulse_ipc::decode(&data).unwrap();
+    assert_eq!(
+        pulse_ipc::attach::decode_fragment(frame.payload)
+            .unwrap()
+            .part,
+        pulse_ipc::attach::Part::Data
+    );
+    handle.request_marker().await.unwrap();
+    assert!(
+        timeout(Duration::from_millis(40), wire.recv())
+            .await
+            .is_err()
+    );
+    handle.acknowledge(8, frame.sequence).unwrap();
+    let marker = wire.recv().await.unwrap();
+    let frame = pulse_ipc::decode(&marker).unwrap();
+    let fragment = pulse_ipc::attach::decode_fragment(frame.payload).unwrap();
+    assert_eq!(fragment.part, pulse_ipc::attach::Part::Marker);
+    assert_eq!(fragment.offset, 5);
+    assert_eq!(
+        fragment.body,
+        u64::to_le_bytes(session.state.borrow().revision)
+    );
+    handle.acknowledge(8, frame.sequence).unwrap();
+    handle.detach();
+    assert!(task.join().await.is_err());
+    session.close();
+    drop(driver);
+    actor.join().await.unwrap();
+}
+#[tokio::test]
 async fn normal_eof_is_ordered_and_requires_final_ack() {
     let (session, actor, driver) = session();
     let (handle, mut wire, task) = attach(&session, 8, config()).await.unwrap();

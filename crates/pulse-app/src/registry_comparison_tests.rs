@@ -2,6 +2,61 @@
 use super::super::tests::{bootstrap, config, session};
 use super::*;
 use pulse_term::session::{DriverEndpoint, SessionHandle, SessionTask};
+#[tokio::test]
+async fn marker_request_is_authorized_rate_limited_and_cannot_cross_replacement() {
+    let f = Fixture::new().await;
+    let other = f.registry.open_window().unwrap();
+    assert!(matches!(
+        f.registry
+            .request_marker(other, f.id, f.binding.generation)
+            .await,
+        Err(RegistryError::Forbidden)
+    ));
+    assert!(matches!(
+        f.registry
+            .request_marker(f.owner, f.id, f.binding.generation + 1)
+            .await,
+        Err(RegistryError::Stale)
+    ));
+    let registry = f.registry.clone();
+    {
+        let pending = registry.request_marker(f.owner, f.id, f.binding.generation);
+        tokio::pin!(pending);
+        tokio::select! { biased; _=&mut pending=>panic!("unexpected synchronous completion"),_=std::future::ready(())=>{} }
+        let mut replacement = f.registry.attach(f.owner, f.id, config()).await.unwrap();
+        assert!(matches!(pending.await, Err(RegistryError::Stale)));
+        bootstrap(&f.registry, f.owner, f.id, &mut replacement).await;
+        assert!(matches!(
+            f.registry
+                .request_marker(f.owner, f.id, replacement.generation)
+                .await,
+            Err(RegistryError::Busy)
+        ));
+        tokio::time::sleep(MIN_INTERVAL).await;
+        f.registry
+            .request_marker(f.owner, f.id, replacement.generation)
+            .await
+            .unwrap();
+        let wire = replacement.wire.recv().await.unwrap();
+        let frame = pulse_ipc::decode(&wire).unwrap();
+        assert_eq!(
+            pulse_ipc::attach::decode_fragment(frame.payload)
+                .unwrap()
+                .part,
+            pulse_ipc::attach::Part::Marker
+        );
+        assert!(matches!(
+            f.registry
+                .request_marker(f.owner, f.id, replacement.generation)
+                .await,
+            Err(RegistryError::Busy)
+        ));
+        f.registry
+            .acknowledge(f.owner, f.id, replacement.generation, frame.sequence)
+            .unwrap();
+    }
+    f.close().await;
+}
 struct Fixture {
     registry: SessionRegistry,
     owner: WindowToken,

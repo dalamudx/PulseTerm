@@ -119,7 +119,14 @@ pub(crate) fn child() -> std::io::Result<()> {
     for _ in 0..40 {
         out.write_all(block.as_bytes())?;
     }
-    out.write_all(b"\x1b[31mEOF\x1b[0m\xe4\xb8")?;
+    out.write_all(b"MARKER_READY\r\n\x1b[31")?;
+    out.flush()?;
+    line.clear();
+    std::io::stdin().lock().read_line(&mut line)?;
+    if line.trim_end() != "m" {
+        return Err(std::io::Error::other("invalid resume input"));
+    }
+    out.write_all(b"mEOF\x1b[0m\xe4\xb8")?;
     out.flush()
 }
 async fn native() -> Result<(SessionHandle, pulse_app::LocalSessionTask)> {
@@ -190,6 +197,7 @@ pub(crate) struct SessionEvidence {
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
+    pub marker_checked: bool,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -208,6 +216,7 @@ impl SessionEvidence {
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
+            || !self.marker_checked
         {
             return Err("session.invalid_evidence".into());
         }
@@ -229,6 +238,37 @@ pub(crate) fn probe_session_ack(
         .0
         .registry
         .acknowledge(owner, id, generation, sequence)
+        .map_err(error)
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_marker(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<()> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state
+        .0
+        .registry
+        .request_marker(owner, id, parse_u64(&generation)?)
+        .await
+        .map_err(error)
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_resume(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+) -> Result<()> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    state
+        .0
+        .registry
+        .input(owner, id, b"m\n".to_vec())
+        .await
         .map_err(error)
 }
 /// Explicit small control DTO; terminal bytes remain exclusively on Raw Channel.
@@ -331,7 +371,8 @@ pub(crate) async fn probe_session_peer(
         .input(owner, id, b"go\n".to_vec())
         .await
         .is_err()
-        && state.0.registry.acknowledge(owner, id, 1, 0).is_err();
+        && state.0.registry.acknowledge(owner, id, 1, 0).is_err()
+        && state.0.registry.request_marker(owner, id, 1).await.is_err();
     if let Some(sender) = sender {
         let _ = sender.send(denied);
     }
@@ -483,7 +524,8 @@ pub(crate) async fn probe_session(
         peer_denied,
         window_revoked: true,
         session_survived,
-        idle_checked: false, // Frontend completes its controlled idle comparison before go.
+        idle_checked: false,
+        marker_checked: false, // Frontend completes its controlled idle comparison before go.
     })
 }
 #[cfg(test)]
@@ -524,6 +566,7 @@ mod tests {
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
+            marker_checked: true,
         };
         assert!(e.validate().is_ok());
         e.generation = "02".into();
@@ -535,6 +578,9 @@ mod tests {
         e.peak_credit_bytes = 8213;
         assert!(e.validate().is_err());
         e.peak_credit_bytes = 6092;
+        e.marker_checked = false;
+        assert!(e.validate().is_err());
+        e.marker_checked = true;
         e.idle_checked = false;
         assert!(e.validate().is_err());
         e.idle_checked = true;

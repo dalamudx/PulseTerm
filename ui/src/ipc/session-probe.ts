@@ -84,6 +84,10 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
   let idleChecked = false;
+  let markerChecked = false;
+  let markerSeen = false;
+  let outputEpoch = 0;
+  let geometry: Pick<AttachBoundary, "columns" | "rows"> | undefined;
   let idle: IdleComparison | undefined;
   let generationSeen: bigint | undefined;
   channel.onmessage = (data) => {
@@ -91,6 +95,11 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       if (!(data instanceof ArrayBuffer)) throw new Error("session.not_binary");
       const wire = new Uint8Array(data);
       const frame = decodeFrame(wire);
+      if (frame.kind === 8 && frame.payload[1] === 5) {
+        outputEpoch++;
+        idle?.activity();
+      }
+      const admissionEpoch = outputEpoch;
       if (!consumer) {
         if (
           frame.kind !== 8 ||
@@ -121,8 +130,12 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
               disposePolicy = suppressQueryReplies(terminal);
               terminal.onData(() => replies++);
               decoder = new Utf8Stream();
+              geometry = { columns: boundary.columns, rows: boundary.rows };
             },
             write: bytes,
+            marker: async (_revision, _parsed, signal) => {
+              if (signal.aborted) throw new Error("session.cancelled");
+            },
             checkpoint: async (_revision, _parsed, signal) =>
               write("\x1b[?2026l", signal),
             finish: async (revision, parsedBytes, signal) => {
@@ -169,6 +182,18 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       latest = consumer
         .enqueue(wire)
         .then(async (receipt) => {
+          if (
+            receipt?.event.kind === "marker" &&
+            admissionEpoch === outputEpoch &&
+            geometry
+          ) {
+            markerSeen = true;
+            idle?.observe({
+              ...geometry,
+              revision: receipt.event.revision,
+              parsedBytes: receipt.event.parsedBytes,
+            });
+          }
           if (receipt?.event.kind === "ready") {
             const boundary = receipt.event.boundary;
             if (!terminal || generationSeen === undefined)
@@ -257,6 +282,51 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
             }
             if (failed || !idleChecked)
               throw failed ?? new Error("session.idle_unchecked");
+            await requireRejected(
+              commands.probeSessionMarker(
+                nonce,
+                (generationSeen + 1n).toString(),
+              ),
+            );
+            idle = new IdleComparison({
+              requestMarker: async (signal) => {
+                if (signal.aborted) throw new Error("session.marker_aborted");
+                await commands.probeSessionMarker(nonce, generation);
+                if (signal.aborted) throw new Error("session.marker_aborted");
+              },
+              compare: async (b, signal) => {
+                if (signal.aborted) throw new Error("session.idle_aborted");
+                const result = await commands.probeSessionCompare(
+                  nonce,
+                  generation,
+                  rendered(b),
+                );
+                if (signal.aborted) throw new Error("session.idle_aborted");
+                return result;
+              },
+              mismatch: () => {
+                failed = new Error("session.data_idle_mismatch");
+                consumer?.cancel();
+                void commands.probeSessionResume(nonce).catch(() => {});
+              },
+              matched: () => {
+                if (!markerSeen || markerChecked) return;
+                const buffer = surface.buffer.active;
+                const paused = Array.from(
+                  { length: surface.rows },
+                  (_, row) =>
+                    buffer
+                      .getLine(buffer.baseY + row)
+                      ?.translateToString(true) ?? "",
+                ).some((line) => line.includes("MARKER_READY"));
+                if (!paused) return;
+                markerChecked = true;
+                void commands.probeSessionResume(nonce).catch((error) => {
+                  failed = error;
+                  consumer?.cancel();
+                });
+              },
+            });
             await commands.probeSessionGo(nonce);
           }
         })
@@ -289,10 +359,12 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       result.nativeExit !== 0 ||
       result.peakCreditBytes > 8212 ||
       !delayed ||
-      !idleChecked
+      !idleChecked ||
+      !markerChecked
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
+    result.markerChecked = markerChecked;
     previous = { nonce, generation: result.generation };
     return result;
   } finally {

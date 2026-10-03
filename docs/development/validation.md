@@ -184,14 +184,22 @@ mise run probe-pty
 ## 绑定摘要比较与有限idle检查（Linux）
 
 - 新增`SessionRegistry::compare_visible`与`RenderedScreen`/`VisibleComparison`：先验证当前window owner和generation，再进行只读actor摘要捕获，返回前重查授权。每session单请求、500ms最小间隔、250ms截止；取消和替换不绕过限频。当前actor状态或捕获边界变化返回Stale；Mismatch和Equal都不清risk。7项Rust回归覆盖一致/差异、不合法输入、foreign/旧generation、输出推进、替换/撤销、取消和single-flight。
-- `IdleComparison`以600ms空闲、350ms证据期限、最多3次尝试调度；新输出入队、隐藏、替换或销毁拒绝迟到结果。未完成IPC仍占single-flight，失败不变成分歧。8项TS受控时钟测试验证有限重试、限频、隐藏、Data边界失效和取消。只有Commit/Checkpoint能提供revision，普通Data后必须等待新的有序检查点，不能猜测revision。
+- `IdleComparison`以600ms空闲、350ms证据期限、最多3次尝试调度；新输出入队、隐藏、替换或销毁拒绝迟到结果。未完成IPC仍占single-flight，失败不变成分歧。8项TS受控时钟测试验证有限重试、限频、隐藏、Data边界失效和取消。Commit/Checkpoint（及下一节新增Marker）提供revision；普通Data后必须等待新的有序检查点，不能猜测revision。
 - 新生成`probe_session_compare`命令使用canonical十进制u64 counter（允许0）和显式小DTO，数据仍Raw Channel；generation必须非0。真实WebKitGTK完整probe连续两轮：错误/旧generation拒绝，人工改变摘要返回Mismatch，紧接重复请求因限频拒绝，600ms后真实headless回调摘要Equal。`channel.json`要求`session.idleChecked=true`，原7组运输与EOF校验同时通过。
-- 限制：仅受控Commit idle验证，不自动重绘，不检查任意Data后的idle。下一步为同通道checkpoint请求、同generation/boundary原子恢复授权及生产DOM生命周期；Equal不证明hidden/history/parser一致。未更改第三方依赖、alacritty补丁或审计门禁。
+- 此阶段仅受控Commit idle验证；后续Data空闲Marker见下一节。仍不自动重绘，同generation/boundary原子恢复授权及生产DOM生命周期待接入；Equal不证明hidden/history/parser一致。未更改第三方依赖、alacritty补丁或审计门禁。
+
+## 普通Data后的有序只读Marker（Linux）
+
+- v1新增Part::Marker=8，与Data/Fence/End使用同一CreditWindow和ordered binary Channel；body是LE u64 revision，offset是当前原始parsed_bytes，未新增旁路事件或JSON终端数据。Marker不同于同步Fence，不写2026l、不finish解码器或更改backend revision，不能打断半条CSI/UTF8。
+- actor `diagnostic_marker(lease_id)`只向当前lease的有界队列try-reserve；满队列返回Busy、旧/已detach lease返回StaleLease；处理前取消不注入Marker。active BSU/pending resize明确Busy，不提前flush/resize。`AttachmentHandle::request_marker`/`SessionRegistry::request_marker`贯通，owner/current generation前后校验；请求每session 500ms限频、single-flight和250ms截止，换绑/取消不重置频率。IPC成功仅证明队列admission，不能拿它当边界或ACK。
+- `IdleComparison`对新Data入队先作废旧证据，600ms空闲请求Marker（最多3次），等待ordered Marker callback且没有后续Data入队才观察精确边界，再按原调度比较。Consumer必须显式支持只读marker callback且完成后才ACK；不支持、取消、迟到回调均不能释放信用。marker可早于IPC返回，仍不并发发起第二请求。
+- 真实WebKitGTK连续两轮native helper输出约3.1MiB后停在半条CSI，前端自动Marker→callback/ACK→摘要Equal，再发送固定m输入续流，最终EOF/边界/digest一致。PTY本身回显m输入也属于原始输出，未过滤或伪造流量。实测第二轮parsedBytes=3,113,003、generation=2、frames=777、peakCreditBytes=8212；schema3要求`markerChecked=true`，数字非性能门槛。peer实际拒绝Marker权限，原7组transport、两次窗口重建和EOF证据同时通过。5个headless attachment场景、真实2MiB native registry/wire探针、native clippy/test与binding drift也通过。
+- 未实现自动重绘、同generation/boundary原子compare→restore、生产DOM/user shell、多视图或Windows/macOS实际验收。连续BSU、持续新输出或队列满可以延期/拒绝，不承诺总会得到可重绘边界。未修改第三方依赖、vendor补丁或审计门禁。
 
 ## 检查结果
 
-- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 31项测试通过（7项ACK driver、13项registry授权/撤销/资源边界、2项终态回收、2项native exit/stop判定、7项generation摘要比较）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
-- TS：68 项测试通过（新增8项idle比较调度/有限重试/迟到证据/隐藏与取消回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：81 项 pulse-term 单元/属性测试通过（新增4项Marker顺序/容量/旧lease/取消/半条CSI/UTF8/BSU回归）；pulse-ipc 15项通过（新增Marker阶段/credit/64位边界）；pulse-app 33项测试通过（8项ACK driver、13项registry授权/撤销/资源边界、2项终态回收、2项native exit/stop判定、8项generation摘要比较/Marker请求）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
+- TS：73 项测试通过（新增3项Data idle Marker调度和2项Marker callback/ACK/unsupported/取消回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

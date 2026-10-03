@@ -96,6 +96,8 @@ pub struct AttachmentReceipt {
 /// Cloneable bound ACK/cancellation endpoint, not a permission token.
 #[derive(Clone)]
 pub struct AttachmentHandle {
+    session: SessionHandle,
+    lease_id: u64,
     ack: mpsc::Sender<(u64, u32)>,
     cancel: watch::Sender<bool>,
 }
@@ -108,6 +110,16 @@ impl AttachmentHandle {
                 mpsc::error::TrySendError::Full(_) => AttachmentError::Busy,
                 mpsc::error::TrySendError::Closed(_) => AttachmentError::Detached,
             })
+    }
+    /// Actor admission only; Marker delivery and rendering still require wire ACK.
+    pub async fn request_marker(&self) -> Result<(), AttachmentError> {
+        if *self.cancel.borrow() {
+            return Err(AttachmentError::Detached);
+        }
+        self.session
+            .diagnostic_marker(self.lease_id)
+            .await
+            .map_err(|e| AttachmentError::Capture(e.into()))
     }
     /// Out-of-band revocation; does not close the registry/session handle.
     pub fn detach(&self) {
@@ -150,6 +162,7 @@ pub async fn attach(
     let mut stream = session
         .diagnostic_subscribe(2000, 4 * 1024 * 1024, 1024 * 1024)
         .await?;
+    let lease_id = stream.lease_id;
     let bootstrap = &stream.bootstrap;
     let sender = AttachmentSender::new(
         generation,
@@ -179,6 +192,8 @@ pub async fn attach(
     );
     Ok((
         AttachmentHandle {
+            session: session.clone(),
+            lease_id,
             ack,
             cancel: cancel.clone(),
         },
@@ -282,6 +297,12 @@ impl Driver {
                                     record = None;
                                     at = 0;
                                 }
+                                Some(frame)
+                            })
+                        }
+                        StreamRecord::Marker(state) => {
+                            self.sender.marker(boundary(state)).map(|frame| {
+                                record = None;
                                 Some(frame)
                             })
                         }

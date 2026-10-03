@@ -2,6 +2,8 @@ import type { AttachBoundary } from "../../ipc/attachment";
 
 export type VisibleComparison = "equal" | "mismatch" | "stale";
 export interface IdleComparisonSink {
+  /** Admission only. Observe boundary exclusively from the ordered Marker callback. */
+  requestMarker?(signal: AbortSignal): Promise<void>;
   /** Capture digest synchronously before awaiting IPC; abort forbids using late evidence. */
   compare(
     boundary: AttachBoundary,
@@ -20,6 +22,7 @@ const MAX_ATTEMPTS = 3;
  */
 export class IdleComparison {
   private boundary: AttachBoundary | undefined;
+  private needsMarker = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private active: AbortController | undefined;
   private epoch = 0;
@@ -32,13 +35,16 @@ export class IdleComparison {
   activity(): void {
     this.invalidate();
     this.boundary = undefined;
+    this.needsMarker = true;
     this.checked = false;
     this.attempts = 0;
+    this.arm();
   }
-  /** Call only after Commit/Checkpoint callback, with no later admitted Data. */
+  /** Call only after Commit/Checkpoint/Marker callback, with no later admitted Data. */
   observe(boundary: AttachBoundary): void {
     this.activity();
     this.boundary = { ...boundary };
+    this.needsMarker = false;
     this.arm();
   }
   setVisible(visible: boolean): void {
@@ -64,7 +70,8 @@ export class IdleComparison {
     if (
       this.disposed ||
       !this.visible ||
-      !this.boundary ||
+      (!this.boundary && !(this.needsMarker && this.sink.requestMarker)) ||
+      this.timer !== undefined ||
       this.active ||
       this.checked ||
       this.attempts >= MAX_ATTEMPTS
@@ -76,8 +83,9 @@ export class IdleComparison {
     }, IDLE_MS);
   }
   private async check(): Promise<void> {
-    if (this.disposed || !this.visible || !this.boundary || this.active) return;
-    const boundary = { ...this.boundary };
+    if (this.disposed || !this.visible || this.active) return;
+    const boundary = this.boundary ? { ...this.boundary } : undefined;
+    if (!boundary && !(this.needsMarker && this.sink.requestMarker)) return;
     const epoch = this.epoch;
     const controller = new AbortController();
     this.active = controller;
@@ -86,6 +94,13 @@ export class IdleComparison {
     // still be pending. It must settle before any further call can be admitted.
     const deadline = setTimeout(() => controller.abort(), DEADLINE_MS);
     try {
+      if (!boundary) {
+        await this.sink.requestMarker?.(controller.signal);
+        if (this.epoch === epoch && !controller.signal.aborted)
+          this.checked = true;
+        // Wait for the ordered Marker callback; IPC completion is NOT its boundary.
+        return;
+      }
       const result = await this.sink.compare(boundary, controller.signal);
       if (this.epoch !== epoch || controller.signal.aborted || this.disposed)
         return;

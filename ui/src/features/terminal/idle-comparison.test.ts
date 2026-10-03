@@ -1,3 +1,66 @@
+it("idle Data requests one Marker; admission is not a boundary and callback drives compare", async () => {
+  const requestMarker = vi.fn().mockResolvedValue(undefined);
+  const compare = vi.fn().mockResolvedValue("equal");
+  const idle = new IdleComparison({
+    requestMarker,
+    compare,
+    mismatch: vi.fn(),
+  });
+  idle.activity();
+  await vi.advanceTimersByTimeAsync(600);
+  expect(requestMarker).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(compare).not.toHaveBeenCalled();
+  expect(requestMarker).toHaveBeenCalledTimes(1);
+  idle.observe(boundary);
+  await vi.advanceTimersByTimeAsync(600);
+  expect(compare).toHaveBeenCalledTimes(1);
+  idle.dispose();
+});
+it("failed Marker admission retries finitely; hidden Data never requests", async () => {
+  const requestMarker = vi.fn().mockRejectedValue(new Error("busy"));
+  const compare = vi.fn();
+  const idle = new IdleComparison({
+    requestMarker,
+    compare,
+    mismatch: vi.fn(),
+  });
+  idle.setVisible(false);
+  idle.activity();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(requestMarker).not.toHaveBeenCalled();
+  idle.setVisible(true);
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(requestMarker).toHaveBeenCalledTimes(3);
+  expect(compare).not.toHaveBeenCalled();
+  idle.dispose();
+});
+it("a Marker may arrive before request completion without spawning parallel work", async () => {
+  let resolve!: () => void;
+  const requestMarker = vi.fn(
+    () =>
+      new Promise<void>((r) => {
+        resolve = r;
+      }),
+  );
+  const compare = vi.fn().mockResolvedValue("equal");
+  const idle = new IdleComparison({
+    requestMarker,
+    compare,
+    mismatch: vi.fn(),
+  });
+  idle.activity();
+  await vi.advanceTimersByTimeAsync(600);
+  idle.observe(boundary);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(compare).not.toHaveBeenCalled();
+  resolve();
+  await vi.advanceTimersByTimeAsync(600);
+  expect(compare).toHaveBeenCalledTimes(1);
+  expect(requestMarker).toHaveBeenCalledTimes(1);
+  idle.dispose();
+});
+
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IdleComparison, type VisibleComparison } from "./idle-comparison";
 

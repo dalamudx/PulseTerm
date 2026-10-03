@@ -1,6 +1,45 @@
 use super::*;
 #[test]
 #[allow(clippy::unwrap_used)]
+fn marker_is_a_distinct_readonly_part_with_unchanged_cursor_and_bounded_credit() {
+    let mut sender = sender(1);
+    let boundary = sender.boundary;
+    assert_eq!(sender.marker(boundary), Err(AttachError::Phase));
+    while let Some(wire) = sender.next_frame().unwrap() {
+        sender
+            .acknowledge(7, crate::decode(&wire).unwrap().sequence)
+            .unwrap();
+    }
+    let data = sender.data(b"x").unwrap();
+    let at = Boundary {
+        parsed_bytes: boundary.parsed_bytes + 1,
+        ..boundary
+    };
+    assert_eq!(
+        sender.marker(at),
+        Err(AttachError::Flow(FlowError::NoCredit))
+    );
+    sender
+        .acknowledge(7, crate::decode(&data).unwrap().sequence)
+        .unwrap();
+    let wire = sender.marker(at).unwrap();
+    let frame = crate::decode(&wire).unwrap();
+    let part = decode_fragment(frame.payload).unwrap();
+    assert_eq!(part.part, Part::Marker);
+    assert_eq!(part.offset, at.parsed_bytes);
+    assert_eq!(part.body, at.revision.to_le_bytes());
+    assert_eq!(
+        sender.data(b"y"),
+        Err(AttachError::Flow(FlowError::NoCredit))
+    );
+    sender.acknowledge(7, frame.sequence).unwrap();
+    assert!(sender.data(b"y").is_ok());
+    let mut malformed = frame.payload.to_vec();
+    malformed.pop();
+    assert_eq!(decode_fragment(&malformed), Err(AttachError::Invalid));
+}
+#[test]
+#[allow(clippy::unwrap_used)]
 fn end_requires_commit_valid_boundary_and_ack_credit() {
     let mut sender = sender(1);
     let boundary = sender.boundary;

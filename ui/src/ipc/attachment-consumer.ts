@@ -12,6 +12,12 @@ import { HEADER_LENGTH } from "./frames";
  * reuse it while an old native/xterm write may still complete. All operations
  * must observe signal; split large replays into bounded callback-driven writes. */
 export interface AttachmentSink {
+  /** Pure boundary observation; do not feed VT, finish UTF-8 or flush BSU. */
+  marker?(
+    revision: bigint,
+    parsedBytes: bigint,
+    signal: AbortSignal,
+  ): Promise<void>;
   /** Process same-boundary state before ACK; absence fails checkpoint frames. */
   checkpoint?(
     revision: bigint,
@@ -151,6 +157,16 @@ export class AttachmentConsumer {
               if (!this.sink.finish) throw new Error("attach.end_unsupported");
               await this.wait(
                 this.sink.finish(
+                  event.revision,
+                  event.parsedBytes,
+                  this.abort.signal,
+                ),
+              );
+            } else if (event.kind === "marker") {
+              if (!this.sink.marker)
+                throw new Error("attach.marker_unsupported");
+              await this.wait(
+                this.sink.marker(
                   event.revision,
                   event.parsedBytes,
                   this.abort.signal,

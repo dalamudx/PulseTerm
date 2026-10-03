@@ -30,6 +30,8 @@ pub enum StreamRecord {
     /// Sync deadline changed backend state without receiving output. A wire driver
     /// must propagate this ordered checkpoint, not manufacture VT or a byte offset.
     Fence(SessionState),
+    /// Read-only ordered boundary. Never flushes sync or feeds parser bytes.
+    Marker(SessionState),
 }
 /// Lease outcome, independent of its bounded output queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +56,7 @@ pub struct StreamStatus {
     pub boundary: SessionState,
 }
 pub(super) struct Lease {
+    pub id: u64,
     pub output: mpsc::Sender<StreamRecord>,
     pub status: watch::Sender<StreamStatus>,
 }
@@ -64,7 +67,11 @@ pub(super) fn create(lease_id: u64, bootstrap: SessionBootstrap) -> (Lease, Sess
         boundary: bootstrap.boundary.clone(),
     });
     (
-        Lease { output, status },
+        Lease {
+            id: lease_id,
+            output,
+            status,
+        },
         SessionStream {
             lease_id,
             bootstrap,
