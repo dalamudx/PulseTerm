@@ -1,4 +1,4 @@
-import type { SessionEvidence } from "../../ipc/gen/commands";
+import type { DomEvidence, SessionEvidence } from "../../ipc/gen/commands";
 import {
   automaticMode,
   finishReport,
@@ -35,6 +35,14 @@ export const subscribe = (listener: () => void) => {
 };
 export const getSnapshot = () => snapshot;
 let initialized = false;
+let terminalHost: HTMLElement | undefined;
+let surfaceLife: AbortController | undefined;
+export function setTerminalHost(host: HTMLDivElement | null): void {
+  if (terminalHost === host) return;
+  surfaceLife?.abort();
+  terminalHost = host ?? undefined;
+  surfaceLife = host ? new AbortController() : undefined;
+}
 
 export async function start(): Promise<void> {
   if (snapshot.running || !nativeAvailable) return;
@@ -44,6 +52,9 @@ export async function start(): Promise<void> {
   let typedEvents = false;
   let session: SessionEvidence | null = null;
   let sessionRuns = 0;
+  let domSession: SessionEvidence | null = null;
+  let domEvidence: DomEvidence | null = null;
+  let domRuns = 0;
   let failure: string | null = null;
   try {
     update({ status: "session-channel" });
@@ -52,6 +63,21 @@ export async function start(): Promise<void> {
     update({ status: "session-channel-recreated" });
     session = await verifySessionChannel();
     sessionRuns++;
+    const host = terminalHost,
+      life = surfaceLife;
+    if (!host || !life || !host.isConnected)
+      throw new Error("probe.dom_host_missing");
+    for (let i = 0; i < 2; i++) {
+      update({ status: i === 0 ? "session-dom" : "session-dom-recreated" });
+      domSession = await verifySessionChannel({
+        host,
+        signal: life.signal,
+        complete: (e) => {
+          domEvidence = e;
+        },
+      });
+      domRuns++;
+    }
     typedEvents = await verifyTypedEvents();
     for (const transport of ["channel", "websocket"] as const) {
       for (const scenario of [
@@ -100,12 +126,21 @@ export async function start(): Promise<void> {
   } finally {
     update({ running: false });
     await finishReport({
-      schemaVersion: 3,
+      schemaVersion: 4,
+      domSession,
+      domEvidence,
+      domRuns,
       session,
       sessionRuns,
       typedEvents,
       completed:
-        failure === null && cancellation && typedEvents && session !== null,
+        failure === null &&
+        cancellation &&
+        typedEvents &&
+        session !== null &&
+        domSession !== null &&
+        domEvidence !== null &&
+        domRuns === 2,
       cancellation,
       measurements: results,
       error: failure,
@@ -114,7 +149,7 @@ export async function start(): Promise<void> {
         hardwareConcurrency: navigator.hardwareConcurrency,
       },
       limitations: [
-        "Session uses real native PTY and browser headless xterm callbacks, not DOM painting",
+        "Fixed PTY samples use headless and DOM xterm; frame fences and DOM rows are not compositor pixel latency",
         "Delivery timing is clock-calibrated estimate; uncertainty is recorded",
         "Heartbeat measures JS timer responsiveness, not input-to-paint latency",
         "A single Linux/container run is not three-platform acceptance",

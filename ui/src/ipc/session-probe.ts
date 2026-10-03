@@ -1,7 +1,7 @@
 // Developer-only real-WebView validation: @xterm/headless is not a DOM renderer.
 import { Channel } from "@tauri-apps/api/core";
 import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
-import headless from "@xterm/headless";
+import type { DomRenderer } from "../features/probe/dom-renderer";
 import { IdleComparison } from "../features/terminal/idle-comparison";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { screenDigest } from "../features/terminal/screen-digest";
@@ -12,7 +12,17 @@ import { AttachmentConsumer } from "./attachment-consumer";
 import { decodeFrame } from "./frames";
 import { commands, type SessionEvidence } from "./gen/commands";
 
-const { Terminal } = headless;
+type ProbeTerminal = Pick<
+  TerminalType,
+  | "buffer"
+  | "cols"
+  | "rows"
+  | "write"
+  | "unicode"
+  | "parser"
+  | "onData"
+  | "dispose"
+>;
 function color(cell: IBufferCell, foreground: boolean): string {
   if (foreground ? cell.isFgDefault() : cell.isBgDefault()) return "default";
   const value = foreground ? cell.getFgColor() : cell.getBgColor();
@@ -20,7 +30,7 @@ function color(cell: IBufferCell, foreground: boolean): string {
     ? `rgb:${(value >>> 16) & 255},${(value >>> 8) & 255},${value & 255}`
     : `idx:${value}`;
 }
-function digest(terminal: TerminalType): string {
+function digest(terminal: ProbeTerminal): string {
   const buffer = terminal.buffer.active;
   return screenDigest({
     cells: Array.from({ length: terminal.rows }, (_, row) =>
@@ -53,9 +63,21 @@ async function requireRejected(action: Promise<unknown>): Promise<void> {
   }
   if (!denied) throw new Error("session.stale_admitted");
 }
-export async function verifySessionChannel(): Promise<SessionEvidence> {
+export async function verifySessionChannel(dom?: {
+  host: HTMLElement;
+  signal: AbortSignal;
+  complete: (e: import("./gen/commands").DomEvidence) => void;
+}): Promise<SessionEvidence> {
   const nonce = crypto.randomUUID();
-  let terminal: TerminalType | undefined;
+  let terminal: ProbeTerminal | undefined;
+  let renderer: DomRenderer | undefined;
+  const lifetime = new AbortController();
+  const cancel = () => {
+    lifetime.abort();
+    consumer?.cancel();
+  };
+  dom?.signal.addEventListener("abort", cancel, { once: true });
+  if (dom?.signal.aborted) lifetime.abort();
   let disposePolicy: (() => void) | undefined;
   let decoder = new Utf8Stream();
   let replies = 0;
@@ -63,6 +85,7 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
   let consumer: AttachmentConsumer | undefined;
   let failed: unknown;
   let latest: Promise<unknown> = Promise.resolve();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   const write = async (text: string, signal: AbortSignal) => {
     if (signal.aborted) throw new Error("session.cancelled");
     if (!terminal) throw new Error("session.no_renderer");
@@ -80,6 +103,7 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
   const bytes = async (data: Uint8Array, signal: AbortSignal) => {
     for (let at = 0; at < data.length; at += 4096)
       await write(decoder.feed(data.subarray(at, at + 4096)), signal);
+    await renderer?.settle(AbortSignal.any([signal, lifetime.signal]));
   };
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
@@ -139,14 +163,27 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
         consumer = new AttachmentConsumer(
           generation,
           {
-            reset: async (boundary) => {
+            reset: async (boundary, signal) => {
               if (terminal) throw new Error("session.repeated_reset");
-              terminal = new Terminal({
-                cols: boundary.columns,
-                rows: boundary.rows,
-                scrollback: 128,
-                allowProposedApi: true,
-              });
+              if (dom) {
+                const { createDomRenderer } = await import(
+                  "../features/probe/dom-renderer"
+                );
+                renderer = createDomRenderer(
+                  dom.host,
+                  boundary,
+                  AbortSignal.any([signal, lifetime.signal]),
+                );
+                terminal = renderer.terminal;
+              } else {
+                const { default: headless } = await import("@xterm/headless");
+                terminal = new headless.Terminal({
+                  cols: boundary.columns,
+                  rows: boundary.rows,
+                  scrollback: 128,
+                  allowProposedApi: true,
+                });
+              }
               const provider = new SharedUnicodeProvider();
               terminal.unicode.register(provider);
               terminal.unicode.activeVersion = provider.version;
@@ -172,16 +209,27 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
                 historyBeforeRepair = historyText();
                 damaged = true;
                 await write("\x18\x1b[1;1H!", signal);
+                await renderer?.settle(
+                  AbortSignal.any([signal, lifetime.signal]),
+                );
               }
             },
-            checkpoint: async (_revision, _parsed, signal) =>
-              write("\x1b[?2026l", signal),
+            checkpoint: async (_revision, _parsed, signal) => {
+              await write("\x1b[?2026l", signal);
+              await renderer?.settle(
+                AbortSignal.any([signal, lifetime.signal]),
+              );
+            },
             finish: async (revision, parsedBytes, signal) => {
               await write(decoder.finish(), signal);
+              await renderer?.settle(
+                AbortSignal.any([signal, lifetime.signal]),
+              );
               final = { revision, parsedBytes };
             },
           },
           async (gen, sequence) => {
+            if (lifetime.signal.aborted) throw new Error("session.cancelled");
             if (sequence === 0) {
               await requireRejected(
                 commands.probeSessionAck(
@@ -363,7 +411,7 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
                     repairAdmitted = true;
                   })
                   .catch((error) => {
-                    failed = error;
+                    failed ??= error;
                     consumer?.cancel();
                     void commands.probeSessionResume(nonce).catch(() => {});
                   });
@@ -383,7 +431,7 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
                 markerChecked = true;
                 repairChecked = true;
                 void commands.probeSessionResume(nonce).catch((error) => {
-                  failed = error;
+                  failed ??= error;
                   consumer?.cancel();
                 });
               },
@@ -392,16 +440,29 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
           }
         })
         .catch((error) => {
-          failed = error;
+          failed ??= error;
           consumer?.cancel();
         });
     } catch (error) {
-      failed = error;
+      failed ??= error;
       consumer?.cancel();
     }
   };
   try {
-    const result = await commands.probeSession(nonce, channel);
+    const native = commands
+      .probeSession(nonce, channel)
+      .catch((error: unknown) => {
+        throw failed ?? error;
+      });
+    const result = await Promise.race([
+      native,
+      new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => {
+          consumer?.cancel();
+          reject(failed ?? new Error("session.frontend_deadline"));
+        }, 70000);
+      }),
+    ]);
     await latest;
     if (failed) throw failed;
     if (
@@ -428,13 +489,21 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
     result.idleChecked = idleChecked;
     result.markerChecked = markerChecked;
     result.repairChecked = repairChecked;
+    if (dom) {
+      if (!renderer) throw new Error("session.no_dom_renderer");
+      dom.complete(renderer.evidence());
+    }
     previous = { nonce, generation: result.generation };
     return result;
   } finally {
+    clearTimeout(deadline);
     idle?.dispose();
     consumer?.cancel();
     disposePolicy?.();
-    terminal?.dispose();
+    lifetime.abort();
+    dom?.signal.removeEventListener("abort", cancel);
+    if (renderer) renderer.dispose();
+    else terminal?.dispose();
     channel.onmessage = () => {};
   }
 }

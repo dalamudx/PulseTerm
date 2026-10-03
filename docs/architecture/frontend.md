@@ -118,6 +118,8 @@ interface ViewController { mount(el: HTMLElement): void; setVisible(v: boolean):
 
 ## 6. TermView（features/terminal）
 
+**当前实现边界（开发验证）**：`features/probe/dom-renderer.ts`已通过同一AttachmentConsumer接入固定40×12、128行history的只读xterm DOM。与headless共用Rust Unicode17 scalar、查询屏蔽、每流解码及repair；输出不进React state，React callback ref只注册容器，卸载作废lifetime/consumer并dispose旧surface。DOM ACK在parser callback和两次animation机会之后（1秒截止，隐藏/断开明确失败），不是compositor像素回执。动态stylesheet通过xterm公开`documentOverride`在创建时设置Tauri本地HTML style anchor的每页nonce；不改全局document或放开CSP unsafe-inline。无nonce时拒绝DOM启动。这里只验证固定helper，不开放键盘/粘贴输入、link addon或user shell；生产ViewHost/fit/IME/selection及pause/resume策略仍为下列设计目标。
+
 **生命周期**：
 
 ```

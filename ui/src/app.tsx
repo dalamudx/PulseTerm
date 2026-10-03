@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { getSnapshot, start, subscribe } from "./features/probe/controller";
+import {
+  getSnapshot,
+  setTerminalHost,
+  start,
+  subscribe,
+} from "./features/probe/controller";
 import { nativeAvailable } from "./ipc/probe";
 
 const copy = {
@@ -50,6 +55,14 @@ export function App() {
           {state.error}
         </p>
       ) : null}
+      <section
+        aria-labelledby="terminal-probe-label"
+        className="terminal-probe"
+      >
+        <h2 id="terminal-probe-label">DOM 终端验证</h2>
+        <p>固定 PTY 样例 · 40 × 12 · 只读，不连接用户 shell</p>
+        <div className="terminal-host" ref={setTerminalHost} />
+      </section>
       <div className="table-scroll">
         <table>
           <thead>

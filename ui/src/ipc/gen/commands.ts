@@ -40,6 +40,15 @@ export type BackendStats = {
 
 export type ComparisonEvidence = "equal" | "mismatch" | "stale";
 
+export type DomEvidence = {
+	renderEvents: number,
+	frameFences: number,
+	rowsChecked: number,
+	widthPx: number | null,
+	heightPx: number | null,
+	readonly: boolean,
+};
+
 export type ProbeConfig = {
 	chunkBytes: number,
 	frames: number,
@@ -76,6 +85,9 @@ export type ProbeReport = {
 	typedEvents: boolean,
 	session: SessionEvidence | null,
 	sessionRuns: number,
+	domSession: SessionEvidence | null,
+	domEvidence: DomEvidence | null,
+	domRuns: number,
 	measurements: ProbeMeasurement[],
 	error: string | null,
 	environment: ProbeEnvironment,

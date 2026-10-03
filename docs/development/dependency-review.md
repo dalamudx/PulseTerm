@@ -62,6 +62,10 @@ S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all
 
 全特性审计没有新增拒绝项：原有6个许可证拒绝和paste/proc-macro-error维护公告仍保留，sources/bans通过。没有添加ignore、放宽白名单或撤销发布门禁。上游测试使用独立冻结的test-only lock，并非product依赖升级。
 
+## DOM renderer开发验证依赖
+
+新增devDependency `@xterm/xterm 6.0.0`，与现有`@xterm/headless`同版；pnpm锁仅新增该包、没有新增传递依赖或升级旧包。已读发布包LICENSE（MIT，保留xterm.js/SourceLair/Christopher Jeffrey版权）；integrity `sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==`。DOM源与CSS仅在开发验证surface启动时动态加载；未来分发须包含该版权许可及现有第三方声明。pnpm audit当前无已知漏洞，不替代完整许可证审查。CSP使用Tauri本地页nonce，未放开unsafe-inline或script-src。Cargo.lock、vendor、白名单和公告ignore未变，原有发布阻断继续有效。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

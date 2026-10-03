@@ -1,9 +1,11 @@
 import type { Terminal } from "@xterm/headless";
 
 /** Install before writing any bytes. Rust is the sole protocol-query responder.
- * This initial policy is tested with xterm headless; color setters still fall through.
+ * Shared headless/DOM probe policy; color setters still fall through.
  */
-export function suppressQueryReplies(terminal: Terminal): () => void {
+export function suppressQueryReplies(
+  terminal: Pick<Terminal, "parser">,
+): () => void {
   const registrations = [
     terminal.parser.registerCsiHandler({ final: "c" }, () => true),
     terminal.parser.registerCsiHandler({ prefix: ">", final: "c" }, () => true),

@@ -77,7 +77,8 @@ pub fn run() -> Result<()> {
 fn validate(path: &Path) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
-    if report["schemaVersion"] != 3
+    if report["schemaVersion"] != 4
+        || report["domRuns"] != 2
         || report["sessionRuns"] != 2
         || report["typedEvents"] != true
         || report["completed"] != true
@@ -85,35 +86,51 @@ fn validate(path: &Path) -> Result<()> {
     {
         bail!("native probe incomplete: {}", report["error"]);
     }
-    let session = &report["session"];
-    if session["generation"]
-        .as_str()
-        .and_then(|s| s.parse::<u64>().ok())
-        .is_none_or(|n| n == 0)
-        || session["nativeExit"] != 0
-        || session["peerDenied"] != true
-        || session["windowRevoked"] != true
-        || session["sessionSurvived"] != true
-        || session["idleChecked"] != true
-        || session["markerChecked"] != true
-        || session["repairChecked"] != true
-        || session["frames"].as_u64().is_none_or(|n| n < 4)
-        || session["peakCreditBytes"]
-            .as_u64()
-            .is_none_or(|n| n > 8212 || n == 0)
-        || session["parsedBytes"]
+    for key in ["session", "domSession"] {
+        let session = &report[key];
+        if session["generation"]
             .as_str()
             .and_then(|s| s.parse::<u64>().ok())
-            .is_none_or(|n| n < 1024 * 1024)
-        || session["digest"].as_str().is_none_or(|s| {
-            s.len() != 16
-                || !s
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            .is_none_or(|n| n == 0)
+            || session["nativeExit"] != 0
+            || session["peerDenied"] != true
+            || session["windowRevoked"] != true
+            || session["sessionSurvived"] != true
+            || session["idleChecked"] != true
+            || session["markerChecked"] != true
+            || session["repairChecked"] != true
+            || session["frames"].as_u64().is_none_or(|n| n < 4)
+            || session["peakCreditBytes"]
+                .as_u64()
+                .is_none_or(|n| n > 8212 || n == 0)
+            || session["parsedBytes"]
+                .as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .is_none_or(|n| n < 1024 * 1024)
+            || session["digest"].as_str().is_none_or(|s| {
+                s.len() != 16
+                    || !s
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+        {
+            bail!("missing native session, window authorization or EOF evidence");
+        }
+    }
+    let dom = &report["domEvidence"];
+    if dom["readonly"] != true
+        || dom["rowsChecked"] != 12
+        || dom["renderEvents"].as_u64().is_none_or(|n| n == 0)
+        || dom["frameFences"].as_u64().is_none_or(|n| n == 0)
+        || ["widthPx", "heightPx"].iter().any(|key| {
+            dom[key]
+                .as_f64()
+                .is_none_or(|n| !n.is_finite() || !(1.0..=4096.0).contains(&n))
         })
     {
-        bail!("missing native session, window authorization or EOF evidence");
+        bail!("missing visible DOM rendering evidence");
     }
+
     let rows = report["measurements"]
         .as_array()
         .context("missing measurements")?;

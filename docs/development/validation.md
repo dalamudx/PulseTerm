@@ -205,10 +205,19 @@ mise run probe-pty
 - `mise run probe-snapshot`默认600个随机样例及既有完整续流回归通过；条件xterm矩阵311/311（只包含原输入解析能与Rust一致的案例），分歧矩阵仍18/372，11个可精确修复、7个明确不可编码/延期且全部风险标记。不是重跑30,000样例或完整S2验收。5个binary/headless场景及2MiB真实native授权/ACK/backpressure探针也通过。
 - 自动修复在此probe每绑定最多一次，不能因仍Mismatch循环重绘；持续输出/Stale/近似状态的生产重试UX与visible-view全局调度仍待接入。当前只验证真实WebView里的headless callback，不是DOM绘制/IME/selection。未宣称S2/S11、history全部恢复或Windows/macOS验收；vendor/依赖锁和发布门禁未变。
 
+## 可见DOM终端组合验证（Linux）
+
+- `probe-channel` schema4保留两轮headless基线，新增两轮可见`@xterm/xterm` 6.0.0（MIT）DOM renderer；固定PTY 40×12、128行history。同一session probe/consumer走窗口owner/generation授权、Raw Channel、250ms延迟ACK、空闲Marker、半CSI显示损坏→精确Repair→摘要Equal→续流/EOF。每绑定只修复一次，不开放任意shell、键盘/粘贴输入或外部链接。React只注册host，输出及decoder留在imperative controller。
+- DOM sink先等待xterm write callback，再等两次animation机会（1秒有限截止）；隐藏、卸载或取消不绕过等待、不返ACK。最终DOM renderer `.xterm-rows`的12行文本与同viewport buffer逐行相同，屏幕位于可见viewport、几何非零、onRender事件及frame fence非零才算完成；不是GPU/compositor回执，也不是input-to-paint时延。screenReaderMode开启只说明选项接入，未测真实读屏器。
+- 严格CSP阻止xterm动态stylesheet曾造成文字不可读；已用本地HTML空style anchor的Tauri每页nonce与公开documentOverride隔离样式创建，确保nonce先于CSS文本/插入。全局document不改、只授nonce给renderer style；缺nonce或未替换token明确拒绝。不加unsafe-inline、不改tauri.conf.json、不引入xterm fork。原生窗口截图已读回确认文字/中文/emoji可见及布局不溢出；开发界面沿用现有Radix tokens，机械检测零发现。
+- 初轮再次出现真实EOF早于child.try_wait收据被标为native_cancelled。reader只在成功read0记录EOF；controller只在真实EOF且无I/O failure时提供单次100ms退出发布宽限，截止不续期（正常20ms监督采样），非EOF stop及I/O error仍立即terminate，过期继续终止。不把cancelled+exit0当成功。新增回归覆盖99/100ms界限、非EOF/失败/未stop、重复调用不延长期限；真实2MiB PTY→registry/ACK压力、resize、EOF及取消仍通过。
+- 两次成功的独立Linux运行各含2轮headless+2轮DOM及原7组transport/cancel测量，最后`generation=4`、`parsedBytes=3,113,003`、`frames=780`、`peakCreditBytes=8212`、digest=`b17f4532b0d32770`；DOM `renderEvents=776`、`frameFences=776`、`rowsChecked=12`、320×192 CSS px。时间/帧数是单次证据，不是吞吐或延迟门槛。此前一次报告因错误地把固定样例行数写为8而被拒绝；已改为真实12并保持逐行全量验证。前端70秒会话deadline保留首个renderer错误，后续取消不能覆盖根因；后端仍有既有60秒relay/10秒ACK/helper40秒限制。
+- 完整check/test、native clippy -D warnings、12项native测试及bindings-check通过；85项TS含9项新增fence/nonce回归。`pnpm audit`无已知漏洞；lock仅新增@xterm/xterm 6.0.0单包。未更新Cargo.lock/vendor/CSP策略或依赖豁免。生产DOM交互/用户shell、ResizeObserver/fit、IME/selection、全局resync/隐藏暂停UX以及Windows/macOS仍未验收；不宣称S2/S11通过。
+
 ## 检查结果
 
-- Rust：84 项 pulse-term 单元/属性测试通过（新增3项原子修复授权/延期/CSI/UTF8/BSU与history回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 35项测试通过（新增Commit ACK前单修复及换绑/授权/限频回归）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
-- TS：76 项测试通过（新增3项Repair暂存/Commit callback/ACK/取消/unsupported及中断事务回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：84 项 pulse-term 单元/属性测试通过（新增3项原子修复授权/延期/CSI/UTF8/BSU与history回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 36项测试通过（新增真实EOF退出发布宽限截止/不续期回归）；额外178项原上游测试通过；原生适配器现12项测试通过（新增DOM帧/行数/只读/finite geometry证据验证）；本轮未修改parser补丁或上游源码。
+- TS：85 项测试通过（新增6项DOM animation fence/取消/隐藏/卸载/期限和3项nonce document隔离/缺失拒绝回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

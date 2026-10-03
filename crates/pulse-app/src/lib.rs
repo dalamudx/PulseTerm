@@ -10,7 +10,7 @@ use pulse_term::session::{
     SessionTask, TRANSPORT_QUEUE_CAPACITY, TransportWrite,
 };
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc as blocking};
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -116,6 +116,8 @@ fn setup(
     let reads = Arc::new(AtomicU64::new(0));
     let writes = Arc::new(AtomicU64::new(0));
     let read_count = reads.clone();
+    let eof = Arc::new(AtomicBool::new(false));
+    let reader_eof = eof.clone();
     let read_failure = failed.clone();
     let read_stop = stop.clone();
     let reader_thread = std::thread::Builder::new()
@@ -125,7 +127,10 @@ fn setup(
             let mut delivering = true;
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break,
+                    Ok(0) => {
+                        reader_eof.store(true, Ordering::Release);
+                        break;
+                    }
                     Ok(n) => {
                         if delivering {
                             if output.blocking_send(buf[..n].to_vec()).is_err() {
@@ -194,6 +199,7 @@ fn setup(
             let result = (|| {
                 let mut resizes = 0;
                 let mut cancelled = false;
+                let mut eof_deadline = None;
                 let exit = loop {
                     // EOF can stop the actor before this controller samples the child.
                     // Observe an already-reaped exit before deciding to terminate.
@@ -202,7 +208,14 @@ fn setup(
                         .map_err(|e| LocalSessionError(e.to_string()))?;
                     let stopping =
                         *stop.borrow() || stop.has_changed().is_err() || *failed.borrow();
-                    match native_control::action(observed, stopping) {
+                    let eof_grace = native_control::eof_grace(
+                        stopping,
+                        *failed.borrow(),
+                        eof.load(Ordering::Acquire),
+                        std::time::Instant::now(),
+                        &mut eof_deadline,
+                    );
+                    match native_control::action(observed, stopping && !eof_grace) {
                         native_control::Action::Exited(exit) => break exit,
                         native_control::Action::Terminate => {
                             cancelled = true;

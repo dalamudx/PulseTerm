@@ -387,7 +387,12 @@ fn probe_finish(
     if state.active.lock().map_err(|_| "probe.poisoned")?.is_some() {
         return Err("probe.busy".into());
     }
-    report.validate()?;
+    report.validate().inspect_err(|error| {
+        eprintln!(
+            "probe.report_rejected: {error}; session_runs={} dom_runs={}",
+            report.session_runs, report.dom_runs
+        )
+    })?;
     let bytes = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     if bytes.len() > 64 * 1024 {
         return Err("probe.report_too_large".into());
@@ -416,18 +421,59 @@ struct ProbeReport {
     typed_events: bool,
     session: Option<crate::window_sessions::SessionEvidence>,
     session_runs: u32,
+    dom_session: Option<crate::window_sessions::SessionEvidence>,
+    dom_evidence: Option<DomEvidence>,
+    dom_runs: u32,
     measurements: Vec<ProbeMeasurement>,
     error: Option<String>,
     environment: ProbeEnvironment,
     limitations: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DomEvidence {
+    render_events: u32,
+    frame_fences: u32,
+    rows_checked: u32,
+    width_px: f64,
+    height_px: f64,
+    readonly: bool,
+}
+impl DomEvidence {
+    fn validate(&self) -> ProbeResult<()> {
+        if self.render_events == 0
+            || self.frame_fences == 0
+            || self.rows_checked != 12
+            || !self.readonly
+            || !self.width_px.is_finite()
+            || !self.height_px.is_finite()
+            || !(1.0..=4096.0).contains(&self.width_px)
+            || !(1.0..=4096.0).contains(&self.height_px)
+        {
+            return Err("probe.invalid_dom_evidence".into());
+        }
+        Ok(())
+    }
+}
+
 impl ProbeReport {
     fn validate(&self) -> ProbeResult<()> {
-        if self.schema_version != 3
+        if self.schema_version != 4
             || self.measurements.len() > 7
             || (self.completed
                 && (self.session_runs != 2
+                    || self.dom_runs != 2
+                    || self
+                        .dom_evidence
+                        .as_ref()
+                        .is_none_or(|e| e.validate().is_err())
+                    || self.dom_session.as_ref().is_none_or(|s| {
+                        s.validate().is_err()
+                            || !s.repair_checked
+                            || !s.idle_checked
+                            || !s.marker_checked
+                    })
                     || !self.cancellation
                     || !self.typed_events
                     || self.session.as_ref().is_none_or(|s| {
@@ -443,6 +489,12 @@ impl ProbeReport {
                     || self.measurements.iter().any(|row| !row.verified)))
         {
             return Err("probe.invalid_report".into());
+        }
+        if let Some(session) = &self.dom_session {
+            session.validate()?;
+        }
+        if let Some(evidence) = &self.dom_evidence {
+            evidence.validate()?;
         }
         if let Some(session) = &self.session {
             session.validate()?;
@@ -735,12 +787,15 @@ mod tests {
     #[test]
     fn report_validation_requires_version_and_real_evidence() {
         let mut report = ProbeReport {
-            schema_version: 3,
+            schema_version: 4,
             completed: false,
             cancellation: false,
             typed_events: false,
             session: None,
             session_runs: 0,
+            dom_session: None,
+            dom_evidence: None,
+            dom_runs: 0,
             measurements: vec![],
             error: Some("probe.failure".into()),
             environment: ProbeEnvironment {
@@ -752,13 +807,42 @@ mod tests {
         assert!(report.validate().is_ok());
         report.schema_version = 1;
         assert!(report.validate().is_err());
-        report.schema_version = 3;
+        report.schema_version = 4;
         report.completed = true;
         assert!(report.validate().is_err());
         report.cancellation = true;
         report.typed_events = true;
         report.error = None;
         assert!(report.validate().is_err()); // Still missing measurements.
+    }
+
+    #[test]
+    fn dom_evidence_requires_visible_finite_dimensions_and_actual_rows() {
+        let mut e = DomEvidence {
+            render_events: 1,
+            frame_fences: 2,
+            rows_checked: 12,
+            width_px: 270.0,
+            height_px: 128.0,
+            readonly: true,
+        };
+        assert!(e.validate().is_ok());
+        e.render_events = 0;
+        assert!(e.validate().is_err());
+        e.render_events = 1;
+        e.frame_fences = 0;
+        assert!(e.validate().is_err());
+        e.frame_fences = 2;
+        e.rows_checked = 0;
+        assert!(e.validate().is_err());
+        e.rows_checked = 12;
+        for width in [0.0, f64::NAN, f64::INFINITY, 4097.0] {
+            e.width_px = width;
+            assert!(e.validate().is_err());
+        }
+        e.width_px = 270.0;
+        e.readonly = false;
+        assert!(e.validate().is_err());
     }
 
     #[test]
