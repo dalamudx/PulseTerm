@@ -95,6 +95,11 @@ description = "Measure real WebView Channel and loopback WebSocket"
 depends = ["desktop-build"]
 run = "cargo xtask probe-channel"
 
+[tasks.probe-window]
+description = "Validate native minimize/resume under isolated Linux X11/Openbox"
+depends = ["desktop-build"]
+run = "cargo xtask probe-window"
+
 [tasks.bindings]
 description = "Generate typed IPC commands, events and DTOs from Rust"
 run = "cargo run -p pulseterm-desktop --features desktop --locked -- --export-bindings"

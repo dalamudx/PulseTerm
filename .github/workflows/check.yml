@@ -20,7 +20,7 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 vim less htop tmux
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils vim less htop tmux
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -62,6 +62,9 @@ jobs:
       - name: Validate Linux native sessions, windows and transports
         if: runner.os == 'Linux'
         run: mise run probe-channel
+      - name: Validate native minimized-window recovery under Openbox
+        if: runner.os == 'Linux'
+        run: mise run probe-window
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: mise run audit
@@ -70,5 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terminal-probe-${{ matrix.os }}
-          path: target/probes/*.json
+          path: |
+            target/probes/*.json
+            target/probes/window-manager.log
           if-no-files-found: ignore

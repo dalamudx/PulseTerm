@@ -138,6 +138,7 @@ export type SessionEvidence = {
 	resizeCount: number,
 	pauseCount: number,
 	nativeWindowChecked: boolean,
+	nativeMinimizeChecked: boolean,
 	columns: number,
 	rows: number,
 };

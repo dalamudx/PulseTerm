@@ -62,6 +62,7 @@ fn main() -> Result<()> {
         Some("check-deps") => check_deps()?,
         Some("probe") => probe()?,
         Some("probe-channel") => channel_probe::run()?,
+        Some("probe-window") => channel_probe::run_window()?,
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-pty-portable") => portable_pty_probe::run()?,
         Some("probe-local-session") => local_session_probe::run()?,

@@ -23,6 +23,7 @@ struct Inner {
     windows: Mutex<HashMap<String, WindowToken>>,
     active: Mutex<Option<Active>>,
     slot: Arc<Semaphore>,
+    minimize: bool,
 }
 struct Active {
     owner: WindowToken,
@@ -33,11 +34,17 @@ struct Active {
 }
 impl Default for WindowSessions {
     fn default() -> Self {
+        Self::new(false)
+    }
+}
+impl WindowSessions {
+    pub(crate) fn new(minimize: bool) -> Self {
         Self(Arc::new(Inner {
             registry: SessionRegistry::new(),
             windows: Mutex::new(HashMap::new()),
             active: Mutex::new(None),
             slot: Arc::new(Semaphore::new(1)),
+            minimize,
         }))
     }
 }
@@ -243,6 +250,7 @@ pub(crate) struct SessionEvidence {
     pub resize_count: u32,
     pub pause_count: u32,
     pub native_window_checked: bool,
+    pub native_minimize_checked: bool,
     pub columns: u16,
     pub rows: u16,
 }
@@ -252,6 +260,7 @@ impl SessionEvidence {
         if self.resize_count > 3
             || self.pause_count > 1
             || (self.native_window_checked && self.pause_count != 1)
+            || (self.native_minimize_checked && !self.native_window_checked)
             || !(2..=160).contains(&self.columns)
             || !(2..=60).contains(&self.rows)
         {
@@ -434,28 +443,48 @@ struct NativeVisibilityGuard {
     state: WindowSessions,
     owner: WindowToken,
     armed: bool,
+    minimize: bool,
 }
 impl Drop for NativeVisibilityGuard {
     fn drop(&mut self) {
         if self.armed && self.state.caller(&self.window).ok() == Some(self.owner) {
+            if self.minimize {
+                let _ = self.window.unminimize();
+            }
             let _ = self.window.show();
         }
     }
 }
+#[derive(Clone, Copy)]
+enum NativeVisibility {
+    Visible,
+    Hidden,
+    Minimized,
+}
+fn native_state_matches(visible: bool, minimized: bool, expected: NativeVisibility) -> bool {
+    match expected {
+        NativeVisibility::Visible => visible && !minimized,
+        NativeVisibility::Hidden => !visible && !minimized,
+        NativeVisibility::Minimized => minimized,
+    }
+}
+
 async fn wait_native_visible(
     window: &WebviewWindow,
     state: &WindowSessions,
     owner: WindowToken,
-    visible: bool,
+    expected: NativeVisibility,
 ) -> Result<()> {
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if state.caller(window)? != owner {
                 return Err("session.window_replaced".into());
             }
-            if window.is_visible().map_err(error)? == visible
-                && (!visible || !window.is_minimized().map_err(error)?)
-            {
+            if native_state_matches(
+                window.is_visible().map_err(error)?,
+                window.is_minimized().map_err(error)?,
+                expected,
+            ) {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -485,16 +514,34 @@ pub(crate) async fn probe_session_window_cycle(
         state: state.inner().clone(),
         owner,
         armed: true,
+        minimize: state.0.minimize,
     };
-    window.hide().map_err(error)?;
-    wait_native_visible(&window, &state, owner, false).await?;
+    if state.0.minimize {
+        window.minimize().map_err(error)?;
+    } else {
+        window.hide().map_err(error)?;
+    }
+    wait_native_visible(
+        &window,
+        &state,
+        owner,
+        if state.0.minimize {
+            NativeVisibility::Minimized
+        } else {
+            NativeVisibility::Hidden
+        },
+    )
+    .await?;
     // This backend deadline and restoration do not depend on animation frames,
     // document visibility events, or JavaScript running while unmapped.
     let boundary = hidden_output(&state, owner, id, &gate, generation).await?;
     tokio::time::sleep(Duration::from_millis(100)).await;
     gate.hidden(generation)?;
+    if state.0.minimize {
+        window.unminimize().map_err(error)?;
+    }
     window.show().map_err(error)?;
-    wait_native_visible(&window, &state, owner, true).await?;
+    wait_native_visible(&window, &state, owner, NativeVisibility::Visible).await?;
     if state.0.registry.state(owner, id).map_err(error)?.lifecycle != Lifecycle::Running {
         return Err("session.closed_while_hidden".into());
     }
@@ -930,6 +977,7 @@ pub(crate) async fn probe_session(
         resize_count: resizes,
         pause_count: pauses,
         native_window_checked: visibility.native_checked(),
+        native_minimize_checked: state.0.minimize && visibility.native_checked(),
         columns: final_state.size.columns(),
         rows: final_state.size.rows(),
     })
@@ -952,6 +1000,25 @@ mod tests {
         assert!(validate_probe_input(&"中".repeat(342)).is_err());
     }
 
+    #[test]
+    fn native_state_gate_distinguishes_hide_minimize_and_restored_visibility() {
+        for visible in [false, true] {
+            for minimized in [false, true] {
+                assert_eq!(
+                    native_state_matches(visible, minimized, NativeVisibility::Minimized),
+                    minimized
+                );
+                assert_eq!(
+                    native_state_matches(visible, minimized, NativeVisibility::Hidden),
+                    !visible && !minimized
+                );
+                assert_eq!(
+                    native_state_matches(visible, minimized, NativeVisibility::Visible),
+                    visible && !minimized
+                );
+            }
+        }
+    }
     #[test]
     fn origins_are_local_only() {
         for url in [
@@ -992,6 +1059,7 @@ mod tests {
             resize_count: 0,
             pause_count: 0,
             native_window_checked: false,
+            native_minimize_checked: false,
             columns: 40,
             rows: 12,
         };
@@ -1000,7 +1068,11 @@ mod tests {
         assert!(e.validate().is_err());
         e.pause_count = 1;
         assert!(e.validate().is_ok());
+        e.native_minimize_checked = true;
+        assert!(e.validate().is_ok());
         e.native_window_checked = false;
+        assert!(e.validate().is_err());
+        e.native_minimize_checked = false;
         e.pause_count = 0;
         e.generation = "02".into();
         assert!(e.validate().is_err());

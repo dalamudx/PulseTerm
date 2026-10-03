@@ -165,6 +165,7 @@ struct BenchState {
     epoch: Instant,
     active: Mutex<Option<Arc<Run>>>,
     automatic: bool,
+    minimize: bool,
     report_path: Option<PathBuf>,
 }
 
@@ -393,6 +394,7 @@ fn probe_finish(
             report.session_runs, report.dom_runs
         )
     })?;
+    report.validate_window_mode(state.minimize)?;
     let bytes = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     if bytes.len() > 64 * 1024 {
         return Err("probe.report_too_large".into());
@@ -467,7 +469,23 @@ impl DomEvidence {
     }
 }
 
+fn window_mode_matches(minimize: bool, dom: Option<bool>, headless: Option<bool>) -> bool {
+    dom == Some(minimize) && headless == Some(false)
+}
 impl ProbeReport {
+    fn validate_window_mode(&self, minimize: bool) -> ProbeResult<()> {
+        if self.completed
+            && !window_mode_matches(
+                minimize,
+                self.dom_session.as_ref().map(|s| s.native_minimize_checked),
+                self.session.as_ref().map(|s| s.native_minimize_checked),
+            )
+        {
+            return Err("probe.window_mode_mismatch".into());
+        }
+        Ok(())
+    }
+
     fn validate(&self) -> ProbeResult<()> {
         if self.schema_version != 4
             || self.measurements.len() > 7
@@ -641,7 +659,8 @@ pub fn run() {
         }
         return;
     }
-    let automatic = args.iter().any(|arg| arg == "--probe");
+    let minimize = args.iter().any(|arg| arg == "--probe-window");
+    let automatic = minimize || args.iter().any(|arg| arg == "--probe");
     let report_path = args
         .iter()
         .position(|arg| arg == "--report")
@@ -651,12 +670,13 @@ pub fn run() {
         epoch: Instant::now(),
         active: Mutex::new(None),
         automatic,
+        minimize,
         report_path,
     };
     let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
-        .manage(WindowSessions::default())
+        .manage(WindowSessions::new(minimize))
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);
@@ -722,6 +742,7 @@ mod tests {
             epoch: Instant::now(),
             active: Mutex::new(None),
             automatic: false,
+            minimize: false,
             report_path: None,
         };
         let id = uuid::Uuid::new_v4().to_string();
@@ -803,6 +824,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn report_window_mode_cannot_substitute_hide_for_minimize_or_claim_headless() {
+        for mode in [false, true] {
+            assert!(window_mode_matches(mode, Some(mode), Some(false)));
+            assert!(!window_mode_matches(mode, Some(!mode), Some(false)));
+            assert!(!window_mode_matches(mode, None, Some(false)));
+            assert!(!window_mode_matches(mode, Some(mode), Some(true)));
+            assert!(!window_mode_matches(mode, Some(mode), None));
+        }
+    }
     #[test]
     fn report_validation_requires_version_and_real_evidence() {
         let mut report = ProbeReport {

@@ -258,9 +258,18 @@ mise run probe-pty
 - 两次独立完整Linux WebView通过（最后含原子snapshot和自动监听清理，各2headless+2DOM+7transport/cancel），最终DOM generation=12、3resize/1pause/nativeWindowChecked=true、104×12、parsedBytes=3,113,119、frames=787、peakCreditBytes=8212、digest=`00b088cbb609382c`、renderEvents=785/frameFences=783、12行DOM匹配。期间无旧Channel帧，恢复seed/输入回显/repair/EOF均通过。native shutdown出现GLib-GIO name释放连接已关闭warning，不影响完整report/退出收据，未把它隐藏或作为失败重跑。
 - 浏览器的visibilitychange来源合并在单元模拟源中验证；真实WebView证据是host属性observer自动pause/resume和native hide/show，不声称浏览器必在OS最小化时发事件。系统minimize、应用多pane ViewHost、跨屏DPI/IME/Windows/macOS及长期hidden策略仍未完成；release gate未放宽。
 
+## Linux X11/Openbox真实native最小化与恢复（受控样例）
+
+- 新增`mise run probe-window`→cargo xtask probe-window→新建私有Xvfb/DBus/Openbox（即使已有DISPLAY也隔离），CLI --probe-window选择backend模式，JS不能选择minimize。普通probe-channel保持原无WM路径与报告channel.json；最小化单独生成window-minimize.json/WM log。Openbox/xprop属于验证环境系统前置，不引入Cargo/pnpm或分发依赖；Linux CI安装并新增独立执行步骤/证据上传，注册CI不当作远端已运行证明。
+- native cycle准入/owner/generation/pause票据不变：minimize→最长2秒确认runtime is_minimized=true→后台产生固定HIDDEN_SEED、parsed_bytes推进且Running→100ms→unminimize/show→最长2秒确认visible&&!minimized→finish native receipt。controller之后AND确认容器/页面可见、授权新Begin并精确恢复；不是CSS隐藏或失焦替代。guard失败/取消仅对同WindowToken窗口尝试unminimize/show，不自动resume/新建窗口/盲重试。
+- 新增后台DTO nativeMinimizeChecked，必须与nativeWindowChecked/pauseCount一致；server与xtask各自核对mode：minimize DOM=true、headless=false，普通channel二者false。2项native测试覆盖mode错配/缺失/headless claim与全部visible/minimized布尔组合；SessionEvidence fixture拒绝不具备window收据的minimize true。xtask新增2项验证缺失/字符串/数字不是bool收据，现23native/4xtask/126TS通过；bindings generation/drift、native clippy -D warnings及完整check/test通过。
+- wrapper等待EWMH支持窗口属性最多50×100ms，owned WM失败立即退出、未ready明确deadline失败；EXIT/INT/TERM清理自己启动的Openbox，外层180秒timeout覆盖完整进程组。直接负向probe用stub openbox退出17确认wrapper失败1而非fallback；用stub xprop使ready永远失败确认5秒timeout；真WM下app退出7保留7；三种退出后pgrep无遗留Openbox。script sh -n及git diff --check通过。
+- 一次独立带WM完整运行成功（内含2headless+2DOM+7transport/cancel）；nativeMinimizeChecked=true、generation=12、3resize/1pause、104×12、parsedBytes=3,113,119、frames=792、peakCreditBytes=8212、nativeExit=0、digest=`00b088cbb609382c`；DOM12行匹配、832×192、renderEvents=790/frameFences=788。最小化期间无旧Channel帧，恢复HIDDEN_SEED，后续输入/repair/EOF全通过。最后普通无WM Channel另一次完整运行也通过，其nativeMinimizeChecked=false、headless=false，后续check/test通过；没有重复已通过的WM正向样例。
+- Openbox启动log有系统菜单文件缺失message，minimize运行退出时有X授权释放warning；完整runtime状态回读/report/exit均成功且WM无泄漏，没有放宽WebKit sandbox或忽略门禁。数字只是单次受控证据，不承诺性能。尚未验收用户点击最小化的自动事件捕获、其它X11 WM/Wayland、Windows/macOS、长时间最小化/关闭竞态实际UI、跨屏DPI与生产ViewHost；所有dependency/release gate保持。
+
 ## 检查结果
 
-- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现21项测试通过（新增Destroyed的wait/early resume/native在途/poison时序及native show收据准入回归）；本轮未修改parser补丁或上游源码。
+- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 38项测试通过（新增bound resize owner/旧generation/重绑/控制拒绝回归）；额外178项原上游测试通过；原生适配器现23项测试通过（新增report模式不允许hide冒充minimize/headless claim、native visible/hidden/minimized状态矩阵回归）；xtask现4项报告负向测试通过（含新增2项minimize mode/缺失或非bool收据回归）；本轮未修改parser补丁或上游源码。
 - TS：126 项测试通过（新增17项单generation visibility的AND来源、同步retire、串行phase/early show、取消/late结果/timeout、不确定恢复、原子snapshot及observer清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

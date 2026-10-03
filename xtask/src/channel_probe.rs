@@ -6,8 +6,21 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
+    run_mode(false)
+}
+pub fn run_window() -> Result<()> {
+    if !cfg!(target_os = "linux") {
+        bail!("probe-window currently requires isolated Linux X11/Openbox");
+    }
+    run_mode(true)
+}
+fn run_mode(minimize: bool) -> Result<()> {
     let root = super::root()?;
-    let report = root.join("target/probes/channel.json");
+    let report = root.join(if minimize {
+        "target/probes/window-minimize.json"
+    } else {
+        "target/probes/channel.json"
+    });
     if report.exists() {
         std::fs::remove_file(&report)?;
     }
@@ -20,8 +33,9 @@ pub fn run() -> Result<()> {
         bail!("run mise run desktop-build first");
     }
     let headless = cfg!(target_os = "linux")
-        && std::env::var_os("DISPLAY").is_none()
-        && std::env::var_os("WAYLAND_DISPLAY").is_none();
+        && (minimize
+            || (std::env::var_os("DISPLAY").is_none()
+                && std::env::var_os("WAYLAND_DISPLAY").is_none()));
     let mut command = if headless {
         // GNU timeout supervises the complete xvfb/dbus/WebView process group.
         let mut command = Command::new("timeout");
@@ -33,13 +47,26 @@ pub fn run() -> Result<()> {
             "dbus-run-session",
             "--",
         ]);
+        if minimize {
+            command
+                .arg("sh")
+                .arg(root.join("scripts/probe-window-x11.sh"))
+                .arg(root.join("target/probes/window-manager.log"));
+        }
         command.arg(&executable);
         command
     } else {
         Command::new(&executable)
     };
     command
-        .args(["--probe", "--report"])
+        .args([
+            if minimize {
+                "--probe-window"
+            } else {
+                "--probe"
+            },
+            "--report",
+        ])
         .arg(&report)
         .stdin(Stdio::null());
     // Only synthetic frames and fixed finite-helper output; keep the WebKit sandbox enabled.
@@ -63,7 +90,7 @@ pub fn run() -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    validate(&report)?;
+    validate(&report, minimize)?;
     if !status.success() {
         bail!("WebView probe process failed: {status}");
     }
@@ -74,7 +101,11 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-fn validate(path: &Path) -> Result<()> {
+fn window_mode_matches(report: &Value, minimize: bool) -> bool {
+    report["domSession"]["nativeMinimizeChecked"].as_bool() == Some(minimize)
+        && report["session"]["nativeMinimizeChecked"].as_bool() == Some(false)
+}
+fn validate(path: &Path, minimize: bool) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
     if report["schemaVersion"] != 4
@@ -128,6 +159,7 @@ fn validate(path: &Path) -> Result<()> {
         || report["domSession"]["pauseCount"] != 1
         || report["domSession"]["nativeWindowChecked"] != true
         || report["session"]["nativeWindowChecked"] != false
+        || !window_mode_matches(&report, minimize)
         || dom["visibilityChecked"] != true
         || report["session"]["resizeCount"] != 0
         || report["session"]["pauseCount"] != 0
@@ -183,4 +215,28 @@ fn validate(path: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn only_requested_native_mode_with_false_headless_claim_is_accepted() {
+        for mode in [false, true] {
+            let mut r = serde_json::json!({"domSession":{"nativeMinimizeChecked":mode},"session":{"nativeMinimizeChecked":false}});
+            assert!(window_mode_matches(&r, mode));
+            assert!(!window_mode_matches(&r, !mode));
+            r["session"]["nativeMinimizeChecked"] = Value::Bool(true);
+            assert!(!window_mode_matches(&r, mode));
+        }
+    }
+    #[test]
+    fn missing_or_non_boolean_window_receipts_fail_closed() {
+        for invalid in [Value::Null, Value::String("true".into()), Value::from(1)] {
+            let r = serde_json::json!({"domSession":{"nativeMinimizeChecked":invalid},"session":{"nativeMinimizeChecked":false}});
+            assert!(!window_mode_matches(&r, false));
+            assert!(!window_mode_matches(&r, true));
+        }
+        assert!(!window_mode_matches(&serde_json::json!({}), false));
+    }
 }
