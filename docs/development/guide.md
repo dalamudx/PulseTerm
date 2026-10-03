@@ -38,7 +38,7 @@
 各平台依赖：
 - **Windows**：Visual Studio Build Tools（MSVC + Windows SDK）、WebView2 Runtime。如果要从源码编译音频相关依赖，还需要 NASM。
 - **macOS**：Xcode Command Line Tools。
-- **Linux**（Debian/Ubuntu）：`libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev build-essential`。要测试 H.264，还需安装 `gstreamer1.0-libav` 或 VA-API 插件。
+- **Linux**（Debian/Ubuntu）：`libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev build-essential`。要测试 H.264，还需安装 `gstreamer1.0-libav` 或 VA-API 插件。
 
 ## 3. 常用命令
 
@@ -55,7 +55,12 @@ mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run audit                    # Rust 许可证/安全公告/来源检查
 mise run fmt                      # 统一格式
+mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
+mise run desktop                  # 打开原生开发验证界面（不是完整终端）
+mise run probe-channel            # 自动采集真实 WebView 的 Channel/Socket 结果
 ```
+
+无显示服务的 Linux 运行 `probe-channel` 需要 `xvfb`、`dbus-x11` 和 coreutils 的 `timeout`；探针监督整个 Xvfb/DBus/WebView 进程组，最长运行 180 秒。Linux 原生构建还需 GTK3/WebKitGTK 开发包，Windows/macOS 使用对应系统开发环境。原生依赖只在 `pulseterm-desktop` 的 `desktop` feature 启用，默认 headless 检查无需 GUI 库。
 
 输出在 `target/probes/`，详见 [验证记录](./validation.md)。使用未激活 mise 的 shell 时，单条工具命令加 `mise exec --` 前缀。CI 同样读取此配置，不在工作流里重复声明 Rust/Node/pnpm 版本。
 

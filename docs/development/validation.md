@@ -5,7 +5,7 @@
 ## 工程基础
 
 - `.mise.toml` 固定 Rust 1.95.0、Node 22.23.3、pnpm 10.34.6、cargo-deny 0.20.2；任务统一使用 `mise run`。
-- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term` 与 `xtask`，没有提前创建其余空 crate。
+- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term`、`pulseterm-desktop` 与 `xtask`；原生 GUI 依赖受 `desktop` feature 控制，默认仍可做 headless 核心检查。
 - `cargo xtask check-deps` 检查已实例化 crate 的直接依赖方向、Tauri 隔离和领域层已知 I/O 依赖；这是初始规则，不是完整的传递依赖/源码安全证明。
 - Rust 禁止 unsafe；生产代码禁止 unwrap/expect；TS 开启 strict 和 noUncheckedIndexedAccess，使用 Biome。
 - GitHub Actions 配置 Linux/Windows/macOS 检查、测试和探针；VT 样例禁止换行归一化。
@@ -16,7 +16,8 @@
 
 - 6 字节头：kind、保留 flags、little-endian u32 sequence；payload 不超过 1 MiB。
 - 拒绝短头、未知 kind、非零 flags、超长数据；TS 正确处理非零 byteOffset，payload 引用原 buffer。
-- Rust 属性测试覆盖随机载荷往返、任意输入不 panic；尚未实现 Channel 传输、信用额度、顺序恢复或桌面载荷分片。
+- Rust 属性测试覆盖随机载荷往返、任意输入不 panic。新增 sans-I/O `CreditWindow`：同时限制帧数和载荷字节，只接受已发送序号的累计 ACK；重复、过期、未来 ACK 不增加额度，支持 u32 回绕。
+- 真实 Raw Channel 与本机 WebSocket 复用此帧格式和信用窗口；尚未实现生产会话重绑定、顺序恢复或桌面载荷分片。
 
 ## 终端双解析器探针（S2、ADR-026 的部分证据）
 
@@ -47,15 +48,32 @@ mise run probe
 
 当前是有上限的热历史，不是冷热分层/压缩归档。10 万行历史目标需要独立压缩存储，不能直接沿用 alacritty 原始格子。此数值也不是整棵进程树的内存测试。
 
+## 真实 WebView 数据通道（S1 的部分证据）
+
+```sh
+mise run desktop-check
+mise exec -- cargo test -p pulseterm-desktop --features desktop --locked
+mise run probe-channel
+# target/probes/channel.json
+```
+
+- Linux Debian / WebKitGTK 2.54.0 / GTK 3.24.49，Xvfb 1280×800；debug Rust 构建、production Vite 资源。没有关闭 WebKit sandbox。
+- 每种传输运行：64 KiB × 256 帧（终端流大小）、256 KiB × 256 帧（桌面块大小）、64 KiB × 32 帧（75 ms 延迟累计 ACK）。Rust 发送确定性载荷，前端逐字节检查数据、长度、序号、总量，ACK 仅在消费后发送。
+- 实测完整性通过；最大在途载荷不超过 `window × chunkBytes`，最大帧数不超过 window。取消测试通过，取消后新 Channel 能重新运行。另有信用不足等待、伪 ACK、重复 ACK、独占运行槽与无令牌 Socket 拒绝测试。
+- 两次本地完整运行均通过。示例测量：Channel 终端流 21.40 MB/s、桌面块 52.43 MB/s；WebSocket 对应 37.62 / 49.93 MB/s。Channel 送达 p95 为 24.19 / 20.88 ms，WebSocket 为 5.66 / 4.28 ms；数值存在运行间波动，不能作为基准或性能承诺。
+- Socket 仅绑定 127.0.0.1 随机端口、单次连接、随机令牌及固定子协议；接收数据消息上限 4 字节，关闭/无 ACK 均有超时或取消保护。probe command 只向本地 main WebView 注册，没有开启远端权限。
+- 送达时间通过 7 次时钟往返选择最小误差样本校准；报告含时钟不确定度、ACK RTT p95、JS 16 ms 定时器延迟及在途峰值。定时器响应不等于输入到绘制延迟。
+- 合成数据并不经过 terminal parser、Canvas、WebGL 或 RDP 解码，不测 GPU/端到端渲染，也不证明生产缓存/整棵进程树内存有界。三个平台的真实显示环境、系统输入负载、多会话公平性及持续高吞吐仍待验证；S1 尚未整体验收通过。
+
 ## 检查结果
 
-- Rust：11 项单元/属性测试通过。
-- TS：5 项测试通过；tsc、Biome 通过。
+- Rust：14 项核心单元/属性测试、4 项原生适配器测试通过。
+- TS：8 项测试通过；tsc、Biome 通过；验证应用 Vite 资源构建通过。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
-- cargo-deny：公告、来源、许可证及 bans 通过，保留 windows-sys 双版本和未使用白名单项的警告。
+- 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
 - Astrolabe 已用于骨架、Rust 符号精确引用、TS 文件依赖范围及 Rust 诊断。TS 语言服务器诊断超时，未取得安装授权，不能视为通过；TS 的类型证据来自 tsc。
 
 ## 尚未验证
 
-真实 Tauri Channel 吞吐/回压（S1）、ConPTY、窗口材质/IME、真实 PTY/SSH 互通、桌面显示与编解码、CLI IPC、类型代码生成均未实现或验证。下一步首先补充完整状态恢复与 Unicode 宽度一致性证据，并建立真实 WebView 数据通道测量，避免把 headless 结果误当性能验收。
+S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 PTY/SSH 互通、桌面显示与编解码、CLI IPC、类型代码生成仍未实现或验证。完整终端状态恢复与 Unicode 宽度一致性仍未通过；后续应继续补这些证据，不能直接将视口重放用于生产 detach/attach。原生依赖门禁审查通过之前，不得打包分发验证应用。

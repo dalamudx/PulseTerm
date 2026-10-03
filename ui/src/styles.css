@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@import "@radix-ui/colors/slate.css";
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/cyan.css";
+@import "@radix-ui/colors/red.css";
+
+:root {
+  color-scheme: light;
+  --bg: var(--slate-1);
+  --fg: var(--slate-12);
+  --muted: var(--slate-11);
+  --border: var(--slate-7);
+  --control: var(--slate-3);
+  --hover: var(--slate-4);
+  --focus: var(--cyan-8);
+  --danger: var(--red-11);
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+main {
+  max-width: 1100px;
+  padding: 24px;
+  margin: auto;
+}
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+p {
+  margin: 8px 0 16px;
+}
+header p,
+.note {
+  color: var(--muted);
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+}
+.toolbar p {
+  margin: 0;
+}
+button {
+  border: 1px solid var(--border);
+  background: var(--control);
+  color: var(--fg);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--hover);
+}
+button:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+}
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+th {
+  font-weight: 600;
+}
+.note {
+  max-width: 75ch;
+  margin-top: 24px;
+}
+.error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+::selection {
+  background: var(--slate-5);
+}
+@media (max-width: 600px) {
+  main {
+    padding: 16px;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
+}

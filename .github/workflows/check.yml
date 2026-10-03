@@ -18,6 +18,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install tools from .mise.toml
         uses: jdx/mise-action@v3
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -26,6 +29,13 @@ jobs:
         run: mise run test
       - name: Compare terminal parsers
         run: mise run probe
+      - name: Check native desktop adapter
+        run: mise run desktop-check
+      - name: Test native desktop adapter
+        run: mise exec -- cargo test -p pulseterm-desktop --features desktop --locked
+      - name: Measure Linux native WebView
+        if: runner.os == 'Linux'
+        run: mise run probe-channel
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: mise run audit

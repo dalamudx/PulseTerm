@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PulseTerm Validation",
+  "version": "0.1.0",
+  "identifier": "dev.pulseterm.validation",
+  "build": {"frontendDist": "../../../ui/dist"},
+  "app": {
+    "windows": [{"label": "main", "title": "PulseTerm · IPC validation", "width": 900, "height": 640}],
+    "security": {"csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:*; img-src 'self' data:"}
+  },
+  "bundle": {"active": false}
+}

@@ -1,6 +1,9 @@
 //! Session-local binary frames. The enclosing channel supplies frame boundaries.
 #![forbid(unsafe_code)]
 
+/// Bounded cumulative-ack flow control, independent of any runtime.
+pub mod flow;
+
 /// Header: kind u8, flags u8, sequence u32 (little endian).
 pub const HEADER_LEN: usize = 6;
 /// Bound payload allocation at every IPC boundary.

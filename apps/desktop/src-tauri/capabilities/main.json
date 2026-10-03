@@ -1,0 +1,6 @@
+{
+  "identifier": "validation-main",
+  "description": "Only the local validation window can use the probe commands.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

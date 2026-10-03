@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "xtask"]
+members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,6 +16,13 @@ proptest = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+tauri = "=2.12.1"
+tauri-build = "=2.7.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio-tungstenite = "0.28"
+futures-util = { version = "0.3", features = ["sink"] }
+uuid = { version = "1", features = ["v4"] }
+
 pulse-core = { path = "crates/pulse-core", version = "0.1.0" }
 pulse-ipc = { path = "crates/pulse-ipc", version = "0.1.0" }
 pulse-term = { path = "crates/pulse-term", version = "0.1.0" }

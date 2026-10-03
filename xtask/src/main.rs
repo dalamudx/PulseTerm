@@ -1,6 +1,8 @@
 //! Repository checks and reproducible technical probes.
 #![forbid(unsafe_code)]
 
+mod channel_probe;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -37,7 +39,8 @@ fn main() -> Result<()> {
         }
         Some("check-deps") => check_deps()?,
         Some("probe") => probe()?,
-        _ => bail!("usage: cargo xtask <check|check-deps|probe>"),
+        Some("probe-channel") => channel_probe::run()?,
+        _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel>"),
     }
     Ok(())
 }

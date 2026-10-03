@@ -24,6 +24,24 @@ run = ["cargo xtask probe", "pnpm --filter ui probe"]
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]
 
+[tasks.desktop-build]
+description = "Build the native WebView validation app"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]
+
+[tasks.desktop-check]
+description = "Check desktop adapter and frontend assets"
+run = ["pnpm --filter ui build", "cargo clippy -p pulseterm-desktop --features desktop --all-targets --locked -- -D warnings"]
+
+[tasks.desktop]
+description = "Run the native validation app"
+depends = ["desktop-build"]
+run = "cargo run -p pulseterm-desktop --features desktop --locked"
+
+[tasks.probe-channel]
+description = "Measure real WebView Channel and loopback WebSocket"
+depends = ["desktop-build"]
+run = "cargo xtask probe-channel"
+
 [tasks.audit]
 description = "Audit Rust dependency licenses and advisories"
-run = ["cargo deny check", "pnpm audit --audit-level moderate"]
+run = ["cargo deny --all-features --locked check", "pnpm audit --audit-level moderate"]

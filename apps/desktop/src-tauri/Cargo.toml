@@ -1,0 +1,33 @@
+[package]
+name = "pulseterm-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid"]
+
+[[bin]]
+name = "pulseterm-desktop"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[dependencies]
+pulse-ipc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tauri = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[build-dependencies]
+tauri-build = { workspace = true, optional = true }
+
+[lints]
+workspace = true
