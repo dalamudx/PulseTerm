@@ -80,6 +80,7 @@ impl SessionRegistry {
 }
 ```
 
+- 上述API示意尚非完整生产registry。当前 `pulse-app::registry::SessionRegistry` 已实现有界metadata、可信WindowToken的single-owner授权、backend generation、capture串行及晚完成隔离；state/input/resize/ACK/detach/close均检查owner。window关闭不关闭session，application shutdown才关闭所有handles；native receipt仍由registrar监督。跨窗口迁移/重新授权、多视图、Tauri生命周期/ACL适配及事件合并仍待实现，详情见 [终端关联协议](./terminal-attachment.md)。
 - `FrameSink` 是对发送渠道的抽象。桌面端的实现是 Tauri `Channel`；测试中是内存队列；将来 mux 守护进程中是本地 socket。
 - 会话的生命周期只由 `open` 和 `close` 决定，**和视图无关**。没有视图关联时，会话照常运行。
 - 会话元数据（标题、当前目录、状态、未读标记）改变时，以低频事件 `session.updated` 广播，按 100ms 合并。

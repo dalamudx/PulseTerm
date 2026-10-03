@@ -37,7 +37,7 @@ fn command(mode: &str) -> Result<PtyCommand> {
     Ok(command)
 }
 async fn wire_streaming() -> Result<serde_json::Value> {
-    use pulse_app::attachment::{AttachmentConfig, attach};
+    use pulse_app::{attachment::AttachmentConfig, registry::SessionRegistry};
     use pulse_ipc::attach::{Part, decode_fragment};
     let size = TermSize::new(80, 24)?;
     let (session, task) =
@@ -49,7 +49,11 @@ async fn wire_streaming() -> Result<serde_json::Value> {
         bytes: 9000,
         ack_timeout: Duration::from_secs(5),
     };
-    let (ack, mut wire, binding) = attach(&session, 0x100000000000007, config).await?;
+    let registry = SessionRegistry::new();
+    let window = registry.open_window()?;
+    let id = registry.register(window, session.clone())?;
+    let binding = registry.attach(window, id, config).await?;
+    let mut wire = binding.wire;
     let mut replay = pulse_term::TerminalProbe::new(size, 128);
     let mut sequence = 0;
     let mut offset = None;
@@ -70,8 +74,8 @@ async fn wire_streaming() -> Result<serde_json::Value> {
                     replay.take_replies();
                 }
                 Part::Commit => {
-                    session
-                        .input("literal ; $(input) 中\n".as_bytes().to_vec())
+                    registry
+                        .input(window, id, "literal ; $(input) 中\n".as_bytes().to_vec())
                         .await?;
                 }
                 Part::Data => {
@@ -100,13 +104,13 @@ async fn wire_streaming() -> Result<serde_json::Value> {
                     end = true;
                 }
             }
-            ack.acknowledge(part.generation, frame.sequence)?;
+            registry.acknowledge(window, id, part.generation, frame.sequence)?;
         }
         Ok::<_, anyhow::Error>(())
     })
     .await
     .context("native wire deadline")??;
-    let receipt = binding.join().await?;
+    let receipt = binding.completion.await??;
     let (state, exit) = tokio::time::timeout(Duration::from_secs(3), task.join()).await??;
     ensure!(
         end && state.lifecycle == Lifecycle::Ended && exit.exit_code == 0,
@@ -129,7 +133,7 @@ async fn wire_streaming() -> Result<serde_json::Value> {
         "wire final screen"
     );
     Ok(
-        json!({"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
+        json!({"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
     )
 }
 async fn streaming() -> Result<serde_json::Value> {
@@ -312,7 +316,7 @@ async fn probe() -> Result<serde_json::Value> {
     let stream = streaming().await?;
     let wire = wire_streaming().await?;
     Ok(
-        json!({"wire":wire,"stream":stream,"schemaVersion":3,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","Only one diagnostic output lease; no production window/authorization or protocol ACK integration","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
+        json!({"wire":wire,"stream":stream,"schemaVersion":3,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","One authorized registry binding; runtime WebView/window lifecycle adapter remains unimplemented","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
     )
 }
 pub fn run() -> Result<()> {

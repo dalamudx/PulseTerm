@@ -163,9 +163,16 @@ mise run probe-pty
 - CI沿用三平台probe-local-session/probe-attachment任务，已包含新路径；本轮Linux执行。77项term、14项IPC、7项app、60项TS及API隔离/check通过。Cargo.lock只增加pulse-app→pulse-ipc内部edge，无第三方版本/许可证/补丁变化。
 - 仍非production attach：一个诊断订阅、没有Tauri权限/真实窗口绑定，未覆盖非UTF-8双坐标。旧surface/已转交帧撤销、自动idle同步限频、多视图策略和真实WebView callback ACK→PTY组合验收仍待实现；不代表三平台/S2/S11整体通过。
 
+## 应用注册层授权与撤销（后端基础）
+
+- 新增 `pulse-app::registry`：32个可信window incarnation、64个session、64个监督task上限及per-session capture try-lock；generation backend单调分配，id耗尽/容量满拒绝且不替换当前binding。元数据短锁不跨await，capture future编译期验证Send。
+- 13项新增测试涵盖同actor重复注册/替换watch不能绕过owner、外来window/跨registry token权限、unknown session统一拒绝、旧ACK/detach/晚完成不能影响替换、failed/busy/取消前capture保留旧view、窗口关闭时并发capture不复活、同label重建不继承授权、EOF final ACK清理、应用Drop关闭session、window/session/task容量及ID耗尽。原7项driver测试同样通过。
+- probe-local-session的2MiB native wire流现在通过registry注册/input/ACK与监督completion；Linux实际helper连续offset、EOF/child join、暂停ACK时parsed_bytes冻结和inspect通过。测试使用可信in-process WindowToken，不能视为Tauri command授权/WebView窗口事件验收。CI现有三平台任务自动包含此路径，Windows本轮未实测。
+- window关闭撤销view但保留application-owned session；新window不会凭相同label继承访问权。跨window迁移/重新授权尚未实现；注册者必须监督native receipt，shutdown不是process-tree join。无第三方依赖、锁文件或parser补丁变更，发布门禁不变。
+
 ## 检查结果
 
-- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 7项ACK driver监督测试通过；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- Rust：77 项 pulse-term 单元/属性测试通过（新增9项原子lease/背压、同步Fence、EOF/取消/native resize回归）；pulse-ipc 14项通过（加入End阶段/额度/边界回归）；pulse-app 20项测试通过（7项ACK driver及13项registry授权/撤销/资源边界）；额外178项原上游测试通过；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
 - TS：60 项测试通过（本轮新增3项EOF callback/unsupported/取消迟到ACK拒绝）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

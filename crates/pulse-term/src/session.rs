@@ -330,6 +330,11 @@ pub struct SessionHandle {
     pub state: watch::Receiver<SessionState>,
 }
 impl SessionHandle {
+    /// Compare backend actor identity for trusted registrars; not an authorization
+    /// capability. Independent of publicly replaceable watch receivers.
+    pub fn same_actor(&self, other: &Self) -> bool {
+        self.commands.same_channel(&other.commands)
+    }
     /// Capture replay and install its bounded live subscriber atomically. Diagnostic
     /// single-lease API: not a production attach authorization or renderer binding.
     /// Full output queues pause parsing/transport; controls and close remain fair.

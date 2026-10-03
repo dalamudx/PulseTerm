@@ -1,6 +1,6 @@
 # 终端重连事务 v1（已实现的基础，非生产 attach）
 
-后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；窗口无关的协议额度/ACK监督已在pulse-app贯通；生产窗口/权限绑定、多视图策略仍待实现。
+后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；窗口无关的协议额度/ACK监督已在pulse-app贯通；注册层已有可信window token、owner授权和generation撤销；真实Tauri window事件/权限适配、多视图策略仍待实现。
 
 ## 一个流，一个事务
 
@@ -15,7 +15,7 @@
 
 `diagnostic_subscribe` 在同一actor回合捕获history/screen并安装唯一有界订阅。先预留8条队列容量再读取/解析transport，Data带start、原始bytes及after-boundary；full时停止解析和transport读取，不丢块，控制/close仍公平。无subscriber时仍独立解析。8×64KiB是lease载荷预算，不含driver/current/native块、grid和allocator开销。
 
-- lease_id是actor-local单调serial，不是全应用generation或授权。成功新capture替换旧lease；取消/失败capture保留旧lease。旧renderer及旧排队消息不能复用到新generation。
+- lease_id是actor-local单调serial，不是全应用generation或授权。成功新capture替换旧lease；捕获失败或actor处理前取消保留旧lease。actor提交后取消已经发生替换，旧lease不自动回滚，必须重新attach。旧renderer及旧排队消息不能复用到新generation。
 - watch StreamStatus提供无丢失终止原因和boundary：native resize成功、palette/cellpixels改变会Reconfigured；pending resize拒绝新lease，失败保持旧lease。Receiver放弃/close会Detached，不关闭registry session handle。
 - sync deadline的零字节state推进用Fence，映射同stream Part::Checkpoint=6；offset必须等于live cursor，body是little-endian u64 revision且不回退，使用同generation/order/credits。Consumer要求sink处理完成才ACK，缺实现会fail closed；checkpoint本身不证明hidden/parser/history一致。
 - genuine EOF在actor处理finish后停止输出；driver排空剩余Data/Fence，再发送Part::End=7，offset必须等于最终parsed_bytes，8字节body为revision且不回退。TS consumer要求sink.finish完成decoder尾部及render callback后才ACK；没有finish实现明确拒绝。End后拒绝任何当前generation的Data/Checkpoint/再次End。取消、Failed或resize不发送假EOF，必须丢弃旧surface而非finish它。
@@ -29,6 +29,15 @@
 - detach、丢弃receiver/task、超时或invalid ACK释放本lease，不调用SessionHandle.close；Replaced/Reconfigured/Failed/Closed撤销整个generation。调用方必须观察join错误并取消所有已经转交的旧wire及surface，driver不能撤回已经开始的xterm write。
 - 正常End的ACK也必须收到，join才返回成功及final boundary/帧数/credit峰值；这只是可信consumer提交的ACK证明，不证明用户看见画面。一个诊断订阅、UTF-8坐标和调用方分配generation的限制不变，尚非窗口registry API。
 
+
+### 应用注册层（pulse-app::registry）
+
+- `SessionRegistry` 管理metadata，不锁Term。32个window incarnation、64个session和最多64个正在监督/取消中的binding task；每session capture用try-lock拒绝并发，不排无限等待队列。短std Mutex只保护索引，跨await不持有；注册者仍必须持有/监督native SessionTask或spawn_local receipt。
+- `WindowToken` 是可信runtime adapter在window创建时取得的不可序列化能力；跨registry/重新创建均不复用。不能把frontend自报label、windowId或sessionId当owner。公开sessionId/generation应在JS控制面序列化为十进制string，binary仍保留u64。
+- 一个application使用一个registry；注册相同actor两次被拒绝，身份由私有command channel比较而非公开watch receiver，避免两个id绕过owner与capture gate。注册层对input/resize/capture/state/resolve/ACK/detach/close先检查owner，未知session和无权限同样Forbidden。generation由backend分配，不复用失败capture的编号；旧ACK/detach在进入driver前返回Stale，不会撤销或释放新binding。晚到monitor完成仅能删除同generation条目。
+- window关闭撤销token和其view binding，不close session；旧token和同label的新window都不能继承session权限。孤立session仍由application持有，只有显式shutdown/session close关闭；安全的跨window迁移/恢复授权尚未实现。cap限制避免无限遗留，但这不是完整workspace迁移UX。
+- close/shutdown与await capture并发时，capture返回后再次检查owner，禁止死window复活view。成功capture提交后取消可能已替换旧lease；没有snapshot rollback。old wire/surface仍须由adapter丢弃，registry不能撤回已执行的xterm write。
+- native 2MiB压力探针已把input/ACK通过registry授权；window生命周期目前是可信in-process模拟，未注册Tauri命令、CSP capability、真实Destroyed/Exit回调，不构成桌面权限验收。
 
 ## 解析状态、历史与显示
 
@@ -54,4 +63,4 @@ sink仍为适配接口，不是Tauri listener或窗口view管理器。它负责�
 
 已新增后端透明Handler风险位、REP边界观察及visible digest v1（FNV-1a64，非安全认证）；actor diagnostic_digest/verify_screen只在同SessionState且摘要相同时清提示，不跨boundary丢风险。矩阵覆盖372样例，18个已知分歧全被提示，11个可编码帧screen-only修复后完全一致，7个明确不可编码/延期。新增真实修复探针发现宽head缺spacer及origin域外cursor在xterm不可表示，已修复此前“精确”误报。风险位为保守提示，可有false positive；不能每条输出自动重绘。摘要不覆盖hidden/parser/history、链接、全部样式和palette渲染；不能由digest一致宣称完整状态一致。可见视图idle/resize/reattach的限频调度和generation校验仍须view driver接入。
 
-仍需：生产generation/权限/渲染器生命周期集成、真实WebView callback ACK至native链路组合实测、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
+仍需：真实runtime window事件/权限适配和渲染器生命周期集成、真实WebView callback ACK至native链路组合实测、Windows ConPTY实测、更丰富真实录制和sync频率测量、深历史分页、reflow与滚动/selection UX。原依赖与发布门禁不变。
