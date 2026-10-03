@@ -282,6 +282,7 @@ pub fn run() -> Result<()> {
             Err(gap) => (
                 Value::Null,
                 Some(match gap {
+                    RestoreGap::OutputTooLarge => "output-too-large",
                     RestoreGap::SyncPending => "sync-pending",
                     RestoreGap::PendingSequenceTooLong => "pending-too-long",
                     RestoreGap::InactiveCursorDivergence => "inactive-cursor-divergence",

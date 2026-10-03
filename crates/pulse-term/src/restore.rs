@@ -5,6 +5,10 @@
 
 use std::fmt::Write;
 
+#[cfg(test)]
+#[path = "restore_budget_tests.rs"]
+mod budget_tests;
+
 use alacritty_terminal::grid::{Cursor, Dimensions, Grid};
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::term::TermMode;
@@ -20,25 +24,36 @@ use crate::{TerminalProbe, sgr_color};
 struct Emitter {
     buf: String,
     last_print: Option<char>,
+    limit: usize,
+    exceeded: bool,
 }
 
 impl Write for Emitter {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.buf.push_str(s);
-        Ok(())
+        self.push_str(s);
+        if self.exceeded {
+            Err(std::fmt::Error)
+        } else {
+            Ok(())
+        }
     }
 }
 
 impl Emitter {
     fn push_str(&mut self, s: &str) {
-        self.buf.push_str(s);
+        if self.exceeded || s.len() > self.limit.saturating_sub(self.buf.len()) {
+            self.exceeded = true;
+        } else {
+            self.buf.push_str(s);
+        }
     }
     fn push(&mut self, c: char) {
-        self.buf.push(c);
+        let mut bytes = [0; 4];
+        self.push_str(c.encode_utf8(&mut bytes));
     }
     /// A character that goes through the parser's print path.
     fn print(&mut self, c: char) {
-        self.buf.push(c);
+        self.push(c);
         self.last_print = Some(c);
     }
 }
@@ -46,6 +61,8 @@ impl Emitter {
 /// A restore cannot be produced right now; retry when the condition clears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestoreGap {
+    /// Serialization exceeded the byte budget; no partial replay is returned.
+    OutputTooLarge,
     /// A synchronized update (DEC 2026) is buffered and not yet applied.
     SyncPending,
     /// An unfinished escape sequence is longer than the replay bound.
@@ -72,6 +89,12 @@ pub struct Restore {
 impl TerminalProbe {
     /// Build a complete-state restore (evaluation spike, visible area only).
     pub fn restore_sequence(&self) -> Result<Restore, RestoreGap> {
+        self.restore_sequence_bounded(1024 * 1024)
+    }
+
+    /// Generate within a payload byte budget, returning no partial bytes on error.
+    /// This limits emitted content, not terminal/grid or allocator overhead.
+    pub fn restore_sequence_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
         use alacritty_terminal::vte::ansi::Timeout;
         if self.parser.sync_timeout().pending_timeout() || self.parser.sync_bytes_count() > 0 {
             return Err(RestoreGap::SyncPending);
@@ -84,9 +107,12 @@ impl TerminalProbe {
         let grid = term.grid();
         let mode = *term.mode();
         let mut out = Emitter {
-            buf: String::from("\x1bc"),
+            buf: String::new(),
             last_print: None,
+            limit,
+            exceeded: false,
         };
+        out.push_str("\x1bc");
 
         for index in 0..=258 {
             if let Some(rgb) = term.colors()[index] {
@@ -299,6 +325,12 @@ impl TerminalProbe {
         if self.side.last_input.is_some() && out.last_print != self.side.last_input {
             approximations.push("REP preceding character");
         }
+        if out.exceeded
+            || pending.len().saturating_add(self.utf8_tail.len())
+                > limit.saturating_sub(out.buf.len())
+        {
+            return Err(RestoreGap::OutputTooLarge);
+        }
         let mut bytes = out.buf.into_bytes();
         bytes.extend_from_slice(pending);
         bytes.extend_from_slice(&self.utf8_tail);
@@ -404,6 +436,9 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
 fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'static str>) {
     for line in 0..grid.screen_lines() as i32 {
         for column in 0..grid.columns() {
+            if out.exceeded {
+                return;
+            }
             let row = &grid[Line(line)];
             let cell = &row[Column(column)];
             let previous_wide =
