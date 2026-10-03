@@ -24,6 +24,23 @@ run = ["cargo xtask probe", "pnpm --filter ui probe"]
 description = "Exercise native PTY input, queries, resize, output and teardown"
 run = "cargo xtask probe-pty"
 
+[tasks.unicode-table]
+description = "Generate xterm scalar widths from locked Rust Unicode table"
+run = "cargo xtask unicode-table"
+
+[tasks.unicode-table-check]
+description = "Check deterministic shared width table without writing"
+run = "cargo xtask unicode-table-check"
+
+[tasks.probe-unicode]
+description = "Compare explicit character and grapheme providers (diagnostic, not S2 acceptance)"
+depends = ["probe"]
+run = "pnpm --filter ui exec tsx scripts/unicode-probe.ts"
+
+[tasks.probe-snapshot]
+description = "Strict continuation gate for complete state restore (currently expected to fail)"
+run = "cargo xtask probe-snapshot"
+
 [tasks.fmt]
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]

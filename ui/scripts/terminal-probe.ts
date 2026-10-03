@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import unicode from "@xterm/addon-unicode11";
 import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
 import headless from "@xterm/headless";
 import { suppressQueryReplies } from "../src/features/terminal/query-policy";
+import { SharedUnicodeProvider } from "../src/features/terminal/unicode-provider";
+import { Utf8Stream } from "../src/features/terminal/utf8-stream";
 
 const { Terminal } = headless;
-const { Unicode11Addon } = unicode;
 
 function object(value: unknown): Record<string, unknown> {
   assert.ok(
@@ -64,18 +64,22 @@ async function parse(input: string, cols: number, rows: number, chunkSize = 3) {
     scrollback: 128,
     allowProposedApi: true,
   });
-  const addon = new Unicode11Addon();
-  terminal.loadAddon(addon);
-  terminal.unicode.activeVersion = "11";
+  const provider = new SharedUnicodeProvider();
+  terminal.unicode.register(provider);
+  terminal.unicode.activeVersion = provider.version;
   const dispose = suppressQueryReplies(terminal);
   const replies: string[] = [];
   terminal.onData((data) => replies.push(data));
   const bytes = new TextEncoder().encode(input);
+  const decoder = new Utf8Stream();
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    await new Promise<void>((resolve) =>
-      terminal.write(bytes.subarray(offset, offset + chunkSize), resolve),
-    );
+    const decoded = decoder.feed(bytes.subarray(offset, offset + chunkSize));
+    if (decoded.length > 0)
+      await new Promise<void>((resolve) => terminal.write(decoded, resolve));
   }
+  const trailing = decoder.finish();
+  if (trailing.length > 0)
+    await new Promise<void>((resolve) => terminal.write(trailing, resolve));
   const result = screen(terminal);
   dispose();
   terminal.dispose();

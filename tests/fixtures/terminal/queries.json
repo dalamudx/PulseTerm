@@ -16,6 +16,15 @@
     {"name": "window-character-size", "input": "\u001b[18t", "backendReplies": ["\u001b[8;8;32t"]},
     {"name": "clipboard-read-denied", "input": "\u001b]52;c;?\u0007", "backendReplies": []},
     {"name": "clipboard-write-denied", "input": "\u001b]52;c;c2VjcmV0\u0007", "backendReplies": []},
+    {"name": "default-foreground", "input": "\u001b]10;?\u0007", "backendReplies": ["\u001b]10;rgb:ffff/ffff/ffff\u0007"]},
+    {"name": "default-background-st", "input": "\u001b]11;?\u001b\\", "backendReplies": ["\u001b]11;rgb:0000/0000/0000\u001b\\"]},
+    {"name": "default-cursor", "input": "\u001b]12;?\u0007", "backendReplies": ["\u001b]12;rgb:ffff/ffff/ffff\u0007"]},
+    {"name": "indexed-ansi", "input": "\u001b]4;1;?;2;?\u0007", "backendReplies": ["\u001b]4;1;rgb:cdcd/0000/0000\u0007", "\u001b]4;2;rgb:0000/cdcd/0000\u0007"]},
+    {"name": "indexed-256", "input": "\u001b]4;196;?;255;?\u0007", "backendReplies": ["\u001b]4;196;rgb:ffff/0000/0000\u0007", "\u001b]4;255;rgb:eeee/eeee/eeee\u0007"]},
+    {"name": "query-set-reset-order", "input": "\u001b]4;1;?\u0007\u001b]4;1;#112233\u0007\u001b]4;1;?\u0007\u001b]104;1\u0007\u001b]4;1;?\u0007", "backendReplies": ["\u001b]4;1;rgb:cdcd/0000/0000\u0007", "\u001b]4;1;rgb:1111/2222/3333\u0007", "\u001b]4;1;rgb:cdcd/0000/0000\u0007"]},
+    {"name": "foreground-set-reset", "input": "\u001b]10;#123456\u0007\u001b]10;?\u0007\u001b]110\u0007\u001b]10;?\u0007", "backendReplies": ["\u001b]10;rgb:1212/3434/5656\u0007", "\u001b]10;rgb:ffff/ffff/ffff\u0007"]},
+    {"name": "invalid-indexed-query", "input": "\u001b]4;999;?\u0007", "backendReplies": []},
+    {"name": "unknown-pixel-size", "input": "\u001b[14t", "backendReplies": []},
     {"name": "ordered-queries", "input": "abc\u001b[5n\u001b[c\u001b[?25$p\u001b[6n", "backendReplies": ["\u001b[0n", "\u001b[?6c", "\u001b[?25;1$y", "\u001b[1;4R"]}
   ]
 }

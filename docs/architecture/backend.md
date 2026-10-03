@@ -143,7 +143,7 @@ reader ─► 有界队列(64 块 × 最大 64KB) ─► actor:
 - **输入**：`term_input(session, bytes)` 直接写入 Transport，不经过输出处理流程。非 UTF-8 会话先用同一种编码把输入转换回去。Backspace、Delete 的编码按 TERM-18 的设置转换。广播输入（WS-05）由 `pulse-app` 把同一份输入分发给多个会话。
 - **win32-input-mode**：解析到终端发出 `CSI ?9001h` 时，将会话标记为使用该模式，并通过事件通知前端切换按键编码方式。
 - **查询应答只由后端负责**：前后端各有一份解析器，如果两边都回答程序的查询（DA1/DA2、DSR 光标位置、DECRQM、XTVERSION、DECRQSS、OSC 4/10/11/12 颜色查询、CSI t 窗口报告），shell 会收到两份应答，导致乱码或程序误判。规定由后端的 `alacritty_terminal` 统一应答（经 `Event::PtyWrite` 写回 Transport），前端屏蔽 xterm 的应答（见 frontend.md §6）。为了正确回答颜色查询（vim 等程序靠它判断深浅背景），前端切换终端配色时，要把当前配色同步给后端。
-- **字符宽度一致**：后端（`unicode-width`）和前端（xterm unicode11 / graphemes addon）对 CJK、emoji、ZWJ 序列的宽度判断必须一致，否则搜索命中位置、命令标记和快照会错位。两端固定使用同一 Unicode 版本，并用同一份宽度测试样例做一致性测试（S2）。
+- **字符宽度一致**：后端（`unicode-width`）和前端（使用同一锁定表生成的 SharedUnicodeProvider）对 CJK、emoji、ZWJ 序列的宽度判断必须一致，否则搜索命中位置、命令标记和快照会错位。两端固定使用同一 Unicode 版本，并用同一份宽度测试样例做一致性测试（S2）。
 - **远端剪贴板请求**（OSC 52，SEC-08）：写入请求按用户设置处理（允许 / 询问 / 禁止）；读取请求一律忽略，不应答。
 - **会话日志**（TERM-16）：和录制一样挂在处理流程的第 4 步。纯文本模式输出的是“已滚出屏幕的行 + 会话结束时的屏幕内容”，没有控制序列；原始模式直接写入字节流。
 

@@ -4,6 +4,9 @@
 mod channel_probe;
 mod pty_probe;
 mod query_probe;
+mod snapshot_probe;
+mod unicode_probe;
+mod unicode_table;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -51,6 +54,9 @@ fn main() -> Result<()> {
         Some("probe-channel") => channel_probe::run()?,
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-pty-worker") => pty_probe::worker()?,
+        Some("unicode-table") => unicode_table::run(false)?,
+        Some("unicode-table-check") => unicode_table::run(true)?,
+        Some("probe-snapshot") => snapshot_probe::run()?,
         _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty>"),
     }
     Ok(())
@@ -154,6 +160,7 @@ fn probe() -> Result<()> {
     let report = json!({
         "schema_version": 1, "columns": size.columns(), "rows": size.rows(), "cases": cases,
         "queries": query_probe::run(size)?,
+        "unicode": unicode_probe::run(size)?,
         "memory": {"retained_history_lines": memory.history_lines(), "grid_cell_bytes_lower_bound": memory.grid_cell_bytes()},
         "limitations": ["Only visible cells and cursor are compared", "No inactive buffer, saved cursor, tab stop, pending wrap or parser-state restoration", "No cold history archive or process-tree memory measurement", "Headless xterm does not measure WebView rendering, IME or IPC throughput"]
     });

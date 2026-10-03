@@ -27,12 +27,15 @@ mise run probe
 # target/probes/xterm.json：跨解析器比较结果，探索性失败同样记录
 ```
 
-- 使用 alacritty_terminal 0.26.0 / vte 0.15.0 和 xterm headless 6.0.0；xterm 加载 Unicode11。这不代表已经统一全部 Unicode 宽度表。
-- 通过 6 个基本样例：ASCII、颜色/样式、中文与基本 emoji/组合音符、备用屏、返回主屏、光标位置查询。比较内容、宽度、颜色、部分样式、光标位置和备用屏标志。
+- 使用 alacritty_terminal 0.26.0 / vte 0.15.0 和 xterm headless 6.0.0；主探针使用项目 SharedUnicodeProvider，宽度表从锁定 unicode-width 0.2.2（Unicode 17）生成，公开 experimental API 注册，无第三方 fork。
+- 通过 7 个样例（包括原探索性 ZWJ 现已提升为严格门禁）：ASCII、颜色/样式、中文与基本 emoji/组合音符、备用屏、返回主屏、光标位置查询。比较内容、宽度、颜色、部分样式、光标位置和备用屏标志。
 - 前端策略阻止常见 CSI/DCS/OSC 查询应答及 OSC 52；新增公共 DECRQM（`CSI $ p`）拦截，修复只拦截私有模式而遗漏公共模式的重复应答缺口。单独测试先观测 xterm 原有应答，再安装 hook 验证应答消失，并在释放 hook 后验证模式写入未被吞掉。
-- `tests/fixtures/terminal/queries.json` 的 14 组共享用例覆盖 DA1/DA2、DSR、CJK 光标位置、公共/私有 DECRQM、字符尺寸、多查询应答顺序及 OSC 52 读写拒绝。Rust 检查每种固定块大小（1 到输入字节长度），逐块消费应答；前端检查 1/2/3/7/整流分块，必须没有协议应答且屏幕与 Rust 一致。查询矩阵写入 `terminal.json`，跨解析器结果写入 `xterm.json`，由现有 `mise run probe` 和 CI 执行。
-- 这不是完整查询兼容性证明：颜色/像素尺寸应答、混合调色写入与查询等仍待实现；矩阵中 OSC 52 无应答仅证明探针的拒绝策略，不证明应用已实现完整的剪贴板权限流程。
-- `explore-zwj` 保留为明确标记的探索性样例，当前失败，不阻塞基础样例检查；不能把该样例或总体 S2 宣称为通过。
+- `tests/fixtures/terminal/queries.json` 的 23 组共享用例覆盖 DA1/DA2、DSR、CJK 光标位置、公共/私有 DECRQM、字符尺寸、多查询应答顺序及 OSC 52 读写拒绝。Rust 检查每种固定块大小（1 到输入字节长度），逐块消费应答；前端检查 1/2/3/7/整流分块，必须没有协议应答且屏幕与 Rust 一致。查询矩阵写入 `terminal.json`，跨解析器结果写入 `xterm.json`，由现有 `mise run probe` 和 CI 执行。
+- OSC 4/10/11/12 由 backend 使用主题 fallback 与 remote OSC override 应答；在 BEL/ST 边界先收取事件，再继续解析，防止后续 set/reset 改变较早查询的回答。actor 提供有界 palette 与 cell geometry 控制命令。像素尺寸只有实际测量且乘法不溢出才应答；未知时不编造尺寸。这不是完整查询兼容性证明，真实 UI 配色/测量同步仍待接入；矩阵中 OSC 52 无应答仅证明探针的拒绝策略，不证明应用已实现完整的剪贴板权限流程。
+- 原先 ZWJ 的格子布局还随 xterm raw Uint8Array 分块改变。每流 `Utf8Stream` 先保留不完整 UTF-8，空解码不调用 xterm；再使用同一 Unicode 17 scalar provider。`zwj.vt` 已改为严格门禁。16 组共享文本以 1/2/3/7/整流分块检查格子、光标和分块稳定性，shared provider 均通过；Unicode6/11/15 与实验 grapheme provider 仅作差异对比，不用于主链路。
+- `unicode-table-check` 重新从实际 Rust 表生成内容并只读比较；TS 穷举 0..0x10FFFF 的分类指纹和 Rust 生成值一致。表与适配器用的是**标量宽度**，并非现代 grapheme 宽度：例如家庭 emoji 仍占多个宽格子，没有宣称完整 EGC 字形/字体/IME 支持。实验 grapheme addon 只作为 MIT 开发依赖，不进入产品渲染路径。
+- 新增 `mise run probe-snapshot` 严格续流门禁，报告 `target/probes/snapshot.json`：9 组初始画面均一致，但 8 组继续输入后失败（pending wrap、非活动主屏、保存光标、滚动区、insert mode、字符集、部分 CSI/UTF-8）。命令真实退出非零，不包装成通过。它不是默认 CI 的通过项；S2 验收与生产 attach 必须通过此门禁。修复涉及 [完整恢复方案取舍](../architecture/terminal-snapshot-proposal.md)，目前未批准终端依赖补丁。
+- 非规范 UTF-8/C1 在浏览器的实际行为、组合簇边界的更多控制序列场景、live 字体/IME、完整模式/历史恢复仍待验证，总体 S2 未通过。
 
 ### 已修复：UTF-8 分块时漏字符
 
@@ -108,8 +111,8 @@ mise run probe-pty
 
 ## 检查结果
 
-- Rust：33 项 headless 单元/属性测试通过（原有 22 项 + actor/有界驱动 11 项）；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
-- TS：24 项测试通过；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：37 项 headless 单元/属性测试通过（actor/有界驱动 11 项、配色/像素应答 4 项及既有 22 项）；原生适配器 8 项测试已在此前通过，本轮未修改桌面代码。
+- TS：38 项测试通过；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
@@ -117,4 +120,4 @@ mise run probe-pty
 
 ## 尚未验证
 
-S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、GUI 接入与生产进程树回收仍待验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。完整终端状态恢复与 Unicode 宽度一致性仍未通过；后续应继续补这些证据，不能直接将视口重放用于生产 detach/attach。原生依赖门禁审查通过之前，不得打包分发验证应用。
+S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、GUI 接入与生产进程树回收仍待验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。完整终端状态恢复仍未通过；Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证；后续应继续补这些证据，不能直接将视口重放用于生产 detach/attach。原生依赖门禁审查通过之前，不得打包分发验证应用。

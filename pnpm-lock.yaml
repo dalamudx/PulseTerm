@@ -41,6 +41,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 6.1.1
         version: 6.1.1(vite@8.3.2(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+      '@xterm/addon-unicode-graphemes':
+        specifier: 0.4.0
+        version: 0.4.0
       '@xterm/addon-unicode11':
         specifier: 0.9.0
         version: 0.9.0
@@ -563,6 +566,9 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
+
+  '@xterm/addon-unicode-graphemes@0.4.0':
+    resolution: {integrity: sha512-9+/CqwbKcnlkJU4d3wIgO+wjsL8f6vyz+UwUWLu6nADQz8Gr8ONqGCJfdDjIdI+yYZLABQqQy47FzEM6AWELjw==}
 
   '@xterm/addon-unicode11@0.9.0':
     resolution: {integrity: sha512-FxDnYcyuXhNl+XSqGZL/t0U9eiNb/q3EWT5rYkQT/zuig8Gz/VagnQANKHdDWFM2lTMk9ly0EFQxxxtZUoRetw==}
@@ -1279,6 +1285,8 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.2.0
+
+  '@xterm/addon-unicode-graphemes@0.4.0': {}
 
   '@xterm/addon-unicode11@0.9.0': {}
 

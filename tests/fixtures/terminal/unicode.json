@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"name":"ascii", "input":"XabcY", "required":true},
+    {"name":"cjk", "input":"X中文Y", "required":true},
+    {"name":"combining", "input":"XéY", "required":true},
+    {"name":"combining-after-cjk", "input":"X中́Y", "required":true},
+    {"name":"zwj-family", "input":"X👨‍👩‍👧‍👦Y", "required":false},
+    {"name":"zwj-profession", "input":"X👩‍💻Y", "required":false},
+    {"name":"rainbow-flag", "input":"X🏳️‍🌈Y", "required":false},
+    {"name":"regional-flag", "input":"X🇨🇳Y", "required":false},
+    {"name":"skin-tone", "input":"X👍🏽Y", "required":false},
+    {"name":"heart-vs16", "input":"X❤️Y", "required":false},
+    {"name":"heart-vs15", "input":"X❤︎Y", "required":false},
+    {"name":"keycap", "input":"X1️⃣Y", "required":false},
+    {"name":"unicode13-ninja", "input":"X🥷Y", "required":false},
+    {"name":"unicode15-shaking-face", "input":"X🫨Y", "required":false},
+    {"name":"ambiguous-middle-dot", "input":"X·Y", "required":true},
+    {"name":"wrap-family", "input":"123456789012345678901234567890👨‍👩‍👧‍👦Y", "required":false}
+  ]
+}

@@ -18,7 +18,7 @@
 | 分屏 | react-resizable-panels | 嵌套的分屏布局和拖动调整 |
 | 拖拽 | dnd-kit | 标签排序、标签拖到分屏、主机拖到分组 |
 | 命令面板 | cmdk | — |
-| 终端显示 | @xterm/xterm 6 + addon：webgl、unicode11、web-links、search、image（P2） | 只负责显示，不保存权威状态 |
+| 终端显示 | @xterm/xterm 6 + webgl、web-links、search、image（P2）；项目共享 Unicode scalar provider | 只负责显示，不保存权威状态 |
 | 远程桌面 | 自研 RemoteCanvas（WebGL2 + WebCodecs）；noVNC 1.7 | — |
 | 编辑器 | Monaco（@monaco-editor/react，用到时加载） | — |
 | 多语言 | react-i18next | 简体中文、英文 |
@@ -122,10 +122,11 @@ interface ViewController { mount(el: HTMLElement): void; setVisible(v: boolean):
 
 ```
 mount(el)
-  → new Terminal({ scrollback: 2000, allowProposedApi: true, … })；加载 webgl、unicode11、web-links addon
+  → new Terminal({ scrollback: 2000, allowProposedApi: true, … })；加载 webgl、web-links addon；注册由 Rust 生成的 Unicode 17 scalar provider
   → fit 计算行列数 → ipc.term.attach(sessionId, viewId, cols, rows, channel)
   → channel.onFrame:
-       Data/Snapshot → term.write(bytes, () => ack(bytes.length))
+       Data → 每流 Utf8Stream 解码；非空完整标量写入 xterm；额度仍按原始帧字节/序号归还，不按 JS 字符串长度计算
+       Snapshot → 完整状态恢复门禁尚未通过，禁止把现有视口重放用于生产 attach
        Title/Cwd/Bell/Mark → 更新 sessionStore；命令标记用 xterm decoration 显示
        Exit → 显示“进程已退出”，并提供重启 / 关闭按钮
 onData(s)        → 同一微任务内的输入合并 → ipc.term.input(sessionId, bytes)（广播时发给多个会话）

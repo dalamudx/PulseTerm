@@ -1,6 +1,6 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
-  "files": {"includes": ["ui/**", "!ui/src/ipc/gen/**"]},
+  "files": {"includes": ["ui/**", "!ui/src/ipc/gen/**", "!ui/src/features/terminal/gen/**"]},
   "formatter": {"indentStyle": "space"},
   "linter": {"enabled": true, "rules": {"recommended": true}},
   "assist": {"actions": {"source": {"organizeImports": "on"}}}

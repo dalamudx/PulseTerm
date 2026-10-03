@@ -3,14 +3,26 @@
 //! regions, tab stops, pending wrap and parser state are not restored.
 #![forbid(unsafe_code)]
 
+mod palette;
 /// Window-independent actor and bounded test transport.
 pub mod session;
+pub use palette::QueryPalette;
+
+/// Actual Unicode table version shared with the authoritative parser.
+pub const UNICODE_VERSION: (u8, u8, u8) = unicode_width::UNICODE_VERSION;
+
+/// Non-CJK scalar width used by the parser (non-printing controls map to zero).
+pub fn scalar_width(codepoint: u32) -> u8 {
+    char::from_u32(codepoint)
+        .and_then(unicode_width::UnicodeWidthChar::width)
+        .unwrap_or(0) as u8
+}
 
 use std::fmt::Write;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use alacritty_terminal::Term;
-use alacritty_terminal::event::{Event, EventListener};
+use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::term::cell::{Cell, Flags};
@@ -33,13 +45,16 @@ impl Dimensions for Size {
 }
 
 #[derive(Clone)]
-struct ReplyListener(Sender<String>);
+struct ReplyListener(Sender<Event>);
 impl EventListener for ReplyListener {
     fn send_event(&self, event: Event) {
-        if let Event::PtyWrite(reply) = event {
-            let _ = self.0.send(reply);
+        if matches!(
+            event,
+            Event::PtyWrite(_) | Event::ColorRequest(..) | Event::TextAreaSizeRequest(_)
+        ) {
+            let _ = self.0.send(event);
         }
-        // No clipboard, title, color or size requests are serviced by this probe.
+        // Clipboard/title requests remain disabled; no GUI callbacks are invoked.
     }
 }
 
@@ -79,7 +94,10 @@ pub struct ObservedScreen {
 pub struct TerminalProbe {
     term: Term<ReplyListener>,
     parser: Processor,
-    replies: Receiver<String>,
+    events: Receiver<Event>,
+    replies: Vec<String>,
+    palette: QueryPalette,
+    cell_pixels: Option<(u16, u16)>,
     utf8_tail: Vec<u8>,
 }
 
@@ -95,7 +113,10 @@ impl TerminalProbe {
         Self {
             term: Term::new(config, &Size(size), ReplyListener(sender)),
             parser: Processor::new(),
-            replies,
+            events: replies,
+            replies: Vec::new(),
+            palette: QueryPalette::default(),
+            cell_pixels: None,
             utf8_tail: Vec::new(),
         }
     }
@@ -130,8 +151,20 @@ impl TerminalProbe {
     }
 
     /// Drain authoritative protocol replies; a transport would write these upstream.
-    pub fn take_replies(&self) -> Vec<String> {
-        self.replies.try_iter().collect()
+    pub fn take_replies(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.replies)
+    }
+
+    /// Update the fallback palette from the current UI theme; OSC overrides win
+    /// until reset by the program. Already queued replies are not recolored.
+    pub fn set_query_palette(&mut self, palette: QueryPalette) {
+        self.palette = palette;
+    }
+
+    /// Actual measured cell dimensions, or None when pixel geometry is unknown.
+    /// Overflowing/zero geometry is never passed to backend formatters.
+    pub fn set_cell_pixels(&mut self, pixels: Option<(u16, u16)>) {
+        self.cell_pixels = pixels;
     }
 
     /// Inspect the active viewport. Scrollback and hidden state are intentionally excluded.
@@ -240,9 +273,55 @@ fn complete_utf8_prefix(bytes: &[u8]) -> usize {
 }
 
 impl TerminalProbe {
+    fn collect_events(&mut self) {
+        for event in self.events.try_iter() {
+            match event {
+                Event::PtyWrite(reply) => self.replies.push(reply),
+                Event::ColorRequest(index, format)
+                    if index < alacritty_terminal::term::color::COUNT =>
+                {
+                    let color = self.term.colors()[index].or_else(|| self.palette.indexed(index));
+                    if let Some(color) = color {
+                        self.replies.push(format(color));
+                    }
+                }
+                Event::TextAreaSizeRequest(format) => {
+                    if let Some((cell_width, cell_height)) = self.cell_pixels {
+                        let num_lines = self.term.screen_lines() as u16;
+                        let num_cols = self.term.columns() as u16;
+                        if cell_width > 0
+                            && cell_height > 0
+                            && num_lines.checked_mul(cell_height).is_some()
+                            && num_cols.checked_mul(cell_width).is_some()
+                        {
+                            self.replies.push(format(WindowSize {
+                                num_lines,
+                                num_cols,
+                                cell_width,
+                                cell_height,
+                            }));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     fn feed_complete_prefix(&mut self, bytes: &[u8]) {
         let end = complete_utf8_prefix(bytes);
-        self.parser.advance(&mut self.term, &bytes[..end]);
+        // Answer at OSC terminators before a later OSC set/reset or RIS can
+        // change the queried color. These delimiters cannot split valid UTF-8.
+        // Plain output remains batched; this is not byte-at-a-time parsing.
+        let mut start = 0;
+        for (index, byte) in bytes[..end].iter().enumerate() {
+            if matches!(byte, 0x07 | b'\\' | 0x9c) {
+                self.parser.advance(&mut self.term, &bytes[start..=index]);
+                self.collect_events();
+                start = index + 1;
+            }
+        }
+        self.parser.advance(&mut self.term, &bytes[start..end]);
+        self.collect_events();
         self.utf8_tail.extend_from_slice(&bytes[end..]);
         debug_assert!(self.utf8_tail.len() <= 3);
     }
@@ -311,6 +390,72 @@ mod tests {
         TerminalProbe::new(TermSize::new(24, 6).unwrap(), 64)
     }
 
+    #[test]
+    fn queued_queries_do_not_use_a_later_theme() {
+        let mut term = terminal();
+        term.feed(b"\x1b]10;?\x07");
+        let palette = QueryPalette {
+            foreground: [0x12, 0x34, 0x56],
+            ..QueryPalette::default()
+        };
+        term.set_query_palette(palette);
+        term.feed(b"\x1b]10;?\x07");
+        assert_eq!(
+            term.take_replies(),
+            vec![
+                "\x1b]10;rgb:ffff/ffff/ffff\x07",
+                "\x1b]10;rgb:1212/3434/5656\x07"
+            ]
+        );
+    }
+    #[test]
+    fn remote_override_survives_theme_update_until_reset() {
+        let mut term = terminal();
+        term.feed(b"\x1b]10;#abcdef\x07");
+        term.set_query_palette(QueryPalette {
+            foreground: [1, 2, 3],
+            ..QueryPalette::default()
+        });
+        term.feed(b"\x1b]10;?\x07\x1b]110\x07\x1b]10;?\x07");
+        assert_eq!(
+            term.take_replies(),
+            vec![
+                "\x1b]10;rgb:abab/cdcd/efef\x07",
+                "\x1b]10;rgb:0101/0202/0303\x07"
+            ]
+        );
+    }
+    #[test]
+    fn pixel_geometry_uses_current_dimensions_and_never_overflows() {
+        let mut term = terminal();
+        term.feed(b"\x1b[14t");
+        assert!(term.take_replies().is_empty());
+        term.set_cell_pixels(Some((8, 16)));
+        term.feed(b"\x1b[14t");
+        assert_eq!(term.take_replies(), vec!["\x1b[4;96;192t"]);
+        term.resize(TermSize::new(32, 8).unwrap());
+        term.feed(b"\x1b[14t");
+        assert_eq!(term.take_replies(), vec!["\x1b[4;128;256t"]);
+        for dimensions in [(0, 16), (8, 0), (u16::MAX, 16), (8, u16::MAX)] {
+            term.set_cell_pixels(Some(dimensions));
+            term.feed(b"\x1b[14t");
+            assert!(term.take_replies().is_empty());
+        }
+    }
+    #[test]
+    fn indexed_palette_covers_cube_and_grayscale_boundaries() {
+        let palette = QueryPalette::default();
+        for (index, expected) in [
+            (16, [0, 0, 0]),
+            (231, [255, 255, 255]),
+            (232, [8, 8, 8]),
+            (255, [238, 238, 238]),
+        ] {
+            let rgb = palette.indexed(index).unwrap();
+            assert_eq!([rgb.r, rgb.g, rgb.b], expected);
+        }
+        assert!(palette.indexed(269).is_none());
+    }
     #[test]
     fn arbitrary_chunk_boundaries_preserve_state() {
         let input = "hello\r\n\x1b[31m中文 e\u{301} 🌍\x1b[0m\x1b[2;4H!";

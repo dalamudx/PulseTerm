@@ -57,6 +57,14 @@ pub enum SessionError {
 enum Command {
     Input(Vec<u8>, oneshot::Sender<Result<(), SessionError>>),
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
+    Palette(
+        crate::QueryPalette,
+        oneshot::Sender<Result<(), SessionError>>,
+    ),
+    CellPixels(
+        Option<(u16, u16)>,
+        oneshot::Sender<Result<(), SessionError>>,
+    ),
     Inspect(oneshot::Sender<ObservedScreen>),
 }
 #[derive(Debug)]
@@ -177,6 +185,22 @@ impl SessionHandle {
     pub async fn resize(&self, size: TermSize) -> Result<(), SessionError> {
         let (reply, result) = oneshot::channel();
         self.enqueue(Command::Resize(size, reply))?;
+        result.await.map_err(|_| SessionError::Closed)?
+    }
+    /// Serialize a UI palette update with output handling; remote OSC overrides
+    /// keep precedence until the program resets them.
+    pub async fn set_query_palette(
+        &self,
+        palette: crate::QueryPalette,
+    ) -> Result<(), SessionError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Palette(palette, reply))?;
+        result.await.map_err(|_| SessionError::Closed)?
+    }
+    /// Set measured cell geometry, or None when no renderer reports it.
+    pub async fn set_cell_pixels(&self, pixels: Option<(u16, u16)>) -> Result<(), SessionError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::CellPixels(pixels, reply))?;
         result.await.map_err(|_| SessionError::Closed)?
     }
     /// Return a visible-screen diagnostic, never a complete restore snapshot.
@@ -300,6 +324,12 @@ pub fn spawn_session(
                     Some(Command::Resize(size, reply)) => {
                         terminal.resize(size); current.size = size; current.revision += 1;
                         state.send_replace(current.clone()); let _ = reply.send(Ok(()));
+                    }
+                    Some(Command::Palette(palette, reply)) => {
+                        terminal.set_query_palette(palette); let _ = reply.send(Ok(()));
+                    }
+                    Some(Command::CellPixels(pixels, reply)) => {
+                        terminal.set_cell_pixels(pixels); let _ = reply.send(Ok(()));
                     }
                     Some(Command::Inspect(reply)) => { let _ = reply.send(terminal.screen()); }
                 }

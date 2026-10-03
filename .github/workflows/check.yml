@@ -27,8 +27,12 @@ jobs:
         run: mise run check
       - name: Test code
         run: mise run test
+      - name: Check shared Unicode table
+        run: mise run unicode-table-check
       - name: Compare terminal parsers
         run: mise run probe
+      - name: Compare Unicode providers
+        run: pnpm --filter ui exec tsx scripts/unicode-probe.ts
       - name: Exercise Unix native PTY
         if: runner.os != 'Windows'
         run: mise run probe-pty
