@@ -10,6 +10,10 @@ export function suppressQueryReplies(terminal: Terminal): () => void {
     terminal.parser.registerCsiHandler({ final: "n" }, () => true),
     terminal.parser.registerCsiHandler({ prefix: "?", final: "n" }, () => true),
     terminal.parser.registerCsiHandler(
+      { intermediates: "$", final: "p" },
+      () => true,
+    ),
+    terminal.parser.registerCsiHandler(
       { prefix: "?", intermediates: "$", final: "p" },
       () => true,
     ),

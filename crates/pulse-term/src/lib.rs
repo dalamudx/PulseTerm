@@ -112,6 +112,15 @@ impl TerminalProbe {
         }
     }
 
+    /// End an input stream, replacing one trailing incomplete UTF-8 scalar with U+FFFD.
+    /// Repeated calls are harmless. This does not reset or serialize ANSI parser state.
+    pub fn finish_input(&mut self) {
+        if !self.utf8_tail.is_empty() {
+            self.utf8_tail.clear();
+            self.parser.advance(&mut self.term, "\u{fffd}".as_bytes());
+        }
+    }
+
     /// Drain authoritative protocol replies; a transport would write these upstream.
     pub fn take_replies(&self) -> Vec<String> {
         self.replies.try_iter().collect()
@@ -362,6 +371,71 @@ mod tests {
         source.feed(b"abc\x1b[6n\x1b]52;c;?\x07");
         assert_eq!(source.take_replies(), vec!["\x1b[1;4R"]);
         assert!(source.take_replies().is_empty());
+    }
+
+    #[test]
+    fn eof_replaces_each_incomplete_scalar_once() {
+        for bytes in [
+            vec![0xc2],
+            vec![0xe4],
+            vec![0xe4, 0xb8],
+            vec![0xf0],
+            vec![0xf0, 0x9f],
+            vec![0xf0, 0x9f, 0x8c],
+        ] {
+            let mut source = terminal();
+            source.feed(b"ready:");
+            source.feed(&bytes);
+            assert_eq!(source.screen().cursor, (6, 0));
+            source.finish_input();
+            let screen = source.screen();
+            assert_eq!(screen.cells[0][6].text, "\u{fffd}");
+            assert_eq!(screen.cursor, (7, 0));
+            assert!(source.utf8_tail.is_empty());
+            source.finish_input();
+            assert_eq!(source.screen(), screen);
+        }
+    }
+
+    #[test]
+    fn complete_input_and_partial_queries_are_unchanged_at_eof() {
+        for input in ["中🌍", "abc\x1b[", "abc\x1b]52;c;?"] {
+            let mut source = terminal();
+            source.feed(input.as_bytes());
+            let screen = source.screen();
+            source.finish_input();
+            assert_eq!(source.screen(), screen);
+            assert!(source.take_replies().is_empty());
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn generated_streams_preserve_state_and_replies(
+            tokens in proptest::collection::vec(0usize..12, 0..64),
+            partition in proptest::collection::vec(1usize..17, 1..12),
+        ) {
+            let alphabet = ["text ", "中", "🌍", "e\u{301}", "\r\n", "\x1b[31m", "\x1b[0m", "\x1b[6n", "\x1b[?25$p", "\x1b[?1049h", "\x1b[?1049l", "\x1b[2;4H"];
+            let input: String = tokens.into_iter().map(|token| alphabet[token]).collect();
+            let mut whole = terminal();
+            whole.feed(input.as_bytes());
+            whole.finish_input();
+            let mut chunked = terminal();
+            let mut offset = 0;
+            let mut step = 0;
+            let mut replies = Vec::new();
+            while offset < input.len() {
+                let end = (offset + partition[step % partition.len()]).min(input.len());
+                chunked.feed(&input.as_bytes()[offset..end]);
+                replies.extend(chunked.take_replies());
+                offset = end;
+                step += 1;
+            }
+            chunked.finish_input();
+            replies.extend(chunked.take_replies());
+            proptest::prop_assert_eq!(chunked.screen(), whole.screen());
+            proptest::prop_assert_eq!(replies, whole.take_replies());
+        }
     }
 
     #[test]

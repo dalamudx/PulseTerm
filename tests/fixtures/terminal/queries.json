@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "columns": 32,
+  "rows": 8,
+  "cases": [
+    {"name": "primary-da", "input": "\u001b[c", "backendReplies": ["\u001b[?6c"]},
+    {"name": "secondary-da", "input": "\u001b[>c", "backendReplies": ["\u001b[>0;2600;1c"]},
+    {"name": "device-status", "input": "\u001b[5n", "backendReplies": ["\u001b[0n"]},
+    {"name": "cursor-position", "input": "abc\u001b[6n", "backendReplies": ["\u001b[1;4R"]},
+    {"name": "cjk-cursor-position", "input": "中\u001b[6n", "backendReplies": ["\u001b[1;3R"]},
+    {"name": "cursor-visible", "input": "\u001b[?25$p", "backendReplies": ["\u001b[?25;1$y"]},
+    {"name": "cursor-hidden", "input": "\u001b[?25l\u001b[?25$p", "backendReplies": ["\u001b[?25;2$y"]},
+    {"name": "insert-reset", "input": "\u001b[4$p", "backendReplies": ["\u001b[4;2$y"]},
+    {"name": "insert-set", "input": "\u001b[4h\u001b[4$p", "backendReplies": ["\u001b[4;1$y"]},
+    {"name": "bracketed-paste-set", "input": "\u001b[?2004h\u001b[?2004$p", "backendReplies": ["\u001b[?2004;1$y"]},
+    {"name": "window-character-size", "input": "\u001b[18t", "backendReplies": ["\u001b[8;8;32t"]},
+    {"name": "clipboard-read-denied", "input": "\u001b]52;c;?\u0007", "backendReplies": []},
+    {"name": "clipboard-write-denied", "input": "\u001b]52;c;c2VjcmV0\u0007", "backendReplies": []},
+    {"name": "ordered-queries", "input": "abc\u001b[5n\u001b[c\u001b[?25$p\u001b[6n", "backendReplies": ["\u001b[0n", "\u001b[?6c", "\u001b[?25;1$y", "\u001b[1;4R"]}
+  ]
+}

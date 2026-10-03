@@ -1,5 +1,6 @@
 import headless from "@xterm/headless";
 import { expect, it } from "vitest";
+import queries from "../../../../tests/fixtures/terminal/queries.json";
 import { suppressQueryReplies } from "./query-policy";
 
 const { Terminal } = headless;
@@ -22,6 +23,47 @@ it("suppresses parser replies but keeps onData subscribed", async () => {
   dispose();
   await write(terminal, "\x1b[6n");
   expect(replies).toEqual(["\x1b[1;1R"]);
+  terminal.dispose();
+});
+
+it.each(queries.cases)("suppresses fragmented query $name", async (entry) => {
+  const bytes = new TextEncoder().encode(entry.input);
+  for (const chunkSize of new Set([1, 2, 3, 7, Math.max(1, bytes.length)])) {
+    const terminal = new Terminal({
+      cols: queries.columns,
+      rows: queries.rows,
+      allowProposedApi: true,
+    });
+    const replies: string[] = [];
+    terminal.onData((data) => replies.push(data));
+    const dispose = suppressQueryReplies(terminal);
+    try {
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        await new Promise<void>((resolve) =>
+          terminal.write(bytes.subarray(offset, offset + chunkSize), resolve),
+        );
+      }
+      expect(replies, `${entry.name}: ${chunkSize}-byte chunks`).toEqual([]);
+    } finally {
+      dispose();
+      terminal.dispose();
+    }
+  }
+});
+
+it("suppresses public DECRQM without consuming the mode setter", async () => {
+  const terminal = new Terminal({ allowProposedApi: true });
+  const replies: string[] = [];
+  terminal.onData((data) => replies.push(data));
+  await write(terminal, "\x1b[4$p");
+  expect(replies).toEqual(["\x1b[4;2$y"]);
+  replies.length = 0;
+  const dispose = suppressQueryReplies(terminal);
+  await write(terminal, "\x1b[4h\x1b[4$p");
+  expect(replies).toEqual([]);
+  dispose();
+  await write(terminal, "\x1b[4$p");
+  expect(replies).toEqual(["\x1b[4;1$y"]);
   terminal.dispose();
 });
 

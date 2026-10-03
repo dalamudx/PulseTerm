@@ -57,7 +57,7 @@ function screen(terminal: TerminalType) {
     alternate: buffer.type === "alternate",
   };
 }
-async function parse(input: string, cols: number, rows: number) {
+async function parse(input: string, cols: number, rows: number, chunkSize = 3) {
   const terminal = new Terminal({
     cols,
     rows,
@@ -71,9 +71,9 @@ async function parse(input: string, cols: number, rows: number) {
   const replies: string[] = [];
   terminal.onData((data) => replies.push(data));
   const bytes = new TextEncoder().encode(input);
-  for (let offset = 0; offset < bytes.length; offset += 3) {
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     await new Promise<void>((resolve) =>
-      terminal.write(bytes.subarray(offset, offset + 3), resolve),
+      terminal.write(bytes.subarray(offset, offset + chunkSize), resolve),
     );
   }
   const result = screen(terminal);
@@ -118,6 +118,39 @@ for (const raw of report.cases) {
       name,
       passed: false,
       exploratory,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+assert.ok(Array.isArray(report.queries) && report.queries.length > 0);
+for (const raw of report.queries) {
+  const entry = object(raw);
+  const name = `query:${text(entry.name)}`;
+  try {
+    assert.deepEqual(entry.backend_replies, entry.expected_replies);
+    const input = text(entry.input);
+    for (const chunkSize of new Set([
+      1,
+      2,
+      3,
+      7,
+      Math.max(1, new TextEncoder().encode(input).length),
+    ])) {
+      const direct = await parse(
+        input,
+        integer(report.columns),
+        integer(report.rows),
+        chunkSize,
+      );
+      assert.deepEqual(direct.replies, []);
+      assert.deepEqual(direct.screen, entry.expected);
+    }
+    results.push({ name, passed: true, exploratory: false });
+  } catch (error) {
+    results.push({
+      name,
+      passed: false,
+      exploratory: false,
       error: error instanceof Error ? error.message : String(error),
     });
   }

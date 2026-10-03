@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod channel_probe;
+mod query_probe;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -116,9 +117,11 @@ fn probe() -> Result<()> {
         for chunk in input.as_bytes().chunks(3) {
             terminal.feed(chunk);
         }
+        terminal.finish_input();
         let replay = terminal.screen_replay();
         let mut restored = TerminalProbe::new(size, 128);
         restored.feed(replay.as_bytes());
+        restored.finish_input();
         let rust_replay_matches = terminal.screen() == restored.screen();
         let name = path
             .file_stem()
@@ -139,6 +142,7 @@ fn probe() -> Result<()> {
     }
     let report = json!({
         "schema_version": 1, "columns": size.columns(), "rows": size.rows(), "cases": cases,
+        "queries": query_probe::run(size)?,
         "memory": {"retained_history_lines": memory.history_lines(), "grid_cell_bytes_lower_bound": memory.grid_cell_bytes()},
         "limitations": ["Only visible cells and cursor are compared", "No inactive buffer, saved cursor, tab stop, pending wrap or parser-state restoration", "No cold history archive or process-tree memory measurement", "Headless xterm does not measure WebView rendering, IME or IPC throughput"]
     });
