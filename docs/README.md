@@ -15,4 +15,6 @@
 | [development/plan.md](./development/plan.md) | 全员 | v1.0 开发计划：时间线、各 Sprint 分工、关键路径、风险、完成标准 |
 | [development/guide.md](./development/guide.md) | 开发 | 环境、构建、测试、代码规范、CI、发布、合规红线、安全要求、开源协作 |
 
+当前已实现范围及验证结果见 [development/validation.md](./development/validation.md)。
+
 > 修改架构的流程：先在 `architecture/decisions.md` 登记 ADR，再更新对应的文档。

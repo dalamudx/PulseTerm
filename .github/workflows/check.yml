@@ -1,0 +1,38 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools from .mise.toml
+        uses: jdx/mise-action@v3
+      - name: Install JavaScript dependencies
+        run: mise run bootstrap
+      - name: Check code
+        run: mise run check
+      - name: Test code
+        run: mise run test
+      - name: Compare terminal parsers
+        run: mise run probe
+      - name: Audit dependencies
+        if: runner.os == 'Linux'
+        run: mise run audit
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-probe-${{ matrix.os }}
+          path: target/probes/*.json
+          if-no-files-found: ignore

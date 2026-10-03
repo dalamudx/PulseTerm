@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# VT samples contain meaningful CR/LF and escape bytes: preserve them verbatim.
+tests/fixtures/terminal/*.vt -text -diff

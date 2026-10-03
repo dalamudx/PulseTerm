@@ -1,0 +1,29 @@
+[tools]
+rust = "1.95.0"
+node = "22.23.3"
+pnpm = "10.34.6"
+"cargo:cargo-deny" = "0.20.2"
+
+[tasks.bootstrap]
+description = "Install JavaScript dependencies from the lockfile"
+run = "pnpm install --frozen-lockfile"
+
+[tasks.check]
+description = "Check Rust and TypeScript code"
+run = ["cargo xtask check", "pnpm --filter ui check"]
+
+[tasks.test]
+description = "Run unit and shared-fixture tests"
+run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
+
+[tasks.probe]
+description = "Compare Rust terminal state and xterm headless"
+run = ["cargo xtask probe", "pnpm --filter ui probe"]
+
+[tasks.fmt]
+description = "Format Rust and TypeScript code"
+run = ["cargo fmt --all", "pnpm --filter ui format"]
+
+[tasks.audit]
+description = "Audit Rust dependency licenses and advisories"
+run = ["cargo deny check", "pnpm audit --audit-level moderate"]

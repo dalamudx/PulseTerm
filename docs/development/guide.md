@@ -5,7 +5,7 @@
 ```
 .
 ├─ Cargo.toml               # workspace；依赖版本统一在 [workspace.dependencies] 中管理
-├─ rust-toolchain.toml      # 固定 stable 版本号
+├─ .mise.toml               # 固定 Rust / Node.js / pnpm 和辅助工具版本，定义开发任务
 ├─ package.json / pnpm-workspace.yaml
 ├─ crates/                  # 见 architecture/backend.md §1
 ├─ apps/
@@ -28,9 +28,10 @@
 
 | 工具 | 版本 |
 |---|---|
-| Rust | stable（由 `rust-toolchain.toml` 固定），组件：rustfmt、clippy |
-| Node.js | 22 LTS |
-| pnpm | 10.x（用 corepack 启用） |
+| mise | 工具链统一入口；先安装 mise，再信任仓库配置 |
+| Rust | 1.95.0（由 `.mise.toml` 固定），组件：rustfmt、clippy |
+| Node.js | 22.23.3（由 `.mise.toml` 固定） |
+| pnpm | 10.34.6（由 `.mise.toml` 固定，不再使用 corepack 管理版本） |
 | Tauri CLI | 2.x（`pnpm tauri`） |
 | 辅助工具 | `cargo-nextest`、`cargo-deny`、`cargo-fuzz`（可选）、Docker（运行互通测试） |
 
@@ -40,6 +41,25 @@
 - **Linux**（Debian/Ubuntu）：`libwebkit2gtk-4.1-dev libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev libasound2-dev libudev-dev build-essential`。要测试 H.264，还需安装 `gstreamer1.0-libav` 或 VA-API 插件。
 
 ## 3. 常用命令
+
+工具版本只修改 `.mise.toml`，不另建 `rust-toolchain.toml`、`.nvmrc` 或其他版本文件。库依赖仍在 Cargo / package manifests 中声明，提交 `Cargo.lock` 和 `pnpm-lock.yaml`；mise 管理执行这些依赖的工具。配置尚未信任前不要执行任务。
+
+**当前可执行：**
+
+```bash
+mise trust .mise.toml              # 先审阅配置，再信任
+mise install                      # 安装固定版本的工具
+mise run bootstrap                # 依据 pnpm-lock.yaml 安装依赖
+mise run check                    # Rust 格式/clippy/依赖分层 + TS 类型/Biome
+mise run test                     # Rust 单元/属性测试 + Vitest
+mise run probe                    # Rust 与 xterm headless 共享样例比较
+mise run audit                    # Rust 许可证/安全公告/来源检查
+mise run fmt                      # 统一格式
+```
+
+输出在 `target/probes/`，详见 [验证记录](./validation.md)。使用未激活 mise 的 shell 时，单条工具命令加 `mise exec --` 前缀。CI 同样读取此配置，不在工作流里重复声明 Rust/Node/pnpm 版本。
+
+**下列是目标接口，相关模块尚未实现，不应视为可执行命令：**
 
 ```bash
 pnpm install                       # 安装前端依赖
@@ -56,7 +76,7 @@ cargo xtask interop up && cargo nextest run --features interop   # 协议互通�
 pnpm e2e                           # Playwright + tauri-driver（Windows / Linux）
 cargo xtask bench                  # 端到端性能基准（启动时间、内存、cat 1GB）
 
-cargo xtask check                  # 提交前运行：格式、clippy、依赖分层、cargo-deny、TS 类型检查和 lint
+mise run check && mise run audit   # 提交前运行：格式、clippy、依赖分层、TS 与许可证检查
 pnpm tauri build                   # 本地打包
 ```
 
@@ -78,7 +98,8 @@ pnpm tauri build                   # 本地打包
 - 界面文字必须使用 i18n key；提交前的检查会标出未翻译的文案。
 
 ### 通用
-- 提交信息遵循 Conventional Commits（`feat(ssh): …`、`fix(term): …`）。scope 使用 crate 名去掉 `pulse-` 前缀，或前端的功能模块名。
+- 提交信息遵循 Conventional Commits（`feat(ssh): …`、`fix(term): …`）。scope 使用 crate 名去掉 `pulse-` 前缀，或前端的功能模块名。**提交信息只描述技术或产品变更，禁止排期、日期、Sprint、周数或里程碑安排等描述。**
+- 发现代码、分析符号引用/调用关系及依赖影响优先使用 Astrolabe；写入前读取当前文件，写入后请求诊断并运行针对性编译与测试。语言服务器不可用时不得把空诊断视为通过，也不得未经授权自动安装。
 - 采用主干开发：功能分支保持短小，通过 PR 合并到 `main`，采用 squash 合并。PR 要引用对应的功能 ID（例如 `SSH-04`）。
 - 改动影响架构时，先在 `docs/architecture/decisions.md` 登记 ADR；修改 IPC 协议、数据库 schema 或 action id 时，要在 PR 中单独说明兼容性影响。
 

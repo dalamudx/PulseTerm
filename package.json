@@ -1,0 +1,9 @@
+{
+  "name": "pulseterm",
+  "private": true,
+  "scripts": {
+    "check": "pnpm --filter ui check",
+    "test": "pnpm --filter ui test",
+    "probe": "pnpm --filter ui probe"
+  }
+}
