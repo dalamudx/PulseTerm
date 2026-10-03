@@ -2,7 +2,7 @@
 use crate::raw_frame::RawFrame;
 use pulse_app::attachment::AttachmentConfig;
 use pulse_app::registry::{
-    RenderedScreen, SessionId, SessionRegistry, VisibleComparison, WindowToken,
+    RenderedScreen, RepairAdmission, SessionId, SessionRegistry, VisibleComparison, WindowToken,
 };
 use pulse_app::spawn_local;
 use pulse_core::TermSize;
@@ -198,6 +198,7 @@ pub(crate) struct SessionEvidence {
     pub session_survived: bool,
     pub idle_checked: bool,
     pub marker_checked: bool,
+    pub repair_checked: bool,
 }
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -217,6 +218,7 @@ impl SessionEvidence {
             || !self.session_survived
             || !self.idle_checked
             || !self.marker_checked
+            || !self.repair_checked
         {
             return Err("session.invalid_evidence".into());
         }
@@ -295,6 +297,44 @@ fn parse_counter(value: &str) -> Result<u64> {
     }
     Ok(parsed)
 }
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RepairEvidence {
+    Equal,
+    Stale,
+    Queued,
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn probe_session_repair(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+    rendered: RenderedProjection,
+) -> Result<RepairEvidence> {
+    let (owner, id) = state.owned(&window, &nonce)?;
+    let rendered = RenderedScreen {
+        boundary: SessionState {
+            lifecycle: Lifecycle::Running,
+            size: TermSize::new(rendered.columns, rendered.rows).map_err(error)?,
+            revision: parse_counter(&rendered.revision)?,
+            parsed_bytes: parse_counter(&rendered.parsed_bytes)?,
+        },
+        digest: rendered.digest,
+    };
+    let admitted = state
+        .0
+        .registry
+        .request_repair(owner, id, parse_u64(&generation)?, rendered)
+        .await
+        .map_err(error)?;
+    Ok(match admitted {
+        RepairAdmission::Equal => RepairEvidence::Equal,
+        RepairAdmission::Stale => RepairEvidence::Stale,
+        RepairAdmission::Queued => RepairEvidence::Queued,
+    })
+}
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn probe_session_compare(
@@ -372,7 +412,26 @@ pub(crate) async fn probe_session_peer(
         .await
         .is_err()
         && state.0.registry.acknowledge(owner, id, 1, 0).is_err()
-        && state.0.registry.request_marker(owner, id, 1).await.is_err();
+        && state.0.registry.request_marker(owner, id, 1).await.is_err()
+        && state
+            .0
+            .registry
+            .request_repair(
+                owner,
+                id,
+                1,
+                RenderedScreen {
+                    boundary: SessionState {
+                        size: TermSize::new(32, 8).map_err(error)?,
+                        lifecycle: Lifecycle::Running,
+                        revision: 0,
+                        parsed_bytes: 0,
+                    },
+                    digest: "0000000000000000".into(),
+                },
+            )
+            .await
+            .is_err();
     if let Some(sender) = sender {
         let _ = sender.send(denied);
     }
@@ -525,7 +584,8 @@ pub(crate) async fn probe_session(
         window_revoked: true,
         session_survived,
         idle_checked: false,
-        marker_checked: false, // Frontend completes its controlled idle comparison before go.
+        marker_checked: false,
+        repair_checked: false, // Frontend completes its controlled idle comparison before go.
     })
 }
 #[cfg(test)]
@@ -567,6 +627,7 @@ mod tests {
             session_survived: true,
             idle_checked: true,
             marker_checked: true,
+            repair_checked: true,
         };
         assert!(e.validate().is_ok());
         e.generation = "02".into();

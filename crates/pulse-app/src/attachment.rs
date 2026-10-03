@@ -111,6 +111,25 @@ impl AttachmentHandle {
                 mpsc::error::TrySendError::Closed(_) => AttachmentError::Detached,
             })
     }
+    /// Atomic same-boundary comparison and ordered exact repair admission.
+    pub async fn request_repair(
+        &self,
+        boundary: SessionState,
+        digest: String,
+    ) -> Result<pulse_term::session::RepairAdmission, AttachmentError> {
+        if *self.cancel.borrow() {
+            return Err(AttachmentError::Detached);
+        }
+        self.session
+            .diagnostic_repair(pulse_term::session::SessionRepairRequest {
+                lease_id: self.lease_id,
+                boundary,
+                digest,
+                cancelled: self.cancel.subscribe(),
+            })
+            .await
+            .map_err(AttachmentError::Capture)
+    }
     /// Actor admission only; Marker delivery and rendering still require wire ACK.
     pub async fn request_marker(&self) -> Result<(), AttachmentError> {
         if *self.cancel.borrow() {
@@ -187,6 +206,9 @@ pub async fn attach(
             deadlines: VecDeque::new(),
             total: 0,
             peak: 0,
+            repair_hold: None,
+            repair_acks: 0,
+            repair_sending: false,
         }
         .run(),
     );
@@ -222,6 +244,9 @@ struct Driver {
     deadlines: VecDeque<Instant>,
     total: u64,
     peak: usize,
+    repair_hold: Option<tokio::sync::OwnedSemaphorePermit>,
+    repair_acks: usize,
+    repair_sending: bool,
 }
 impl Driver {
     fn acknowledge(&mut self, ack: (u64, u32)) -> Result<(), AttachmentError> {
@@ -231,6 +256,12 @@ impl Driver {
         }
         for _ in 0..release.frames {
             self.deadlines.pop_front();
+        }
+        if self.repair_acks > 0 {
+            self.repair_acks = self.repair_acks.saturating_sub(release.frames);
+            if self.repair_acks == 0 {
+                self.repair_hold = None;
+            }
         }
         Ok(())
     }
@@ -267,6 +298,24 @@ impl Driver {
                     peak_credit_bytes: self.peak,
                 });
             }
+            if !bootstrap
+                && !self.repair_sending
+                && self.repair_acks == 0
+                && matches!(record, Some(StreamRecord::Repair { .. }))
+                && pending.is_none()
+                && let Some(StreamRecord::Repair {
+                    boundary: state,
+                    bytes,
+                    hold,
+                }) = record.take()
+            {
+                if state.parsed_bytes != live_cursor {
+                    return Err(AttachError::Invalid.into());
+                }
+                self.sender.start_repair(boundary(&state), bytes)?;
+                self.repair_hold = hold;
+                self.repair_sending = true;
+            }
             if pending.is_none() && !ended {
                 let next = if bootstrap {
                     self.sender.next_frame().inspect(|frame| {
@@ -274,6 +323,18 @@ impl Driver {
                             bootstrap = false;
                         }
                     })
+                } else if self.repair_sending {
+                    match self.sender.next_repair() {
+                        Ok(None) => {
+                            self.repair_sending = false;
+                            self.repair_acks = self.deadlines.len();
+                            if self.repair_acks == 0 {
+                                self.repair_hold = None;
+                            }
+                            continue;
+                        }
+                        other => other,
+                    }
                 } else if let Some(ref value) = record {
                     match value {
                         StreamRecord::Data {
@@ -300,6 +361,7 @@ impl Driver {
                                 Some(frame)
                             })
                         }
+                        StreamRecord::Repair { .. } => return Err(AttachError::Phase.into()),
                         StreamRecord::Marker(state) => {
                             self.sender.marker(boundary(state)).map(|frame| {
                                 record = None;
@@ -339,6 +401,8 @@ impl Driver {
                 if !bootstrap
                     && pending.is_none()
                     && record.is_none()
+                    && !self.repair_sending
+                    && self.repair_acks == 0
                     && !drained
                     && let Ok(value) = self.stream.output.try_recv()
                 {
@@ -356,7 +420,7 @@ impl Driver {
                 _=async {match deadline{Some(at)=>tokio::time::sleep_until(at).await,None=>std::future::pending().await}}=>return Err(AttachmentError::AckTimeout),
                 _=self.wire.closed()=>return Err(AttachmentError::Detached),
                 permit=wire.reserve(), if pending.is_some()=>{permit.map_err(|_|AttachmentError::Detached)?.send(pending.take().ok_or(AttachmentError::Supervisor)?);self.deadlines.push_back(pending_deadline.take().ok_or(AttachmentError::Supervisor)?);},
-                value=self.stream.output.recv(), if !bootstrap && record.is_none() && !drained && pending.is_none()=>{match value{Some(value)=>record=Some(value),None=>drained=true,}},
+                value=self.stream.output.recv(), if !bootstrap && record.is_none() && !self.repair_sending && self.repair_acks == 0 && !drained && pending.is_none()=>{match value{Some(value)=>record=Some(value),None=>drained=true,}},
             }
         }
     }

@@ -20,6 +20,7 @@ export type AttachmentEvent =
       history: Uint8Array;
       restore: Uint8Array;
     }
+  | { kind: "repair"; boundary: AttachBoundary; bytes: Uint8Array }
   | { kind: "data"; bytes: Uint8Array; offset: bigint }
   | {
       kind: "checkpoint" | "marker" | "end";
@@ -38,13 +39,21 @@ export interface AttachmentReceipt {
 export class AttachmentReceiver {
   private next = 0;
   private revision = 0n;
-  private phase: "begin" | "bootstrap" | "live" | "ended" | "failed" = "begin";
+  private phase:
+    | "begin"
+    | "bootstrap"
+    | "live"
+    | "repair"
+    | "ended"
+    | "failed" = "begin";
   private boundary: AttachBoundary | undefined;
   private history = new Uint8Array();
   private restore = new Uint8Array();
   private historyAt = 0;
   private restoreAt = 0;
   private liveAt = 0n;
+  private columns = 0;
+  private rows = 0;
   constructor(readonly generation: bigint) {
     if (generation <= 0n || generation > MAX_U64)
       throw new Error("attach.generation");
@@ -107,6 +116,8 @@ export class AttachmentReceiver {
         restoreBytes > MAX_RESTORE
       )
         throw new Error("attach.limits");
+      this.columns = boundary.columns;
+      this.rows = boundary.rows;
       this.boundary = boundary;
       this.history = new Uint8Array(historyBytes);
       this.restore = new Uint8Array(restoreBytes);
@@ -154,6 +165,48 @@ export class AttachmentReceiver {
       this.restore = new Uint8Array();
       this.revision = this.boundary.revision;
       this.boundary = undefined;
+      this.phase = "live";
+    } else if (part === 9) {
+      if (this.phase !== "live" || offset !== this.liveAt || body.length !== 12)
+        throw new Error("attach.repair_begin");
+      const meta = new DataView(body.buffer, body.byteOffset, body.byteLength);
+      const revision = meta.getBigUint64(0, true),
+        length = meta.getUint32(8, true);
+      if (revision < this.revision || length < 1 || length > MAX_RESTORE)
+        throw new Error("attach.repair_limits");
+      this.boundary = {
+        columns: this.columns,
+        rows: this.rows,
+        revision,
+        parsedBytes: offset,
+      };
+      this.restore = new Uint8Array(length);
+      this.restoreAt = 0;
+      this.phase = "repair";
+    } else if (part === 10) {
+      if (
+        this.phase !== "repair" ||
+        offset !== BigInt(this.restoreAt) ||
+        body.length === 0 ||
+        body.length > this.restore.length - this.restoreAt
+      )
+        throw new Error("attach.repair_bytes");
+      this.restore.set(body, this.restoreAt);
+      this.restoreAt += body.length;
+    } else if (part === 11) {
+      if (
+        this.phase !== "repair" ||
+        offset !== this.liveAt ||
+        body.length !== 0 ||
+        this.restoreAt !== this.restore.length ||
+        !this.boundary
+      )
+        throw new Error("attach.repair_commit");
+      event = { kind: "repair", boundary: this.boundary, bytes: this.restore };
+      this.revision = this.boundary.revision;
+      this.boundary = undefined;
+      this.restore = new Uint8Array();
+      this.restoreAt = 0;
       this.phase = "live";
     } else if (part === 5) {
       if (

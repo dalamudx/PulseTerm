@@ -103,7 +103,7 @@ impl TerminalProbe {
     /// Generate within a payload byte budget, returning no partial bytes on error.
     /// This limits emitted content, not terminal/grid or allocator overhead.
     pub fn restore_sequence_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
-        self.build_restore(limit, false)
+        self.build_restore(limit, false, false)
     }
 
     /// Rebuild visible/buffer state without RIS, preserving primary scrollback.
@@ -111,10 +111,20 @@ impl TerminalProbe {
     /// frames. History can be seeded into a fresh renderer before this operation.
     /// Not atomic or a production attach protocol by itself.
     pub fn restore_screen_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
-        self.build_restore(limit, true)
+        self.build_restore(limit, true, false)
     }
 
-    fn build_restore(&self, limit: usize, preserve_history: bool) -> Result<Restore, RestoreGap> {
+    /// Screen repair wrapped in synchronized updates; end precedes incomplete parser tail.
+    pub fn repair_screen_bounded(&self, limit: usize) -> Result<Restore, RestoreGap> {
+        self.build_restore(limit, true, true)
+    }
+
+    fn build_restore(
+        &self,
+        limit: usize,
+        preserve_history: bool,
+        synchronized: bool,
+    ) -> Result<Restore, RestoreGap> {
         use alacritty_terminal::vte::ansi::Timeout;
         if self.parser.sync_timeout().pending_timeout() || self.parser.sync_bytes_count() > 0 {
             return Err(RestoreGap::SyncPending);
@@ -132,6 +142,9 @@ impl TerminalProbe {
             limit,
             exceeded: false,
         };
+        if synchronized {
+            out.push_str("\x18\x1b[?2026h");
+        }
         if preserve_history {
             out.push_str(SCREEN_RESET);
             write_stops(&mut out, (0..term.columns()).step_by(8));
@@ -381,6 +394,9 @@ impl TerminalProbe {
 
         if self.side.last_input.is_some() && out.last_print != self.side.last_input {
             approximations.push("REP preceding character");
+        }
+        if synchronized {
+            out.push_str("\x1b[?2026l");
         }
         if out.exceeded
             || pending.len().saturating_add(self.utf8_tail.len())

@@ -25,6 +25,45 @@ pub enum VisibleComparison {
     /// Actor advanced or reconfigured. This is not evidence of parser divergence.
     Stale,
 }
+pub use pulse_term::session::RepairAdmission;
+impl SessionRegistry {
+    /// Atomically compare/capture on the actor and queue an exact screen-only repair.
+    /// Queued is admission only; it must render/ACK on this generation's ordered stream.
+    /// No stale evidence can authorize a future boundary; risk flags remain unchanged.
+    pub async fn request_repair(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<RepairAdmission, RegistryError> {
+        let (entry, binding) = {
+            let state = self.lock()?;
+            let entry = Self::entry(&state, owner, id)?;
+            let binding = state
+                .bindings
+                .get(&id)
+                .filter(|b| b.generation == generation)
+                .ok_or(RegistryError::Stale)?
+                .handle
+                .clone();
+            (entry, binding)
+        };
+        let mut last = entry.repair.try_lock().map_err(|_| RegistryError::Busy)?;
+        let now = Instant::now();
+        if last.is_some_and(|at| now.duration_since(at) < MIN_INTERVAL) {
+            return Err(RegistryError::Busy);
+        }
+        *last = Some(now);
+        let admission = timeout(
+            DEADLINE,
+            binding.request_repair(rendered.boundary, rendered.digest),
+        )
+        .await;
+        self.comparison_entry(owner, id, generation)?;
+        Ok(admission.map_err(|_| RegistryError::Busy)??)
+    }
+}
 impl SessionRegistry {
     fn comparison_entry(
         &self,

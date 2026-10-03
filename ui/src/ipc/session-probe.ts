@@ -85,6 +85,29 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
   let delayed = false;
   let idleChecked = false;
   let markerChecked = false;
+  let repairChecked = false,
+    damaged = false,
+    repairAttempted = false,
+    repairAdmitted = false;
+  let historyBeforeRepair: string[] = [];
+  const historyText = () => {
+    const b = terminal?.buffer.normal;
+    return b
+      ? Array.from(
+          { length: b.baseY },
+          (_, i) => b.getLine(i)?.translateToString(false) ?? "",
+        )
+      : [];
+  };
+  const paused = () => {
+    const b = terminal?.buffer.active;
+    return b
+      ? Array.from(
+          { length: terminal?.rows ?? 0 },
+          (_, i) => b.getLine(b.baseY + i)?.translateToString(true) ?? "",
+        ).some((s) => s.includes("MARKER_READY"))
+      : false;
+  };
   let markerSeen = false;
   let outputEpoch = 0;
   let geometry: Pick<AttachBoundary, "columns" | "rows"> | undefined;
@@ -133,8 +156,23 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
               geometry = { columns: boundary.columns, rows: boundary.rows };
             },
             write: bytes,
+            repair: async (_boundary, data, signal) => {
+              if (!damaged) throw new Error("session.unsolicited_repair");
+              decoder = new Utf8Stream();
+              await bytes(data, signal);
+              if (
+                JSON.stringify(historyBeforeRepair) !==
+                JSON.stringify(historyText())
+              )
+                throw new Error("session.repair_history");
+            },
             marker: async (_revision, _parsed, signal) => {
               if (signal.aborted) throw new Error("session.cancelled");
+              if (!damaged && paused()) {
+                historyBeforeRepair = historyText();
+                damaged = true;
+                await write("\x18\x1b[1;1H!", signal);
+              }
             },
             checkpoint: async (_revision, _parsed, signal) =>
               write("\x1b[?2026l", signal),
@@ -194,6 +232,11 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
               parsedBytes: receipt.event.parsedBytes,
             });
           }
+          if (
+            receipt?.event.kind === "repair" &&
+            admissionEpoch === outputEpoch
+          )
+            idle?.observe(receipt.event.boundary);
           if (receipt?.event.kind === "ready") {
             const boundary = receipt.event.boundary;
             if (!terminal || generationSeen === undefined)
@@ -304,13 +347,30 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
                 if (signal.aborted) throw new Error("session.idle_aborted");
                 return result;
               },
-              mismatch: () => {
-                failed = new Error("session.data_idle_mismatch");
-                consumer?.cancel();
-                void commands.probeSessionResume(nonce).catch(() => {});
+              mismatch: (b) => {
+                if (repairAttempted) {
+                  failed = new Error("session.repair_diverged");
+                  consumer?.cancel();
+                  void commands.probeSessionResume(nonce).catch(() => {});
+                  return;
+                }
+                repairAttempted = true;
+                void commands
+                  .probeSessionRepair(nonce, generation, rendered(b))
+                  .then((result) => {
+                    if (result !== "queued")
+                      throw new Error(`session.repair_${result}`);
+                    repairAdmitted = true;
+                  })
+                  .catch((error) => {
+                    failed = error;
+                    consumer?.cancel();
+                    void commands.probeSessionResume(nonce).catch(() => {});
+                  });
               },
               matched: () => {
-                if (!markerSeen || markerChecked) return;
+                if (!markerSeen || markerChecked || !damaged || !repairAdmitted)
+                  return;
                 const buffer = surface.buffer.active;
                 const paused = Array.from(
                   { length: surface.rows },
@@ -321,6 +381,7 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
                 ).some((line) => line.includes("MARKER_READY"));
                 if (!paused) return;
                 markerChecked = true;
+                repairChecked = true;
                 void commands.probeSessionResume(nonce).catch((error) => {
                   failed = error;
                   consumer?.cancel();
@@ -360,11 +421,13 @@ export async function verifySessionChannel(): Promise<SessionEvidence> {
       result.peakCreditBytes > 8212 ||
       !delayed ||
       !idleChecked ||
-      !markerChecked
+      !markerChecked ||
+      !repairChecked
     )
       throw new Error("session.integrity_failed");
     result.idleChecked = idleChecked;
     result.markerChecked = markerChecked;
+    result.repairChecked = repairChecked;
     previous = { nonce, generation: result.generation };
     return result;
   } finally {

@@ -1,6 +1,65 @@
 use super::*;
 #[test]
 #[allow(clippy::unwrap_used)]
+fn repair_fragments_preserve_live_cursor_and_no_credit_cannot_advance() {
+    let b = Boundary {
+        columns: 32,
+        rows: 8,
+        revision: u64::MAX - 4,
+        parsed_bytes: (1u64 << 60) + 7,
+    };
+    let mut s = AttachmentSender::new(7, b, vec![], vec![b'x'], 3, 1, 64).unwrap();
+    while let Some(w) = s.next_frame().unwrap() {
+        s.acknowledge(7, crate::decode(&w).unwrap().sequence)
+            .unwrap();
+    }
+    s.start_repair(b, b"screen-repair".to_vec()).unwrap();
+    assert!(s.start_repair(b, vec![1]).is_err());
+    assert!(s.data(b"x").is_err());
+    assert!(s.finish(b).is_err());
+    let mut collected = Vec::new();
+    let mut parts = Vec::new();
+    while let Some(w) = s.next_repair().unwrap() {
+        let f = crate::decode(&w).unwrap();
+        let p = decode_fragment(f.payload).unwrap();
+        parts.push(p.part);
+        match p.part {
+            Part::RepairBegin => {
+                assert_eq!(p.offset, b.parsed_bytes);
+                assert_eq!(
+                    u64::from_le_bytes(p.body[..8].try_into().unwrap()),
+                    b.revision
+                );
+            }
+            Part::RepairBytes => {
+                assert_eq!(p.offset, collected.len() as u64);
+                collected.extend_from_slice(p.body);
+            }
+            Part::RepairCommit => assert_eq!(p.offset, b.parsed_bytes),
+            _ => panic!("not repair"),
+        };
+        if p.part != Part::RepairCommit {
+            assert!(matches!(
+                s.next_repair(),
+                Err(AttachError::Flow(FlowError::NoCredit))
+            ));
+        }
+        s.acknowledge(7, f.sequence).unwrap();
+    }
+    assert_eq!(collected, b"screen-repair");
+    assert_eq!(parts.first(), Some(&Part::RepairBegin));
+    assert_eq!(parts.last(), Some(&Part::RepairCommit));
+    let w = s.data(b"end").unwrap();
+    assert_eq!(
+        decode_fragment(crate::decode(&w).unwrap().payload)
+            .unwrap()
+            .offset,
+        b.parsed_bytes
+    );
+}
+
+#[test]
+#[allow(clippy::unwrap_used)]
 fn marker_is_a_distinct_readonly_part_with_unchanged_cursor_and_bounded_credit() {
     let mut sender = sender(1);
     let boundary = sender.boundary;

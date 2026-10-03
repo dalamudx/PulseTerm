@@ -96,6 +96,7 @@ fn validate(path: &Path) -> Result<()> {
         || session["sessionSurvived"] != true
         || session["idleChecked"] != true
         || session["markerChecked"] != true
+        || session["repairChecked"] != true
         || session["frames"].as_u64().is_none_or(|n| n < 4)
         || session["peakCreditBytes"]
             .as_u64()

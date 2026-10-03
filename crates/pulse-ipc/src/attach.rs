@@ -39,6 +39,12 @@ pub enum Part {
     End = 7,
     /// Pure boundary marker: preserve parser, decoder and synchronized updates.
     Marker = 8,
+    /// Atomic screen-only repair metadata at current live offset.
+    RepairBegin = 9,
+    /// Section-local offset, never original PTY bytes.
+    RepairBytes = 10,
+    /// Empty commit after the declared exact restore bytes.
+    RepairCommit = 11,
 }
 /// Control/output boundary captured by the terminal owner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +125,9 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
         6 => Part::Checkpoint,
         7 => Part::End,
         8 => Part::Marker,
+        9 => Part::RepairBegin,
+        10 => Part::RepairBytes,
+        11 => Part::RepairCommit,
         _ => return Err(AttachError::Invalid),
     };
     let read = |at| -> Result<u64, AttachError> {
@@ -134,7 +143,12 @@ pub fn decode_fragment(bytes: &[u8]) -> Result<Fragment<'_>, AttachError> {
         || (matches!(part, Part::Begin | Part::Commit) && offset != 0)
         || (part == Part::Commit && !body.is_empty())
         || (matches!(part, Part::Checkpoint | Part::End | Part::Marker) && body.len() != 8)
-        || (matches!(part, Part::History | Part::Restore | Part::Data) && body.is_empty())
+        || (matches!(
+            part,
+            Part::History | Part::Restore | Part::Data | Part::RepairBytes
+        ) && body.is_empty())
+        || (part == Part::RepairBegin && body.len() != 12)
+        || (part == Part::RepairCommit && !body.is_empty())
     {
         return Err(AttachError::Invalid);
     }
@@ -198,6 +212,7 @@ pub struct AttachmentSender {
     live_offset: u64,
     fragment: usize,
     window: CreditWindow,
+    repair: Option<(Vec<u8>, usize, Part)>,
 }
 impl AttachmentSender {
     /// Freeze a transaction from an actor boundary; validate before emitting Begin.
@@ -230,6 +245,7 @@ impl AttachmentSender {
             live_offset: boundary.parsed_bytes,
             fragment,
             window: CreditWindow::new(max_frames, max_bytes)?,
+            repair: None,
         };
         decode_begin(&value.metadata())?;
         Ok(value)
@@ -260,7 +276,11 @@ impl AttachmentSender {
             }
             Part::Commit => &[],
             Part::Data | Part::End => return Ok(None),
-            Part::Checkpoint | Part::Marker => return Err(AttachError::Phase),
+            Part::Checkpoint
+            | Part::Marker
+            | Part::RepairBegin
+            | Part::RepairBytes
+            | Part::RepairCommit => return Err(AttachError::Phase),
         };
         let payload = Fragment {
             part: self.phase,
@@ -310,7 +330,7 @@ impl AttachmentSender {
     }
     /// Send post-boundary VT bytes only after Commit on this same ordered stream.
     pub fn data(&mut self, bytes: &[u8]) -> Result<Vec<u8>, AttachError> {
-        if self.phase != Part::Data {
+        if self.phase != Part::Data || self.repair.is_some() {
             return Err(AttachError::Phase);
         }
         if bytes.is_empty() || bytes.len() > self.fragment {
@@ -337,6 +357,77 @@ impl AttachmentSender {
         self.live_offset = next;
         Ok(out)
     }
+    /// Start exact repair at this cursor, keeping the same credit sequence and byte offset.
+    pub fn start_repair(&mut self, boundary: Boundary, bytes: Vec<u8>) -> Result<(), AttachError> {
+        if self.phase != Part::Data || self.repair.is_some() {
+            return Err(AttachError::Phase);
+        }
+        if boundary.columns != self.boundary.columns
+            || boundary.rows != self.boundary.rows
+            || boundary.parsed_bytes != self.live_offset
+            || boundary.revision < self.boundary.revision
+            || bytes.is_empty()
+            || bytes.len() > MAX_RESTORE
+        {
+            return Err(AttachError::Invalid);
+        }
+        self.boundary.revision = boundary.revision;
+        self.repair = Some((bytes, 0, Part::RepairBegin));
+        Ok(())
+    }
+    /// Generate one credit-bound repair fragment; NoCredit leaves the transaction intact.
+    pub fn next_repair(&mut self) -> Result<Option<Vec<u8>>, AttachError> {
+        let Some((bytes, at, part)) = self.repair.as_ref() else {
+            return Ok(None);
+        };
+        let mut metadata = Vec::new();
+        let (offset, body) = match part {
+            Part::RepairBegin => {
+                metadata.extend_from_slice(&self.boundary.revision.to_le_bytes());
+                metadata.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                (self.live_offset, metadata.as_slice())
+            }
+            Part::RepairBytes => (
+                *at as u64,
+                &bytes[*at..(*at + self.fragment).min(bytes.len())],
+            ),
+            Part::RepairCommit => (self.live_offset, &[][..]),
+            _ => return Err(AttachError::Phase),
+        };
+        let payload = Fragment {
+            part: *part,
+            generation: self.generation,
+            offset,
+            body,
+        }
+        .encode()?;
+        let sequence = self.window.record_send(payload.len())?;
+        let wire = Frame {
+            kind: FrameKind::Attachment,
+            sequence,
+            payload: &payload,
+        }
+        .encode()?;
+        match part {
+            Part::RepairBegin => {
+                if let Some(r) = self.repair.as_mut() {
+                    r.2 = Part::RepairBytes;
+                }
+            }
+            Part::RepairBytes => {
+                let len = body.len();
+                if let Some(r) = self.repair.as_mut() {
+                    r.1 += len;
+                    if r.1 == r.0.len() {
+                        r.2 = Part::RepairCommit;
+                    }
+                }
+            }
+            Part::RepairCommit => self.repair = None,
+            _ => return Err(AttachError::Phase),
+        }
+        Ok(Some(wire))
+    }
     /// State advanced without new raw bytes (e.g. synchronized-update expiry).
     /// Same stream/credits as Data. Wrong cursor or older revision is rejected;
     /// a NoCredit error leaves all state unchanged. Receiver must process before ACK.
@@ -354,7 +445,7 @@ impl AttachmentSender {
         Ok(frame)
     }
     fn state_frame(&mut self, boundary: Boundary, part: Part) -> Result<Vec<u8>, AttachError> {
-        if self.phase != Part::Data {
+        if self.phase != Part::Data || self.repair.is_some() {
             return Err(AttachError::Phase);
         }
         if boundary.columns != self.boundary.columns

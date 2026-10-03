@@ -18,6 +18,9 @@ mod bootstrap_tests;
 #[path = "session_marker_tests.rs"]
 mod marker_tests;
 #[cfg(test)]
+#[path = "session_repair_tests.rs"]
+mod repair_tests;
+#[cfg(test)]
 #[path = "session_stream_tests.rs"]
 mod stream_tests;
 use pulse_core::TermSize;
@@ -151,7 +154,32 @@ struct PendingResize {
     native: oneshot::Receiver<Result<(), SessionError>>,
     deadline: tokio::time::Instant,
 }
+/// Actor admission only, not rendering completion or permission for a later boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepairAdmission {
+    /// Projection already agrees; no repair queued and risk not cleared.
+    Equal,
+    /// Output or controls advanced; no repair queued.
+    Stale,
+    /// Exact replay admitted, not yet delivered or rendered.
+    Queued,
+}
+/// Validation-only repair gate. Binding cancellation is checked again at actor capture.
+pub struct SessionRepairRequest {
+    /// Actor-local current stream serial, not an authorization token.
+    pub lease_id: u64,
+    /// All dimensions/revision/parsed bytes must still agree.
+    pub boundary: SessionState,
+    /// Visible digest v1 at the renderer callback boundary.
+    pub digest: String,
+    /// Binding revocation checked before capture and before queue insertion.
+    pub cancelled: watch::Receiver<bool>,
+}
 enum Command {
+    Repair {
+        request: SessionRepairRequest,
+        reply: oneshot::Sender<Result<RepairAdmission, SessionRestoreError>>,
+    },
     Marker(u64, oneshot::Sender<Result<(), SessionError>>),
     Subscribe {
         history_rows: usize,
@@ -365,6 +393,17 @@ impl SessionHandle {
     }
 }
 impl SessionHandle {
+    /// Compare and capture a precise screen repair on one actor turn, never clearing risk.
+    pub async fn diagnostic_repair(
+        &self,
+        request: SessionRepairRequest,
+    ) -> Result<RepairAdmission, SessionRestoreError> {
+        let (reply, result) = oneshot::channel();
+        self.enqueue(Command::Repair { request, reply })?;
+        result
+            .await
+            .map_err(|_| SessionRestoreError::Session(SessionError::Closed))?
+    }
     /// Admit a read-only marker into THIS lease's bounded ordered output queue.
     /// Success is not delivery or ACK. Full queue returns Busy without waiting;
     /// cancelled requests and stale serials never inject a marker into a new lease.
@@ -669,6 +708,28 @@ pub fn spawn_session(
                         if !reply.is_closed() {
                             let result=stream::prepare(&terminal,&current,history_rows,history_budget,restore_budget);
                             let _ = reply.send(result);
+                        }
+                    }
+                    Some(Command::Repair {request, reply}) => {
+                        if !reply.is_closed() {
+                            let result = (|| -> Result<RepairAdmission,SessionRestoreError> {
+                                if *request.cancelled.borrow() || !lease.as_ref().is_some_and(|l|l.id==request.lease_id && !l.output.is_closed()) {
+                                    return Err(SessionError::StaleLease.into());
+                                }
+                                if request.boundary != current { return Ok(RepairAdmission::Stale); }
+                                if request.digest.len()!=16 || !request.digest.bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b)) { return Err(SessionError::InvalidDigest.into()); }
+                                if resizing.is_some() { return Err(SessionError::Busy.into()); }
+                                if request.digest==terminal.screen_digest() { return Ok(RepairAdmission::Equal); }
+                                let active=lease.as_ref().ok_or(SessionError::StaleLease)?;
+                                let hold=active.repair.clone().try_acquire_owned().map_err(|_|SessionError::Busy)?;
+                                let slot=match stream_permit.take(){Some(slot)=>slot,None=>active.output.clone().try_reserve_owned().map_err(|e| match e { mpsc::error::TrySendError::Full(_)=>SessionError::Busy,mpsc::error::TrySendError::Closed(_)=>SessionError::StaleLease })?};
+                                let restore=terminal.repair_screen_bounded(MAX_RESTORE_BYTES).map_err(SessionRestoreError::Gap)?;
+                                if !restore.approximations.is_empty() { return Err(SessionRestoreError::Approximate(restore.approximations)); }
+                                if *request.cancelled.borrow() || reply.is_closed() { return Err(SessionError::StaleLease.into()); }
+                                slot.send(StreamRecord::Repair {boundary:current.clone(),bytes:restore.bytes,hold:Some(hold)});
+                                Ok(RepairAdmission::Queued)
+                            })();
+                            let _=reply.send(result);
                         }
                     }
                     Some(Command::Marker(id,reply)) => {

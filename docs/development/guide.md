@@ -71,7 +71,7 @@ mise run audit                    # Rust 许可证/安全公告/来源检查
 mise run fmt                      # 统一格式
 mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
 mise run desktop                  # 打开原生开发验证界面（不是完整终端）
-mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit及Data idle Marker检查，两次重建及7组测量
+mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data idle Marker及精确屏幕修复，两次重建及7组测量
 ```
 
 `probe-pty` 当前在 Unix 运行，依赖系统 `/bin/sh` 和 `stty`，不需要显示服务；输出 `target/probes/pty.json`。监督器最长 25 秒，交互 helper 自带 10 秒截止时间。三平台 CI 新增 `probe-pty-portable` 和 `probe-local-session`，不依赖Windows的stty；仅有Linux运行证据，不能把注册成功当作ConPTY验收。Windows helper只测canonical输入和native尺寸回读，不测raw/Win32键盘、child尺寸query或随附conpty.dll。

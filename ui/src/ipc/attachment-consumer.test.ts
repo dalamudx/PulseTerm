@@ -22,6 +22,108 @@ const generation = new DataView(
   firstWire.byteOffset,
 ).getBigUint64(10, true);
 const text = new TextDecoder();
+function repairWire(
+  part: number,
+  sequence: number,
+  body: Uint8Array,
+  offset = 10n,
+): Uint8Array {
+  const raw = new Uint8Array(26 + body.length);
+  const v = new DataView(raw.buffer);
+  raw[0] = 8;
+  v.setUint32(2, sequence, true);
+  raw[6] = 1;
+  raw[7] = part;
+  v.setBigUint64(10, generation, true);
+  v.setBigUint64(18, offset, true);
+  raw.set(body, 26);
+  return raw;
+}
+function repairFrames() {
+  const meta = new Uint8Array(12);
+  const v = new DataView(meta.buffer);
+  v.setBigUint64(0, (1n << 64n) - 4n, true);
+  v.setUint32(8, 3, true);
+  const seq = fixture.length;
+  return [
+    repairWire(9, seq, meta),
+    repairWire(10, seq + 1, new TextEncoder().encode("FIX"), 0n),
+    repairWire(11, seq + 2, new Uint8Array()),
+  ];
+}
+it("repair is staged until Commit and cannot ACK before screen callback or interleave Data", async () => {
+  const ack: number[] = [];
+  const events: string[] = [];
+  const slow = deferred();
+  const target = sink(events);
+  target.repair = async (boundary, bytes) => {
+    expect(boundary.parsedBytes).toBe(10n);
+    expect(boundary.revision).toBe((1n << 64n) - 4n);
+    events.push(text.decode(bytes));
+    await slow.promise;
+  };
+  const c = new AttachmentConsumer(generation, target, (_, seq) => {
+    ack.push(seq);
+  });
+  for (const w of fixture) await c.enqueue(w);
+  events.length = 0;
+  const frames = repairFrames();
+  await c.enqueue(frames[0] as Uint8Array);
+  await c.enqueue(frames[1] as Uint8Array);
+  expect(events).toEqual([]);
+  const commit = c.enqueue(frames[2] as Uint8Array);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(ack).not.toContain(fixture.length + 2);
+  slow.resolve();
+  await commit;
+  expect(events).toEqual(["FIX"]);
+  expect(ack).toContain(fixture.length + 2);
+});
+it("unsupported or cancelled repair fails closed without a commit ACK", async () => {
+  for (const supported of [false, true]) {
+    const ack: number[] = [];
+    const slow = deferred();
+    const target = sink([]);
+    if (supported) target.repair = () => slow.promise;
+    const c = new AttachmentConsumer(generation, target, (_, seq) => {
+      ack.push(seq);
+    });
+    for (const w of fixture) await c.enqueue(w);
+    const f = repairFrames();
+    await c.enqueue(f[0] as Uint8Array);
+    await c.enqueue(f[1] as Uint8Array);
+    const promise = c.enqueue(f[2] as Uint8Array);
+    const rejected = expect(promise).rejects.toThrow(
+      supported ? "cancelled" : "repair_unsupported",
+    );
+    if (supported) c.cancel();
+    await rejected;
+    slow.resolve();
+    await Promise.resolve();
+    expect(ack).not.toContain(fixture.length + 2);
+  }
+});
+it("malformed or interrupted repair never renders a partial screen", async () => {
+  for (const errorPart of [5, 7, 9, 11]) {
+    const target = sink([]);
+    let repairs = 0;
+    target.repair = async () => {
+      repairs++;
+    };
+    const c = new AttachmentConsumer(generation, target, () => {});
+    for (const w of fixture) await c.enqueue(w);
+    const f = repairFrames();
+    await c.enqueue(f[0] as Uint8Array);
+    const bad =
+      errorPart === 9
+        ? repairWire(9, fixture.length + 1, new Uint8Array(12))
+        : repairWire(errorPart, fixture.length + 1, new Uint8Array());
+    await expect(c.enqueue(bad)).rejects.toThrow();
+    expect(repairs).toBe(0);
+  }
+});
+
 function deferred() {
   let resolve = () => {};
   const promise = new Promise<void>((done) => {

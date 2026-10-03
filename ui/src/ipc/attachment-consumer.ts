@@ -12,6 +12,13 @@ import { HEADER_LENGTH } from "./frames";
  * reuse it while an old native/xterm write may still complete. All operations
  * must observe signal; split large replays into bounded callback-driven writes. */
 export interface AttachmentSink {
+  /** Exact screen-only repair: reset decoder/parser, never clear scrollback.
+   * Replay includes CAN and synchronized updates with end before pending CSI tail. */
+  repair?(
+    boundary: AttachBoundary,
+    bytes: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<void>;
   /** Pure boundary observation; do not feed VT, finish UTF-8 or flush BSU. */
   marker?(
     revision: bigint,
@@ -150,6 +157,16 @@ export class AttachmentConsumer {
                 );
               await this.wait(
                 this.sink.write(event.restore, this.abort.signal),
+              );
+            } else if (event.kind === "repair") {
+              if (!this.sink.repair)
+                throw new Error("attach.repair_unsupported");
+              await this.wait(
+                this.sink.repair(
+                  event.boundary,
+                  event.bytes,
+                  this.abort.signal,
+                ),
               );
             } else if (event.kind === "data") {
               await this.wait(this.sink.write(event.bytes, this.abort.signal));

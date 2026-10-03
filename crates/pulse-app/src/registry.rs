@@ -4,6 +4,7 @@ use crate::attachment::{
     self, AttachmentConfig, AttachmentError, AttachmentHandle, AttachmentReceipt,
 };
 use pulse_core::TermSize;
+pub use pulse_term::session::RepairAdmission;
 use pulse_term::session::{SessionError, SessionHandle, SessionState};
 use std::{
     collections::{HashMap, HashSet},
@@ -55,6 +56,7 @@ struct Entry {
     capture: Arc<AsyncMutex<()>>,
     comparison: AsyncMutex<Option<tokio::time::Instant>>,
     marker: AsyncMutex<Option<tokio::time::Instant>>,
+    repair: AsyncMutex<Option<tokio::time::Instant>>,
 }
 struct Binding {
     generation: u64,
@@ -193,6 +195,7 @@ impl SessionRegistry {
                 capture: Arc::new(AsyncMutex::new(())),
                 comparison: AsyncMutex::new(None),
                 marker: AsyncMutex::new(None),
+                repair: AsyncMutex::new(None),
             }),
         );
         Ok(id)

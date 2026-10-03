@@ -1,5 +1,54 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+#[tokio::test]
+async fn repair_remains_single_flight_until_commit_ack_and_orders_subsequent_data() {
+    let (s, actor, d) = session();
+    let (h, mut wire, task) = attach(&s, 9, config()).await.unwrap();
+    bootstrap(&h, &mut wire, 9).await;
+    let state = s.state.borrow().clone();
+    assert_eq!(
+        h.request_repair(state.clone(), "0000000000000000".into())
+            .await
+            .unwrap(),
+        pulse_term::session::RepairAdmission::Queued
+    );
+    let mut parts = Vec::new();
+    loop {
+        let raw = wire.recv().await.unwrap();
+        let f = pulse_ipc::decode(&raw).unwrap();
+        let p = pulse_ipc::attach::decode_fragment(f.payload).unwrap();
+        parts.push(p.part);
+        if p.part == pulse_ipc::attach::Part::RepairCommit {
+            assert!(
+                h.request_repair(state.clone(), "0000000000000000".into())
+                    .await
+                    .is_err()
+            );
+            d.output.send(b"next".to_vec()).await.unwrap();
+            assert!(
+                timeout(Duration::from_millis(40), wire.recv())
+                    .await
+                    .is_err()
+            );
+            h.acknowledge(9, f.sequence).unwrap();
+            break;
+        }
+        h.acknowledge(9, f.sequence).unwrap();
+    }
+    assert_eq!(parts[0], pulse_ipc::attach::Part::RepairBegin);
+    let raw = wire.recv().await.unwrap();
+    let f = pulse_ipc::decode(&raw).unwrap();
+    let p = pulse_ipc::attach::decode_fragment(f.payload).unwrap();
+    assert_eq!(p.part, pulse_ipc::attach::Part::Data);
+    assert_eq!(p.offset, 0);
+    h.acknowledge(9, f.sequence).unwrap();
+    h.detach();
+    assert!(task.join().await.is_err());
+    s.close();
+    drop(d);
+    actor.join().await.unwrap();
+}
+
 use pulse_core::TermSize;
 use pulse_term::session::{self, ChannelTransport, DriverEndpoint, SessionTask};
 use tokio::time::{sleep, timeout};

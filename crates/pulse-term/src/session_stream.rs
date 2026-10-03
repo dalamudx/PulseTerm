@@ -10,7 +10,8 @@ pub struct SessionStream {
     pub lease_id: u64,
     /// History and screen captured before any queued Data, on the same actor turn.
     pub bootstrap: SessionBootstrap,
-    /// At most eight 64 KiB payloads plus fixed metadata/allocator overhead.
+    /// Eight records: Data <=64 KiB, plus at most one <=1 MiB repair per lease
+    /// across the queue/driver until Commit ACK. Excludes allocator overhead.
     pub output: mpsc::Receiver<StreamRecord>,
     /// Non-lossy termination reason; must cancel the old renderer generation.
     pub status: watch::Receiver<StreamStatus>,
@@ -32,6 +33,15 @@ pub enum StreamRecord {
     Fence(SessionState),
     /// Read-only ordered boundary. Never flushes sync or feeds parser bytes.
     Marker(SessionState),
+    /// Exact screen-only replay captured at this output boundary; not PTY Data.
+    Repair {
+        /// Capture boundary, not an output byte offset increase.
+        boundary: SessionState,
+        /// Exact bounded synchronized replay including pending parser tail.
+        bytes: Vec<u8>,
+        /// Single repair per lease, held through the final wire/render ACK.
+        hold: Option<tokio::sync::OwnedSemaphorePermit>,
+    },
 }
 /// Lease outcome, independent of its bounded output queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +67,7 @@ pub struct StreamStatus {
 }
 pub(super) struct Lease {
     pub id: u64,
+    pub repair: std::sync::Arc<tokio::sync::Semaphore>,
     pub output: mpsc::Sender<StreamRecord>,
     pub status: watch::Sender<StreamStatus>,
 }
@@ -69,6 +80,7 @@ pub(super) fn create(lease_id: u64, bootstrap: SessionBootstrap) -> (Lease, Sess
     (
         Lease {
             id: lease_id,
+            repair: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
             output,
             status,
         },

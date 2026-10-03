@@ -194,12 +194,21 @@ mise run probe-pty
 - actor `diagnostic_marker(lease_id)`只向当前lease的有界队列try-reserve；满队列返回Busy、旧/已detach lease返回StaleLease；处理前取消不注入Marker。active BSU/pending resize明确Busy，不提前flush/resize。`AttachmentHandle::request_marker`/`SessionRegistry::request_marker`贯通，owner/current generation前后校验；请求每session 500ms限频、single-flight和250ms截止，换绑/取消不重置频率。IPC成功仅证明队列admission，不能拿它当边界或ACK。
 - `IdleComparison`对新Data入队先作废旧证据，600ms空闲请求Marker（最多3次），等待ordered Marker callback且没有后续Data入队才观察精确边界，再按原调度比较。Consumer必须显式支持只读marker callback且完成后才ACK；不支持、取消、迟到回调均不能释放信用。marker可早于IPC返回，仍不并发发起第二请求。
 - 真实WebKitGTK连续两轮native helper输出约3.1MiB后停在半条CSI，前端自动Marker→callback/ACK→摘要Equal，再发送固定m输入续流，最终EOF/边界/digest一致。PTY本身回显m输入也属于原始输出，未过滤或伪造流量。实测第二轮parsedBytes=3,113,003、generation=2、frames=777、peakCreditBytes=8212；schema3要求`markerChecked=true`，数字非性能门槛。peer实际拒绝Marker权限，原7组transport、两次窗口重建和EOF证据同时通过。5个headless attachment场景、真实2MiB native registry/wire探针、native clippy/test与binding drift也通过。
-- 未实现自动重绘、同generation/boundary原子compare→restore、生产DOM/user shell、多视图或Windows/macOS实际验收。连续BSU、持续新输出或队列满可以延期/拒绝，不承诺总会得到可重绘边界。未修改第三方依赖、vendor补丁或审计门禁。
+- 此阶段未实现自动重绘和同generation/boundary原子compare→restore；下一节补受控精确修复。生产DOM/user shell、多视图或Windows/macOS实际验收仍未完成。连续BSU、持续新输出或队列满可以延期/拒绝，不承诺总会得到可重绘边界。未修改第三方依赖、vendor补丁或审计门禁。
+
+## 原子精确屏幕修复事务与受控自动重绘（Linux）
+
+- actor `diagnostic_repair`同一回合核对lease、取消信号、全部输出/尺寸revision及digest，Equal/Stale不排帧；Mismatch才尝试精确恢复。gap/approximation、满队列、pending resize或取消明确拒绝，风险标记不清除。`SessionRegistry::request_repair`验证window owner/current generation，single-flight、500ms限频与250ms截止；返回后重新校验generation，换绑不能让旧恢复进入新绑定。
+- 新Part9/10/11分段修复与Data共用Channel和CreditWindow：最多1MiB暂存，Commit前无部分渲染，期间不交错Data/End；修复不推进原始parsed_bytes。单份repair permit从actor捕获持有到最终Commit ACK；未ACK时后续Data不会发出，第二次修复明确Busy。receiver/sink不支持、错offset、取消和中断事务fail closed。
+- 专用非RIS同步序列CAN→2026h→screen restore→2026l→pending CSI/UTF8，结束同步不能放到待续parser尾部后。sink重置decoder而非terminal，保留scrollback。新增3项core回归含半CSI续流、完整UTF8中、history颜色/cells、旧lease/取消、nonedge wrap拒绝和active BSU拒绝；新增driver/registry两项授权/晚完成/ACK限流回归，1项IPC大整数/NoCredit/section offset回归，3项TS Commit/ACK/unsupported/取消/中断回归。
+- 真实WebKitGTK两轮受控自动修复：fixed helper在半条CSI暂停，Marker callback中故意修改xterm可见内容及cursor；idle检测真实Mismatch，重新捕获同边界精确Repair，Commit后再次摘要Equal再续流。修复前后history文本完全相同，最终EOF/native exit0/digest及原始字节边界一致，peer修复权限拒绝；schema3要求`repairChecked=true`。实测第二轮parsedBytes=3,113,003、frames=783、generation=2、peakCreditBytes=8212；原7组运输检查同时通过，数字不作性能门槛。
+- `mise run probe-snapshot`默认600个随机样例及既有完整续流回归通过；条件xterm矩阵311/311（只包含原输入解析能与Rust一致的案例），分歧矩阵仍18/372，11个可精确修复、7个明确不可编码/延期且全部风险标记。不是重跑30,000样例或完整S2验收。5个binary/headless场景及2MiB真实native授权/ACK/backpressure探针也通过。
+- 自动修复在此probe每绑定最多一次，不能因仍Mismatch循环重绘；持续输出/Stale/近似状态的生产重试UX与visible-view全局调度仍待接入。当前只验证真实WebView里的headless callback，不是DOM绘制/IME/selection。未宣称S2/S11、history全部恢复或Windows/macOS验收；vendor/依赖锁和发布门禁未变。
 
 ## 检查结果
 
-- Rust：81 项 pulse-term 单元/属性测试通过（新增4项Marker顺序/容量/旧lease/取消/半条CSI/UTF8/BSU回归）；pulse-ipc 15项通过（新增Marker阶段/credit/64位边界）；pulse-app 33项测试通过（8项ACK driver、13项registry授权/撤销/资源边界、2项终态回收、2项native exit/stop判定、8项generation摘要比较/Marker请求）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
-- TS：73 项测试通过（新增3项Data idle Marker调度和2项Marker callback/ACK/unsupported/取消回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：84 项 pulse-term 单元/属性测试通过（新增3项原子修复授权/延期/CSI/UTF8/BSU与history回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 35项测试通过（新增Commit ACK前单修复及换绑/授权/限频回归）；额外178项原上游测试通过；原生适配器现11项测试通过（新增origin/整数/证据验证）；本轮未修改parser补丁或上游源码。
+- TS：76 项测试通过（新增3项Repair暂存/Commit callback/ACK/取消/unsupported及中断事务回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

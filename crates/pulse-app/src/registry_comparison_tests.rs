@@ -1,6 +1,67 @@
 #![allow(clippy::unwrap_used)]
 use super::super::tests::{bootstrap, config, session};
 use super::*;
+#[tokio::test]
+async fn repair_admission_is_authorized_generation_scoped_and_rate_bound() {
+    let registry = SessionRegistry::new();
+    let owner = registry.open_window().unwrap();
+    let other = registry.open_window().unwrap();
+    let (h, task, d) = session();
+    let id = registry.register(owner, h.clone()).unwrap();
+    let mut b = registry.attach(owner, id, config()).await.unwrap();
+    bootstrap(&registry, owner, id, &mut b).await;
+    let captured = h.diagnostic_digest().await.unwrap();
+    let rendered = RenderedScreen {
+        boundary: captured.boundary,
+        digest: captured.digest,
+    };
+    assert!(matches!(
+        registry
+            .request_repair(other, id, b.generation, rendered.clone())
+            .await,
+        Err(RegistryError::Forbidden)
+    ));
+    assert!(matches!(
+        registry
+            .request_repair(owner, id, b.generation + 1, rendered.clone())
+            .await,
+        Err(RegistryError::Stale)
+    ));
+    assert_eq!(
+        registry
+            .request_repair(owner, id, b.generation, rendered.clone())
+            .await
+            .unwrap(),
+        RepairAdmission::Equal
+    );
+    assert!(matches!(
+        registry
+            .request_repair(owner, id, b.generation, rendered.clone())
+            .await,
+        Err(RegistryError::Busy)
+    ));
+    tokio::time::sleep(MIN_INTERVAL).await;
+    let mut bad = rendered.clone();
+    bad.digest = "0000000000000000".into();
+    let pending = registry.request_repair(owner, id, b.generation, bad);
+    tokio::pin!(pending);
+    tokio::select! {biased; _=&mut pending=>panic!("request should await actor"),_=std::future::ready(())=>{}}
+    let mut replacement = registry.attach(owner, id, config()).await.unwrap();
+    assert!(matches!(pending.await, Err(RegistryError::Stale)));
+    bootstrap(&registry, owner, id, &mut replacement).await;
+    assert!(matches!(
+        registry
+            .request_repair(owner, id, replacement.generation, rendered)
+            .await,
+        Err(RegistryError::Busy)
+    ));
+    registry.close_window(owner).unwrap();
+    assert_eq!(h.state.borrow().lifecycle, Lifecycle::Running);
+    h.close();
+    drop(d);
+    task.join().await.unwrap();
+}
+
 use pulse_term::session::{DriverEndpoint, SessionHandle, SessionTask};
 #[tokio::test]
 async fn marker_request_is_authorized_rate_limited_and_cannot_cross_replacement() {
