@@ -357,6 +357,13 @@ mise run probe-pty
 - 成功report schema1包含逐跳pins/inner mismatch/destination拒绝/singleForwardCredit1/secondForward拒绝/nestedBytesExact/innerEofAndClose/both connections+relays drain/listener join并validator逐项要求。新增2单测验证exact owned loopback/port与单completed不足，SSH feature13 tests/clippy-Dwarnings通过；全默认check/test199TS/39app/89core/16IPC/6xtask与原K-I/real OpenSSH10server probes再运行成功。CI Linux新增调用，未取得远端CI；Cargo依赖/locks/CSP/audit配置未变。
 - S4仍未全验收：两个controlled endpoints不代表OpenSSH7–9/dropbear/真实多级跳板实现矩阵，生产Route连接池、任意目标/remote-forward、SFTP/Agent/FIDO2/证书/GBK、实际slow consumer SSH窗口压力与actor集成待验证。仍不开放用户endpoint或production credentials。
 
+## S4限制性用户证书认证/CA与subject持钥（Linux）
+
+- 新probe-ssh-certificate，临时Ed25519 CA/subject与独立pinned host，loopback controlled server仅certificate auth（其它方法不开放）、fixed exec。政策用Certificate.validate_at验证CA签名/可信SHA256指纹和时间，另补User类型、当前expected username、exact principal存在与critical_options空。仅verify_signature不能当信任，库validate也不自动验证principal/critical options；本test policy拒所有critical选项而非忽略force-command等限制。没有生产CA信任库/撤销政策/用户UI采用承诺。
+- 真实加密SSH连接依次使用6invalid cert：unknown CA/expired/future/wrong principal/Host type/critical force-command，全部authenticate failure；随后wrong username/不同leaf私钥搭配valid cert也明确失败，确保CA签名不等于client私钥持有证明。所有negative后accepted=0，再1valid cert authenticated、固定exec CERT_OK、exit7+EOF/Close/output drain，所有connections在server stop前独立归零，最后join listener。CA/keys只在内存，不采用户credential或写CA secret。
+- 2新增feature单测确定性timestamp100..200：100 inclusive/199 valid/99未来/200 expired、wrong CA/username/principal/type/options拒绝；显式Builder.all_principals_valid生成golden ticket也被此policy拒绝。report必须negativeCertificates6、wrongUsernameRejected/leafKeyOwnershipRequired及所有CA/time/type/principal/EOF/drain字段，单completed不足；15SSH-feature tests/clippy-Dwarnings、真实cert probe通过。默认check/test199TS/39app/89core/16IPC/6xtask及K-I/OpenSSH10server/jump probes再通过。
+- 新mise/xtask/CI及ssh-certificate.json已注册，本轮无新依赖/locks/审计配置变动，原6license/2maintenance release gate保持。受控认证证明不代替OpenSSH7–9/dropbear/实际企业CA/撤销UX、主机证书信任、Agent/FIDO2/PKCS11/密钥加密、GBK或production SSH actor/SFTP/转发验收，S4仍未全通过。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

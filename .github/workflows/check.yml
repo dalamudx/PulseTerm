@@ -53,6 +53,7 @@ jobs:
           sudo mkdir -p /run/sshd
           mise run probe-ssh-system
           mise run probe-ssh-jump
+          mise run probe-ssh-certificate
           mise exec -- cargo clippy -p xtask --features ssh-probe --all-targets --locked -- -D warnings
           mise exec -- cargo test -p xtask --features ssh-probe --locked
       - name: Exercise native actor and wire acknowledgment backpressure

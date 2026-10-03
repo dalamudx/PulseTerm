@@ -89,6 +89,10 @@ run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-system"
 description = "Validate separately pinned SSH hops and bounded direct-tcpip relay"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-jump"
 
+[tasks.probe-ssh-certificate]
+description = "Validate trusted CA, principal, validity and restrictive SSH certificate policy"
+run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-certificate"
+
 [tasks.desktop-build]
 description = "Build the native WebView validation app"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]
