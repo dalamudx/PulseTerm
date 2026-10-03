@@ -33,6 +33,19 @@ MPL 为文件级 copyleft，不等同于 GPL/AGPL；开发指南已允许在不�
 
 **建议的审查方向（未批准、未实施）**：跟踪 Tauri/GTK 依赖迁移，评估是否批准仅此公告的有理由、可复查例外。不得整体关闭 advisories，不得放行未来的实际漏洞公告。当前没有添加 ignore。
 
+## 单独升级 Wry 的核查结论
+
+用户选择保留 Tauri、优先检查升级 Wry。核查后没有改动 Cargo manifests 或 lockfile：
+
+- crates.io `cargo search wry` / `cargo info wry` 显示最新已发布版本为 **0.57.0**，项目实际已使用该版本；没有更高已发布版本可以升级。
+- 上游 `tauri-apps/wry` 的 `dev` 分支 manifest 仍为 0.57.0，Linux 仍依赖 GTK 0.18、gdkx11 0.18、WebKit2GTK 2.0.2。上游分支是可变来源，此结论只对应本次检查；没有把 git 分支引入项目。
+- Tauri 2.12.1 本身也直接依赖 GTK 0.18；因此仅改变 Wry 的 GTK 依赖并不能清除整个旧依赖链，还涉及 Tauri runtime、Tao 和菜单库等组件的配套兼容性。
+- 额外查看已发布的 `tauri-runtime-wry 3.0.0-alpha.4` manifest，仍要求 Wry 0.57.0、GTK 0.18。没有迁移到 Tauri 3 alpha；该预发布版本也不能证明当前维护公告已消除。
+
+证据来源：本地 `cargo tree --workspace --all-features -i wry`、已发布 crate 的 Cargo manifests，以及 [Wry 上游 manifest](https://github.com/tauri-apps/wry/blob/dev/Cargo.toml)。没有可升级版本，因此无需声称已完成升级构建/运行测试。
+
+**结论**：单独升级 Wry 暂不能解决 `proc-macro-error 1.0.4`。可行的下一步仍是评估两个旧版宏 crate 的定点补丁，或等待完整原生绑定栈升级；二者均未实施。升级路径与许可证审查互不替代，原有门禁保持失败。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。
