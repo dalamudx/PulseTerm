@@ -537,9 +537,17 @@ mise run probe-pty
 - 新mandatory peerReloadChecked加入typed SessionEvidence、TS与xtask两报告收据检查；native false拒、xtask缺/false/truthy值拒。2新增PageTracker负向tests，native42/strictclippy/bindingsdrift/tsc/Biome通过。实测v2和默认v1各两headless+两DOM run（各4真实reload），最终reports completed/peerReloadChecked及后续display receipts true；fullcheck/fulltests52app/93term/33IPC/12route/13xtask/215TS通过，MCP新probe无error诊断。
 - 之前目标迁移和Entry retirement也补做explicit encoding-probe实际GBK Window兼容：两GBK DOM run/双坐标/reverse input/新runtime-display receipts均过、40nativefeature/strictclippy/绑定漂移过，普通desktop仍不启用GBK，未新增deps/lock/CSP/audit豁免。当前新增reload的GBK/外部WM兼容尚未重跑。下一步需新页面权限mint/revoke与其真实renderer消费，不开放用户shell/任意导航；S11总体仍未完整验收。首次未知无report风险不宣称修复，releaseaudit仍blocked。
 
+## S11固定peer每页nonce与精确runtime窗口身份
+
+- PageTracker保留最多2次导航和一份watch投影，nonce由backend uuid mint；刷新retire前显式revoke，Started同样清current、保留previous仅给negative probe，Finished才生成新值。注入只在可信builder Finished、local origin和runtime身份检查之后用当前document eval，UUID为规范ASCII；不提供前端nonce getter RPC，不记录nonce明文。当前PageLoaded但未auth/旧nonce未拒都不能标第二页ready。
+- probe_session_peer现在需要run nonce+page nonce：Active只能由trustedbuilder一次绑定精确peer WindowToken，重复同token允许refresh，新/foreign/main token或wrongrun都在confirm/取oneshot前拒绝，不能将同label重建窗口当原peer。页面确认single-use。新document真实IPC脚本先尝试previousnonce并要求拒绝，再currentnonce确认；watch还强制previous拒绝标记+当前auth2，不能只看Finished2。旧nonce不复活、不消费newpage许可。
+- 2新增nonce单测覆盖explicitrevoke/no-greeting-getter、duplicate/previous/unknown、已加载未认证；1新增实际actor+Active测试覆盖未绑定/foreign/main/newtoken/wrongrun不会耗valid nonce或oneshot，正确peer随后成功，bind不可覆盖。native45/strictclippy/typeddrift/tsc/Biome与真实v1/v2各两headless+两DOM（各4reload）通过；fullcheck/fulltests52app/93term/33IPC/12route/13xtask/215TS通过。
+- 精确owner变更后的MCP window_sessions诊断超时，不算通过；此前将长shell与MCP放Promise.all导致fabric取消两条shell（status killed/无有效完成），未据此标通过。确认取消后顺序复验任务完整通过，source/controller注册和types以实际编译/tests为准，不安装语言服务器。首次无report未知风险依旧未声称修复。
+- 本scope只授予fixed peer的只读foreign-control拒绝探针，不授予peer自身input/ACK/attach：真实刷新后的画面仍Rust validator，不是授权新页面自己的DOM恢复。下一步把同页面nonce及owner门用于fixed peer只读Channel，native task继续应用所有，旧页面回调不得关PTY。不改变deps/lock/CSP/audit/release门禁，不标S11完成。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现42项测试通过（含目标迁移确认gate/旧guard及2项PageLoad有序计数/重复与乱序拒绝回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现45项测试通过（含PageLoad计数、2项每页nonce撤销/加载不等于认证回归及1项精确peer incarnation准入隔离）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：215 项测试通过（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

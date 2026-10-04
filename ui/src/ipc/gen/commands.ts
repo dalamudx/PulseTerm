@@ -36,7 +36,7 @@ export const commands = {
 	/**  Revoke exactly this viewer generation; registry never closes the session. */
 	probeSessionDetach: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_session_detach", { nonce, generation }),
 	probeSessionGo: (nonce: string) => __TAURI_INVOKE<null>("probe_session_go", { nonce }),
-	probeSessionPeer: (nonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce }),
+	probeSessionPeer: (nonce: string, pageNonce: string) => __TAURI_INVOKE<null>("probe_session_peer", { nonce, pageNonce }),
 };
 
 /** Events */

@@ -7,16 +7,42 @@ struct Pages {
     started: u8,
     finished: u8,
     invalid: bool,
+    authenticated: u8,
+    old_nonce_rejected: bool,
+}
+#[derive(Clone, Default)]
+struct Nonces {
+    current: Option<uuid::Uuid>,
+    previous: Option<uuid::Uuid>,
+}
+impl Pages {
+    fn ready(self, count: u8) -> bool {
+        !self.invalid
+            && self.started == count
+            && self.finished == count
+            && self.authenticated == count
+            && (count == 1 || self.old_nonce_rejected)
+    }
 }
 #[derive(Clone)]
-pub(super) struct PageTracker(watch::Sender<Pages>);
+pub(super) struct PageTracker {
+    events: watch::Sender<Pages>,
+    nonce: Arc<Mutex<Nonces>>,
+}
 impl PageTracker {
     pub(super) fn new() -> Self {
         let (tx, _) = watch::channel(Pages::default());
-        Self(tx)
+        Self {
+            events: tx,
+            nonce: Arc::new(Mutex::new(Nonces::default())),
+        }
     }
     pub(super) fn record(&self, event: PageLoadEvent) {
-        self.0.send_modify(|p| {
+        let Ok(mut nonces) = self.nonce.lock() else {
+            self.events.send_modify(|p| p.invalid = true);
+            return;
+        };
+        self.events.send_modify(|p| {
             if p.invalid {
                 return;
             }
@@ -25,6 +51,9 @@ impl PageTracker {
                     if p.started != p.finished || p.started >= 2 {
                         p.invalid = true;
                     } else {
+                        if let Some(old) = nonces.current.take() {
+                            nonces.previous = Some(old);
+                        }
                         p.started += 1;
                     }
                 }
@@ -32,14 +61,57 @@ impl PageTracker {
                     if p.started != p.finished + 1 {
                         p.invalid = true;
                     } else {
+                        nonces.current = Some(uuid::Uuid::new_v4());
                         p.finished += 1;
                     }
                 }
             }
+            if p.invalid {
+                nonces.current = None;
+            }
         });
     }
+    // Backend-only material for current-document eval. Never expose a nonce getter RPC.
+    pub(super) fn injection(&self) -> Result<(String, Option<String>)> {
+        let n = self.nonce.lock().map_err(error)?;
+        let p = self.snapshot();
+        require(!p.invalid && p.started == p.finished)?;
+        Ok((
+            n.current.ok_or("session.peer_page_not_ready")?.to_string(),
+            n.previous.map(|v| v.to_string()),
+        ))
+    }
+    fn revoke_nonce(&self) -> Result<()> {
+        let mut n = self.nonce.lock().map_err(error)?;
+        n.previous = n.current.take();
+        Ok(())
+    }
+    pub(super) fn confirm_nonce(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let n = self.nonce.lock().map_err(error)?;
+        if n.current != Some(parsed) {
+            if n.previous == Some(parsed) {
+                self.events.send_modify(|p| p.old_nonce_rejected = true);
+            }
+            return Err("session.peer_page_nonce_rejected".into());
+        }
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if !p.invalid
+                && p.started == p.finished
+                && p.authenticated + 1 == p.finished
+                && (p.finished == 1 || p.old_nonce_rejected)
+            {
+                p.authenticated = p.finished;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+
     fn snapshot(&self) -> Pages {
-        *self.0.borrow()
+        *self.events.borrow()
     }
 }
 fn require(value: bool) -> Result<()> {
@@ -57,20 +129,14 @@ pub(super) async fn verify(
     handle: &SessionHandle,
     pages: &PageTracker,
 ) -> Result<()> {
-    require(
-        pages.snapshot()
-            == Pages {
-                started: 1,
-                finished: 1,
-                invalid: false,
-            }
-            && state.caller(window)? == owner,
-    )?;
+    require(pages.snapshot().ready(1) && state.caller(window)? == owner)?;
     let old = transfer::capture(state, owner, id, handle).await?;
     let before = state.0.registry.state(owner, id).map_err(error)?;
     // Peer JS has never been granted access to this session: its only script probes
-    // forbidden main-session controls. No page token/nonce reuse is authorized here.
-    // Production adapters must revoke old page nonce/epoch BEFORE this registry step.
+    // forbidden main-session controls. Revoke its page nonce before retiring views;
+    // new nonce is injected only to the new local document after Finished.
+    let old_nonce = pages.injection()?.0;
+    pages.revoke_nonce()?;
     require(state.0.registry.retire_window_views(owner).map_err(error)? == 1)?;
     require(
         state
@@ -85,18 +151,14 @@ pub(super) async fn verify(
                 .await
                 .is_err(),
     )?;
-    let mut changed = pages.0.subscribe();
+    let mut changed = pages.events.subscribe();
     eprintln!("session.peer_reload.requested");
     window.reload().map_err(error)?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let p = *changed.borrow();
             require(!p.invalid)?;
-            if p == (Pages {
-                started: 2,
-                finished: 2,
-                invalid: false,
-            }) {
+            if p.ready(2) {
                 return Ok::<(), String>(());
             }
             changed.changed().await.map_err(error)?;
@@ -113,6 +175,7 @@ pub(super) async fn verify(
                 .get_webview_window(window.label())
                 .is_some(),
     )?;
+    require(pages.confirm_nonce(&old_nonce).is_err() && pages.injection()?.0 != old_nonce)?;
     let fresh = transfer::capture(state, owner, id, handle).await?;
     require(fresh.generation > old.generation)?;
     let old_result = tokio::time::timeout(Duration::from_secs(3), old.completion)
@@ -148,6 +211,52 @@ pub(super) async fn verify(
 mod tests {
     use super::*;
     #[test]
+    fn navigation_nonce_is_revoked_and_duplicate_or_old_page_confirmation_cannot_reauthorize() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        assert!(p.injection().is_err());
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().ok().map(|n| n.0).unwrap_or_default();
+        assert!(!old.is_empty());
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert!(p.snapshot().ready(1));
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.revoke_nonce().is_ok());
+        assert!(p.injection().is_err());
+        p.record(PageLoadEvent::Started);
+        assert!(p.confirm_nonce(&old).is_err());
+        p.record(PageLoadEvent::Finished);
+        let (current, previous) = p.injection().unwrap_or_default();
+        assert_ne!(current, old);
+        assert_eq!(previous.as_deref(), Some(old.as_str()));
+        assert!(p.confirm_nonce(&current).is_ok());
+        assert!(p.snapshot().ready(2));
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&current).is_err());
+    }
+    #[test]
+    fn loaded_page_is_not_ready_without_actual_old_nonce_rejection_and_current_confirmation() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.confirm_nonce(&old).is_ok());
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let fresh = p.injection().unwrap_or_default().0;
+        assert!(!p.snapshot().ready(2));
+        assert!(p.confirm_nonce(&fresh).is_err());
+        assert!(p.confirm_nonce(&uuid::Uuid::new_v4().to_string()).is_err());
+        assert!(!p.snapshot().old_nonce_rejected);
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&fresh).is_ok());
+        assert!(p.snapshot().ready(2));
+        p.record(PageLoadEvent::Started);
+        assert!(p.confirm_nonce(&fresh).is_err());
+        assert!(p.injection().is_err());
+    }
+
+    #[test]
     fn two_real_page_cycles_are_required_and_early_finish_is_not_ready() {
         let p = PageTracker::new();
         p.record(PageLoadEvent::Started);
@@ -158,7 +267,9 @@ mod tests {
             Pages {
                 started: 1,
                 finished: 1,
-                invalid: false
+                invalid: false,
+                authenticated: 0,
+                old_nonce_rejected: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -169,7 +280,9 @@ mod tests {
             Pages {
                 started: 2,
                 finished: 2,
-                invalid: false
+                invalid: false,
+                authenticated: 0,
+                old_nonce_rejected: false,
             }
         );
         p.record(PageLoadEvent::Started);

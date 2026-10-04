@@ -43,8 +43,33 @@ struct Active {
     nonce: String,
     id: SessionId,
     peer: Option<oneshot::Sender<bool>>,
+    peer_pages: reload::PageTracker,
+    peer_owner: Option<WindowToken>,
     visibility: Arc<crate::viewer_visibility::VisibilityGate>,
 }
+impl Active {
+    // Only the trusted builder callback binds the fixed peer incarnation. Never a JS label/token.
+    fn bind_peer(&mut self, owner: WindowToken) -> Result<()> {
+        if owner == self.owner || self.peer_owner.is_some_and(|known| known != owner) {
+            return Err("session.forbidden".into());
+        }
+        self.peer_owner = Some(owner);
+        Ok(())
+    }
+    fn admit_peer(
+        &mut self,
+        owner: WindowToken,
+        nonce: &str,
+        page_nonce: &str,
+    ) -> Result<(SessionId, Option<oneshot::Sender<bool>>)> {
+        if self.peer_owner != Some(owner) || self.owner == owner || self.nonce != nonce {
+            return Err("session.forbidden".into());
+        }
+        self.peer_pages.confirm_nonce(page_nonce)?;
+        Ok((self.id, self.peer.take()))
+    }
+}
+
 impl Default for WindowSessions {
     fn default() -> Self {
         Self::new(false, None, false, false)
@@ -904,15 +929,13 @@ pub(crate) async fn probe_session_peer(
     window: WebviewWindow,
     state: State<'_, WindowSessions>,
     nonce: String,
+    page_nonce: String,
 ) -> Result<()> {
     let owner = state.caller(&window)?;
     let (id, sender) = {
         let mut active = state.0.active.lock().map_err(error)?;
-        let run = active
-            .as_mut()
-            .filter(|run| run.nonce == nonce && run.owner != owner)
-            .ok_or("session.forbidden".to_string())?;
-        (run.id, run.peer.take())
+        let run = active.as_mut().ok_or("session.forbidden")?;
+        run.admit_peer(owner, &nonce, &page_nonce)?
     };
     let denied = state
         .0
@@ -980,22 +1003,22 @@ pub(crate) async fn probe_session(
         handle: handle.clone(),
     };
     let (peer_tx, peer_rx) = oneshot::channel();
+    let pages = reload::PageTracker::new();
     let visibility = Arc::new(crate::viewer_visibility::VisibilityGate::default());
     *state.0.active.lock().map_err(error)? = Some(Active {
         owner,
         nonce: nonce.clone(),
         id,
         peer: Some(peer_tx),
+        peer_pages: pages.clone(),
+        peer_owner: None,
         visibility: visibility.clone(),
     });
     let (peer_handle, peer_task) = native().await?;
     // Each window incarnation is installed on the runtime, never from a frontend label.
     let peer_state = state.clone();
-    let pages = reload::PageTracker::new();
     let loaded_pages = pages.clone();
-    let script = format!(
-        "void window.__TAURI_INTERNALS__.invoke('probe_session_peer',{{nonce:'{nonce}'}}).catch(console.error)"
-    );
+
     let peer = WebviewWindowBuilder::new(
         window.app_handle(),
         "session-peer",
@@ -1004,11 +1027,20 @@ pub(crate) async fn probe_session(
     .visible(false)
     .on_page_load(move |peer, payload| {
         loaded_pages.record(payload.event());
-        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
-            && peer_state.install(&peer).is_ok()
-            && peer.eval(&script).is_err()
-        {
-            eprintln!("session.peer_eval_failed");
+        let bound = if matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) {
+            peer_state.install(&peer).and_then(|owner|{
+                if peer_state.caller(&peer)?!=owner{return Err("session.forbidden".into());}
+                let mut active=peer_state.0.active.lock().map_err(error)?;
+                let run=active.as_mut().filter(|r|r.nonce==nonce).ok_or("session.forbidden")?;
+                run.bind_peer(owner)
+            })
+        } else {Err("session.peer_page_started".to_string())};
+        if matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) && bound.is_ok(){
+            if let Ok((current,previous))=loaded_pages.injection(){
+                let denied=previous.map(|old|format!("let denied=false;try{{await call({{nonce:'{nonce}',pageNonce:'{old}'}})}}catch{{denied=true}}if(!denied)throw new Error('session.peer_old_page_nonce_admitted');")).unwrap_or_default();
+                let script=format!("void(async()=>{{const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}})}})().catch(console.error)");
+                if peer.eval(&script).is_err(){eprintln!("session.peer_eval_failed");}
+            }else{eprintln!("session.peer_page_not_ready");}
         }
     })
     .build()
@@ -1199,6 +1231,60 @@ pub(crate) async fn probe_session(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn peer_admission_requires_the_bound_runtime_incarnation_before_consuming_nonce_or_sender()
+     {
+        use pulse_term::session::{ChannelTransport, spawn_session};
+        let registry = SessionRegistry::new();
+        let main = registry.open_window().unwrap();
+        let peer = registry.open_window().unwrap();
+        let foreign = registry.open_window().unwrap();
+        let (transport, driver) = ChannelTransport::bounded_driver();
+        let (handle, task) = spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+        let id = registry.register(main, handle).unwrap();
+        let pages = reload::PageTracker::new();
+        pages.record(tauri::webview::PageLoadEvent::Started);
+        pages.record(tauri::webview::PageLoadEvent::Finished);
+        let page_nonce = pages.injection().unwrap().0;
+        let (tx, mut rx) = oneshot::channel();
+        let mut run = Active {
+            owner: main,
+            nonce: "run".into(),
+            id,
+            peer: Some(tx),
+            peer_owner: None,
+            peer_pages: pages,
+            visibility: Arc::new(crate::viewer_visibility::VisibilityGate::default()),
+        };
+        assert!(run.admit_peer(peer, "run", &page_nonce).is_err());
+        assert!(run.bind_peer(main).is_err());
+        run.bind_peer(peer).unwrap();
+        run.bind_peer(peer).unwrap();
+        assert!(run.bind_peer(foreign).is_err());
+        assert!(run.admit_peer(foreign, "run", &page_nonce).is_err());
+        assert!(run.admit_peer(main, "run", &page_nonce).is_err());
+        assert!(run.admit_peer(peer, "wrong-run", &page_nonce).is_err());
+        assert!(matches!(
+            rx.try_recv(),
+            Err(oneshot::error::TryRecvError::Empty)
+        ));
+        let (accepted, sender) = run.admit_peer(peer, "run", &page_nonce).unwrap();
+        assert_eq!(accepted, id);
+        sender.unwrap().send(true).unwrap();
+        assert!(rx.await.unwrap());
+        assert!(run.admit_peer(peer, "run", &page_nonce).is_err());
+        registry.close_session(main, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop(driver);
+    }
+
     #[test]
     fn finite_input_validation_uses_utf8_byte_budget_and_rejects_controls() {
         for input in ["typed", "中文🌍", "\r"] {
