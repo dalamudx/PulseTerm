@@ -80,8 +80,17 @@ async fn maximum_source_chunk_expands_into_bounded_ordered_display_records() {
     }
     assert_eq!(rendered, "中".repeat(MAX_CHUNK / 2).as_bytes());
     handle.close();
+    // Keep the producer alive until cancellation commits: dropping it here races
+    // normal EOF against the actor's deliberately fair select.
+    assert_eq!(
+        timeout(Duration::from_secs(1), task.join())
+            .await
+            .unwrap()
+            .unwrap()
+            .lifecycle,
+        Lifecycle::Closed
+    );
     drop(driver);
-    assert_eq!(task.join().await.unwrap().lifecycle, Lifecycle::Closed);
 }
 #[tokio::test]
 async fn reverse_input_and_query_encoding_refuse_unrepresentable_input_without_writing() {
