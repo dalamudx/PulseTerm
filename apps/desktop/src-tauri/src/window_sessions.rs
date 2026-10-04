@@ -1,4 +1,6 @@
 //! Local-only session validation. No user shell, remote navigation or frontend owner token.
+#[path = "encoding_probe.rs"]
+pub(crate) mod encoding_probe;
 use crate::raw_frame::RawFrame;
 use pulse_app::attachment::AttachmentConfig;
 use pulse_app::registry::{
@@ -26,6 +28,7 @@ struct Inner {
     slot: Arc<Semaphore>,
     minimize: bool,
     dual: bool,
+    encoding: bool,
     external_control: Option<std::path::PathBuf>,
 }
 struct Active {
@@ -37,7 +40,7 @@ struct Active {
 }
 impl Default for WindowSessions {
     fn default() -> Self {
-        Self::new(false, None, false)
+        Self::new(false, None, false, false)
     }
 }
 impl WindowSessions {
@@ -45,6 +48,7 @@ impl WindowSessions {
         minimize: bool,
         external_control: Option<std::path::PathBuf>,
         dual: bool,
+        encoding: bool,
     ) -> Self {
         Self(Arc::new(Inner {
             registry: SessionRegistry::new(),
@@ -54,6 +58,7 @@ impl WindowSessions {
             slot: Arc::new(Semaphore::new(1)),
             minimize,
             dual,
+            encoding,
             external_control,
         }))
     }

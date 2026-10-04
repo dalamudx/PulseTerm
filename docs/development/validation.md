@@ -420,9 +420,18 @@ mise run probe-pty
 - 最终default-v1真实probe-channel completed、typed bindings-check、workspacecheck/tsc/Biome/nativeclippy-Dwarnings再次成功，先前v2有36native tests/210TS，xtask新mode单测通过；CI新增Linuxv2但保留v1/WM测试。无newdependencies/locks/audit/CSP改变。既有native_visibility采样一次失败仍rootcause未定位，不能因最终通过宣称全解决。
 - 当前完成v2固定UTF8真实窗口组合，不是productioncharset；GBK DOM、binary/Zmodem预分类、temporary charset切换、真实设备、Windows/macOS依然pending。release6license/2maintenance门禁不放宽。
 
+## 显式验证特性的GBK双坐标真实Channel/DOM样例
+
+- 新desktop encoding-probe feature显式启用pulse-term/validation，default/desktop不自动启用。默认compiled命令只返回encoding.validation_feature_required，--probe-encoding不带feature直接exit1、不启动GUI；terminal-api-check仍确认默认外部consumer无法访问GBK/replay/Echo。generated command surface在两feature中一致，避免drift，但生产textclassification尚未实现。
+- 新mise desktop-encoding-build/probe-encoding-window与xtask独立encoding-window.json，only固定已分类文本，不创建用户shell/远端连接/任意charset入口。复用WindowSessions可信owner/nonce/独占slot/RunGuard和registry.attach_v2，fixedinput只中文/确认，旧generation ACK不能影响新binding，任何error走guard撤销/关闭并清理。CI显式build模式与原默认v1/v2/WM验证分别保留。
+- 实测两轮GBK actor→Raw Channel ArrayBuffer→AttachmentV2Consumer→可见DOM→callback ACK成功。history15row+半lead初始capture source76/display75，两generation准确恢复；Commit渲染后才输入握手，后端driver收到D6D0CEC4/C8B7C8CF反编码。续流lead产生pureMarker source78/display78，只render fence不写VT，cursor/baseY不变；trail续流中文/GBK_OK，最终source89/UTF891/revision5/digest78682c0fbbb6bc30与backend一致。report replacement1、145frames、peak64、DOM12行、history/sourceOnlyMarker/reverseInput/callbackAck全true；原2headless/2UTF8DOM/7测量也完成。
+- 不走等坐标UTF8 shim，renderer只接columns/rows用于几何，所有V2控制事件保留完整两计数；双坐标final/digest及history实际检查，不能把headlessproducer预ACK称为这轮真实ACK。2新native证据回归raw==display伪成功/缺DOM/无ACK/信用65/旧replacement/非法counter拒绝；xtask新增缺字段/无renderACK/同坐标负向。第2case失败保留第1成功和原error，但不能completedtrue；额外native报告回归证明该边界。
+- 最终普通v2重建（encodingRuns0、encodingnull）/check/fulltests/GBKheadless/encoding-probe严格clippy全通过；核心93term/45app/23IPC、39native、210TS、8xtask。defaultAPI隔离/GBKmode明确拒绝及bindings-check通过，Astrolabe Rust新模块无error诊断；TS证据来自tsc。无lock/newdependency版本/CSP/audit豁免；only featureedge启用已有encoding_rs。
+- 未完成：真实GBK SSH/PTY传输与设备端画面、binary/Zmodem预分类、临时charset切换、生产入口、三平台/IME。已批准strict策略仅对分类fixture有效，不能标S2/S4全通过。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现7项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
 - TS：210 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

@@ -428,6 +428,8 @@ fn probe_finish(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProbeReport {
     schema_version: u32,
+    encoding: Option<crate::window_sessions::encoding_probe::EncodingEvidence>,
+    encoding_runs: u32,
     completed: bool,
     cancellation: bool,
     typed_events: bool,
@@ -492,6 +494,25 @@ impl DomEvidence {
 fn window_mode_matches(minimize: bool, dom: Option<bool>, headless: Option<bool>) -> bool {
     dom == Some(minimize) && headless == Some(false)
 }
+fn validate_encoding_evidence(
+    evidence: Option<&crate::window_sessions::encoding_probe::EncodingEvidence>,
+    runs: u32,
+    version: Option<u8>,
+    completed: bool,
+) -> ProbeResult<()> {
+    // Keep errors from failed run two alongside the completed first case.
+    if runs > 2 || evidence.is_some() != (runs > 0) {
+        return Err("probe.encoding_evidence_missing".into());
+    }
+    if let Some(e) = evidence {
+        e.validate()?;
+        if version != Some(2) || (completed && runs != 2) {
+            return Err("probe.unexpected_encoding_evidence".into());
+        }
+    }
+    Ok(())
+}
+
 impl ProbeReport {
     fn validate_window_mode(&self, minimize: bool) -> ProbeResult<()> {
         if self.completed
@@ -507,6 +528,12 @@ impl ProbeReport {
     }
 
     fn validate(&self) -> ProbeResult<()> {
+        validate_encoding_evidence(
+            self.encoding.as_ref(),
+            self.encoding_runs,
+            self.session.as_ref().map(|s| s.attachment_version),
+            self.completed,
+        )?;
         if self.schema_version != 4
             || self.measurements.len() > 7
             || (self.completed
@@ -619,6 +646,9 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             probe_event,
             crate::window_sessions::probe_session,
             crate::window_sessions::probe_session_protocol,
+            crate::window_sessions::encoding_probe::probe_encoding,
+            crate::window_sessions::encoding_probe::probe_encoding_mode,
+            crate::window_sessions::encoding_probe::probe_encoding_input,
             crate::window_sessions::probe_session_ack,
             crate::window_sessions::probe_session_compare,
             crate::window_sessions::probe_session_repair,
@@ -699,7 +729,12 @@ pub fn run() {
     } else {
         None
     };
-    let dual = args.iter().any(|arg| arg == "--probe-v2");
+    let encoding = args.iter().any(|arg| arg == "--probe-encoding");
+    if encoding && !cfg!(feature = "encoding-probe") {
+        eprintln!("encoding.validation_feature_required");
+        std::process::exit(1);
+    }
+    let dual = encoding || args.iter().any(|arg| arg == "--probe-v2");
     let automatic = minimize || dual || args.iter().any(|arg| arg == "--probe");
     let report_path = args
         .iter()
@@ -717,7 +752,12 @@ pub fn run() {
     let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
-        .manage(WindowSessions::new(minimize, external_control, dual))
+        .manage(WindowSessions::new(
+            minimize,
+            external_control,
+            dual,
+            encoding,
+        ))
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);
@@ -877,9 +917,22 @@ mod tests {
         }
     }
     #[test]
+    fn encoding_failure_report_keeps_first_success_without_claiming_completion() {
+        let e=serde_json::from_value(serde_json::json!({"generation":"2","sourceBytes":"89","utf8Bytes":"91","revision":"5","digest":"78682c0fbbb6bc30","frames":145,"peakCreditBytes":64,"replacements":1,"reverseInputChecked":true,"sourceOnlyMarker":true,"domRowsChecked":12,"historyChecked":true,"callbackAckChecked":true})).unwrap();
+        assert!(validate_encoding_evidence(Some(&e), 1, Some(2), false).is_ok());
+        assert!(validate_encoding_evidence(Some(&e), 1, Some(2), true).is_err());
+        assert!(validate_encoding_evidence(Some(&e), 2, Some(2), true).is_ok());
+        assert!(validate_encoding_evidence(Some(&e), 2, Some(1), true).is_err());
+        assert!(validate_encoding_evidence(None, 0, Some(1), false).is_ok());
+        assert!(validate_encoding_evidence(None, 1, Some(2), false).is_err());
+    }
+
+    #[test]
     fn report_validation_requires_version_and_real_evidence() {
         let mut report = ProbeReport {
             schema_version: 4,
+            encoding: None,
+            encoding_runs: 0,
             completed: false,
             cancellation: false,
             typed_events: false,

@@ -1,13 +1,13 @@
-# 字符编码与终端恢复边界：待决协议取舍
+# 字符编码与终端恢复边界：已采纳双坐标协议
 
-状态：Accepted（用户确认方案 A：版本化双坐标）。实施中；v1/actor 暂不改义。证据来自 S4 GBK probe 与现有 actor/attachment 实现。
+状态：Accepted（用户确认方案 A：版本化双坐标）。v2、actor和注册层已实现，并取得固定UTF8/GBK真实WebView证据；不等于生产字符编码或远端设备验收。v1/parsed_bytes仍保留原始source语义。
 
 ## 已知约束与证据
 
 - ADR-027：原始字节先做二进制传输（如 Zmodem）分类，文本在后端转成 UTF-8，parser/前端只接 UTF-8；输入反向转换。
-- `SessionState.parsed_bytes` 当前按 actor 收到的 `Vec<u8>` 长度递增，尚无 charset decoder。
-- `attach::Boundary.parsed_bytes` 与 terminal-attachment 文档明确是原始输出边界，不能直接当转码后的字节数；该文档已标非 UTF-8 的双坐标未实现。
-- attachment driver 检查 `start + bytes.len() == state.parsed_bytes`，frontend receiver 也按实际 Data body 长度推进同一个 live cursor。
+- `SessionState.parsed_bytes`按原始source递增，utf8_bytes按归一化输出递增；验证特性有strictGBK decoder，跨lease存活。生产binary preclassifier/charset切换尚未接入。
+- v1 parsed_bytes保留原始输出边界并拒绝非UTF8会话；attach_v2分别携带source/UTF8游标，不能用一个替代另一个。
+- 原单坐标假设已迁移：driver/frontend Data连续性按utf8_bytes/bodylen，source单调推进并支持无显示Marker；ACK只按实际wire信用释放。
 - 实测固定 GBK Chinese/ANSI/DSR fixture 原始 33 bytes、UTF-8 43 bytes；全部 1..33 分块保持 scalar、cells 和 query replies。直接接一个 decoder 而保留单坐标会使下一块 offset/EOF/summary 不一致。
 - 半个 GBK 字符可先消耗原始 1 byte、暂不产生 UTF-8；下一 byte 可能产生 3 UTF-8 bytes。快照只需要当前显示状态，decoder pending 状态仍由同一个 backend session 保留。
 
@@ -19,7 +19,7 @@
 - render只理解UTF-8，ACK额度仍按实际wire frame字节，不用raw或normalized累计计数代替credit。
 - generation/revision/两坐标共同比较，旧或仅一个坐标一致的摘要不能清风险；encoding切换需要明确decoder pending处理和新边界。
 - 需要attachment v2或显式可协商扩展：Rust sender/driver、TS receiver/consumer、headless/DOM/CLI fixtures和public DTO同步迁移；旧v1必须明确拒绝非UTF-8而非误解析。不混用两版frame。
-- 已获用户确认；当前没有production consumer/历史持久化迁移承诺。独立v2编解码与actor/driver正在实施，生产窗口暂继续v1-only。
+- 已获用户确认；v2编解码/actor/driver/registry已实现。固定UTF8-v2和显式encoding-probe GBK窗口验证通过，默认桌面无validation feature，不开放生产GBK；历史持久化仍未承诺迁移。
 
 示意（不是最终binary layout）：
 

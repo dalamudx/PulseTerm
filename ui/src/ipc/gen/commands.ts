@@ -15,6 +15,9 @@ export const commands = {
 	probeEvent: (nonce: string) => __TAURI_INVOKE<null>("probe_event", { nonce }),
 	probeSession: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel }),
 	probeSessionProtocol: () => __TAURI_INVOKE<number>("probe_session_protocol"),
+	probeEncoding: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<EncodingEvidence>("probe_encoding", { nonce, channel }),
+	probeEncodingMode: () => __TAURI_INVOKE<boolean>("probe_encoding_mode"),
+	probeEncodingInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_encoding_input", { nonce, generation, text }),
 	probeSessionAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_session_ack", { nonce, generation, sequence }),
 	probeSessionCompare: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<ComparisonEvidence>("probe_session_compare", { nonce, generation, rendered }),
 	probeSessionRepair: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<RepairEvidence>("probe_session_repair", { nonce, generation, rendered }),
@@ -71,6 +74,22 @@ export type DomEvidence = {
 	activeParkChecked: boolean,
 };
 
+export type EncodingEvidence = {
+	generation: string,
+	sourceBytes: string,
+	utf8Bytes: string,
+	revision: string,
+	digest: string,
+	frames: number,
+	peakCreditBytes: number,
+	replacements: number,
+	reverseInputChecked: boolean,
+	sourceOnlyMarker: boolean,
+	domRowsChecked: number,
+	historyChecked: boolean,
+	callbackAckChecked: boolean,
+};
+
 export type NativeVisibilitySample = {
 	incarnation: string,
 	revision: number,
@@ -110,6 +129,8 @@ export type ProbeMeasurement = {
 
 export type ProbeReport = {
 	schemaVersion: number,
+	encoding: EncodingEvidence | null,
+	encodingRuns: number,
 	completed: boolean,
 	cancellation: boolean,
 	typedEvents: boolean,

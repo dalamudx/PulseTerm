@@ -85,6 +85,9 @@ jobs:
       - name: Validate external WM-only terminal view lifecycle
         if: runner.os == 'Linux'
         run: mise run probe-window-external
+      - name: Validate classified GBK actor recovery in the real WebView
+        if: runner.os == 'Linux'
+        run: mise run probe-encoding-window
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: mise run audit

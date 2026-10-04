@@ -31,7 +31,7 @@ export interface DomRenderer {
  * Paste is blocked (no production paste approval UX); no arbitrary shell. */
 export function createDomRenderer(
   host: HTMLElement,
-  boundary: AttachBoundary,
+  boundary: Pick<AttachBoundary, "columns" | "rows">,
   signal: AbortSignal,
 ): DomRenderer {
   if (signal.aborted || !host.isConnected)

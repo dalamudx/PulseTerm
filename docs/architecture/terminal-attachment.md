@@ -20,7 +20,7 @@
 - 无显示输出的decoder pending消费以同队列Marker发布source增量，UTF8不动，不feed VT/flush sync。Checkpoint/End要求source和UTF8都与当前stream一致，revision不回退。RepairBegin/Bytes/Commit保持两个游标，source变化或一个游标不符均拒；History/Restore/RepairBytes的offset仍section-local。
 - Begin/history/restore/repair staging界限不变；credit按实际v2 envelope+body（outer6byte header独立），不以raw或UTF8累计量释放。NoCredit不能变任何游标/阶段；旧generation ACK拒绝。Consumer先有界staging，完整Commit后render，write/marker/repair/EOF callback完成后ACK，取消或迟到callback不ACK。
 - actor SessionState保留parsed_bytes=原始source，再加utf8_bytes/source_is_utf8；完整状态比较天然同时包括两坐标与encoding mode，不能只依据source一致清除风险。validation-only spawn_gbk_text_session使用已分类GBK文本，decoder跨detach/lease存活、input和query反向编码。raw≤64KiB，单次UTF8展开≤3×64KiB+4工作buffer，再≤64KiBrecords，满队列阻止继续解析和transport读取；多出的decoder scratch/pending内存须计入预算。
-- 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实GBK设备/GBK窗口DOM验收仍待完成；固定UTF8-v2已通过Linux2headless/2DOM/resize3/pause2组合。
+- 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实GBK设备/生产预分类仍待完成；固定UTF8-v2已通过Linux2headless/2DOM/resize3/pause2组合，显式encoding-probe已通过两轮GBK actor→真实Channel→DOM半字符跨重绑/历史/反向输入/纯状态Marker/EOF，不能称远端SSH/PTY GBK验收。
 
 ## 原子live诊断lease
 

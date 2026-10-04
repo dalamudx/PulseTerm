@@ -8,6 +8,8 @@ publish = false
 
 [features]
 default = []
+# Classified fixtures only; never enabled by desktop/default or production builds.
+encoding-probe = ["desktop", "pulse-term/validation"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
 
 [[bin]]

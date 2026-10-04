@@ -109,6 +109,15 @@ run = ["cargo xtask probe-encoding-attachment", "pnpm --filter ui exec tsx scrip
 description = "Build the native WebView validation app"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]
 
+[tasks.desktop-encoding-build]
+description = "Build explicit classified-GBK validation app, not the default desktop"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features encoding-probe --locked"]
+
+[tasks.probe-encoding-window]
+description = "Validate GBK dual-coordinate recovery through actual Channel and DOM callbacks"
+depends = ["desktop-encoding-build"]
+run = "cargo xtask probe-encoding-window"
+
 [tasks.desktop-check]
 description = "Check desktop adapter and frontend assets"
 run = ["pnpm --filter ui build", "cargo clippy -p pulseterm-desktop --features desktop --all-targets --locked -- -D warnings"]

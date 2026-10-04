@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-# Explicitly opted-in by xtask only; never enable in the desktop dependency.
+# Explicit probes only (xtask / desktop encoding-probe); never default desktop.
 validation = ["dep:encoding_rs"]
 
 [dependencies]

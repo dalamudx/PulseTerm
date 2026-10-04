@@ -6,26 +6,31 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
-    run_mode(false, false, false)
+    run_mode(false, false, false, false)
 }
 pub fn run_window() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("probe-window currently requires isolated Linux X11/Openbox");
     }
-    run_mode(true, false, false)
+    run_mode(true, false, false, false)
 }
 pub fn run_window_external() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("external window probe requires isolated X11/Openbox");
     }
-    run_mode(true, true, false)
+    run_mode(true, true, false, false)
 }
 pub fn run_v2() -> Result<()> {
-    run_mode(false, false, true)
+    run_mode(false, false, true, false)
 }
-fn run_mode(minimize: bool, external: bool, dual: bool) -> Result<()> {
+pub fn run_encoding() -> Result<()> {
+    run_mode(false, false, true, true)
+}
+fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool) -> Result<()> {
     let root = super::root()?;
-    let report = root.join(if dual {
+    let report = root.join(if encoding {
+        "target/probes/encoding-window.json"
+    } else if dual {
         "target/probes/channel-v2.json"
     } else if external {
         "target/probes/window-external.json"
@@ -79,7 +84,9 @@ fn run_mode(minimize: bool, external: bool, dual: bool) -> Result<()> {
     };
     command
         .args([
-            if dual {
+            if encoding {
+                "--probe-encoding"
+            } else if dual {
                 "--probe-v2"
             } else if external {
                 "--probe-window-external"
@@ -114,6 +121,12 @@ fn run_mode(minimize: bool, external: bool, dual: bool) -> Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     };
     validate(&report, minimize, external, dual)?;
+    let actual: Value = serde_json::from_slice(&std::fs::read(&report)?)?;
+    if encoding {
+        validate_encoding(&actual)?;
+    } else if actual["encodingRuns"] != 0 || !actual["encoding"].is_null() {
+        bail!("unexpected GBK evidence outside explicit encoding mode");
+    }
     if external {
         let actions = root.join("target/probes/window-external-actions.log");
         if std::fs::metadata(&actions)?.len() > 128 {
@@ -151,6 +164,47 @@ fn validate_external_actions(text: &str) -> Result<()> {
             bail!("external WM action ordering or generation mismatch");
         }
         previous = numeric;
+    }
+    Ok(())
+}
+
+fn validate_encoding(report: &Value) -> Result<()> {
+    let e = &report["encoding"];
+    if report["encodingRuns"] != 2
+        || e["sourceBytes"] != "89"
+        || e["utf8Bytes"] != "91"
+        || e["replacements"] != 1
+        || e["domRowsChecked"] != 12
+        || [
+            "reverseInputChecked",
+            "sourceOnlyMarker",
+            "historyChecked",
+            "callbackAckChecked",
+        ]
+        .iter()
+        .any(|key| e[key] != true)
+        || e["peakCreditBytes"]
+            .as_u64()
+            .is_none_or(|n| n == 0 || n > 64)
+        || e["frames"]
+            .as_u64()
+            .is_none_or(|n| !(4..=16384).contains(&n))
+        || e["generation"]
+            .as_str()
+            .and_then(|s| s.parse::<u64>().ok())
+            .is_none_or(|n| n == 0)
+        || e["revision"]
+            .as_str()
+            .and_then(|s| s.parse::<u64>().ok())
+            .is_none_or(|n| n == 0)
+        || e["digest"].as_str().is_none_or(|s| {
+            s.len() != 16
+                || !s
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    {
+        bail!("missing actual GBK actor/Channel/DOM evidence");
     }
     Ok(())
 }
@@ -291,6 +345,21 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn encoding_receipt_rejects_utf8_only_missing_render_or_unbounded_credit() {
+        let mut r = serde_json::json!({"encodingRuns":2,"encoding":{"sourceBytes":"89","utf8Bytes":"91","generation":"2","revision":"20","digest":"9e1323ca657a4985","replacements":1,"frames":100,"peakCreditBytes":64,"domRowsChecked":12,"reverseInputChecked":true,"sourceOnlyMarker":true,"historyChecked":true,"callbackAckChecked":true}});
+        assert!(validate_encoding(&r).is_ok());
+        r["encoding"]["utf8Bytes"] = serde_json::json!("89");
+        assert!(validate_encoding(&r).is_err());
+        r["encoding"]["utf8Bytes"] = serde_json::json!("91");
+        r["encoding"]["callbackAckChecked"] = serde_json::json!(false);
+        assert!(validate_encoding(&r).is_err());
+        r["encoding"]["callbackAckChecked"] = serde_json::json!(true);
+        r["encoding"]["peakCreditBytes"] = serde_json::json!(65);
+        assert!(validate_encoding(&r).is_err());
+        assert!(validate_encoding(&serde_json::json!({})).is_err());
+    }
+
     #[test]
     fn attachment_version_evidence_cannot_substitute_v1_for_v2_or_mix_runs() {
         for dual in [false, true] {

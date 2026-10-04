@@ -1,4 +1,10 @@
-import type { DomEvidence, SessionEvidence } from "../../ipc/gen/commands";
+import { verifyEncodingWindow } from "../../ipc/encoding-window-probe";
+import type {
+  DomEvidence,
+  EncodingEvidence,
+  SessionEvidence,
+} from "../../ipc/gen/commands";
+import { commands } from "../../ipc/gen/commands";
 import {
   automaticMode,
   finishReport,
@@ -107,6 +113,8 @@ export async function start(): Promise<void> {
   let domSession: SessionEvidence | null = null;
   let domEvidence: DomEvidence | null = null;
   let domRuns = 0;
+  let encoding: EncodingEvidence | null = null;
+  let encodingRuns = 0;
   let failure: string | null = null;
   try {
     update({ status: "session-channel" });
@@ -172,6 +180,17 @@ export async function start(): Promise<void> {
         update({ measurements: [...results] });
       }
     }
+    if (await commands.probeEncodingMode()) {
+      const host = terminalHost,
+        life = surfaceLife;
+      if (!host || !life || !host.isConnected)
+        throw new Error("encoding.dom_host_missing");
+      for (let i = 0; i < 2; i++) {
+        update({ status: `encoding-dom-${i + 1}` });
+        encoding = await verifyEncodingWindow(host, life.signal);
+        encodingRuns++;
+      }
+    }
     update({ status: "cancellation" });
     cancellation = await verifyCancellation();
     if (!cancellation) throw new Error("probe.cancellation_bound");
@@ -191,6 +210,8 @@ export async function start(): Promise<void> {
     update({ running: false });
     await finishReport({
       schemaVersion: 4,
+      encoding,
+      encodingRuns,
       domSession,
       domEvidence,
       domRuns,

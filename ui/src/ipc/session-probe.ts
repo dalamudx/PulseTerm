@@ -53,7 +53,7 @@ function color(cell: IBufferCell, foreground: boolean): string {
     ? `rgb:${(value >>> 16) & 255},${(value >>> 8) & 255},${value & 255}`
     : `idx:${value}`;
 }
-function digest(terminal: ProbeTerminal): string {
+export function digest(terminal: ProbeTerminal): string {
   const buffer = terminal.buffer.active;
   return screenDigest({
     cells: Array.from({ length: terminal.rows }, (_, row) =>
