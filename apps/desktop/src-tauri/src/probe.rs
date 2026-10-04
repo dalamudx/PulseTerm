@@ -700,6 +700,25 @@ fn export_bindings(check: bool) -> ProbeResult<()> {
 /// Launch the local-only validation app. No product sessions are exposed yet.
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    let cli_window = args.iter().any(|a| a == "--probe-cli-window");
+    if args.iter().any(|a| a == "--cli-window-helper") {
+        #[cfg(all(feature = "cli-window-probe", unix))]
+        {
+            if crate::cli_window_probe::helper().is_err() {
+                std::process::exit(2);
+            }
+            return;
+        }
+        #[cfg(not(all(feature = "cli-window-probe", unix)))]
+        {
+            eprintln!("cliwindow.validation_feature_required");
+            std::process::exit(1);
+        }
+    }
+    if cli_window && !cfg!(all(feature = "cli-window-probe", unix)) {
+        eprintln!("cliwindow.validation_feature_required");
+        std::process::exit(1);
+    }
     if args.iter().any(|arg| arg == "--session-probe-child") {
         if crate::window_sessions::child().is_err() {
             std::process::exit(2);
@@ -750,6 +769,16 @@ pub fn run() {
         report_path,
     };
     let bindings = command_bindings();
+    let cli_path = if cli_window {
+        state.report_path.clone()
+    } else {
+        None
+    };
+    if cli_window && (cli_path.is_none() || automatic) {
+        eprintln!("cliwindow.report_and_exclusive_mode_required");
+        std::process::exit(1);
+    }
+    let cli_started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let result = tauri::Builder::default()
         .manage(state)
         .manage(WindowSessions::new(
@@ -759,6 +788,20 @@ pub fn run() {
             encoding,
         ))
         .invoke_handler(bindings.invoke_handler())
+        .on_page_load(move |webview, payload| {
+            #[cfg(all(feature = "cli-window-probe", unix))]
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
+                && !cli_started.swap(true, std::sync::atomic::Ordering::SeqCst)
+                && let Some(path) = cli_path.clone()
+            {
+                crate::cli_window_probe::launch(webview.app_handle().clone(), path);
+            }
+            #[cfg(not(all(feature = "cli-window-probe", unix)))]
+            {
+                let _ = (&webview, &payload, &cli_path, &cli_started);
+            }
+        })
         .setup(move |app| {
             bindings.mount_events(app);
             let window = app

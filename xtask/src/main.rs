@@ -5,6 +5,8 @@ mod attachment_probe;
 mod channel_probe;
 #[cfg(all(feature = "cli-probe", unix))]
 mod cli_probe;
+#[cfg(all(feature = "cli-probe", unix))]
+mod cli_window_probe;
 mod encoding_attachment_probe;
 #[cfg(feature = "ssh-probe")]
 mod gbk_probe;
@@ -117,6 +119,12 @@ fn main() -> Result<()> {
             ssh_certificate_probe::run()?;
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-certificate requires --features ssh-probe");
+        }
+        Some("probe-cli-window") => {
+            #[cfg(all(feature = "cli-probe", unix))]
+            cli_window_probe::run()?;
+            #[cfg(not(all(feature = "cli-probe", unix)))]
+            bail!("probe-cli-window requires Unix --features cli-probe");
         }
         Some("probe-cli") => {
             #[cfg(all(feature = "cli-probe", unix))]

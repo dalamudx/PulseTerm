@@ -1,5 +1,7 @@
 //! Desktop adapter. Native dependencies are opt-in for headless core checks.
 
+#[cfg(all(feature = "cli-window-probe", unix))]
+mod cli_window_probe;
 #[cfg(feature = "desktop")]
 mod native_visibility;
 #[cfg(feature = "desktop")]

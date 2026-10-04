@@ -10,6 +10,7 @@ publish = false
 default = []
 # Classified fixtures only; never enabled by desktop/default or production builds.
 encoding-probe = ["desktop", "pulse-term/validation"]
+cli-window-probe = ["desktop", "dep:tempfile", "dep:zeroize", "tokio/io-util", "tokio/process"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
 
 [[bin]]
@@ -26,6 +27,8 @@ pulse-pty = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tempfile = { workspace=true, optional=true }
+zeroize = { workspace=true, optional=true }
 tauri = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true }

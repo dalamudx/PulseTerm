@@ -328,6 +328,7 @@ pub struct ActionDef {
 - 消息格式为 JSON-RPC 2.0，当前验证子集为object请求/string id/object params（不接受batch/notification/numeric id）。每条消息前加4字节小端u32长度，body≤64KiB，分帧只返回一条以便上层预算。建立连接时先发送`hello {protocolVersion:1, token}`；错误认证/重复hello/id/128请求预算耗尽均撤销连接，不执行任何动作。
 - 当前pulse-ipc::cli提供有界codec与SessionAuth，不负责OS peer权限或Capability授权；token恒定时间比较，拥有secret的wire buffer/expected token/消费的hello token零化且无Debug。CLI准入后仍必须走共享Capability注册表及风险确认；nativeUnix探针只允许固定只读ping，不是生产interprocess/Windows管道实现。
 - token 在每次启动时随机生成，写入运行时目录中权限为 0600 的文件。
+- S5固定native验证中，CLI响应只确认真实窗口注册/visible状态，不声称页面已加载或compositor首帧；page-load/Destroyed另外监督。Linux样例native客户端收据约8–12ms而WebView页面加载约330ms，不能把前者当生产窗口完整可用50ms或冷启动验收。defaultdesktop不含cli-window-probe，未开放生产CLI窗口请求。
 - 主进程没有运行时，CLI 以 `--startup-actions` 参数启动 `pulseterm-desktop`，参数中带上本次的请求。`single-instance` 插件负责处理启动过程中的竞争（例如同时运行了两次 CLI）。
 
 ## 13. 错误模型

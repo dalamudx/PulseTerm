@@ -454,6 +454,14 @@ mise run probe-pty
 - fulltests发现旧GBK expansion test在close()之后立刻drop driver，让EOF和cancel同时ready，公平select偶发normalEnded而非预期Closed。独立签名72a2bb7先await有限1s close终态后drop，Closed断言不放宽，生产actor不改；再跑完整suite通过。serde/subtle2.6.1/zeroize1.9.0/uuid只新增已锁定依赖边，没有版本升级/newcrate；all-featureaudit仍原6license/2maintenance拒，sources/bans通过未豁免。
 - 未完成：生产interprocess端点/WindowsNamedPipeACL与真实跨用户拒绝、clap独立pulseterm入口、共享Capability授权/风险确认、单实例/冷启动--startup-actions/50ms窗口创建、S5三平台验收。这里的ping RTT/原生UDS和Linuxpeer证据不能当上述能力已完成。
 
+## S5真实CLI到Tauri native窗口收据与加载时序（Linux）
+
+- 新显式desktop cli-window-probe/mise desktop-cli-build/probe-cli-window，仅固定probe.window且emptyparams，nativeUDS/token/peerUID准入后在Tauri mainthread创建480×320本地页面，无shell/任意URL/窗口label输入。main page Finished后才启动private服务/三个独立helper（wrongtoken+两次good）。wrongtoken返回拒、窗口数不增加；两次真实窗口visible+runtime注册+pageload+Destroyed全部确认后windowcount回初始，client/listener/private runtime清理。
+- 第一版JSONRPCresult等待load和destroy，CLI完整回执346–396ms而servernative9–11ms。改唯一result在真正native注册/visible检查后发，不仅回accepted；page-load与destroy仍独立await。最终sample1 servernative7004us、clientrequest/native8022us、load330244us；sample2 native10680us/client11872us/load333854us。前两个是受控native状态收据，不是compositor首像素/完整terminal可用，不能声称S5生产显示50ms全通过。未运行的客户端拉起/冷启动竞争还没接。
+- main-thread回调先检查oneshot接收端是否已取消，build后投递失败主动关闭latewindow；正常/错误都有WindowGuard关闭，page/load/build/destroy各有限deadline。runnerLinuxGNUtimeout40秒监督整个Xvfb/dbus/GUI进程组，parent50秒观察上限，既有DISPLAY也有超时。CLIhelper仅good/denied，mode缺report或与自动benchmark混用拒。defaultdesktop二进制直接--probe-cli-window exit1/cliwindow.validation_feature_required，不启动GUI。
+- 两次真实probe（最后修改只报告/negative/监督）通过。2新增xtask negative tests拒假visible/倒序native或load时间/缺清理/单sample，并允许nativeACK早于pageload（不混两个phase）；CLIfeature12xtask/native39tests、两featurestrictclippy、bindings drift与workspacecheck/tsc/Biome通过，MCP cli_window_probe Rust无error诊断。CI新增该native入口，保留oldchannel/v2/GBK/WM。锁文件只多desktop tempfile/zeroize已锁包边，无newversions/CSP放宽；allfeatureaudit仍6license/2maintenance门禁失败。
+- 限制：仅Linux/privatefixture nativeUDS，不是productioninterprocess/clap/Capability或跨用户/WindowsACL；当前重建WebView页面约330ms，完整显示与50ms目标仍需独立评估；未测试冷启动/single-instance/真实user窗口/IME/跨平台。主进程配置窗口与spawn同runtime并不等于productionCLI启动流程。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
