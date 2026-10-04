@@ -567,9 +567,16 @@ mise run probe-pty
 - 2新增native回归各覆盖v1/v2：occupy lane后render Busy且zero frames、oldbinding保持、释放后下一次准确attach generation仅+1；badprevious失败detach自己的lease、permit恢复1、actorRunning/metadataNone、nextgeneration2能正常attach/close/join。default和encoding-probe各50项native/strictclippy通过，实际v2两headless+两DOM sourcefreshDOM/targetDOM及7合成transport测量完整，typeddrift/check通过、MCPsharedhelper无error。前一轮v1/GBK/外部WM实际证据保持，当前新增sender顺序尚未重新跑这三种实际模式。
 - 发送准入是元数据保护，不是复用SSH控制通道/提高native窗口吞吐或放宽恢复精度；所有deadline/credit/500ms比较限频与releaseaudit保持。下一步Started可信callback需自动retire已绑定peer窗口的view，以覆盖不经root显式retire的实际reload；生产任意导航仍未开放。
 
+## S11实际导航Started驱动退旧binding（非调用方提前撤销）
+
+- fixed builder每次PageLoadStarted先PageTracker.record撤当前nonce，再按后端当前run nonce与windows索引中的精确peerToken调用retire_window_views。首次Started未授权peer仅允许退0；第二次必须在Started2/Finished1阶段退1个旧lease，缺/重复/0或2count/错误/非Started回执标invalid，不允许仅加载新页/新页DOM成功冒充自动退役。mandatory peerNavigationRetired贯穿nativeDTO/TS/xtask严格bool检查。
+- reload验证不再在root显式revoke或retire：capture的旧lease在调用window.reload前仍checkBinding成功，真实Started驱动撤nonce及view，Root等待新页认证+sourceDOM+Done+automaticretired，旧ACK/input拒/完成Detached与新capture精度单独核对，actor和窗口owner始终保留。用于撤销的runtime callback不要求新URL仍local（导航到远端也应撤旧许可），但授予新nonce/权限仍只允许可信本地Finished；no frontend revoke/RPC label。
+- 2新增native回归：真实actorlease下oldrun、同label更换token不能退原binding；正确peer退1且重复退0、actorRunning/closejoin正常；PageTracker actualStarted阶段/count/失败严格负向。default/encoding-probe各52native、strictclippy/typeddrift/fullcheck/fulltests52app/93term/33IPC/12route/13xtask/219TS通过。actualv1/v2各两headless+两DOM run（各4真实Started自动退役及freshsourceDOM）完整JSON独立retired/display receipts true，原七组合成测量仍完整。
+- 旧页自己的renderer先前仍未授权（它只有foreign-control拒绝probe），旧activelease来自Rust验证器；证明runtime Started对真actor订阅退役，不等于旧页正在绘制liveData时的完整恢复。下一步先补firstpage本身readonlyDOM许可，再真实验证其旧nonce对ownreadonly端点被拒。当前不处理生产任意导航/连续三次reload、跨平台或用户IME，既有偶发退出风险保留，GBK/外部WM最新Started版本尚未实测复跑；release门禁不改。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各50项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各52项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：219 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

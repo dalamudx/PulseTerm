@@ -232,6 +232,24 @@ impl WindowSessions {
         }
         self.0.registry.close_window(token).map_err(error)
     }
+    // Trusted runtime callback only: revoke the known peer even when navigation
+    // leaves local origin. Never mint capability or trust a frontend window label.
+    fn retire_peer_page(&self, label: &str, nonce: &str) -> Result<usize> {
+        let token = self.0.windows.lock().map_err(error)?.get(label).copied();
+        let active = self.0.active.lock().map_err(error)?;
+        let run = active
+            .as_ref()
+            .filter(|r| r.nonce == nonce)
+            .ok_or("session.forbidden")?;
+        match (run.peer_owner, token) {
+            (None, _) => Ok(0),
+            (Some(peer), Some(actual)) if peer == actual && actual != run.owner => {
+                self.0.registry.retire_window_views(actual).map_err(error)
+            }
+            _ => Err("session.forbidden".into()),
+        }
+    }
+
     fn caller(&self, window: &WebviewWindow) -> Result<WindowToken> {
         if !local_url(&window.url().map_err(error)?) {
             return Err("session.forbidden_origin".into());
@@ -386,6 +404,7 @@ pub(crate) struct SessionEvidence {
     pub peer_display_checked: bool,
     pub peer_reload_checked: bool,
     pub peer_reload_display_checked: bool,
+    pub peer_navigation_retired: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -433,6 +452,7 @@ impl SessionEvidence {
             || !self.peer_display_checked
             || !self.peer_reload_checked
             || !self.peer_reload_display_checked
+            || !self.peer_navigation_retired
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -1067,6 +1087,9 @@ pub(crate) async fn probe_session(
     .inner_size(600.0,400.0)
     .on_page_load(move |peer, payload| {
         loaded_pages.record(payload.event());
+        if matches!(payload.event(),tauri::webview::PageLoadEvent::Started){
+            loaded_pages.navigation_retired(peer_state.retire_peer_page(peer.label(),&nonce));
+        }
         let bound = if matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) {
             peer_state.install(&peer).and_then(|owner|{
                 if peer_state.caller(&peer)?!=owner{return Err("session.forbidden".into());}
@@ -1268,6 +1291,7 @@ pub(crate) async fn probe_session(
         peer_display_checked: true,
         peer_reload_checked: true,
         peer_reload_display_checked: true,
+        peer_navigation_retired: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1412,6 +1436,7 @@ mod tests {
             peer_display_checked: true,
             peer_reload_checked: true,
             peer_reload_display_checked: true,
+            peer_navigation_retired: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1482,6 +1507,9 @@ mod tests {
         e.peer_reload_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_reload_display_checked = true;
+        e.peer_navigation_retired = false;
+        assert!(e.validate().is_err());
+        e.peer_navigation_retired = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

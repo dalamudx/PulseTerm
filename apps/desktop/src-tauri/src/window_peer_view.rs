@@ -83,6 +83,101 @@ mod tests {
     use super::*;
     use pulse_term::session::{ChannelTransport, spawn_session};
     #[tokio::test]
+    async fn trusted_started_retirement_ignores_old_run_and_recreated_window_but_keeps_peer_actor_alive()
+     {
+        let state = WindowSessions::default();
+        let main = state.0.registry.open_window().unwrap();
+        let peer = state.0.registry.open_window().unwrap();
+        let foreign = state.0.registry.open_window().unwrap();
+        let (transport, driver) = ChannelTransport::bounded_driver();
+        let (handle, task) = spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+        let id = state.0.registry.register(peer, handle).unwrap();
+        let view = state
+            .0
+            .registry
+            .attach(
+                peer,
+                id,
+                AttachmentConfig {
+                    fragment: 64,
+                    frames: 1,
+                    bytes: 128,
+                    ack_timeout: Duration::from_secs(3),
+                },
+            )
+            .await
+            .unwrap();
+        let mut run = Active::new(
+            main,
+            "current".into(),
+            id,
+            Arc::new(crate::viewer_visibility::VisibilityGate::default()),
+        );
+        run.bind_peer(peer).unwrap();
+        run.peer_id = Some(id);
+        *state.0.active.lock().unwrap() = Some(run);
+        state
+            .0
+            .windows
+            .lock()
+            .unwrap()
+            .insert("session-peer".into(), peer);
+        assert!(state.retire_peer_page("session-peer", "old-run").is_err());
+        state
+            .0
+            .registry
+            .check_binding(peer, id, view.generation)
+            .unwrap();
+        state
+            .0
+            .windows
+            .lock()
+            .unwrap()
+            .insert("session-peer".into(), foreign);
+        assert!(state.retire_peer_page("session-peer", "current").is_err());
+        state
+            .0
+            .registry
+            .check_binding(peer, id, view.generation)
+            .unwrap();
+        state
+            .0
+            .windows
+            .lock()
+            .unwrap()
+            .insert("session-peer".into(), peer);
+        assert_eq!(
+            state.retire_peer_page("session-peer", "current").unwrap(),
+            1
+        );
+        assert!(
+            state
+                .0
+                .registry
+                .check_binding(peer, id, view.generation)
+                .is_err()
+        );
+        assert_eq!(
+            state.retire_peer_page("session-peer", "current").unwrap(),
+            0
+        );
+        assert_eq!(
+            state.0.registry.state(peer, id).unwrap().lifecycle,
+            Lifecycle::Running
+        );
+        state.0.registry.close_session(peer, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop((view, driver));
+    }
+
+    #[tokio::test]
     async fn pending_readonly_authorization_cannot_complete_after_navigation_revokes_its_epoch() {
         let registry = SessionRegistry::new();
         let main = registry.open_window().unwrap();

@@ -11,6 +11,7 @@ struct Pages {
     old_nonce_rejected: bool,
     rendered: bool,
     captured: bool,
+    navigation_retired: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -83,6 +84,7 @@ impl PageTracker {
             n.previous.map(|v| v.to_string()),
         ))
     }
+    #[cfg(test)]
     fn revoke_nonce(&self) -> Result<()> {
         let mut n = self.nonce.lock().map_err(error)?;
         n.previous = n.current.take();
@@ -150,6 +152,25 @@ impl PageTracker {
         require(accepted)
     }
 
+    pub(super) fn navigation_retired(&self, result: Result<usize>) {
+        self.events.send_modify(|p| {
+            if p.started == 1 && p.finished == 0 && !p.invalid {
+                if result != Ok(0) {
+                    p.invalid = true;
+                }
+            } else if p.started == 2
+                && p.finished == 1
+                && !p.invalid
+                && !p.navigation_retired
+                && result == Ok(1)
+            {
+                p.navigation_retired = true;
+            } else {
+                p.invalid = true;
+            }
+        });
+    }
+
     fn snapshot(&self) -> Pages {
         *self.events.borrow()
     }
@@ -172,25 +193,14 @@ pub(super) async fn verify(
     require(pages.snapshot().ready(1) && state.caller(window)? == owner)?;
     let old = transfer::capture(state, owner, id, handle).await?;
     let before = state.0.registry.state(owner, id).map_err(error)?;
-    // Peer JS has never been granted access to this session: its only script probes
-    // forbidden main-session controls. Revoke its page nonce before retiring views;
-    // new nonce is injected only to the new local document after Finished.
+    // No explicit teardown here: actual Started must revoke nonce and retire this
+    // still-open subscription. Finished/newdoc DOM alone cannot prove teardown.
     let old_nonce = pages.injection()?.0;
-    pages.revoke_nonce()?;
-    require(state.0.registry.retire_window_views(owner).map_err(error)? == 1)?;
-    require(
-        state
-            .0
-            .registry
-            .acknowledge(owner, id, old.generation, 0)
-            .is_err()
-            && state
-                .0
-                .registry
-                .input_bound(owner, id, old.generation, b"denied\n".to_vec())
-                .await
-                .is_err(),
-    )?;
+    state
+        .0
+        .registry
+        .check_binding(owner, id, old.generation)
+        .map_err(error)?;
     let mut changed = pages.events.subscribe();
     eprintln!("session.peer_reload.requested");
     window.reload().map_err(error)?;
@@ -198,7 +208,7 @@ pub(super) async fn verify(
         loop {
             let p = *changed.borrow();
             require(!p.invalid)?;
-            if p.ready(2) && p.rendered {
+            if p.ready(2) && p.rendered && p.navigation_retired {
                 return Ok::<(), String>(());
             }
             changed.changed().await.map_err(error)?;
@@ -214,6 +224,19 @@ pub(super) async fn verify(
                 .app_handle()
                 .get_webview_window(window.label())
                 .is_some(),
+    )?;
+    require(
+        state
+            .0
+            .registry
+            .acknowledge(owner, id, old.generation, 0)
+            .is_err()
+            && state
+                .0
+                .registry
+                .input_bound(owner, id, old.generation, b"denied\n".to_vec())
+                .await
+                .is_err(),
     )?;
     require(pages.confirm_nonce(&old_nonce).is_err() && pages.injection()?.0 != old_nonce)?;
     let fresh = transfer::capture(state, owner, id, handle).await?;
@@ -250,6 +273,34 @@ pub(super) async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn navigation_retirement_receipt_requires_the_actual_second_started_phase_and_one_view() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(0));
+        p.record(PageLoadEvent::Finished);
+        p.record(PageLoadEvent::Started);
+        assert!(!p.snapshot().navigation_retired);
+        p.navigation_retired(Ok(1));
+        assert!(p.snapshot().navigation_retired);
+        assert!(!p.snapshot().invalid);
+        p.record(PageLoadEvent::Finished);
+        assert!(p.snapshot().navigation_retired);
+        for result in [Ok(0), Ok(2), Err("failed".to_string())] {
+            let failed = PageTracker::new();
+            failed.record(PageLoadEvent::Started);
+            failed.navigation_retired(Ok(0));
+            failed.record(PageLoadEvent::Finished);
+            failed.record(PageLoadEvent::Started);
+            failed.navigation_retired(result);
+            assert!(failed.snapshot().invalid);
+            assert!(!failed.snapshot().navigation_retired);
+        }
+        let early = PageTracker::new();
+        early.navigation_retired(Ok(1));
+        assert!(early.snapshot().invalid);
+    }
+
     #[test]
     fn readonly_view_requires_authenticated_fresh_page_and_rendered_receipt_is_single_use() {
         let p = PageTracker::new();
@@ -343,6 +394,7 @@ mod tests {
                 old_nonce_rejected: false,
                 rendered: false,
                 captured: false,
+                navigation_retired: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -358,6 +410,7 @@ mod tests {
                 old_nonce_rejected: false,
                 rendered: false,
                 captured: false,
+                navigation_retired: false,
             }
         );
         p.record(PageLoadEvent::Started);

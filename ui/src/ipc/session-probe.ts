@@ -1124,6 +1124,7 @@ export async function verifySessionChannel(dom?: {
       !result.peerDisplayChecked ||
       !result.peerReloadChecked ||
       !result.peerReloadDisplayChecked ||
+      !result.peerNavigationRetired ||
       !result.windowRevoked ||
       !result.sessionSurvived ||
       result.nativeExit !== 0 ||
