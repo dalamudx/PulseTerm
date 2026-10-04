@@ -10,7 +10,7 @@ fn require(value: bool) -> Result<()> {
         Err("session.peer_transfer_invalid".into())
     }
 }
-async fn capture(
+pub(super) async fn capture(
     state: &WindowSessions,
     owner: WindowToken,
     id: SessionId,

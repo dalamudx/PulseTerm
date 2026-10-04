@@ -529,9 +529,17 @@ mise run probe-pty
 - 3新增regression：同owner两个liveview批量撤销/0重复count、旧input/ACK拒，foreign binding保持；无view仍解析output，newgen准确bootstrap，oldcompletion不影响new；持有旧capturegate时retire立刻成功/oldEntry身份复核拒/newcaptureBusy，共享marker/repair/comparison锁与时间保持；closedtoken不能退foreign。fullcheck/fulltest52app/93term/33IPC/12route/13xtask/215TS、真实PTY迁移/2MiBbackpressure与两GBK headless恢复通过，strictclippy/MCPregistry无error。
 - 尚未接on_page_load Start/真实window.reload/旧IPC epoch，不能视为S11刷新验收。releaseaudit仍原6license+2unmaintained失败，未改依赖/lock/gate；下一步有限runtime reload样例应把native task与page命令future分离，以免页面消失误关PTY，并等待新page准确Begin/ACK。
 
+## S11真实fixed peer WebView reload与同native actor延续（不是reload页面DOM恢复）
+
+- 既有peer WebviewWindowBuilder的on_page_load记录最多两次Started→Finished，watch只存一份bounded Pages metadata；finished-before-start、重复Started/Finished或第三次导航永久invalid，不能靠重复回调制造fresh page。初次foreign-control脚本结束后，Rust准确capture peer会话，retire_window_views要求撤1个view、oldACK/input拒，然后调用实际WebviewWindow::reload（Tauri2.12.1 public SDK）。5s固定截止等待真实第二次页面加载完成。
+- fresh page仍同runtime window token/registered native window，backendSessionState和同SessionHandle仍Running且完整等于刷新前；Rust v1/v2 recapture每cell/cursor与backend inspect exact，newgen>oldgen，oldreceipt必须Detached、晚完成不清newbinding，freshview显式detach只回Detached。随后同既有peer child继续跨窗transfer、sourceDestroyed和main独立Channel实际DOM恢复，child由main native command supervisor持有，peer pagehide不会drop native task。
+- 注意这个peer JS一直只执行对main会话的foreign拒绝探针，从未获自己peer sessionId/input/ACK/attach权限；oldpage无capability可复用。这是runtime reload+actor/旧binding失效证据，不是已授权production页面的nonce/epoch隔离，也不是新peer页面的DOM/Channel渲染。本页recapture仍Rust验证器消费，之前已验的目标main DOM证据只能算后续迁移，不可冒充refresh DOM。
+- 新mandatory peerReloadChecked加入typed SessionEvidence、TS与xtask两报告收据检查；native false拒、xtask缺/false/truthy值拒。2新增PageTracker负向tests，native42/strictclippy/bindingsdrift/tsc/Biome通过。实测v2和默认v1各两headless+两DOM run（各4真实reload），最终reports completed/peerReloadChecked及后续display receipts true；fullcheck/fulltests52app/93term/33IPC/12route/13xtask/215TS通过，MCP新probe无error诊断。
+- 之前目标迁移和Entry retirement也补做explicit encoding-probe实际GBK Window兼容：两GBK DOM run/双坐标/reverse input/新runtime-display receipts均过、40nativefeature/strictclippy/绑定漂移过，普通desktop仍不启用GBK，未新增deps/lock/CSP/audit豁免。当前新增reload的GBK/外部WM兼容尚未重跑。下一步需新页面权限mint/revoke与其真实renderer消费，不开放用户shell/任意导航；S11总体仍未完整验收。首次未知无report风险不宣称修复，releaseaudit仍blocked。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现40项测试通过（含原visibility/park回归及1项目标迁移确认gate/旧guard隔离回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现42项测试通过（含目标迁移确认gate/旧guard及2项PageLoad有序计数/重复与乱序拒绝回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：215 项测试通过（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

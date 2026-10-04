@@ -1,6 +1,8 @@
 //! Local-only session validation. No user shell, remote navigation or frontend owner token.
 #[path = "encoding_probe.rs"]
 pub(crate) mod encoding_probe;
+#[path = "window_reload_probe.rs"]
+mod reload;
 #[path = "window_transfer_probe.rs"]
 mod transfer;
 #[path = "window_transfer_view.rs"]
@@ -317,6 +319,7 @@ pub(crate) struct SessionEvidence {
     pub peer_denied: bool,
     pub peer_transfer_checked: bool,
     pub peer_display_checked: bool,
+    pub peer_reload_checked: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -362,6 +365,7 @@ impl SessionEvidence {
             || !self.peer_denied
             || !self.peer_transfer_checked
             || !self.peer_display_checked
+            || !self.peer_reload_checked
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -987,6 +991,8 @@ pub(crate) async fn probe_session(
     let (peer_handle, peer_task) = native().await?;
     // Each window incarnation is installed on the runtime, never from a frontend label.
     let peer_state = state.clone();
+    let pages = reload::PageTracker::new();
+    let loaded_pages = pages.clone();
     let script = format!(
         "void window.__TAURI_INTERNALS__.invoke('probe_session_peer',{{nonce:'{nonce}'}}).catch(console.error)"
     );
@@ -997,6 +1003,7 @@ pub(crate) async fn probe_session(
     )
     .visible(false)
     .on_page_load(move |peer, payload| {
+        loaded_pages.record(payload.event());
         if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
             && peer_state.install(&peer).is_ok()
             && peer.eval(&script).is_err()
@@ -1023,6 +1030,7 @@ pub(crate) async fn probe_session(
         .await
         .map_err(|_| "session.peer_timeout".to_string())?
         .map_err(|_| "session.peer_cancelled".to_string())?;
+    reload::verify(&state, &peer, peer_owner, peer_id, &peer_handle, &pages).await?;
     let peer_transfer = transfer::handoff(
         &state,
         &window,
@@ -1170,6 +1178,7 @@ pub(crate) async fn probe_session(
         peer_denied,
         peer_transfer_checked: true,
         peer_display_checked: true,
+        peer_reload_checked: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1257,6 +1266,7 @@ mod tests {
             peer_denied: true,
             peer_transfer_checked: true,
             peer_display_checked: true,
+            peer_reload_checked: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1321,6 +1331,9 @@ mod tests {
         e.peer_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_display_checked = true;
+        e.peer_reload_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_reload_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

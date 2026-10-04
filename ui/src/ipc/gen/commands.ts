@@ -172,6 +172,7 @@ export type SessionEvidence = {
 	peerDenied: boolean,
 	peerTransferChecked: boolean,
 	peerDisplayChecked: boolean,
+	peerReloadChecked: boolean,
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
 	idleChecked: boolean,
