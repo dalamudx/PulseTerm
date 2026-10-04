@@ -53,6 +53,7 @@ type Options = {
     digest: string,
   ) => Promise<void>;
   failed: (error: unknown) => void;
+  live?: { ready: () => Promise<void>; marker: Options["confirm"] };
 };
 async function setup() {
   vi.resetModules();
@@ -137,6 +138,77 @@ it("new document rejects its formerly authorized page nonce on its own ACK and c
   );
   expect(mock.ack).toHaveBeenCalledWith("run", "page", "17", 2);
   expect(mock.done).toHaveBeenCalledOnce();
+});
+it("retained live wrapper confirms bootstrap and Marker while native subscription remains alive until pagehide", async () => {
+  const s = await setup();
+  let admit!: () => void, close!: () => void;
+  const ready = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((r) => {
+      close = r;
+    });
+  });
+  const live = s.verifyPeerView("run", "page", undefined, true);
+  await ready;
+  const options = mock.options as Options;
+  expect(options.live).toBeDefined();
+  expect(mock.done).not.toHaveBeenCalled();
+  await options.live?.ready();
+  expect(mock.done).toHaveBeenCalledOnce();
+  expect(s.host.remove).not.toHaveBeenCalled();
+  expect(options.signal.aborted).toBe(false);
+  await options.live?.marker(
+    "17",
+    { columns: 40, rows: 12, revision: 4n, parsedBytes: 90n },
+    "a".repeat(16),
+  );
+  expect(mock.confirm).toHaveBeenCalledWith(
+    "run",
+    "page",
+    "17",
+    expect.objectContaining({ revision: "4", parsedBytes: "90" }),
+  );
+  s.win.dispatchEvent(new Event("pagehide"));
+  await live;
+  expect(s.host.remove).toHaveBeenCalledOnce();
+  expect(mock.dispose).toHaveBeenCalledOnce();
+  close();
+  await Promise.resolve();
+  expect(mock.capture).toHaveBeenCalledOnce();
+  expect(s.root.hidden).toBe(false);
+});
+it("native live closure before bootstrap is not a successful display or Done", async () => {
+  const s = await setup();
+  await expect(
+    s.verifyPeerView("run", "page", undefined, true),
+  ).rejects.toThrow("peer.live_closed_before_bootstrap");
+  expect(mock.done).not.toHaveBeenCalled();
+  expect(s.host.remove).toHaveBeenCalledOnce();
+});
+it("native live failure after bootstrap is preserved and disposes only the old surface", async () => {
+  const s = await setup();
+  let admit!: () => void, fail!: (error: Error) => void;
+  const ready = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((_r, reject) => {
+      fail = reject;
+    });
+  });
+  const live = s.verifyPeerView("run", "page", undefined, true);
+  const failed = expect(live).rejects.toThrow("native.marker_failed");
+  await ready;
+  await (mock.options as Options).live?.ready();
+  fail(new Error("native.marker_failed"));
+  await failed;
+  expect(mock.done).toHaveBeenCalledOnce();
+  expect(s.host.remove).toHaveBeenCalledOnce();
+  expect(s.root.hidden).toBe(false);
 });
 it("pagehide cancels only the surface even while native command awaits and late completion cannot recreate it", async () => {
   const s = await setup();

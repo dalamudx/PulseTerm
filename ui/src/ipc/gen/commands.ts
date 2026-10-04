@@ -180,6 +180,7 @@ export type SessionEvidence = {
 	peerReloadDisplayChecked: boolean,
 	peerNavigationRetired: boolean,
 	peerInitialDisplayChecked: boolean,
+	peerLiveDisplayChecked: boolean,
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
 	idleChecked: boolean,

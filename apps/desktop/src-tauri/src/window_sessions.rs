@@ -406,6 +406,7 @@ pub(crate) struct SessionEvidence {
     pub peer_reload_display_checked: bool,
     pub peer_navigation_retired: bool,
     pub peer_initial_display_checked: bool,
+    pub peer_live_display_checked: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -455,6 +456,7 @@ impl SessionEvidence {
             || !self.peer_reload_display_checked
             || !self.peer_navigation_retired
             || !self.peer_initial_display_checked
+            || !self.peer_live_display_checked
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -1296,6 +1298,7 @@ pub(crate) async fn probe_session(
         peer_reload_display_checked: true,
         peer_navigation_retired: true,
         peer_initial_display_checked: true,
+        peer_live_display_checked: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1442,6 +1445,7 @@ mod tests {
             peer_reload_display_checked: true,
             peer_navigation_retired: true,
             peer_initial_display_checked: true,
+            peer_live_display_checked: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1518,6 +1522,9 @@ mod tests {
         e.peer_initial_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_initial_display_checked = true;
+        e.peer_live_display_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_live_display_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

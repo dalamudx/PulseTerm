@@ -3,6 +3,7 @@ export type PeerBootstrap = (
   nonce: string,
   pageNonce: string,
   previousPageNonce?: string,
+  initialLive?: boolean,
 ) => Promise<void>;
 export interface PeerBootstrapHost {
   __PULSE_PEER_VIEW__?: PeerBootstrap;

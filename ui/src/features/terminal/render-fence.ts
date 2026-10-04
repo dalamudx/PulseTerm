@@ -56,7 +56,12 @@ export function renderFence(
       return;
     }
     timer = setTimeout(
-      () => finish(new Error("terminal.render_timeout")),
+      () =>
+        finish(
+          new Error(
+            `terminal.render_timeout.frames=${count}.visible=${clock.visible()}.connected=${connected()}`,
+          ),
+        ),
       1000,
     );
     frame = clock.request(step);

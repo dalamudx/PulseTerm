@@ -7,6 +7,9 @@ pub(super) struct Current {
     confirm: Option<oneshot::Sender<()>>,
     commit_sequence: Option<u32>,
     commit_acknowledged: bool,
+    live: bool,
+    marker: bool,
+    data_end: Option<(u32, u64, bool)>,
 }
 impl Current {
     fn can_confirm(&self, owner: WindowToken, id: SessionId, generation: u64) -> bool {
@@ -25,7 +28,9 @@ fn current(state: &WindowSessions, owner: WindowToken, generation: u64) -> Resul
         .lock()
         .map_err(error)?
         .as_ref()
-        .filter(|c| c.owner == owner && c.generation == generation && c.confirm.is_some())
+        .filter(|c| {
+            c.owner == owner && c.generation == generation && (c.confirm.is_some() || c.live)
+        })
         .map(|c| c.id)
         .ok_or("session.transfer_stale".into())
 }
@@ -76,16 +81,28 @@ pub(super) fn acknowledge_for(
     if current(state, owner, generation)? != id {
         return Err("session.transfer_stale".into());
     }
+    // Hold metadata through synchronous ACK admission: released credit can wake
+    // the next-frame sender immediately on another runtime thread.
+    let mut slot = state.0.transfer_view.lock().map_err(error)?;
+    let current = slot
+        .as_mut()
+        .filter(|c| {
+            c.owner == owner
+                && c.id == id
+                && c.generation == generation
+                && (c.confirm.is_some() || c.live)
+        })
+        .ok_or("session.transfer_stale")?;
     state
         .0
         .registry
         .acknowledge(owner, id, generation, sequence)
         .map_err(error)?;
-    let mut slot = state.0.transfer_view.lock().map_err(error)?;
-    let current = slot
-        .as_mut()
-        .filter(|c| c.owner == owner && c.id == id && c.generation == generation)
-        .ok_or("session.transfer_stale")?;
+    if let Some((last, _, acknowledged)) = current.data_end.as_mut()
+        && *last == sequence
+    {
+        *acknowledged = true;
+    }
     if current.commit_sequence == Some(sequence) {
         current.commit_acknowledged = true;
     }
@@ -168,12 +185,74 @@ pub(super) fn confirm_for(
         .send(())
         .map_err(|_| "session.transfer_confirm_cancelled".to_string())
 }
+pub(super) fn confirmation_role(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+) -> Result<(bool, bool)> {
+    let slot = state.0.transfer_view.lock().map_err(error)?;
+    let c = slot
+        .as_ref()
+        .filter(|c| {
+            c.owner == owner && c.id == id && c.generation == generation && c.confirm.is_some()
+        })
+        .ok_or("session.transfer_stale")?;
+    Ok((c.live, c.marker))
+}
+pub(super) fn live_generation(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+) -> Result<u64> {
+    let slot = state.0.transfer_view.lock().map_err(error)?;
+    slot.as_ref()
+        .filter(|c| c.owner == owner && c.id == id && c.live)
+        .map(|c| c.generation)
+        .ok_or("session.peer_no_live_view".into())
+}
+pub(super) fn live_data_acked(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+) -> Result<Option<u64>> {
+    let slot = state.0.transfer_view.lock().map_err(error)?;
+    let c = slot
+        .as_ref()
+        .filter(|c| c.owner == owner && c.id == id && c.generation == generation && c.live)
+        .ok_or("session.transfer_stale")?;
+    Ok(c.data_end
+        .filter(|(_, _, acked)| *acked)
+        .map(|(_, end, _)| end))
+}
+
 pub(super) async fn render(
     state: &WindowSessions,
     owner: WindowToken,
     id: SessionId,
     previous: u64,
     channel: &Channel<RawFrame>,
+) -> Result<()> {
+    render_inner(state, owner, id, previous, channel, None).await
+}
+pub(super) async fn render_live(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    channel: &Channel<RawFrame>,
+    pages: &reload::PageTracker,
+    page_nonce: &str,
+) -> Result<()> {
+    render_inner(state, owner, id, 0, channel, Some((pages, page_nonce))).await
+}
+async fn render_inner(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    previous: u64,
+    channel: &Channel<RawFrame>,
+    live: Option<(&reload::PageTracker, &str)>,
 ) -> Result<()> {
     // Reserve the shared sender lane BEFORE capture can replace a live lease.
     let _permit = state
@@ -221,6 +300,9 @@ pub(super) async fn render(
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            live: live.is_some(),
+            marker: false,
+            data_end: None,
         });
     }
     tokio::time::timeout(Duration::from_secs(3), async {
@@ -259,11 +341,30 @@ pub(super) async fn render(
         .registry
         .check_binding(owner, id, view.generation)
         .map_err(error)?;
-    state
-        .0
-        .registry
-        .detach(owner, id, view.generation)
-        .map_err(error)?;
+    if let Some((pages, page_nonce)) = live {
+        tokio::time::timeout(Duration::from_secs(5),async{
+            let navigation=pages.navigation_started();tokio::pin!(navigation);
+            loop{let wire=tokio::select!{biased;result=&mut navigation=>{result?;break;},wire=view.wire.recv()=>wire};
+                let Some(wire)=wire else{if pages.has_navigation_started(){pages.navigation_started().await?;break;}return Err("session.peer_live_wire_closed".to_string());};
+                if pages.authorize_view(page_nonce).is_err(){if pages.has_navigation_started(){pages.navigation_started().await?;break;}return Err("session.peer_live_scope_revoked".to_string());}
+                let frame=pulse_ipc::decode(&wire).map_err(error)?;
+                let(part,offset,length)=if state.0.dual{let p=pulse_ipc::attach_v2::decode_fragment(frame.payload).map_err(error)?;(p.part,p.offset,p.body.len())}else{let p=pulse_ipc::attach::decode_fragment(frame.payload).map_err(error)?;(p.part,p.offset,p.body.len())};
+                match part{
+                    pulse_ipc::attach::Part::Data=>{let end=offset.checked_add(length as u64).ok_or("session.peer_data_overflow")?;let mut slot=state.0.transfer_view.lock().map_err(error)?;let c=slot.as_mut().filter(|c|c.owner==owner&&c.id==id&&c.generation==view.generation&&c.live).ok_or("session.transfer_stale")?;c.data_end=Some((frame.sequence,end,false));},
+                    pulse_ipc::attach::Part::Marker=>{let(tx,rx)=oneshot::channel();{let mut slot=state.0.transfer_view.lock().map_err(error)?;let c=slot.as_mut().filter(|c|c.owner==owner&&c.id==id&&c.generation==view.generation&&c.live&&c.confirm.is_none()&&c.data_end.is_some_and(|(_,_,acked)|acked)).ok_or("session.peer_marker_without_data_ack")?;if c.marker{return Err("session.peer_repeated_live_marker".to_string());}c.marker=true;c.commit_sequence=Some(frame.sequence);c.commit_acknowledged=false;c.confirm=Some(tx);}channel.send(RawFrame(wire)).map_err(error)?;tokio::select!{result=rx=>{result.map_err(error)?;},result=&mut navigation=>{result?;break;}}continue;},
+                    _=>return Err("session.peer_unsupported_live_part".to_string()),
+                }
+                channel.send(RawFrame(wire)).map_err(error)?;
+            }
+            Ok::<(),String>(())
+        }).await.map_err(|_|"session.peer_live_navigation_deadline".to_string())??;
+    } else {
+        state
+            .0
+            .registry
+            .detach(owner, id, view.generation)
+            .map_err(error)?;
+    }
     let receipt = tokio::time::timeout(Duration::from_secs(3), view.completion)
         .await
         .map_err(error)?
@@ -416,6 +517,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn live_data_credit_does_not_grant_duplicate_or_unacknowledged_marker_confirmation() {
+        let state = WindowSessions::default();
+        let owner = state.0.registry.open_window().unwrap();
+        let foreign = state.0.registry.open_window().unwrap();
+        let (transport, driver) = ChannelTransport::bounded_driver();
+        let (handle, task) = session::spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+        let id = state.0.registry.register(owner, handle).unwrap();
+        *state.0.transfer_view.lock().unwrap() = Some(Current {
+            owner,
+            id,
+            generation: 17,
+            confirm: None,
+            commit_sequence: Some(2),
+            commit_acknowledged: true,
+            live: true,
+            marker: false,
+            data_end: Some((3, 42, true)),
+        });
+        assert_eq!(current(&state, owner, 17).unwrap(), id);
+        assert!(confirmation_role(&state, owner, id, 17).is_err());
+        {
+            let slot = state.0.transfer_view.lock().unwrap();
+            assert!(!slot.as_ref().unwrap().can_confirm(owner, id, 17));
+        }
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut slot = state.0.transfer_view.lock().unwrap();
+            let c = slot.as_mut().unwrap();
+            c.confirm = Some(tx);
+            c.marker = true;
+            c.commit_sequence = Some(4);
+            c.commit_acknowledged = false;
+            assert!(!c.can_confirm(owner, id, 17));
+            c.commit_acknowledged = true;
+            assert!(c.can_confirm(owner, id, 17));
+            assert!(!c.can_confirm(foreign, id, 17));
+            assert!(!c.can_confirm(owner, id, 18));
+        }
+        assert_eq!(
+            confirmation_role(&state, owner, id, 17).unwrap(),
+            (true, true)
+        );
+        confirm_for(&state, owner, id, 17).unwrap();
+        rx.await.unwrap();
+        assert!(confirm_for(&state, owner, id, 17).is_err());
+        assert!(confirmation_role(&state, owner, id, 17).is_err());
+        assert_eq!(current(&state, owner, 17).unwrap(), id);
+        state.0.transfer_view.lock().unwrap().take();
+        state.0.registry.close_session(owner, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop(driver);
+    }
+
+    #[tokio::test]
     async fn gate_denies_foreign_old_and_already_confirmed_without_touching_current_binding() {
         let state = WindowSessions::default();
         let owner = state.0.registry.open_window().unwrap();
@@ -438,6 +600,9 @@ mod tests {
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            live: false,
+            marker: false,
+            data_end: None,
         });
         let old_guard = Guard {
             state: state.clone(),
@@ -457,6 +622,9 @@ mod tests {
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            live: false,
+            marker: false,
+            data_end: None,
         });
         drop(old_guard);
         state

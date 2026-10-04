@@ -9,6 +9,7 @@ export async function verifyPeerView(
   nonce: string,
   pageNonce: string,
   previousPageNonce?: string,
+  initialLive = false,
 ): Promise<void> {
   if (started) throw new Error("peer.view_duplicate");
   started = true;
@@ -29,6 +30,11 @@ export async function verifyPeerView(
   let deadline: ReturnType<typeof setTimeout> | undefined;
   let stop: () => void = () => {};
   let challenged = false;
+  let booted = false;
+  let bootReady!: () => void;
+  const bootstrap = new Promise<void>((resolve) => {
+    bootReady = resolve;
+  });
   const wrongPage = (pageNonce[0] === "0" ? "1" : "0") + pageNonce.slice(1);
   const rejected = async (job: Promise<unknown>) => {
     try {
@@ -102,6 +108,24 @@ export async function verifyPeerView(
           commands.probePeerConfirm(nonce, pageNonce, generation, rendered),
         );
       },
+      live: initialLive
+        ? {
+            ready: async () => {
+              await commands.probePeerDone(nonce, pageNonce);
+              booted = true;
+              bootReady();
+            },
+            marker: async (generation, boundary, value) => {
+              await commands.probePeerConfirm(nonce, pageNonce, generation, {
+                columns: boundary.columns,
+                rows: boundary.rows,
+                revision: boundary.revision.toString(),
+                parsedBytes: boundary.parsedBytes.toString(),
+                digest: value,
+              });
+            },
+          }
+        : undefined,
       digest,
       failed: (error) => {
         failure ??= error;
@@ -121,15 +145,47 @@ export async function verifyPeerView(
         7000,
       );
     });
-    await Promise.race([
-      commands.probePeerView(nonce, pageNonce, channel),
-      cancelled,
-      finite,
-    ]);
-    await view.finish();
-    if (failure) throw failure;
-    if (life.signal.aborted) throw new Error("peer.view_cancelled");
-    await commands.probePeerDone(nonce, pageNonce);
+    const native = commands.probePeerView(nonce, pageNonce, channel);
+    if (initialLive) {
+      let navigation!: () => void;
+      const retired = new Promise<void>((resolve) => {
+        navigation = resolve;
+      });
+      const onRetired = () => navigation();
+      life.signal.addEventListener("abort", onRetired, { once: true });
+      const closed = native.then(
+        () => {
+          if (!booted && !life.signal.aborted)
+            failure ??= new Error("peer.live_closed_before_bootstrap");
+          life.abort();
+        },
+        (error) => {
+          failure ??= error;
+          life.abort();
+          throw error;
+        },
+      );
+      try {
+        await Promise.race([
+          bootstrap,
+          cancelled,
+          finite,
+          closed.then(() => {
+            throw failure ?? new Error("peer.live_closed_before_bootstrap");
+          }),
+        ]);
+        await Promise.race([retired, closed, finite]);
+        if (failure) throw failure;
+      } finally {
+        life.signal.removeEventListener("abort", onRetired);
+      }
+    } else {
+      await Promise.race([native, cancelled, finite]);
+      await view.finish();
+      if (failure) throw failure;
+      if (life.signal.aborted) throw new Error("peer.view_cancelled");
+      await commands.probePeerDone(nonce, pageNonce);
+    }
   } finally {
     clearTimeout(deadline);
     stop();

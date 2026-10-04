@@ -252,9 +252,14 @@ export async function initialize(): Promise<void> {
   if (new URL(window.location.href).searchParams.has("session-peer")) {
     installPeerBootstrap(
       window,
-      async (nonce: string, pageNonce: string, previousPageNonce?: string) => {
+      async (
+        nonce: string,
+        pageNonce: string,
+        previousPageNonce?: string,
+        initialLive?: boolean,
+      ) => {
         const { verifyPeerView } = await import("../../ipc/peer-view-probe");
-        await verifyPeerView(nonce, pageNonce, previousPageNonce);
+        await verifyPeerView(nonce, pageNonce, previousPageNonce, initialLive);
       },
     );
     return;

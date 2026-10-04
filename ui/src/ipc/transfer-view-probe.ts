@@ -129,6 +129,7 @@ export class TransferViewProbe {
               await this.renderer?.settle(
                 AbortSignal.any([signal, this.lifetime.signal]),
               );
+              this.renderer?.evidence();
             },
             write: async (bytes, signal) => {
               if (
@@ -158,6 +159,7 @@ export class TransferViewProbe {
               await this.renderer?.settle(
                 AbortSignal.any([signal, this.lifetime.signal]),
               );
+              this.renderer?.evidence();
             },
           },
           async (g, s) => {

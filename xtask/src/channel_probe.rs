@@ -228,6 +228,7 @@ fn transfer_receipts_match(report: &Value) -> bool {
             && report[key]["peerReloadDisplayChecked"].as_bool() == Some(true)
             && report[key]["peerNavigationRetired"].as_bool() == Some(true)
             && report[key]["peerInitialDisplayChecked"].as_bool() == Some(true)
+            && report[key]["peerLiveDisplayChecked"].as_bool() == Some(true)
     })
 }
 fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<()> {
@@ -375,7 +376,7 @@ mod tests {
 
     #[test]
     fn transfer_evidence_requires_both_runtime_receipts_not_truthy_values() {
-        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true}});
+        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true}});
         assert!(transfer_receipts_match(&r));
         for key in ["session", "domSession"] {
             for invalid in [
@@ -400,7 +401,10 @@ mod tests {
                 wrong[key]["peerNavigationRetired"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
-                wrong[key]["peerInitialDisplayChecked"] = invalid;
+                wrong[key]["peerInitialDisplayChecked"] = invalid.clone();
+                assert!(!transfer_receipts_match(&wrong));
+                let mut wrong = r.clone();
+                wrong[key]["peerLiveDisplayChecked"] = invalid;
                 assert!(!transfer_receipts_match(&wrong));
             }
         }

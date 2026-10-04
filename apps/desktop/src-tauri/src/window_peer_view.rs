@@ -36,11 +36,20 @@ pub(crate) async fn probe_peer_confirm(
     generation: String,
     rendered: RenderedProjection,
 ) -> Result<()> {
-    let (owner, id, _) = owned(&state, &window, &nonce, &page_nonce)?;
+    let (owner, id, pages) = owned(&state, &window, &nonce, &page_nonce)?;
     let generation = parse_u64(&generation)?;
+    let (live, marker) = transfer_view::confirmation_role(&state, owner, id, generation)?;
     transfer_view::compare_for(&state, owner, id, generation, rendered).await?;
     owned(&state, &window, &nonce, &page_nonce)?;
-    transfer_view::confirm_for(&state, owner, id, generation)
+    transfer_view::confirm_for(&state, owner, id, generation)?;
+    if live {
+        if marker {
+            pages.mark_live_display(&page_nonce)?;
+        } else {
+            pages.mark_captured(&page_nonce)?;
+        }
+    }
+    Ok(())
 }
 #[tauri::command]
 #[specta::specta]
@@ -52,19 +61,34 @@ pub(crate) async fn probe_peer_view(
     channel: Channel<RawFrame>,
 ) -> Result<()> {
     let state = state.inner().clone();
-    let _slot = state
-        .0
-        .peer_view_slot
-        .clone()
-        .try_acquire_owned()
-        .map_err(error)?;
     let (owner, id, pages) = owned(&state, &window, &nonce, &page_nonce)?;
-    if pages.view_finished() {
-        return Err("session.peer_view_already_finished".into());
+    let initial = pages.claim_view(&page_nonce)?;
+    if !initial {
+        pages.wait_navigation_joined().await?;
+        owned(&state, &window, &nonce, &page_nonce)?;
     }
-    transfer_view::render(&state, owner, id, 0, &channel).await?;
-    owned(&state, &window, &nonce, &page_nonce)?;
-    pages.mark_captured(&page_nonce)
+    {
+        let _slot = state
+            .0
+            .peer_view_slot
+            .clone()
+            .try_acquire_owned()
+            .map_err(error)?;
+        if pages.view_finished() {
+            return Err("session.peer_view_already_finished".into());
+        }
+        if initial {
+            transfer_view::render_live(&state, owner, id, &channel, &pages, &page_nonce).await?;
+        } else {
+            transfer_view::render(&state, owner, id, 0, &channel).await?;
+            owned(&state, &window, &nonce, &page_nonce)?;
+            pages.mark_captured(&page_nonce)?;
+        }
+    }
+    if initial {
+        pages.mark_navigation_joined()?;
+    }
+    Ok(())
 }
 #[tauri::command]
 #[specta::specta]

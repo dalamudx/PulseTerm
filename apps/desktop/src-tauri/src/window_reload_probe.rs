@@ -16,6 +16,9 @@ struct Pages {
     captured: bool,
     navigation_retired: bool,
     initial_display: bool,
+    claimed: bool,
+    live_display: bool,
+    navigation_joined: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -67,6 +70,7 @@ impl PageTracker {
                         p.started += 1;
                         p.captured = false;
                         p.rendered = false;
+                        p.claimed = false;
                     }
                 }
                 PageLoadEvent::Finished => {
@@ -129,6 +133,75 @@ impl PageTracker {
         let n = self.nonce.lock().map_err(error)?;
         require(n.current == Some(parsed) && self.snapshot().readonly_ready())
     }
+    pub(super) fn claim_view(&self, value: &str) -> Result<bool> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        require(nonce.current == Some(parsed))?;
+        let mut initial = None;
+        self.events.send_modify(|p| {
+            if p.readonly_ready() && !p.claimed {
+                p.claimed = true;
+                initial = Some(p.finished == 1);
+            }
+        });
+        initial.ok_or("session.peer_duplicate_capture".into())
+    }
+    pub(super) fn mark_live_display(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        require(nonce.current == Some(parsed))?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(1) && p.rendered && p.captured && !p.live_display {
+                p.live_display = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) fn has_navigation_started(&self) -> bool {
+        let p = self.snapshot();
+        !p.invalid && p.started == 2
+    }
+    pub(super) async fn navigation_started(&self) -> Result<()> {
+        let mut events = self.events.subscribe();
+        loop {
+            let p = *events.borrow();
+            require(!p.invalid)?;
+            if p.started == 2 && p.navigation_retired {
+                return Ok(());
+            }
+            events.changed().await.map_err(error)?;
+        }
+    }
+    pub(super) fn mark_navigation_joined(&self) -> Result<()> {
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if !p.invalid && p.started == 2 && p.navigation_retired && !p.navigation_joined {
+                p.navigation_joined = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) async fn wait_navigation_joined(&self) -> Result<()> {
+        let mut events = self.events.subscribe();
+        tokio::time::timeout(Duration::from_millis(500), async {
+            loop {
+                let p = *events.borrow();
+                require(!p.invalid)?;
+                if p.navigation_joined {
+                    return Ok::<(), String>(());
+                }
+                events.changed().await.map_err(error)?;
+            }
+        })
+        .await
+        .map_err(|_| "session.peer_old_view_join_deadline".to_string())?
+    }
+
     pub(super) fn view_finished(&self) -> bool {
         self.snapshot().captured
     }
@@ -216,7 +289,7 @@ pub(super) async fn verify(
     let mut first_page = pages.events.subscribe();
     window
         .eval(format!(
-            "void window.__PULSE_PEER_VIEW__('{run_nonce}','{page_nonce}').catch(console.error)"
+            "void window.__PULSE_PEER_VIEW__('{run_nonce}','{page_nonce}',undefined,true).catch(console.error)"
         ))
         .map_err(error)?;
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -233,7 +306,61 @@ pub(super) async fn verify(
     .map_err(|_| "session.peer_initial_display_deadline".to_string())??;
     // Initial and reloaded page compare the same actor. Keep the existing quota.
     tokio::time::sleep(Duration::from_millis(500)).await;
-    let old = transfer::capture(state, owner, id, handle).await?;
+    let old_generation = transfer_view::live_generation(state, owner, id)?;
+    let at = state
+        .0
+        .registry
+        .state(owner, id)
+        .map_err(error)?
+        .parsed_bytes;
+    state
+        .0
+        .registry
+        .input_bound(owner, id, old_generation, b"hidden\n".to_vec())
+        .await
+        .map_err(error)?;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let projected = handle.inspect().await.map_err(error)?;
+            let current = state.0.registry.state(owner, id).map_err(error)?;
+            let text = projected
+                .cells
+                .iter()
+                .flatten()
+                .map(|c| c.text.as_str())
+                .collect::<String>();
+            if current.parsed_bytes > at
+                && text.contains("HIDDEN_SEED 中文🌍")
+                && transfer_view::live_data_acked(state, owner, id, old_generation)?
+                    .is_some_and(|end| end >= current.parsed_bytes)
+            {
+                return Ok::<(), String>(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_live_data_ack_deadline".to_string())??;
+    state
+        .0
+        .registry
+        .request_marker(owner, id, old_generation)
+        .await
+        .map_err(error)?;
+    let mut live = pages.events.subscribe();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let p = *live.borrow();
+            require(!p.invalid)?;
+            if p.ready(1) && p.live_display {
+                return Ok::<(), String>(());
+            }
+            live.changed().await.map_err(error)?;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_live_marker_deadline".to_string())??;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let before = state.0.registry.state(owner, id).map_err(error)?;
     // No explicit teardown here: actual Started must revoke nonce and retire this
     // still-open subscription. Finished/newdoc DOM alone cannot prove teardown.
@@ -241,7 +368,7 @@ pub(super) async fn verify(
     state
         .0
         .registry
-        .check_binding(owner, id, old.generation)
+        .check_binding(owner, id, old_generation)
         .map_err(error)?;
     let mut changed = pages.events.subscribe();
     eprintln!("session.peer_reload.requested");
@@ -250,7 +377,12 @@ pub(super) async fn verify(
         loop {
             let p = *changed.borrow();
             require(!p.invalid)?;
-            if p.ready(2) && p.rendered && p.navigation_retired {
+            if p.ready(2)
+                && p.rendered
+                && p.navigation_retired
+                && p.navigation_joined
+                && p.live_display
+            {
                 return Ok::<(), String>(());
             }
             changed.changed().await.map_err(error)?;
@@ -271,26 +403,19 @@ pub(super) async fn verify(
         state
             .0
             .registry
-            .acknowledge(owner, id, old.generation, 0)
+            .acknowledge(owner, id, old_generation, 0)
             .is_err()
             && state
                 .0
                 .registry
-                .input_bound(owner, id, old.generation, b"denied\n".to_vec())
+                .input_bound(owner, id, old_generation, b"denied\n".to_vec())
                 .await
                 .is_err(),
     )?;
     require(pages.confirm_nonce(&old_nonce).is_err() && pages.injection()?.0 != old_nonce)?;
     let fresh = transfer::capture(state, owner, id, handle).await?;
-    require(fresh.generation > old.generation)?;
-    let old_result = tokio::time::timeout(Duration::from_secs(3), old.completion)
-        .await
-        .map_err(error)?
-        .map_err(error)?;
-    require(matches!(
-        old_result,
-        Err(pulse_app::attachment::AttachmentError::Detached)
-    ))?;
+    require(fresh.generation > old_generation)?;
+    require(pages.snapshot().navigation_joined)?;
     state
         .0
         .registry
@@ -315,6 +440,55 @@ pub(super) async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn capture_claim_is_single_flight_per_authenticated_document_and_cannot_replay_after_started() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.claim_view(&old).is_err());
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert_eq!(p.claim_view(&old), Ok(true));
+        assert!(p.claim_view(&old).is_err());
+        assert!(p.mark_live_display(&old).is_err());
+        assert!(p.mark_captured(&old).is_ok());
+        assert!(p.mark_rendered(&old).is_ok());
+        assert!(p.mark_live_display(&old).is_ok());
+        assert!(p.mark_live_display(&old).is_err());
+        assert!(p.mark_navigation_joined().is_err());
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(1));
+        assert!(p.claim_view(&old).is_err());
+        assert!(p.mark_live_display(&old).is_err());
+        p.record(PageLoadEvent::Finished);
+        let fresh = p.injection().unwrap_or_default().0;
+        assert!(p.claim_view(&fresh).is_err());
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&fresh).is_ok());
+        assert_eq!(p.claim_view(&fresh), Ok(false));
+        assert!(p.claim_view(&fresh).is_err());
+        assert!(p.snapshot().live_display);
+        assert!(p.mark_navigation_joined().is_ok());
+        assert!(p.mark_navigation_joined().is_err());
+    }
+    #[tokio::test]
+    async fn new_capture_join_barrier_does_not_release_before_old_native_view_receipt() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(1));
+        let copy = p.clone();
+        let waiting = tokio::spawn(async move { copy.wait_navigation_joined().await });
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+        assert!(p.mark_navigation_joined().is_ok());
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), waiting).await,
+            Ok(Ok(Ok(())))
+        ));
+    }
+
     #[test]
     fn initial_readonly_display_is_not_reused_as_fresh_page_capture_or_done() {
         let p = PageTracker::new();
@@ -473,6 +647,9 @@ mod tests {
                 captured: false,
                 navigation_retired: false,
                 initial_display: false,
+                claimed: false,
+                live_display: false,
+                navigation_joined: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -490,6 +667,9 @@ mod tests {
                 captured: false,
                 navigation_retired: false,
                 initial_display: false,
+                claimed: false,
+                live_display: false,
+                navigation_joined: false,
             }
         );
         p.record(PageLoadEvent::Started);

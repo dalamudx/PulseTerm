@@ -590,10 +590,20 @@ mise run probe-pty
 - latestdefault v1/v2snapshot实际first/fresh/targetDOM及53native、fullcheck/typeddrift/tsc/Biome与229TS通过，CI原有actualprobe含新握手。前次firstpage构建GBK和外部WM实际组合也已过完整独立initial/fresh/retired报告；本次新的前端live/握手后这两模式未复验。无deps/lock/CSP/audit改变。
 - 下一步把显式live接到native application-owned订阅监督：bootstrap确认、Data/Marker确认、Started撤销与oldviewjoin须分开；不能在窗口卸载时取消PTY。snapshot或headless通过不等于oldDOM仍在消费输出时的真实刷新验收。S11整体/生产/跨平台仍未完成，既有偶发退出风险保持。
 
+## S11实际旧DOM持续订阅→Data/Marker确认→Started退役→新页恢复
+
+- firstdoc用render_live保留自己的真实lease与DOM，不再以bootstrap结束后创建的Rust验证器lease代替旧renderer。Root仍持有同一个nativePTY task/actor；peer页面命令只持有view。bootstrap实际DOM行投影/write/fence完成后ACK/摘要Equal，peer confirm标captured、ready调用single-use Done，frontend不等native订阅结束才显示，而是保留surface/查询屏蔽/UTF8Stream直到pagehide或native完成。
+- Root向本renderer generation发固定hidden输入，同一child输出HIDDEN_SEED中文/emoji。native受一帧/8212或8220credit转发Data，只有metadata本seqACK游标达到backend parsed边界才请求pure Marker；Marker必须已有Data本seqACK、自己的seqACK、sameboundary摘要Equal与本页nonce/owner，独立peerLiveDisplayChecked不可用initial/fresh/targetDisplay冒充。snapshot默认仍拒continuation。每次Data/Marker ACK前还检查实际DOM所有行text与buffer projection，不仅依赖模型摘要/RAF机会。
+- metadata锁贯穿同步ACK准入与ACK状态发布：credit释放可能在其他runtime线程唤醒nextFrame，避免Marker误见lastDataAck=false。live Data credit允许后续ACK，不授予重复bootstrap/未ACK Marker确认；Marker单次sender独立重新arm。依旧保留原500ms/session比较quota，first→live、live→fresh、fresh→target仅样例显式按quota节奏安排。
+- nonce锁内每页一次claim（两doc最多两在途请求）限制等待数量，Started重置当前claim/capture/render而保留旧实测收据。native live监督等actualStarted、registry退役后严格Detached receipt，先释放Guard/sender/peer permit再mark_navigation_joined；freshcapture有500ms固定join上限，await后重验nonce，不能抢旧lane或复活旧请求。Rootreload之前仍check旧renderer gen绑定Open；newdoc以自己的Raw Channel重捕获后继续可信跨窗迁移、输入与有序EOF。oldnonce/gen仍拒，view消失不close actor。
+- 新3native回归覆盖claim per-epoch/重复与oldnonce、join真正完成前阻塞、live DataACK不等于Marker确认权限；新3TSwrapper回归native订阅未结束时已ready/Marker、pagehide只清oldsurface与latecompletion、native提前结束或后续失败不能伪成功。此前首次actualrun四次旧live/刷新/迁移已走通但main terminal.render_timeout，整组未通过；保留1sdeadline，只补安全frames/visible/connected分类，之后v2和默认v1完整复验通过，未声称根因已定位。
+- 最新actualv1/v2各两headless+两DOM run（每codec4次oldDOM Data/Marker/Started/fresh/target），mandatory live/retired收据true、seven运输测量完整。default/encoding-probe各56native/strictclippy、fullcheck/fulltests52app/93term/33IPC/12route/13xtask/232TS、baseprobe/typeddrift通过，MCPshared native sender无error。随后actualGBK与外部WM此live版本均完整通过，独立live/retired/fresh收据true、typeddrift保持；next验证未ACK导航场景。
+- 这份controlled sample在Data全部ACK且Marker完成后发起reload，不证明未ACK洪流/持续网络输出期间的bootstrap摘要及重绑策略，live relay只支持Data和single Marker，不把缺少Checkpoint/End支持计完整。firstdoc/currentnonce只读权限仍非production ViewHost，生产/跨平台/IME与S11整体未完成；所有deps/lock/CSP/1srender/原helper deadline/audit门禁不改。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各53项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：229 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各56项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：232 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。
