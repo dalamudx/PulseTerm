@@ -500,6 +500,11 @@ mise run probe-pty
 - 4新增actor-registry回归：有输出时迁移/原window随后close仍继续解析/目标newgeneration bootstrap+输入；旧bindinghandle迟到input不写driver，旧ACK/detach/foreign/closedtarget拒；sameowner/Busy无副作用；ABA/rate锁保留；EOF后拒迁移且原owner不变。最初3项及完整workspacecheck/fulltests（48app/93term/33IPC/12route/210TS）/真实PTY2MiB/v1五headless/v2两GBKheadless回归通过；第4项新增后targeted tests通过。生产Mutex不跨await，测试guard改词法scope通过strictclippy；MCP registry无error诊断。
 - 真实native v2WebView、typedbindings drift、nativeclippy-Dwarnings与39nativeunit回归最终通过，但这些是既有窗口兼容验证，不是新跨窗迁移DOM证据。后续还需固定真实跨窗口Channel/DOM迁移、原视图retire/目标容器接收/尺寸协调/用户拖动确认和关闭后orphan授权恢复；目前不能标S11完整通过。不改变audit/第三方deps或恢复serializer门禁。
 
+## S11单个真实PTY子进程跨可信owner迁移（非GUI窗口）
+
+- probe-local-session新增transferred证据/schema5：只调用一次spawn_local启动既有portable interactive fixed Rust helper。源owner capture真实READY屏幕（19bytes），transfer到target并close源owner仍Running；新generation恢复与backend inspect逐cell完全一致，旧completion观察完仍check新binding成功。原ownerinput/ACK拒，新ownerboundinput中文在同helper实际read_line校验，最终PORTABLE_OK中/exit7，rawData连续19→63/EOF帧ACK/native read63及final state/digest/screen一致，所有native workers/directchildjoin。
+- 2报告negative回归拒missing/false receipts、twochildspawn、无generation递增/错字节/native退出码/非整数；报告验证在落盘前强制执行。fullcheck/真实PTYprobe与4core迁移tests通过。不是runtime WebView窗口，更不证明跨窗口DOM拖动；窗口owner仅trusted registry token，未声称不存在的公共childPID查询API或process-tree验收。默认任务/Unix CI已有probe-local-session即覆盖新增fixed分支；不新建生产迁移RPC/用户shell。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

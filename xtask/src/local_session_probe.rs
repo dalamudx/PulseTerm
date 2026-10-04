@@ -1,3 +1,5 @@
+#[path = "local_session_transfer.rs"]
+mod transfer;
 use anyhow::{Context, Result, ensure};
 use pulse_core::TermSize;
 use pulse_pty::PtyCommand;
@@ -498,8 +500,9 @@ async fn probe() -> Result<serde_json::Value> {
     let stream = streaming().await?;
     let wire = wire_streaming().await?;
     let detached = detached_session().await?;
+    let transferred = transfer::run().await?;
     Ok(
-        json!({"detached":detached,"wire":wire,"stream":stream,"schemaVersion":4,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","One authorized registry binding; runtime WebView/window lifecycle adapter remains unimplemented","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
+        json!({"transferred":transferred,"detached":detached,"wire":wire,"stream":stream,"schemaVersion":5,"platform":std::env::consts::OS,"actorNativeInputOutput":true,"queryAndChildResizeValidated":cfg!(unix),"nativeResizeAcknowledged":true,"nonzeroExit":7,"eofFinalized":true,"boundedDiagnosticRestore":true,"directChildCancelAndJoin":true,"receiptDropClosesActor":true,"queueDepth":pulse_term::session::TRANSPORT_QUEUE_CAPACITY,"chunkBytes":pulse_term::session::MAX_CHUNK,"limits":["Direct child only, not process-tree supervision","Windows canonical helper; ConPTY execution requires Windows CI","One authorized registry binding; runtime WebView/window lifecycle adapter remains unimplemented","Native resize pauses parsing until ACK; queued pre-resize output may still reflow under new size; not a cross-window attach boundary"]}),
     )
 }
 pub fn run() -> Result<()> {
@@ -509,6 +512,7 @@ pub fn run() -> Result<()> {
         .enable_all()
         .build()?;
     let report = runtime.block_on(probe())?;
+    transfer::validate(&report["transferred"])?;
     std::fs::write(
         super::root()?.join("target/probes/local-session.json"),
         serde_json::to_vec_pretty(&report)?,
