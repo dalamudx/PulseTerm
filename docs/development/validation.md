@@ -445,9 +445,18 @@ mise run probe-pty
 - 3新增负向用例拒remote全部提前完成、bridge超1MiB、假HOL/缺独立连接证明、错releasekind/误关actor/信用8221。30SSHfeaturetests、SSHfeaturestrictclippy、jump兼容与workspacecheck/tsc/Biome通过，Astrolabe新pressure文件无error诊断。all-featureaudit重跑仍原6license/2unmaintained阻塞，sources/bans通过，未ignore/变白名单/升级依赖或锁版本。
 - 未完成：生产SSH adapter/每通道credit调度与复用隔离、真实设备/多版本压力矩阵、GBK同条SSH到DOM组合、binary preclassifier/charset切换。此处已确认的同连接HOL必须进入后续设计门禁，不能用headless/受控回环推断真实网络性能。
 
+## S5本地CLI协议与独立Unix socket子进程（非完整生产CLI）
+
+- 新pulse-ipc::cli公共模块：4-byteLE长度+64KiB JSON body，header0/过大在bodyallocation之前拒；Decoder每push最多一frame/返回usedbytecount，任何截断EOF明确失败。boundedwriter防serialize巨大中间Vec，Zeroizing<Vec>所有wire/暂存body在drop清理。JSONRPC2严格object/stringid≤64/method≤96/objectparams，不接受batch/notification/numericID/未知字段，serde拒重复字段/非法UTF8。
+- SessionAuth第一消息hello params={protocolVersion:1,token}，固定64hex token用subtle恒定时间比较，expectedtoken/消费hello字符串零化，无Debug/Display或请求内容错误。failure锁死gate，重复hello/id或128requestbudget拒，auth本身不等于Capability/窗格权限，不将method当shell。10新单测/property覆盖所有分块/header/最大body/EOF/JSON subset/版本/密钥/重放/有限额度。
+- 新optional xtask cli-probe/mise probe-cli，用既有Tokio nativeUDS作有限可重复验证（不是规划interprocess productionadapter）。随机私有runtime0700、token+socket0600；启动token是两次OS随机UUIDv4组成64hex，不在argv/env/report；客户端和服务端均核验peer UID，secret只经私有token文件读取。实际10个新子进程证明合法hello/readonlyping（含中文emoji）/错误token+版本/握手前调用/oversizeheader/partialEOF/idle500ms总截止/unknown shell.exec拒绝；symlinktoken/文件0640拒，临时目录/连接/listener/子进程全部清理。
+- CLIreport强制8失败/成功精确观察序列、10process及所有安全bool，不接受flags-only。2新probe单测验证目录/文件mode与symlink拒；cli-feature10xtask tests、strictclippy、真实probe两次通过，MCP cli.rs/cli_probe.rs无error诊断；workspacecheck/33IPC/93term/45app/210TS、v1五headless/v2两GBKheadless/API isolation通过。
+- fulltests发现旧GBK expansion test在close()之后立刻drop driver，让EOF和cancel同时ready，公平select偶发normalEnded而非预期Closed。独立签名72a2bb7先await有限1s close终态后drop，Closed断言不放宽，生产actor不改；再跑完整suite通过。serde/subtle2.6.1/zeroize1.9.0/uuid只新增已锁定依赖边，没有版本升级/newcrate；all-featureaudit仍原6license/2maintenance拒，sources/bans通过未豁免。
+- 未完成：生产interprocess端点/WindowsNamedPipeACL与真实跨用户拒绝、clap独立pulseterm入口、共享Capability授权/风险确认、单实例/冷启动--startup-actions/50ms窗口创建、S5三平台验收。这里的ping RTT/原生UDS和Linuxpeer证据不能当上述能力已完成。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
 - TS：210 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
@@ -456,4 +465,4 @@ mise run probe-pty
 
 ## 尚未验证
 
-S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实 SSH 互通、桌面显示与编解码、CLI IPC 仍未实现或验证。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、生产DOM GUI 接入与进程树回收仍待验证；Linux已有finite helper的真实WebView组合验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。已批准的非活动网格只读getter及双屏恢复已接入；隐藏光标分离/非行尾wrap等不能无损编码的状态明确延期，尚未接入生产attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。
+S1 已取得 Linux 合成通道/背压的部分证据，但未完成三平台验收。ConPTY、窗口材质/IME、真实协议/桌面/CLI已有部分受控证据，但真实设备与生产接口、Windows管道ACL及CLI窗口启动仍未完成。PTY 已有 Linux 真实交互与系统 Shell 冒烟证据，但交互/login shell 矩阵、Windows ConPTY、生产DOM GUI 接入与进程树回收仍待验证；Linux已有finite helper的真实WebView组合验证。类型生成已有 Linux 控制面证据，但三平台与 RC 依赖门禁未完成。已批准的非活动网格只读getter及双屏恢复已接入；隐藏光标分离/非行尾wrap等不能无损编码的状态明确延期，尚未接入生产attach；xterm.js 与 alacritty 的边缘序列分歧需要重新同步策略。Unicode 标量表已统一，但更多组合边界、字形与控制序列交互仍待验证。原生依赖门禁审查通过之前，不得打包分发验证应用。

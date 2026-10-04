@@ -5,6 +5,8 @@
 pub mod attach;
 /// Dual source/display coordinate transactions. Explicit opt-in; never mix with v1.
 pub mod attach_v2;
+/// Bounded local CLI JSON-RPC framing and handshake admission, not command execution.
+pub mod cli;
 /// Bounded cumulative-ack flow control, independent of any runtime.
 pub mod flow;
 

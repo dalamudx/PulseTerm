@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [features]
+cli-probe = ["dep:tempfile", "dep:uuid", "dep:zeroize"]
 ssh-probe = ["dep:russh", "dep:rand", "dep:tempfile", "dep:encoding_rs"]
 
 [dependencies]
@@ -22,6 +23,8 @@ rand = { version = "0.10", optional = true }
 tempfile = { version = "3", optional = true }
 encoding_rs = { version = "=0.8.42", optional = true }
 serde_json.workspace = true
+uuid = { workspace=true, optional=true }
+zeroize = { workspace=true, optional=true }
 
 [lints]
 workspace = true

@@ -325,7 +325,8 @@ pub struct ActionDef {
 ## 12. CLI 通信服务
 
 - 使用 `interprocess` 建立本地 socket（Unix 为 UDS，Windows 为命名管道，并设置只允许当前用户访问的安全描述符）。
-- 消息格式为 JSON-RPC 2.0，每条消息前加长度前缀。建立连接时先发送 `hello {protocol_version, token}`。
+- 消息格式为 JSON-RPC 2.0，当前验证子集为object请求/string id/object params（不接受batch/notification/numeric id）。每条消息前加4字节小端u32长度，body≤64KiB，分帧只返回一条以便上层预算。建立连接时先发送`hello {protocolVersion:1, token}`；错误认证/重复hello/id/128请求预算耗尽均撤销连接，不执行任何动作。
+- 当前pulse-ipc::cli提供有界codec与SessionAuth，不负责OS peer权限或Capability授权；token恒定时间比较，拥有secret的wire buffer/expected token/消费的hello token零化且无Debug。CLI准入后仍必须走共享Capability注册表及风险确认；nativeUnix探针只允许固定只读ping，不是生产interprocess/Windows管道实现。
 - token 在每次启动时随机生成，写入运行时目录中权限为 0600 的文件。
 - 主进程没有运行时，CLI 以 `--startup-actions` 参数启动 `pulseterm-desktop`，参数中带上本次的请求。`single-instance` 插件负责处理启动过程中的竞争（例如同时运行了两次 CLI）。
 

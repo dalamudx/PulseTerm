@@ -3,6 +3,8 @@
 
 mod attachment_probe;
 mod channel_probe;
+#[cfg(all(feature = "cli-probe", unix))]
+mod cli_probe;
 mod encoding_attachment_probe;
 #[cfg(feature = "ssh-probe")]
 mod gbk_probe;
@@ -43,6 +45,10 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    #[cfg(all(feature = "cli-probe", unix))]
+    if std::env::args().nth(1).as_deref() == Some("cli-probe-helper") {
+        return cli_probe::helper();
+    }
     #[cfg(feature = "ssh-probe")]
     if std::env::args().nth(1).as_deref() == Some("ssh-system-helper") {
         return ssh_system_probe::helper();
@@ -111,6 +117,12 @@ fn main() -> Result<()> {
             ssh_certificate_probe::run()?;
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-certificate requires --features ssh-probe");
+        }
+        Some("probe-cli") => {
+            #[cfg(all(feature = "cli-probe", unix))]
+            cli_probe::run()?;
+            #[cfg(not(all(feature = "cli-probe", unix)))]
+            bail!("probe-cli currently requires Unix and --features cli-probe");
         }
         Some("probe-ssh-pressure") => {
             #[cfg(feature = "ssh-probe")]

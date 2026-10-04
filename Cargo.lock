@@ -3407,7 +3407,11 @@ name = "pulse-ipc"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "serde",
+ "serde_json",
+ "subtle",
  "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]
@@ -6087,6 +6091,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]

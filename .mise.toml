@@ -77,6 +77,10 @@ run = "node scripts/check-terminal-api.mjs"
 description = "Format Rust and TypeScript code"
 run = ["cargo fmt --all", "pnpm --filter ui format"]
 
+[tasks.probe-cli]
+description = "Validate authenticated fixed read-only CLI RPC over a private Unix socket"
+run = "cargo run -p xtask --features cli-probe --locked -- probe-cli"
+
 [tasks.probe-ssh]
 description = "Validate isolated loopback SSH host keys, authentication and PTY channels"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh"

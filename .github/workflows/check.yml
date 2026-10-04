@@ -61,6 +61,12 @@ jobs:
           mise run probe-ssh-legacy
           mise exec -- cargo clippy -p xtask --features ssh-probe --all-targets --locked -- -D warnings
           mise exec -- cargo test -p xtask --features ssh-probe --locked
+      - name: Validate authenticated private CLI IPC
+        if: runner.os == 'Linux'
+        run: |
+          mise run probe-cli
+          mise exec -- cargo test -p xtask --features cli-probe --locked
+          mise exec -- cargo clippy -p xtask --features cli-probe --all-targets --locked -- -D warnings
       - name: Exercise native actor and wire acknowledgment backpressure
         run: mise run probe-local-session
       - name: Exercise native PTY on all platforms

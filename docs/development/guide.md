@@ -75,6 +75,7 @@ mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data 
 mise run probe-channel-v2         # --probe-v2固定UTF8样例，两轮headless/DOM、版本收据和8220-byte窗口
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
+mise run probe-cli                # cli-probe可选feature，私有UDS/10独立固定子进程/握手与长度/权限/EOF验证
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 mise run probe-ssh-jump           # 隔离双SSH host-key pin/单forward额度/GBK→actor/v2、输入/DSR回写与EOF清理
