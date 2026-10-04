@@ -347,6 +347,25 @@ async fn probe() -> Result<serde_json::Value> {
         received == payload.as_bytes(),
         "nested SSH byte loss/reorder"
     );
+    let gbk_bytes = super::gbk_probe::fixture()?;
+    channel.data(gbk_bytes.as_slice()).await?;
+    let mut gbk_returned = Vec::new();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while gbk_returned.len() < gbk_bytes.len() {
+            match channel.wait().await {
+                Some(ChannelMsg::Data { data }) => {
+                    ensure!(gbk_returned.len() + data.len() <= 4096, "GBK echo bound");
+                    gbk_returned.extend_from_slice(&data);
+                }
+                Some(ChannelMsg::Close) | None => anyhow::bail!("GBK channel closed early"),
+                _ => {}
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await??;
+    let gbk_report = super::gbk_probe::verify_network_reply(&gbk_returned)?;
+
     channel.eof().await?;
     let mut eof = false;
     let mut closed = false;
@@ -377,13 +396,13 @@ async fn probe() -> Result<serde_json::Value> {
     ensure!(
         outer.metrics.forward_peak.load(Ordering::SeqCst) == 1
             && outer.metrics.denied.load(Ordering::SeqCst) == 2
-            && inner.metrics.bytes.load(Ordering::SeqCst) == payload.len(),
+            && inner.metrics.bytes.load(Ordering::SeqCst) == payload.len() + gbk_bytes.len(),
         "jump evidence counters missing"
     );
     stop(&mut outer).await?;
     stop(&mut inner).await?;
     Ok(
-        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or actor SSH transport"],"platform":std::env::consts::OS}),
+        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"gbk":gbk_report,"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or actor SSH transport"],"platform":std::env::consts::OS}),
     )
 }
 fn validate_report(r: &serde_json::Value) -> Result<()> {
@@ -410,6 +429,7 @@ fn validate_report(r: &serde_json::Value) -> Result<()> {
             .is_some_and(|n| (1024..=8192).contains(&n)),
         "jump byte evidence"
     );
+    super::gbk_probe::validate_report(&r["gbk"])?;
     ensure!(
         r["limitations"].as_array().is_some_and(|a| !a.is_empty()),
         "jump limitations missing"

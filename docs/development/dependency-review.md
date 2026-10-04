@@ -78,6 +78,12 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 
 探针改用scoped remove_identity(public)，其header正常生成；新增Tokio duplex frame测试确认header/body/string长度和message18，实际private Agent列出空identity、removed-key请求返回AgentProtocolError（不能用transport EOF伪成功）且仍能request-identities证明服务活着。只清probe自己的软件key，不使用用户Agent。future Agent/extension方法须分别验证，不能因为签名通过就忽略remove-all/扩展API风险；升级后复查/跟踪upstream，公开issue/PR仍需用户发布授权。
 
+## S4GBK文本验证依赖
+
+新增仅xtask ssh-probe可选encoding_rs精确0.8.42（(Apache-2.0 OR MIT) AND BSD-3-Clause）与core_detect1.0.0/multiversion_no_op1.0.0/simdutf8 0.1.5。最初registry缓存存在但project lock实际没有此包，因此不是“复用已锁依赖”；Cargo.lock新增4包及xtask引用，未移除/升级其它包。没有把编码模块接production actor，CSR/GTK/terminal vendor不变。
+
+完整--all-features --locked cargo-deny检查仍原license6拒绝/maintenance2（paste/proc-macro-error），sources/bans通过；没有新增拒绝/公告、不加allow或ignore。该库按WHATWG GBK行为，测试中的Chinese/ANSI/分块已验证不等于所有设备GBK/GB18030私有扩展；actor/logging/Zmodem及原始字节语义仍须独立实现。SDK debug不得记录actual credential/终端内容；样例没有用户内容。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

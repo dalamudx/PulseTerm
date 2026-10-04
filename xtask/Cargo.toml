@@ -7,7 +7,7 @@ license.workspace = true
 publish = false
 
 [features]
-ssh-probe = ["dep:russh", "dep:rand", "dep:tempfile"]
+ssh-probe = ["dep:russh", "dep:rand", "dep:tempfile", "dep:encoding_rs"]
 
 [dependencies]
 anyhow.workspace = true
@@ -20,6 +20,7 @@ tokio = { workspace = true, features = ["io-util", "process"] }
 russh = { version = "=0.63.3", default-features = false, features = ["ring"], optional = true }
 rand = { version = "0.10", optional = true }
 tempfile = { version = "3", optional = true }
+encoding_rs = { version = "=0.8.42", optional = true }
 serde_json.workspace = true
 
 [lints]

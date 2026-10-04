@@ -3,6 +3,8 @@
 
 mod attachment_probe;
 mod channel_probe;
+#[cfg(feature = "ssh-probe")]
+mod gbk_probe;
 mod local_session_probe;
 mod portable_pty_probe;
 mod pty_probe;

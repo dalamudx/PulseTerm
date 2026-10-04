@@ -386,6 +386,13 @@ mise run probe-pty
 - 2新增单测检查create legacy后默认KEX/MAC相等且不含SHA1、legacy只Ed25519，以及report互斥/缺flag拒绝；20 SSH-feature tests/clippy-Dwarnings与modern+legacy实际运行通过。其余K-I/jump/cert/Agent-forward4探针及default check再成功，CI追加明确legacy调用；没有新依赖/lock/audit/CSP/正常daemon配置改变。
 - 注意russh Preferred默认safe KEX/CIPHER/MAC排除旧SHA1/CBC，但key列表仍含RSA{hash:None}（ssh-rsa）；本profile RSA feature关闭且只有Ed25519，不能据此承诺启用RSA后的host-key列表也完全现代。生产legacy-per-host政策需另行过滤旧host-key算法并明确用户opt-in，不照搬全DEFAULT key列表。未启group1/DSA/3DES/RSA-SHA1，不验证真实旧设备及用户警告UX；S4矩阵未全完成。
 
+## S4嵌套SSH二进制GBK回显与严格分块转码（Linux）
+
+- 新test-only gbk_probe复用owned双SSH跳板通道，输出固定中文/ANSI/DSR fixture编码为GBK实际33 bytes（UTF8则43 bytes）；真实channel传输、回显原始bytes完全相同，不将SSH Data强行from_utf8。返回gbk报告并纳入jump成功validator，server应用bytes计数同时包含UTF8 4400和GBK33。
+- 编码strict检查GBK.encode had_errors，unrepresentable emoji明确拒绝而非numeric entity替换；decode使用有状态new_decoder_without_bom_handling/decode_to_string_without_replacement，bytes≤4096/out-cap16KiB/完整consumed&InputEmpty，最后empty last=true排空。所有chunk sizes1..33（含leadbyte边界）均得到exact43 UTF8 bytes，与reference backend TerminalProbe cells/DSR replies一致；非法0xff/半个lead0x81EOF均fail而非U+FFFD隐藏损坏。
+- 新3单测覆盖all splits、malformed EOF/unsupported input、bound/缺report；23SSHfeaturetests/clippy-Dwarnings及真实jump+GBK通过。全默认check/test199TS/39app/89core/16IPC/6xtask与其余5SSH模式再次成功；CI既有jump调用即强制新GBK报告。新增encoding_rs0.8.42与3transitive包，完整audit仍原6license/2maintenance失败，sources/bans通过无新增拒绝，原锁定包版本未升级。
+- 严格边界：只是controlled GBK echo+后端解析归一化测试，不是实际GBK交换机/自动侦测/所有GBK扩展/生产codec。raw source bytes33与logical UTF8 bytes43不同，不能直接把现有attachment parsedBytes/raw-offset定义当已经适配；actor original-byte/reconnect/history/input query transcoding及Zmodem在转码前分类仍未接。原协议精确性/flow-control门禁不放宽，生产charset支持未标完成；S4仍部分矩阵。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
