@@ -53,7 +53,30 @@ impl Drop for Jobs {
         }
     }
 }
+fn proxy_order(routed: bool) -> serde_json::Value {
+    if routed {
+        json!(["http-connect", "socks5"])
+    } else {
+        json!([])
+    }
+}
+async fn finish_proxies(proxies: &mut Option<super::super::route_probe::ProxyChain>) -> Result<()> {
+    if let Some(proxies) = proxies.as_mut() {
+        proxies.finish().await?;
+    }
+    *proxies = None;
+    Ok(())
+}
 async fn connect_pressure(e: &Endpoint) -> Result<client::Handle<Pin>> {
+    Ok(connect_path(e, false).await?.0)
+}
+async fn connect_path(
+    e: &Endpoint,
+    routed: bool,
+) -> Result<(
+    client::Handle<Pin>,
+    Option<super::super::route_probe::ProxyChain>,
+)> {
     let cfg = Arc::new(client::Config {
         window_size: 32768,
         maximum_packet_size: 8192,
@@ -61,20 +84,24 @@ async fn connect_pressure(e: &Endpoint) -> Result<client::Handle<Pin>> {
         inactivity_timeout: Some(Duration::from_secs(15)),
         ..Default::default()
     });
-    let mut c = client::connect(
-        cfg,
-        e.address,
-        Pin {
-            key: e.key.clone(),
-            rejected: Arc::new(AtomicBool::new(false)),
-        },
-    )
-    .await?;
+    let pin = Pin {
+        key: e.key.clone(),
+        rejected: Arc::new(AtomicBool::new(false)),
+    };
+    let (mut c, proxies) = if routed {
+        let (proxies, stream) = super::super::route_probe::ProxyChain::connect(e.address).await?;
+        (
+            client::connect_stream(cfg, stream, pin).await?,
+            Some(proxies),
+        )
+    } else {
+        (client::connect(cfg, e.address, pin).await?, None)
+    };
     ensure!(
         c.authenticate_password(USER, PASS).await?.success(),
         "pressure auth"
     );
-    Ok(c)
+    Ok((c, proxies))
 }
 async fn echoed(channel: &mut Channel<client::Msg>, text: &[u8]) -> Result<()> {
     channel.data(text).await?;
@@ -97,9 +124,9 @@ async fn echoed(channel: &mut Channel<client::Msg>, text: &[u8]) -> Result<()> {
     ensure!(bytes == text, "control echo mismatch");
     Ok(())
 }
-pub(super) async fn probe() -> Result<serde_json::Value> {
+pub(super) async fn probe(routed: bool) -> Result<serde_json::Value> {
     let mut endpoint = endpoint(None).await?;
-    let connection = connect_pressure(&endpoint).await?;
+    let (connection, mut proxies) = connect_path(&endpoint, routed).await?;
     let mut control = connection.channel_open_session().await?;
     echoed(&mut control, b"before").await?;
     let primary = connection.channel_open_session().await?;
@@ -277,17 +304,22 @@ pub(super) async fn probe() -> Result<serde_json::Value> {
         .disconnect(Disconnect::ByApplication, "", "en")
         .await?;
     drop(connection);
+    finish_proxies(&mut proxies).await?;
     drained(&endpoint).await?;
     let remote_total = endpoint.metrics.bytes.load(Ordering::SeqCst);
     ensure!(remote_total == 20, "remote control byte accounting");
     stop(&mut endpoint).await?;
-    let detached = cancel::run(false).await?;
-    let timed_out = cancel::run(true).await?;
+    let detached = cancel::run(false, routed).await?;
+    let timed_out = cancel::run(true, routed).await?;
     Ok(
-        json!({"schemaVersion":1,"detached":detached,"timedOut":timed_out,"actorControlResponsive":true,"sourceBytes":source,"utf8Bytes":utf8,"pausedActorSource":paused.0,"pausedBridgeRead":paused.1,"pausedRemoteProduced":paused.2,"pausedRemoteControlReceived":paused.3,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":receipt.peak_credit_bytes,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"limits":["Controlled loopback russh, not network-device or all SSH-server acceptance","Shared SSH connection control is blocked by a full per-channel queue: production multiplexing gate remains","No production SSH transport/route reuse or binary/Zmodem classification"]}),
+        json!({"schemaVersion":1,"proxyOrder":proxy_order(routed),"proxyRelaysJoined":true,"detached":detached,"timedOut":timed_out,"actorControlResponsive":true,"sourceBytes":source,"utf8Bytes":utf8,"pausedActorSource":paused.0,"pausedBridgeRead":paused.1,"pausedRemoteProduced":paused.2,"pausedRemoteControlReceived":paused.3,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":receipt.peak_credit_bytes,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"limits":["Controlled loopback russh, not network-device or all SSH-server acceptance","Shared SSH connection control is blocked by a full per-channel queue: production multiplexing gate remains","No production SSH transport/route reuse or binary/Zmodem classification"]}),
     )
 }
-pub(super) fn validate(r: &serde_json::Value) -> Result<()> {
+pub(super) fn validate(r: &serde_json::Value, routed: bool) -> Result<()> {
+    ensure!(
+        r["proxyOrder"] == proxy_order(routed) && r["proxyRelaysJoined"] == true,
+        "SSH pressure requested route/relay evidence"
+    );
     ensure!(
         r["schemaVersion"] == 1
             && r["sourceBytes"] == TOTAL
@@ -327,7 +359,7 @@ pub(super) fn validate(r: &serde_json::Value) -> Result<()> {
             && r["limits"].as_array().is_some_and(|x| !x.is_empty()),
         "pause metadata/limitations"
     );
-    cancel::validate(&r["detached"], false)?;
-    cancel::validate(&r["timedOut"], true)?;
+    cancel::validate(&r["detached"], false, routed)?;
+    cancel::validate(&r["timedOut"], true, routed)?;
     Ok(())
 }

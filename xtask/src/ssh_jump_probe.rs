@@ -24,8 +24,18 @@ const PASS: &str = "synthetic-jump-password";
 #[path = "ssh_pressure_probe.rs"]
 mod pressure;
 pub fn run_pressure() -> Result<()> {
+    run_pressure_path(false)
+}
+pub fn run_routed_pressure() -> Result<()> {
+    run_pressure_path(true)
+}
+fn run_pressure_path(routed: bool) -> Result<()> {
     let root = super::root()?;
-    let path = root.join("target/probes/ssh-pressure.json");
+    let path = root.join(if routed {
+        "target/probes/route-ssh-pressure.json"
+    } else {
+        "target/probes/ssh-pressure.json"
+    });
     std::fs::create_dir_all(root.join("target/probes"))?;
     if path.exists() {
         std::fs::remove_file(&path)?;
@@ -35,9 +45,9 @@ pub fn run_pressure() -> Result<()> {
         .enable_all()
         .build()?;
     let report = runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(40), pressure::probe()).await
+        tokio::time::timeout(Duration::from_secs(40), pressure::probe(routed)).await
     })??;
-    pressure::validate(&report)?;
+    pressure::validate(&report, routed)?;
     std::fs::write(path, serde_json::to_vec_pretty(&report)?)?;
     println!("PASS SSH ACK pressure and shared-connection head-of-line limitation observed");
     Ok(())

@@ -144,6 +144,12 @@ fn main() -> Result<()> {
             #[cfg(not(all(feature = "cli-probe", unix)))]
             bail!("probe-cli currently requires Unix and --features cli-probe");
         }
+        Some("probe-route-ssh-pressure") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_jump_probe::run_routed_pressure()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-route-ssh-pressure requires --features ssh-probe");
+        }
         Some("probe-ssh-pressure") => {
             #[cfg(feature = "ssh-probe")]
             ssh_jump_probe::run_pressure()?;

@@ -1,8 +1,8 @@
 //! Revoking the view cannot close a busy SSH actor. Private fixture only.
 use super::*;
-pub(super) async fn run(timeout: bool) -> Result<serde_json::Value> {
+pub(super) async fn run(timeout: bool, routed: bool) -> Result<serde_json::Value> {
     let mut endpoint = endpoint(None).await?;
-    let connection = connect_pressure(&endpoint).await?;
+    let (connection, mut proxies) = connect_path(&endpoint, routed).await?;
     let mut control = connection.channel_open_session().await?;
     let primary = connection.channel_open_session().await?;
     let (transport, driver) = ChannelTransport::bounded_driver();
@@ -137,13 +137,18 @@ pub(super) async fn run(timeout: bool) -> Result<serde_json::Value> {
         .disconnect(Disconnect::ByApplication, "", "en")
         .await?;
     drop(connection);
+    finish_proxies(&mut proxies).await?;
     drained(&endpoint).await?;
     stop(&mut endpoint).await?;
     Ok(
-        json!({"kind":if timeout{"ack-timeout"}else{"detach"},"sourceBytes":final_state.parsed_bytes,"utf8Bytes":final_state.utf8_bytes,"actorControlResponsive":true,"viewRevokedOnly":true,"sharedControlRecovered":true,"remoteResumed":true,"actorEndedNormally":true,"fullActorScreenExact":true,"connectionsListenerAndProducerJoined":true}),
+        json!({"proxyOrder":proxy_order(routed),"proxyRelaysJoined":true,"kind":if timeout{"ack-timeout"}else{"detach"},"sourceBytes":final_state.parsed_bytes,"utf8Bytes":final_state.utf8_bytes,"actorControlResponsive":true,"viewRevokedOnly":true,"sharedControlRecovered":true,"remoteResumed":true,"actorEndedNormally":true,"fullActorScreenExact":true,"connectionsListenerAndProducerJoined":true}),
     )
 }
-pub(super) fn validate(r: &serde_json::Value, timeout: bool) -> Result<()> {
+pub(super) fn validate(r: &serde_json::Value, timeout: bool, routed: bool) -> Result<()> {
+    ensure!(
+        r["proxyOrder"] == proxy_order(routed) && r["proxyRelaysJoined"] == true,
+        "SSH release requested route/relay evidence"
+    );
     ensure!(
         r["kind"] == if timeout { "ack-timeout" } else { "detach" }
             && r["sourceBytes"] == TOTAL

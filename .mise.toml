@@ -20,6 +20,10 @@ run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
 description = "Compare Rust terminal state and xterm headless"
 run = ["cargo xtask probe", "pnpm --filter ui probe"]
 
+[tasks.probe-route-ssh-pressure]
+description = "Verify real SSH ACK pressure, detach and timeout through HTTP and SOCKS byte routes"
+run = "cargo run -p xtask --features ssh-probe --locked -- probe-route-ssh-pressure"
+
 [tasks.probe-route]
 description = "Exercise real HTTP CONNECT and SOCKS5 byte-route composition and refusal"
 run = "cargo xtask probe-route"

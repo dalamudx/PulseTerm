@@ -486,6 +486,13 @@ mise run probe-pty
 - 1新增routed report negative regression拒缺keymismatch/错误hop或bytecounts/flags-only；33SSHfeaturetests/strictclippy以及真实组合jump通过。已有CIjump现在强制routedSsh，不增加新crate/lock/audit/CSP修改。
 - 限制：已说明S18协议-neutral复用在受控SSH上成立，但不是企业HTTP/SOCKS服务器矩阵、SSHJumpHop池/ProxyCommand、proxy链端到端ACK背压或productionroute配置；原共享SSH连接HOL门禁保持。下一步将原有4MiB慢ACK样例显式经此代理链验证，不将512bytes正常echo当压力验收。
 
+## S18真实HTTP→SOCKS→SSH→GBK actor的4MiB背压与三种视图释放
+
+- 新mise/xtask/CI probe-route-ssh-pressure，保留原direct probe-ssh-pressure独立报告。复用同NetworkDialer BoxStream与HTTP/SOCKSowned双认证，每条ACK/detach/timeout压力SSH连接都经过该proxychain，而对照独立control连接仍直连。proxy不理解SSH/VT/GBK也不拥有无限缓存，Tokio copy_bidirectional有界buffer及TCP/SSHwindow保证流控，不改变锁定russh。
+- actualwindow-aware远端producer固定4193280 sourcebytes（512×8190），归一化4892160 UTF8，trueactor/registry/v2/credit8220。暂停ACK稳定时actor/reader/remoteProduced三个计数不动，本轮remoteProduced155610<TOTAL，独立连接control响应、同连接control阻塞。恢复ACK后全部raw+UTF8逐byteexact/最终backend画面匹配/SSHEOF+Close/v2EOFACK成功；撤视图或3sACKtimeout两条路径只退binding，会话存活/远端与sameconnectioncontrol恢复，最后完整producer排空与actorEnded。每条disconnect后两proxy/listeners/tasks正常join。
+- report强制请求proxyOrder同时匹配mainACK/detached/timedOut且proxyRelaysJoined=true，不能用direct成功报告替代某一proxyphase。1新mode错配回归、34SSHfeaturetests/strictclippy、原direct三路径回归/workspacecheck/tsc/Biome通过，MCP pressure模块无error诊断；新route三路径actualprobe通过。无依赖/lock/CSP/audit变动。
+- 仍限制：proxy链加入未改善russh同连接HOL，不能准许生产SSH共享池/SFTP/转发复用；受控回环不能当企业代理/网络设备/三平台性能。用显式routeJSON区分多bufferTCP链也不代表复杂真实网络永不积压；没有生产SSH adapter/ProxyCommand/HTTPS TLS/二进制Zmodem预分类。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
