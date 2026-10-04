@@ -554,9 +554,16 @@ mise run probe-pty
 - 最新v2与默认v1各两headless+两DOM run（每codec4个刷新sourceDOM及4个后续targetDOM）完整报告，实际oldnonce拒和newdocDone完成。首次默认v1末轮native_exit_failed未保留分类，补无敏感退出收据诊断后复验通过；尚未复现/定位，不声称已修复这项偶发风险。46native/strictclippy/typeddrift/7报告负向与fullcheck/fulltests52app/93term/33IPC/12route/13xtask/219TS、baseprobe通过，MCP新peer模块无error。
 - 4新增TS是wrapper生命周期mock测试，不算绘制验收；覆盖scope参数/duplicate、pagehide取消在途native和latecompletion、rendererfailure、混版/7s截止清理且不能调用Done。真实绘制证据单独来自WebKitGTK实际probe。first page仍无自己的DOMChannel，live旧页面订阅跨导航、生产任意导航/IME/拖动/多平台、GBK及外部WM最新组合尚待验证；S11总体不标完成，deps/lock/CSP/audit/release门禁不变。
 
+## S11刷新DOM链路的GBK/外部WM兼容与在途许可撤销
+
+- 显式encoding-probe构建发现Active新增peer字段未初始化（默认desktop编译不覆盖此cfg分支），不能视为GBK新组合通过。改为Active::new统一无peer default：owner/nonce/id/visibility与peerNone/peerOwnerNone/peerIdNone/newPageTracker一致；普通固定run显式增加自己的tx/pages，encoding样例不继承peer页面权限。此前已通过的旧encoding版本不当作当前源码证据。
+- 修正后实际probe-encoding-window完整GBK两DOM、双坐标与UTF8固定peer新docreadonly恢复通过；probe-window-external真实WM-only最小化/恢复与两headless+两DOM完整reports通过，freshsourceDOM/targetDOM均独立收据。feature测试最初46项，随后最终源码新增2项回归并补default/encoding-probe各48项tests、严格clippy、bindingsdrift/fullcheck通过，MCP peer模块无error。普通desktop仍未开放GBK入口。
+- 将Active::peer_view同nonce/window/id门复用于四个readonly端点，compare异步返回后仍调用owned重新授权。2新增真实actor metadata回归：foreign/main/wrongrun/oldnonce拒，page2 admission后导航Started使pendingPageTrackerclone不能markCaptured/Done，registry退役后actor仍Running、正常close/join；no-peer默认run绝无page capability。这是受控授权yield回归，不冒充GUI中用户重复刷新操作。
+- CI现有LinuxGBK实际probe后补显式encoding-probe单元测试与strictclippy，防止cfg分支今后只编译默认desktop而漏检查。真实GBK设备、firstpage liveChannel跨导航、生产ViewHost权限、连续任意导航与跨平台仍待验收；最新defaultcore219TS已过，无deps/lock/audit门禁变化。先前偶发native非零退出/无report继续记录风险，未新增豁免或扩大截止。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现46项测试通过（新增只读page2准入、captured/rendered双阶段single-use收据回归；保留nonce/peer incarnation与PageLoad回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各48项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：219 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

@@ -101,7 +101,10 @@ jobs:
         run: mise run probe-window-external
       - name: Validate classified GBK actor recovery in the real WebView
         if: runner.os == 'Linux'
-        run: mise run probe-encoding-window
+        run: |
+          mise run probe-encoding-window
+          mise exec -- cargo test -p pulseterm-desktop --features encoding-probe --locked
+          mise exec -- cargo clippy -p pulseterm-desktop --features encoding-probe --all-targets --locked -- -D warnings
       - name: Audit dependencies
         if: runner.os == 'Linux'
         run: mise run audit

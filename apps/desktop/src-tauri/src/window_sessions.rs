@@ -52,6 +52,39 @@ struct Active {
     visibility: Arc<crate::viewer_visibility::VisibilityGate>,
 }
 impl Active {
+    fn new(
+        owner: WindowToken,
+        nonce: String,
+        id: SessionId,
+        visibility: Arc<crate::viewer_visibility::VisibilityGate>,
+    ) -> Self {
+        Self {
+            owner,
+            nonce,
+            id,
+            visibility,
+            peer: None,
+            peer_pages: reload::PageTracker::new(),
+            peer_owner: None,
+            peer_id: None,
+        }
+    }
+    fn peer_view(
+        &self,
+        owner: WindowToken,
+        nonce: &str,
+        page_nonce: &str,
+    ) -> Result<(SessionId, reload::PageTracker)> {
+        if self.nonce != nonce || self.peer_owner != Some(owner) || self.owner == owner {
+            return Err("session.forbidden".into());
+        }
+        self.peer_pages.authorize_view(page_nonce)?;
+        Ok((
+            self.peer_id.ok_or("session.peer_not_registered")?,
+            self.peer_pages.clone(),
+        ))
+    }
+
     // Only the trusted builder callback binds the fixed peer incarnation. Never a JS label/token.
     fn bind_peer(&mut self, owner: WindowToken) -> Result<()> {
         if owner == self.owner || self.peer_owner.is_some_and(|known| known != owner) {
@@ -1013,14 +1046,9 @@ pub(crate) async fn probe_session(
     let pages = reload::PageTracker::new();
     let visibility = Arc::new(crate::viewer_visibility::VisibilityGate::default());
     *state.0.active.lock().map_err(error)? = Some(Active {
-        owner,
-        nonce: nonce.clone(),
-        id,
         peer: Some(peer_tx),
         peer_pages: pages.clone(),
-        peer_owner: None,
-        peer_id: None,
-        visibility: visibility.clone(),
+        ..Active::new(owner, nonce.clone(), id, visibility.clone())
     });
     let (peer_handle, peer_task) = native().await?;
     // Each window incarnation is installed on the runtime, never from a frontend label.

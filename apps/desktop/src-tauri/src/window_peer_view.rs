@@ -8,14 +8,10 @@ fn owned(
 ) -> Result<(WindowToken, SessionId, reload::PageTracker)> {
     let owner = state.caller(window)?;
     let active = state.0.active.lock().map_err(error)?;
-    let run = active
-        .as_ref()
-        .filter(|r| r.nonce == nonce && r.peer_owner == Some(owner) && r.owner != owner)
-        .ok_or("session.forbidden")?;
-    run.peer_pages.authorize_view(page_nonce)?;
-    let id = run.peer_id.ok_or("session.peer_not_registered")?;
+    let run = active.as_ref().ok_or("session.forbidden")?;
+    let (id, pages) = run.peer_view(owner, nonce, page_nonce)?;
     state.0.registry.state(owner, id).map_err(error)?;
-    Ok((owner, id, run.peer_pages.clone()))
+    Ok((owner, id, pages))
 }
 #[tauri::command]
 #[specta::specta]
@@ -80,4 +76,100 @@ pub(crate) fn probe_peer_done(
 ) -> Result<()> {
     let (_, _, pages) = owned(&state, &window, &nonce, &page_nonce)?;
     pages.mark_rendered(&page_nonce)
+}
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use pulse_term::session::{ChannelTransport, spawn_session};
+    #[tokio::test]
+    async fn pending_readonly_authorization_cannot_complete_after_navigation_revokes_its_epoch() {
+        let registry = SessionRegistry::new();
+        let main = registry.open_window().unwrap();
+        let peer = registry.open_window().unwrap();
+        let foreign = registry.open_window().unwrap();
+        let (transport, driver) = ChannelTransport::bounded_driver();
+        let (handle, task) = spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+        let id = registry.register(peer, handle).unwrap();
+        let mut run = Active::new(
+            main,
+            "run".into(),
+            id,
+            Arc::new(crate::viewer_visibility::VisibilityGate::default()),
+        );
+        run.bind_peer(peer).unwrap();
+        run.peer_id = Some(id);
+        let pages = run.peer_pages.clone();
+        pages.record(tauri::webview::PageLoadEvent::Started);
+        pages.record(tauri::webview::PageLoadEvent::Finished);
+        let old = pages.injection().unwrap().0;
+        pages.confirm_nonce(&old).unwrap();
+        assert!(run.peer_view(peer, "run", &old).is_err());
+        pages.record(tauri::webview::PageLoadEvent::Started);
+        pages.record(tauri::webview::PageLoadEvent::Finished);
+        let current = pages.injection().unwrap().0;
+        assert!(pages.confirm_nonce(&old).is_err());
+        pages.confirm_nonce(&current).unwrap();
+        assert!(run.peer_view(foreign, "run", &current).is_err());
+        assert!(run.peer_view(main, "run", &current).is_err());
+        assert!(run.peer_view(peer, "wrong-run", &current).is_err());
+        assert!(run.peer_view(peer, "run", &old).is_err());
+        let (admitted, pending) = run.peer_view(peer, "run", &current).unwrap();
+        assert_eq!(admitted, id);
+        // Represents compare/capture yielding after initial permission admission.
+        pages.record(tauri::webview::PageLoadEvent::Started);
+        registry.retire_window_views(peer).unwrap();
+        tokio::task::yield_now().await;
+        assert!(run.peer_view(peer, "run", &current).is_err());
+        assert!(pending.mark_captured(&current).is_err());
+        assert!(pending.mark_rendered(&current).is_err());
+        assert!(!pending.view_finished());
+        assert_eq!(
+            registry.state(peer, id).unwrap().lifecycle,
+            Lifecycle::Running
+        );
+        registry.close_session(peer, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop(driver);
+    }
+    #[tokio::test]
+    async fn no_peer_run_default_never_inherits_a_page_capability() {
+        let registry = SessionRegistry::new();
+        let owner = registry.open_window().unwrap();
+        let foreign = registry.open_window().unwrap();
+        let (transport, driver) = ChannelTransport::bounded_driver();
+        let (handle, task) = spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+        let id = registry.register(owner, handle).unwrap();
+        let run = Active::new(
+            owner,
+            "run".into(),
+            id,
+            Arc::new(crate::viewer_visibility::VisibilityGate::default()),
+        );
+        assert!(run.peer.is_none());
+        assert!(run.peer_id.is_none());
+        assert!(run.peer_owner.is_none());
+        assert!(
+            run.peer_view(foreign, "run", &uuid::Uuid::new_v4().to_string())
+                .is_err()
+        );
+        assert!(run.peer_pages.injection().is_err());
+        registry.close_session(owner, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop(driver);
+    }
 }

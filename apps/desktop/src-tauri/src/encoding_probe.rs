@@ -159,13 +159,12 @@ async fn run(
         id,
         handle: handle.clone(),
     };
-    *state.0.active.lock().map_err(error)? = Some(Active {
+    *state.0.active.lock().map_err(error)? = Some(Active::new(
         owner,
         nonce,
         id,
-        peer: None,
-        visibility: Arc::new(crate::viewer_visibility::VisibilityGate::default()),
-    });
+        Arc::new(crate::viewer_visibility::VisibilityGate::default()),
+    ));
     let mut old = handle
         .diagnostic_subscribe(1, 4 * 1024 * 1024, 1024 * 1024)
         .await
