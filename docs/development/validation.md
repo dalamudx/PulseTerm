@@ -522,9 +522,16 @@ mise run probe-pty
 - 最新strictCommitseq/ACK前置与具体Detach收据收紧后的v2→v1真实复验最终通过（两版各两headless+两DOM的runtime/display收据均true），native40/typedbindings/strictclippy通过；gate回归还直接验证无Commit、无ACK、foreign、old以及consumed确认拒绝。原首次无report的未知风险仍保留，不声称修复。
 - 本轮mise run audit仍明确FAILED（6license拒、paste RUSTSEC-2024-0436/proc-macro-error RUSTSEC-2024-0370两项unmaintained；bans/sources过），无新dependency/lock/allowlist/CSP变化，不得打包。后续生产多窗口drag/目标实际输入与尺寸协调、source端DOM退役、WebView reload/关闭后orphan权限恢复、跨平台/IME/用户按钮仍待验证；S11整体未通过。
 
+## S11刷新前可信registry批量view退役（真实reload仍待接）
+
+- 新SessionRegistry::retire_window_views(owner)只允许live window token，短metadata锁原子撤该owner全部bindings；返回实际retired view数（无binding也更换Entry身份）。actor/sessionId/windowowner保持，不sendinput/resize/close，不持锁await；该window关闭后Forbidden，其他window view不受影响。Entry::with_owner共享clone逻辑用于transfer及retire，保留capturegate/marker/repair/comparison时间，不因refresh重置额度。
+- 批量retire不try-lock等旧capture完成，而是换Entry Arc身份使已准入oldcapture在提交处被current_entry复核拒绝；sharedcapture gate仍占住额度，所以new capture可明确Busy直到旧工作结束。这是旧Entry身份与绑定准入基础，不是JS navigation认证：runtime adapter还须先更换/废弃旧page nonce/epoch，防尚未准入的old请求在retire之后新开capture。已native准入的输入不能回滚；不添加frontend批量撤销RPC或隐式retry。
+- 3新增regression：同owner两个liveview批量撤销/0重复count、旧input/ACK拒，foreign binding保持；无view仍解析output，newgen准确bootstrap，oldcompletion不影响new；持有旧capturegate时retire立刻成功/oldEntry身份复核拒/newcaptureBusy，共享marker/repair/comparison锁与时间保持；closedtoken不能退foreign。fullcheck/fulltest52app/93term/33IPC/12route/13xtask/215TS、真实PTY迁移/2MiBbackpressure与两GBK headless恢复通过，strictclippy/MCPregistry无error。
+- 尚未接on_page_load Start/真实window.reload/旧IPC epoch，不能视为S11刷新验收。releaseaudit仍原6license+2unmaintained失败，未改依赖/lock/gate；下一步有限runtime reload样例应把native task与page命令future分离，以免页面消失误关PTY，并等待新page准确Begin/ACK。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 49项测试通过（含4项可信活窗口transfer/旧输入/ABA/额度保持/EOF拒绝回归）；额外178项原上游测试通过；原生适配器现40项测试通过（含原visibility/park回归及1项目标迁移确认gate/旧guard隔离回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现40项测试通过（含原visibility/park回归及1项目标迁移确认gate/旧guard隔离回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：215 项测试通过（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

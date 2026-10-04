@@ -58,6 +58,18 @@ struct Entry {
     marker: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
     repair: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
 }
+impl Entry {
+    fn with_owner(&self, owner: WindowToken) -> Arc<Self> {
+        Arc::new(Self {
+            owner,
+            handle: self.handle.clone(),
+            capture: self.capture.clone(),
+            comparison: self.comparison.clone(),
+            marker: self.marker.clone(),
+            repair: self.repair.clone(),
+        })
+    }
+}
 struct Binding {
     generation: u64,
     handle: AttachmentHandle,
@@ -228,20 +240,42 @@ impl SessionRegistry {
         if entry.handle.state.borrow().lifecycle != pulse_term::session::Lifecycle::Running {
             return Err(RegistryError::Session(SessionError::Closed));
         }
-        let next = Arc::new(Entry {
-            owner: target,
-            handle: entry.handle.clone(),
-            capture: entry.capture.clone(),
-            comparison: entry.comparison.clone(),
-            marker: entry.marker.clone(),
-            repair: entry.repair.clone(),
-        });
+        let next = entry.with_owner(target);
         if let Some(binding) = state.bindings.remove(&id) {
             binding.handle.detach();
         }
         state.sessions.insert(id, next);
         Ok(())
     }
+    /// Trusted navigation teardown: keep window capability/session ownership and
+    /// actors, but revoke every current view and invalidate pending captures.
+    /// The adapter must first invalidate the old page's nonce/epoch so requests not
+    /// yet admitted to this registry cannot start after teardown. Not a frontend RPC.
+    /// Native writes already admitted are not retractable; a new page must attach.
+    /// Unlike transfer this never waits for capture: old Entry identities expire
+    /// while the shared try-lock continues bounding old and new capture work.
+    pub fn retire_window_views(&self, owner: WindowToken) -> Result<usize, RegistryError> {
+        let mut state = self.lock()?;
+        if !state.windows.contains(&owner) {
+            return Err(RegistryError::Forbidden);
+        }
+        let entries: Vec<_> = state
+            .sessions
+            .iter()
+            .filter(|(_, e)| e.owner == owner)
+            .map(|(id, e)| (*id, e.with_owner(owner)))
+            .collect();
+        let mut retired = 0;
+        for (id, next) in entries {
+            if let Some(binding) = state.bindings.remove(&id) {
+                binding.handle.detach();
+                retired += 1;
+            }
+            state.sessions.insert(id, next);
+        }
+        Ok(retired)
+    }
+
     fn current_entry(
         state: &State,
         owner: WindowToken,
@@ -563,6 +597,9 @@ mod comparison;
 #[path = "registry_reap_tests.rs"]
 mod reap_tests;
 pub use comparison::{RenderedScreen, VisibleComparison};
+#[cfg(test)]
+#[path = "registry_retire_tests.rs"]
+mod retire_tests;
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;
