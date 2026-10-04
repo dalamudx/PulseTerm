@@ -364,6 +364,14 @@ mise run probe-pty
 - 2新增feature单测确定性timestamp100..200：100 inclusive/199 valid/99未来/200 expired、wrong CA/username/principal/type/options拒绝；显式Builder.all_principals_valid生成golden ticket也被此policy拒绝。report必须negativeCertificates6、wrongUsernameRejected/leafKeyOwnershipRequired及所有CA/time/type/principal/EOF/drain字段，单completed不足；15SSH-feature tests/clippy-Dwarnings、真实cert probe通过。默认check/test199TS/39app/89core/16IPC/6xtask及K-I/OpenSSH10server/jump probes再通过。
 - 新mise/xtask/CI及ssh-certificate.json已注册，本轮无新依赖/locks/审计配置变动，原6license/2maintenance release gate保持。受控认证证明不代替OpenSSH7–9/dropbear/实际企业CA/撤销UX、主机证书信任、Agent/FIDO2/PKCS11/密钥加密、GBK或production SSH actor/SFTP/转发验收，S4仍未全通过。
 
+## S4私有软件Agent签名/SSH signer认证/identity清理（Unix/Linux）
+
+- 新probe-ssh-agent仅Unix可编译运行，ssh-agent -D使用私有temp sock、explicit AgentClient.connect_uds，不connect_env/读取用户identities，不改全局SSH_AUTH_SOCK；子ssh-add只override其私有socket/无SSH_ASKPASS/无stdin prompt。初始Agent列表为空，加载1份临时Ed25519软件key（0600/目录0700/30秒TTL），身份必须匹配generated pubkey。
+- 真实Agent raw SSH Signature验证用signature::Verifier（与SSHSIG namespace文档签名不同）；真实SSH authenticate_publickey_with only publickey+Agent signer，不把subject私钥交给SSH client。controlled loopback pinned server固定exec AGENT_OK/exit7/EOF/Close/输出排空与connection-before-server-stop归零，listener正常join。
+- remove_all_identities实测earlyEOF，上游0.63.3请求前4字节零header问题单列dependency-review，不忽略失败或修改upstream。改用scoped remove_identity同key，Tokio duplex test确认frame length/message18/key string长度；实际Agent identities为空、removed key签名明确AgentProtocolError而非任意IO失败、随后再次list成功且空证明Agent仍活着。最后ownedAgent kill/wait join，tempdir清除，用户Agent无操作。
+- report ssh-agent.json/isolation/software-vs-hardware/签名/auth/移除拒签/EOF/server+Agent cleanup全字段validator硬要求，缺completed-only拒绝；2新增单测，17SSHfeaturetests/clippy-Dwarnings、实际Agent probe通过。全默认check/test199TS/39app/89core/16IPC/6xtask与此前K-I/real OpenSSH10server/jump/certificate4探针再次成功，CI Unix-Linux调用已注册。无新增依赖/locks/audit修改。
+- 这只是软件Ed25519 Agent路径，不算sk-ssh-ed25519/FIDO2真实触摸/PIN、hardware失联/用户确认、remote agent forwarding/Pageant/windows pipe/macOS矩阵、production credential vault或actor SSH adapter完成。S4仍有真实设备/实现矩阵未验证，release gate6license/2maintenance不放宽。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

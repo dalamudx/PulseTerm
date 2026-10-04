@@ -9,6 +9,8 @@ mod pty_probe;
 mod query_probe;
 mod snapshot_probe;
 mod software_probe;
+#[cfg(all(feature = "ssh-probe", unix))]
+mod ssh_agent_probe;
 #[cfg(feature = "ssh-probe")]
 mod ssh_certificate_probe;
 #[cfg(feature = "ssh-probe")]
@@ -90,6 +92,12 @@ fn main() -> Result<()> {
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
+        Some("probe-ssh-agent") => {
+            #[cfg(all(feature = "ssh-probe", unix))]
+            ssh_agent_probe::run()?;
+            #[cfg(not(all(feature = "ssh-probe", unix)))]
+            bail!("probe-ssh-agent requires Unix and --features ssh-probe");
+        }
         Some("probe-ssh-certificate") => {
             #[cfg(feature = "ssh-probe")]
             ssh_certificate_probe::run()?;

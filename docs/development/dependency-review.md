@@ -72,6 +72,12 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 
 完整全特性联网cargo-deny复核：sources/bans通过（更多重复crypto版本警告），license拒绝仍原6包，advisories仍paste/proc-macro-error两维护公告，无新拒绝项或漏洞条目；没有添加allow/ignore。optional开发依赖仍必须audit，probe成功不能许可打包或生产credential网络端点。系统OpenSSH软件本体许可、系统库分发另行审查，不由Cargo allowlist替代。
 
+## russh0.63.3 Agent清理API协议问题
+
+隔离OpenSSH10软件Agent验证中，初始空/加载synthetic key/raw签名/SSH signer认证通过，但AgentClient.remove_all_identities返回early EOF。读取已锁定upstream client.rs确认：先resize4零字节header，再append REMOVE_ALL_IDENTITIES，再把1u32 append到尾部，而没有覆写前4字节为实际frame长度；OpenSSH Agent收到零长度消息后关闭连接。没有提出生产采用许可、替换版本、vendor或patch该库。
+
+探针改用scoped remove_identity(public)，其header正常生成；新增Tokio duplex frame测试确认header/body/string长度和message18，实际private Agent列出空identity、removed-key请求返回AgentProtocolError（不能用transport EOF伪成功）且仍能request-identities证明服务活着。只清probe自己的软件key，不使用用户Agent。future Agent/extension方法须分别验证，不能因为签名通过就忽略remove-all/扩展API风险；升级后复查/跟踪upstream，公开issue/PR仍需用户发布授权。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

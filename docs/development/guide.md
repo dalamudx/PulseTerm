@@ -78,6 +78,7 @@ mise run probe-ssh                # optional xtask SSH feature，隔离loopback 
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 mise run probe-ssh-jump           # 两个隔离SSH端点，逐跳host-key pin/单forward额度/UTF8与清理
 mise run probe-ssh-certificate    # 临时CA、principal/有效期/critical options/私钥持有证明
+mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签名/auth/删除/清理
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。
@@ -101,6 +102,8 @@ finite terminal sink现在使用GenerationViewHost/ViewScope按后端Begin管理
 `probe-ssh-jump`复用optional ssh-probe、两个owned127.0.0.1临时russh server；outer和inner各自pinned key，inner错误key拒绝，不能因已信任jump就跳过目标校验。direct-tcpip只允许exact owned loopback target+port、拒绝其它host/port/第二并行channel；1个owned permit贯穿relay worker直到实际结束、6秒worker监督。内层SSH经channel.into_stream完成独立KEX/auth，UTF8+字面shell符号4400bytes精确回显与EOF/Close，outer/inner全部连接和relay在listener shutdown之前归零，最后join两listener。报告ssh-jump.json/validator、13feature tests与CI登记；只限制并发worker，不声称SSH库所有buffer在高压/慢consumer下的RSS已验收。不是生产Route池、多级真实jump hosts、SFTP/Agent/FIDO2或SSH actor集成。
 
 `probe-ssh-certificate`使用临时Ed25519 CA/subject/server，只owned loopback。签名+trusted CA指纹+valid_after≤now<valid_before不足以授权：必须User类型、exact user principal、正确username、critical options为空（当前test policy未知选项全部拒绝）；拒空principals的golden ticket。实际6invalid cert及错username/错leaf私钥全部auth失败，1valid cert固定exec/exit7/EOF/Close与connection-before-stop drain通过。subject持私钥证明由russh协议验签，并单列证据，不能把CA签名当client持钥。输出ssh-certificate.json与validator；15feature tests及CI登记。未实现生产CA存储/撤销/证书UX/设备矩阵，不输入用户certificate、CA secret或Agent/FIDO2。
+
+`probe-ssh-agent`当前Unix，ssh-agent -D/private temp sock启动，明确connect_uds私有路径，不read/connect_env或操作用户SSH_AUTH_SOCK/已有Agent。初始identities空，ssh-add仅向private socket加载1份synthetic Ed25519（30秒TTL、temp key0600/dir0700），raw signature经signature::Verifier验证，authenticate_publickey_with通过Agent Signer而非传SSH私钥。固定exec/exit7/EOF/Close、SSH connection-before-stop排空后只remove_identity该synthetic key，列表空+removed-key签名AgentProtocolError且Agent仍可list确认；最后join owned agent daemon。上游russh0.63.3 remove_all_identities帧header有bug导致OpenSSH Agent EOF，不调用、不patch源码，详dependency-review。17feature tests/ssh-agent.json/CI登记；software signer不等于FIDO2硬件、remote Agent forwarding或Windows Pageant/macOS矩阵通过。
 
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 
