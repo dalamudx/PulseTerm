@@ -250,9 +250,13 @@ export async function initialize(): Promise<void> {
   initialized = true;
   if (new URL(window.location.href).searchParams.has("session-peer")) {
     Object.assign(window, {
-      __PULSE_PEER_VIEW__: async (nonce: string, pageNonce: string) => {
+      __PULSE_PEER_VIEW__: async (
+        nonce: string,
+        pageNonce: string,
+        previousPageNonce?: string,
+      ) => {
         const { verifyPeerView } = await import("../../ipc/peer-view-probe");
-        await verifyPeerView(nonce, pageNonce);
+        await verifyPeerView(nonce, pageNonce, previousPageNonce);
       },
     });
     return;

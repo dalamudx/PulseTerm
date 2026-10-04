@@ -8,6 +8,7 @@ let started = false;
 export async function verifyPeerView(
   nonce: string,
   pageNonce: string,
+  previousPageNonce?: string,
 ): Promise<void> {
   if (started) throw new Error("peer.view_duplicate");
   started = true;
@@ -47,6 +48,15 @@ export async function verifyPeerView(
       ack: async (generation, sequence) => {
         if (!challenged) {
           challenged = true;
+          if (previousPageNonce)
+            await rejected(
+              commands.probePeerAck(
+                nonce,
+                previousPageNonce,
+                generation,
+                sequence,
+              ),
+            );
           await rejected(
             commands.probePeerAck(nonce, wrongPage, generation, sequence),
           );
@@ -72,6 +82,15 @@ export async function verifyPeerView(
         await rejected(
           commands.probePeerConfirm(nonce, wrongPage, generation, rendered),
         );
+        if (previousPageNonce)
+          await rejected(
+            commands.probePeerConfirm(
+              nonce,
+              previousPageNonce,
+              generation,
+              rendered,
+            ),
+          );
         await commands.probePeerConfirm(nonce, pageNonce, generation, {
           columns: boundary.columns,
           rows: boundary.rows,

@@ -118,6 +118,26 @@ it("readonly wrapper uses page-scoped ACK/confirmation and cleans its own surfac
   );
   expect(mock.capture).toHaveBeenCalledOnce();
 });
+it("new document rejects its formerly authorized page nonce on its own ACK and confirm endpoints", async () => {
+  const s = await setup();
+  await s.verifyPeerView("run", "page", "old-page");
+  const options = mock.options as Options;
+  await options.ack("17", 2);
+  await options.confirm(
+    "17",
+    { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
+    "a".repeat(16),
+  );
+  expect(mock.ack).toHaveBeenCalledWith("run", "old-page", "17", 2);
+  expect(mock.confirm).toHaveBeenCalledWith(
+    "run",
+    "old-page",
+    "17",
+    expect.objectContaining({ parsedBytes: "76" }),
+  );
+  expect(mock.ack).toHaveBeenCalledWith("run", "page", "17", 2);
+  expect(mock.done).toHaveBeenCalledOnce();
+});
 it("pagehide cancels only the surface even while native command awaits and late completion cannot recreate it", async () => {
   const s = await setup();
   let admitted!: () => void;

@@ -179,6 +179,7 @@ export type SessionEvidence = {
 	peerReloadChecked: boolean,
 	peerReloadDisplayChecked: boolean,
 	peerNavigationRetired: boolean,
+	peerInitialDisplayChecked: boolean,
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
 	idleChecked: boolean,

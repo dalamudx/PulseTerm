@@ -199,7 +199,7 @@ mod tests {
         pages.record(tauri::webview::PageLoadEvent::Finished);
         let old = pages.injection().unwrap().0;
         pages.confirm_nonce(&old).unwrap();
-        assert!(run.peer_view(peer, "run", &old).is_err());
+        assert!(run.peer_view(peer, "run", &old).is_ok());
         pages.record(tauri::webview::PageLoadEvent::Started);
         pages.record(tauri::webview::PageLoadEvent::Finished);
         let current = pages.injection().unwrap().0;

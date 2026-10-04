@@ -12,6 +12,7 @@ struct Pages {
     rendered: bool,
     captured: bool,
     navigation_retired: bool,
+    initial_display: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -19,6 +20,9 @@ struct Nonces {
     previous: Option<uuid::Uuid>,
 }
 impl Pages {
+    fn readonly_ready(self) -> bool {
+        self.ready(1) || self.ready(2)
+    }
     fn ready(self, count: u8) -> bool {
         !self.invalid
             && self.started == count
@@ -58,6 +62,8 @@ impl PageTracker {
                             nonces.previous = Some(old);
                         }
                         p.started += 1;
+                        p.captured = false;
+                        p.rendered = false;
                     }
                 }
                 PageLoadEvent::Finished => {
@@ -118,7 +124,7 @@ impl PageTracker {
         let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
         require(parsed.to_string() == value)?;
         let n = self.nonce.lock().map_err(error)?;
-        require(n.current == Some(parsed) && self.snapshot().ready(2))
+        require(n.current == Some(parsed) && self.snapshot().readonly_ready())
     }
     pub(super) fn view_finished(&self) -> bool {
         self.snapshot().captured
@@ -130,7 +136,7 @@ impl PageTracker {
         require(nonce.current == Some(parsed))?;
         let mut accepted = false;
         self.events.send_modify(|p| {
-            if p.ready(2) && !p.captured && !p.rendered {
+            if p.readonly_ready() && !p.captured && !p.rendered {
                 p.captured = true;
                 accepted = true;
             }
@@ -144,8 +150,11 @@ impl PageTracker {
         require(nonce.current == Some(parsed))?;
         let mut accepted = false;
         self.events.send_modify(|p| {
-            if p.ready(2) && p.captured && !p.rendered {
+            if p.readonly_ready() && p.captured && !p.rendered {
                 p.rendered = true;
+                if p.finished == 1 {
+                    p.initial_display = true;
+                }
                 accepted = true;
             }
         });
@@ -191,6 +200,36 @@ pub(super) async fn verify(
     pages: &PageTracker,
 ) -> Result<()> {
     require(pages.snapshot().ready(1) && state.caller(window)? == owner)?;
+    let run_nonce = {
+        let active = state.0.active.lock().map_err(error)?;
+        active
+            .as_ref()
+            .filter(|r| r.peer_owner == Some(owner) && r.peer_id == Some(id))
+            .ok_or("session.forbidden")?
+            .nonce
+            .clone()
+    };
+    let page_nonce = pages.injection()?.0;
+    let mut first_page = pages.events.subscribe();
+    window
+        .eval(format!(
+            "void window.__PULSE_PEER_VIEW__('{run_nonce}','{page_nonce}').catch(console.error)"
+        ))
+        .map_err(error)?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let p = *first_page.borrow();
+            require(!p.invalid)?;
+            if p.ready(1) && p.rendered && p.initial_display {
+                return Ok::<(), String>(());
+            }
+            first_page.changed().await.map_err(error)?;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_initial_display_deadline".to_string())??;
+    // Initial and reloaded page compare the same actor. Keep the existing quota.
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let old = transfer::capture(state, owner, id, handle).await?;
     let before = state.0.registry.state(owner, id).map_err(error)?;
     // No explicit teardown here: actual Started must revoke nonce and retire this
@@ -274,6 +313,41 @@ pub(super) async fn verify(
 mod tests {
     use super::*;
     #[test]
+    fn initial_readonly_display_is_not_reused_as_fresh_page_capture_or_done() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(0));
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.authorize_view(&old).is_err());
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert!(p.authorize_view(&old).is_ok());
+        assert!(p.mark_captured(&old).is_ok());
+        assert!(p.mark_rendered(&old).is_ok());
+        assert!(p.snapshot().initial_display);
+        assert!(p.view_finished());
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(1));
+        assert!(p.snapshot().initial_display);
+        assert!(!p.snapshot().rendered);
+        assert!(!p.view_finished());
+        assert!(p.mark_captured(&old).is_err());
+        assert!(p.mark_rendered(&old).is_err());
+        p.record(PageLoadEvent::Finished);
+        let fresh = p.injection().unwrap_or_default().0;
+        assert!(p.authorize_view(&fresh).is_err());
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&fresh).is_ok());
+        assert!(p.authorize_view(&fresh).is_ok());
+        assert!(!p.snapshot().rendered);
+        assert!(p.mark_rendered(&fresh).is_err());
+        assert!(p.mark_captured(&fresh).is_ok());
+        assert!(p.mark_rendered(&fresh).is_ok());
+        assert!(p.snapshot().rendered);
+        assert!(p.snapshot().initial_display);
+    }
+
+    #[test]
     fn navigation_retirement_receipt_requires_the_actual_second_started_phase_and_one_view() {
         let p = PageTracker::new();
         p.record(PageLoadEvent::Started);
@@ -309,7 +383,7 @@ mod tests {
         let old = p.injection().unwrap_or_default().0;
         assert!(p.authorize_view(&old).is_err());
         assert!(p.confirm_nonce(&old).is_ok());
-        assert!(p.authorize_view(&old).is_err());
+        assert!(p.authorize_view(&old).is_ok());
         assert!(p.mark_rendered(&old).is_err());
         p.record(PageLoadEvent::Started);
         p.record(PageLoadEvent::Finished);
@@ -395,6 +469,7 @@ mod tests {
                 rendered: false,
                 captured: false,
                 navigation_retired: false,
+                initial_display: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -411,6 +486,7 @@ mod tests {
                 rendered: false,
                 captured: false,
                 navigation_retired: false,
+                initial_display: false,
             }
         );
         p.record(PageLoadEvent::Started);
