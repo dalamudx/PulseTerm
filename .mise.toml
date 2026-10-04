@@ -101,6 +101,10 @@ run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-agent"
 description = "Validate test-only explicit legacy KEX/MAC while secure defaults reject"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-legacy"
 
+[tasks.probe-encoding-attachment]
+description = "Validate dual-coordinate actor recovery and GBK headless rendering"
+run = ["cargo xtask probe-encoding-attachment", "pnpm --filter ui exec tsx scripts/encoding-attachment-probe.ts"]
+
 [tasks.desktop-build]
 description = "Build the native WebView validation app"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]

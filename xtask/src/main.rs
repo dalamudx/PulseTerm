@@ -3,6 +3,7 @@
 
 mod attachment_probe;
 mod channel_probe;
+mod encoding_attachment_probe;
 #[cfg(feature = "ssh-probe")]
 mod gbk_probe;
 mod local_session_probe;
@@ -94,6 +95,7 @@ fn main() -> Result<()> {
         Some("unicode-table-check") => unicode_table::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
+        Some("probe-encoding-attachment") => encoding_attachment_probe::run()?,
         Some("probe-ssh-agent") => {
             #[cfg(all(feature = "ssh-probe", unix))]
             ssh_agent_probe::run()?;

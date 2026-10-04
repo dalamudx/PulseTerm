@@ -22,9 +22,10 @@ try {
   for (const [source, expected] of [
     ['fn main() { let _: fn(&pulse_term::TerminalProbe) -> String = pulse_term::TerminalProbe::screen_replay; }', 'screen_replay'],
     ['fn main() { let _ = std::mem::size_of::<pulse_term::session::EchoTransport>(); }', 'EchoTransport'],
+    ['fn main() { let _ = pulse_term::session::spawn_gbk_text_session; }', 'spawn_gbk_text_session'],
   ]) {
     const result=check(source);
     if(result.status===0 || !result.stderr.includes(expected)) throw new Error(`Forbidden production API remains available: ${expected}\n${result.stderr}`);
   }
-  console.log('Default-feature consumer compiles; legacy screen replay and EchoTransport are unavailable.');
+  console.log('Default-feature consumer compiles; legacy replay, EchoTransport and test-only GBK text entry are unavailable.');
 } finally { rmSync(dir,{recursive:true,force:true}); }

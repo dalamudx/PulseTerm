@@ -8,6 +8,11 @@ mod native_driver_tests;
 #[path = "reconciliation_actor_tests.rs"]
 mod reconciliation_tests;
 use crate::{ObservedScreen, TerminalProbe};
+#[path = "session_encoding.rs"]
+mod encoding;
+#[cfg(all(test, feature = "validation"))]
+#[path = "session_encoding_tests.rs"]
+mod encoding_tests;
 #[path = "session_stream.rs"]
 mod stream;
 pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
@@ -105,6 +110,10 @@ pub struct SessionState {
     pub size: TermSize,
     /// Number of output bytes actually parsed (not queued).
     pub parsed_bytes: u64,
+    /// Normalized output bytes submitted to the parser; not ACK credit.
+    pub utf8_bytes: u64,
+    /// False only for validation text transcoding; v1 must refuse this mode.
+    pub source_is_utf8: bool,
     /// Monotonic state revision for polling/diagnostic consumers.
     pub revision: u64,
 }
@@ -114,6 +123,9 @@ pub enum SessionError {
     /// More than MAX_CHUNK bytes in one message.
     #[error("session chunk exceeds 64 KiB")]
     ChunkTooLarge,
+    /// Malformed source text or unrepresentable input; no replacement substitution.
+    #[error("session character encoding failed")]
+    Encoding,
     /// Caller must retry or propagate pressure; message was not accepted.
     #[error("session bounded queue is full")]
     Busy,
@@ -611,7 +623,24 @@ impl SessionTask {
 pub fn spawn_session(
     size: TermSize,
     history: usize,
+    transport: ChannelTransport,
+) -> (SessionHandle, SessionTask) {
+    spawn_inner(size, history, transport, encoding::Mode::Utf8)
+}
+/// Validation-only already-classified GBK text. No production binary classifier.
+#[cfg(feature = "validation")]
+pub fn spawn_gbk_text_session(
+    size: TermSize,
+    history: usize,
+    transport: ChannelTransport,
+) -> (SessionHandle, SessionTask) {
+    spawn_inner(size, history, transport, encoding::Mode::Gbk)
+}
+fn spawn_inner(
+    size: TermSize,
+    history: usize,
     mut transport: ChannelTransport,
+    mode: encoding::Mode,
 ) -> (SessionHandle, SessionTask) {
     let (commands, mut receiver) = mpsc::channel(QUEUE);
     let (cancel, mut cancelled) = watch::channel(false);
@@ -619,6 +648,8 @@ pub fn spawn_session(
         lifecycle: Lifecycle::Running,
         size,
         parsed_bytes: 0,
+        utf8_bytes: 0,
+        source_is_utf8: mode.source_is_utf8(),
         revision: 0,
     };
     let (state, subscription) = watch::channel(initial.clone());
@@ -629,6 +660,7 @@ pub fn spawn_session(
     };
     let task = tokio::spawn(async move {
         let mut terminal = TerminalProbe::new(size, history);
+        let mut decoder = encoding::Decoder::new(mode);
         let mut current = initial;
         let mut replies = VecDeque::<Vec<u8>>::new();
         let mut reply_bytes = 0;
@@ -672,7 +704,7 @@ pub fn spawn_session(
                     }
                 }, if lease.is_none() || stream_permit.is_some() => {
                     if terminal.expire_sync(std::time::Instant::now()) {
-                        if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
+                        if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes,mode) { current.lifecycle = Lifecycle::Failed; break; }
                         current.revision += 1; state.send_replace(current.clone());
                         if let Some(permit)=stream_permit.take(){permit.send(StreamRecord::Fence(current.clone()));}
                     }
@@ -690,23 +722,25 @@ pub fn spawn_session(
                 }
                 // Output remains readable while flushing replies so a driver stuck
                 // behind its output queue cannot deadlock against input pressure.
-                output = transport.output.recv(), if resizing.is_none() && (lease.is_none() || stream_permit.is_some()) => {
+                output = decoder.next(&mut transport.output), if resizing.is_none() && (lease.is_none() || stream_permit.is_some()) => {
                     match output {
-                        Some(bytes) if bytes.len() <= MAX_CHUNK => {
-                            let start=current.parsed_bytes;
+                        Some(Ok((bytes,source_count))) => {
+                            let start=current.utf8_bytes;
+                            let Some(source_after)=current.parsed_bytes.checked_add(source_count)else{current.lifecycle=Lifecycle::Failed;break;};
+                            let Some(utf8_after)=current.utf8_bytes.checked_add(bytes.len() as u64)else{current.lifecycle=Lifecycle::Failed;break;};
                             terminal.feed(&bytes);
-                            current.parsed_bytes += bytes.len() as u64;
-                            if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes) { current.lifecycle = Lifecycle::Failed; break; }
+                            current.parsed_bytes=source_after;current.utf8_bytes=utf8_after;
+                            if !queue_replies(&mut terminal, &mut replies, &mut reply_bytes,mode) { current.lifecycle = Lifecycle::Failed; break; }
                             current.revision += 1; state.send_replace(current.clone());
-                            if let Some(permit)=stream_permit.take(){permit.send(StreamRecord::Data {start,bytes,boundary:current.clone()});}
+                            if let Some(permit)=stream_permit.take(){if bytes.is_empty(){permit.send(StreamRecord::Marker(current.clone()));}else{permit.send(StreamRecord::Data {start,bytes,boundary:current.clone()});}}
                         }
                         Some(_) => { current.lifecycle = Lifecycle::Failed; break; }
                         None => {
                             terminal.finish_input();
-                            let bounded = queue_replies(&mut terminal, &mut replies, &mut reply_bytes);
+                            let bounded = queue_replies(&mut terminal, &mut replies, &mut reply_bytes,mode);
                             // At EOF an outstanding upstream reply cannot be acknowledged
                             // by this channel driver; fail explicitly rather than discard.
-                            current.lifecycle = if bounded && replies.is_empty() && !transport.failed.as_ref().is_some_and(|f|*f.borrow()) { Lifecycle::Ended } else { Lifecycle::Failed };
+                            current.lifecycle = if decoder.finish() && bounded && replies.is_empty() && !transport.failed.as_ref().is_some_and(|f|*f.borrow()) { Lifecycle::Ended } else { Lifecycle::Failed };
                             break;
                         }
                     }
@@ -715,10 +749,10 @@ pub fn spawn_session(
                     None => { current.lifecycle = Lifecycle::Closed; break; }
                     Some(Command::Input(bytes, reply)) => {
                         let result = if !replies.is_empty() { Err(SessionError::Busy) } else {
-                            transport.input.try_send(TransportWrite::Input(bytes)).map_err(|error| match error {
+                            mode.encode(bytes).and_then(|bytes|transport.input.try_send(TransportWrite::Input(bytes)).map_err(|error| match error {
                                 mpsc::error::TrySendError::Full(_) => SessionError::Busy,
                                 mpsc::error::TrySendError::Closed(_) => SessionError::Transport,
-                            })
+                            }))
                         };
                         let _ = reply.send(result);
                     }
@@ -726,7 +760,7 @@ pub fn spawn_session(
                         let result=if reply.is_closed()||*cancelled.borrow()||cancelled.has_changed().is_err()||lease.as_ref().is_none_or(|l|l.id!=lease_id||l.output.is_closed()){
                             Err(SessionError::StaleLease)
                         }else if !replies.is_empty()||resizing.is_some(){Err(SessionError::Busy)}else{
-                            transport.input.try_send(TransportWrite::Input(bytes)).map_err(|e|match e{mpsc::error::TrySendError::Full(_)=>SessionError::Busy,mpsc::error::TrySendError::Closed(_)=>SessionError::Transport})
+                            mode.encode(bytes).and_then(|bytes|transport.input.try_send(TransportWrite::Input(bytes)).map_err(|e|match e{mpsc::error::TrySendError::Full(_)=>SessionError::Busy,mpsc::error::TrySendError::Closed(_)=>SessionError::Transport}))
                         };let _=reply.send(result);
                     }
 
@@ -878,13 +912,17 @@ fn queue_replies(
     terminal: &mut TerminalProbe,
     replies: &mut VecDeque<Vec<u8>>,
     total: &mut usize,
+    mode: encoding::Mode,
 ) -> bool {
     for reply in terminal.take_replies() {
+        let Ok(reply) = mode.encode(reply.into_bytes()) else {
+            return false;
+        };
         if reply.len() > MAX_CHUNK || reply.len() > MAX_REPLIES.saturating_sub(*total) {
             return false;
         }
         *total += reply.len();
-        replies.push_back(reply.into_bytes());
+        replies.push_back(reply);
     }
     true
 }

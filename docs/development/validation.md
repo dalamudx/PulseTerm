@@ -393,10 +393,21 @@ mise run probe-pty
 - 新3单测覆盖all splits、malformed EOF/unsupported input、bound/缺report；23SSHfeaturetests/clippy-Dwarnings及真实jump+GBK通过。全默认check/test199TS/39app/89core/16IPC/6xtask与其余5SSH模式再次成功；CI既有jump调用即强制新GBK报告。新增encoding_rs0.8.42与3transitive包，完整audit仍原6license/2maintenance失败，sources/bans通过无新增拒绝，原锁定包版本未升级。
 - 严格边界：只是controlled GBK echo+后端解析归一化测试，不是实际GBK交换机/自动侦测/所有GBK扩展/生产codec。raw source bytes33与logical UTF8 bytes43不同，不能直接把现有attachment parsedBytes/raw-offset定义当已经适配；actor original-byte/reconnect/history/input query transcoding及Zmodem在转码前分类仍未接。原协议精确性/flow-control门禁不放宽，生产charset支持未标完成；S4仍部分矩阵。
 
+## ADR-029双坐标v2与validation-only GBK actor恢复
+
+- 用户明确选择版本化双坐标，保留原始SessionState.parsed_bytes并新增utf8_bytes/source_is_utf8；协议v2独立于原v1，未改旧parsedBytes公开语义。Rust attach_v2 + TS AttachmentV2Receiver/Consumer以28-byte envelope/36-byte Begin分别追踪source与display。part IDs/ordered channel/credit共用既有FrameKind8，互相reject mixed versions/unknown flags，bigint保持大于2^53精度。
+- source消费无显示（半GBK lead）发布pure Marker，decoder在backend actor且跨lease存活。v2 Data按实际body长度推进UTF8，source独立monotonic；Checkpoint/EOF/Repair保持两个cursor一致，sourceRegression和source正确/display错误均failclosed。renderer摘要SessionState比较包括两个计数及mode；当前desktop仍UTF8-v1-only，未增加GBK窗口命令。
+- pulse-app attach_v2显式准入，复用同一Driver的ACK/timeout/cancel/EOF/repair监督，driver livecursor改为state.utf8_bytes；Fragment末记录原source终点，不推算一对一raw映射。v2limit在atomiccapture前校验；v1先拒source_is_utf8=false，哪怕source/display均0，保留旧lease。3app回归证明invalidcredit保旧lease、wronggeneration只退视图新view继续EOF、noACK实际停actor且timeout不关session。
+- validation feature才可调用spawn_gbk_text_session，未接productionbinary/Zmodem分类。rawchunk≤64KiB，单次最大3×64KiB+4 scratch并按≤64KiBrecords有界分发，source在第一份decoded record消费一次，后续source不增加；满lease阻止pending解析/继续读transport。4core tests覆盖半GBK原始1/UTF80跨capture→trail原始2/UTF83，64KiBsource→98304UTF8两记录，input中文反编码/emoji拒写/query反编码，malformed及halfEOF=Failed不当normalEOF或replacement。
+- 共享attachment-v2.hex由Rust sender byte-for-byte校验，包含独立bigintsource/display、source-onlyMarker、中文展开Data、samecursorRepair与EOF；TS8tests检验mixedversion/duplicatedsource/sourceRegression/repair+EOF mismatch/oldgen/queuedcallbackACK/cancel+latewrite/unsupportedmarker/overflow。Rust额外pre-copybody bound与Commit释放bootstrapVec容量回归；v1原全部用例保持。
+- 新mise/xtask/CI probe-encoding-attachment两份actualactor→v2→headless样例（含history），准确半GBK捕获与新lease重建，EOF source7/UTF89和source82/UTF884均与Rustscreen一致，无frontendquery泄漏。生成阶段ACK先保存wire以运行actor，TS独立callbackgated消费再ACK，不称同进程roundtrip或realWebViewGBK证据。默认prod-feature独立consumer禁止test-onlyGBK入口，existingreplay/Echo门禁保持。
+- 验证记录：核心组合check/test207TS、93core/42app/22IPC（后续pre-copy回归增至23）、v1五headlesscase与v2两case通过，默认API隔离通过。原生UTF8-v1真实Channel/DOM复验completed=true（2sessionRuns/2domRuns/7measurements），bindings-check/native clippy-Dwarnings/36native tests通过；encoding_rs没有新版本，仅lock增加pulse-term可选依赖边，审计许可/公告门禁没有豁免。首次运行在2headless之后/首DOM期间native_query_failed，root cause未定位；补static分类日志但500ms/failclosed不放宽，后续通过不宣称根因已修。
+- 未完成：productionbinarypreclassifier/临时encoding切换、多charset/真实GBK设备、生产registry/windowv2授权/DOM/三平台编码acceptance，S2/S4仍不标全过。UTF8原有invalid字节/EOF replacement行为不改，strictGBK拒绝政策目前只对已分类测试文本有效。
+
 ## 检查结果
 
-- Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
-- TS：199 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 42项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- TS：207 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

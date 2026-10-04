@@ -19,11 +19,11 @@ pub struct SessionStream {
 /// All records are ordered. Fences do not consume/re-encode output bytes.
 #[derive(Debug)]
 pub enum StreamRecord {
-    /// Exactly the original raw chunk parsed by this actor.
+    /// Normalized display bytes parsed by this actor, source endpoint in boundary.
     Data {
-        /// Original byte offset before this chunk.
+        /// Normalized UTF-8 display offset before this chunk.
         start: u64,
-        /// Raw bytes, never partial/drop-on-full.
+        /// Display bytes, never drop-on-full; source bytes may have different length.
         bytes: Vec<u8>,
         /// Parsed/control boundary AFTER the chunk.
         boundary: SessionState,

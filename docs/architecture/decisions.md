@@ -35,6 +35,8 @@
 | ADR-027 | 字符编码转换在后端完成：输出在进入解析器前转换为 UTF-8，输入写入前转换回原编码；前端和解析器只处理 UTF-8 | Accepted | 老服务器和网络设备普遍使用 GBK 等编码；`alacritty_terminal` 和 xterm.js 都只支持 UTF-8 |
 | ADR-028 | Route 增加外部命令（ProxyCommand）一跳；内置 SSH 不支持的场景，可以对单台主机改用系统 OpenSSH 模式 | Accepted | ssh_config 中常见 ProxyCommand（cloudflared、AWS SSM）；russh 不支持 GSSAPI 和 PKCS#11 |
 
+| ADR-029 | 非 UTF-8 会话采用版本化双坐标：保留原始 source 字节边界，另设 UTF-8 显示游标；ACK 按实际帧额度，不与任一累计计数混用 | Accepted（用户确认双坐标） | GBK 固定样例 source33/UTF843 不等；方案与后果见 [编码边界评估](./terminal-encoding-boundaries.md)，v2 显式准入、v1 拒转码，生产 binary preclassifier 和窗口适配仍待完成 |
+
 ## 待决事项
 
 | 事项 | 影响 | 计划 |

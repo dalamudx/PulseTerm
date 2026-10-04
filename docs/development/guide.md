@@ -80,6 +80,7 @@ mise run probe-ssh-jump           # 两个隔离SSH端点，逐跳host-key pin/�
 mise run probe-ssh-certificate    # 临时CA、principal/有效期/critical options/私钥持有证明
 mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签名/auth/删除/清理
 mise run probe-ssh-legacy         # 仅test profile旧KEX/MAC，安全default前后明确拒绝
+mise run probe-encoding-attachment # validation-only GBK actor/v2原子重绑/history/双坐标headless渲染
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。

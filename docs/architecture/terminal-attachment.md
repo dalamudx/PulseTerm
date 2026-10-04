@@ -11,9 +11,20 @@
 - 片段body≤64KiB、history≤4MiB、restore≤1MiB。History/Restore section-local offset连续，Data从Begin.parsed_bytes开始连续。乱序、长度不符、未知版本/flag和未Commit的Data终止当前事务，没有部分渲染或丢字节后继续。
 - sender无额度时phase/offset不变。已经生成的帧必须发送或取消整个generation，不能跳过。receiver先按声明长度有界暂存，Commit收到完整内容后才返回ready。
 
+## v2双坐标（ADR-029，明确选择而非隐式升级）
+
+`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；当前窗口注册层/真实桌面仍v1-only，没有自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
+
+- envelope28字节：version:u8=2、part:u8、reserved:u16=0、generation:u64、offset:u64、source_after:u64。Begin body36：columns:u16、rows:u16、revision:u64、source:u64、UTF8:u64、history_len:u32、restore_len:u32；Begin source需与envelope一致。全部小端，JS仍bigint。
+- Data.offset是normalized UTF8游标，按body真实长度连续递增，source_after独立单调（可不增加）。一份normalized record分片时，前片保留previous source边界，最后一片提交该record source endpoint，不能推算每个UTF8字节映射到哪个source byte。完整raw chunk展开超过64KiB时，actor把source consumed计入第一份显示record，后续显示record不再增加source。两种分段都不声明raw↔display逐字节映射。
+- 无显示输出的decoder pending消费以同队列Marker发布source增量，UTF8不动，不feed VT/flush sync。Checkpoint/End要求source和UTF8都与当前stream一致，revision不回退。RepairBegin/Bytes/Commit保持两个游标，source变化或一个游标不符均拒；History/Restore/RepairBytes的offset仍section-local。
+- Begin/history/restore/repair staging界限不变；credit按实际v2 envelope+body（outer6byte header独立），不以raw或UTF8累计量释放。NoCredit不能变任何游标/阶段；旧generation ACK拒绝。Consumer先有界staging，完整Commit后render，write/marker/repair/EOF callback完成后ACK，取消或迟到callback不ACK。
+- actor SessionState保留parsed_bytes=原始source，再加utf8_bytes/source_is_utf8；完整状态比较天然同时包括两坐标与encoding mode，不能只依据source一致清除风险。validation-only spawn_gbk_text_session使用已分类GBK文本，decoder跨detach/lease存活、input和query反向编码。raw≤64KiB，单次UTF8展开≤3×64KiB+4工作buffer，再≤64KiBrecords，满队列阻止继续解析和transport读取；多出的decoder scratch/pending内存须计入预算。
+- 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实设备和窗口v2注册授权/DOM验收仍待完成。
+
 ## 原子live诊断lease
 
-`diagnostic_subscribe` 在同一actor回合捕获history/screen并安装唯一有界订阅。先预留8条队列容量再读取/解析transport，Data带start、原始bytes及after-boundary；full时停止解析和transport读取，不丢块，控制/close仍公平。无subscriber时仍独立解析。普通Data每条≤64KiB；此外每lease最多一份≤1MiB精确修复跨queue/driver持有至修复Commit ACK。修复在queue占一条容量，driver持有修复时queue可再存8条Data。不含driver/current/native块、grid和allocator开销。
+`diagnostic_subscribe` 在同一actor回合捕获history/screen并安装唯一有界订阅。先预留8条队列容量再读取/解析transport，Data带UTF-8 start、归一化显示bytes及after-boundary（包含source与UTF8两计数；UTF-8模式两者相等）；full时停止解析和transport读取，不丢块，控制/close仍公平。无subscriber时仍独立解析。普通Data每条≤64KiB；此外每lease最多一份≤1MiB精确修复跨queue/driver持有至修复Commit ACK。修复在queue占一条容量，driver持有修复时queue可再存8条Data。不含driver/current/native块、grid和allocator开销。
 
 - viewer输入采用`SessionRegistry::input_bound(owner,id,generation,bytes)`→AttachmentHandle→actor `input_for_lease`：进入时核对runtime owner/current generation，actor回合同步核对当前lease、取消watch、receiver仍存活及调用reply未放弃；resize/pending replies或满transport队列明确Busy。old generation在registry拒绝，旧lease在actor拒绝，caller cancel在actor接受前拒绝。返回前再核对current binding，但不能撤销已经准入的native input，因此成功只是有界admission，不是物理写入回执；不确定错误/超时绝不自动重发。低率控制面仍按字节预算约束，与output ACK不是同一个方向。
 - 有限DOM探针的InputQueue单消息≤1KiB UTF8、最多32项/8KiB包含活动IPC，按FIFO single-flight发送；空/孤立surrogate/超限拒绝，不替换非法文本。一秒不确定截止、取消、native错误或overload拒绝所有pending并停止后续dispatch；晚成功不drain新输入、不重试。host撤销/输入失败调用只撤销current generation的detach；已准入的输入无法回滚。paste阻止，仅合成固定键盘/composition样例，正式粘贴确认/IME/user shell仍待实现。

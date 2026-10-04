@@ -37,6 +37,8 @@ jobs:
         run: mise run terminal-api-check
       - name: Validate ordered reconnect and history replay
         run: mise run probe-attachment
+      - name: Validate dual-coordinate transcoded reconnect
+        run: mise run probe-encoding-attachment
       - name: Validate terminal restore continuation
         run: mise run probe-snapshot
       - name: Compare terminal parsers

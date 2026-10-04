@@ -768,6 +768,8 @@ pub(crate) async fn probe_session_repair(
             size: TermSize::new(rendered.columns, rendered.rows).map_err(error)?,
             revision: parse_counter(&rendered.revision)?,
             parsed_bytes: parse_counter(&rendered.parsed_bytes)?,
+            utf8_bytes: parse_counter(&rendered.parsed_bytes)?,
+            source_is_utf8: true,
         },
         digest: rendered.digest,
     };
@@ -800,6 +802,8 @@ pub(crate) async fn probe_session_compare(
             size: TermSize::new(rendered.columns, rendered.rows).map_err(error)?,
             revision: parse_counter(&rendered.revision)?,
             parsed_bytes: parse_counter(&rendered.parsed_bytes)?,
+            utf8_bytes: parse_counter(&rendered.parsed_bytes)?,
+            source_is_utf8: true,
         },
         digest: rendered.digest,
     };
@@ -880,6 +884,8 @@ pub(crate) async fn probe_session_peer(
                         lifecycle: Lifecycle::Running,
                         revision: 0,
                         parsed_bytes: 0,
+                        utf8_bytes: 0,
+                        source_is_utf8: true,
                     },
                     digest: "0000000000000000".into(),
                 },

@@ -107,8 +107,20 @@ impl NativeWatcher {
         });
         Ok(
             match tokio::time::timeout(Duration::from_millis(500), query).await {
-                Ok(Ok(value)) => value,
-                _ => None,
+                Ok(Ok(value)) => {
+                    if value.is_none() {
+                        eprintln!("native.visibility_read_failed");
+                    }
+                    value
+                }
+                Ok(Err(_)) => {
+                    eprintln!("native.visibility_worker_failed");
+                    None
+                }
+                Err(_) => {
+                    eprintln!("native.visibility_query_deadline");
+                    None
+                }
             },
         )
     }
@@ -153,7 +165,9 @@ impl NativeWatcher {
                     }
                     let sample = match observer.sample(window.clone()).await {
                         Ok(sample) => sample,
-                        Err(_) => {
+                        Err(error) => {
+                            // Internal static error code only, no terminal data/window labels.
+                            eprintln!("native.visibility_observer_failed:{error}");
                             if let Ok(Some(invalid)) = observer.commit(None) {
                                 let _ = invalid.emit_to(
                                     &window,

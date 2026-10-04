@@ -1,16 +1,22 @@
 //! Supervised, window-neutral diagnostic wire binding. Callers own permissions,
 //! globally fresh generations, binary delivery, and renderer invalidation.
 use pulse_ipc::{
-    attach::{AttachError, AttachmentSender, Boundary, ENVELOPE_LEN, MAX_FRAGMENT},
+    attach::{AttachError, ENVELOPE_LEN, MAX_FRAGMENT},
     flow::FlowError,
 };
 use pulse_term::session::{
     Lifecycle, SessionHandle, SessionRestoreError, SessionState, SessionStream, StreamEnd,
     StreamRecord,
 };
+#[path = "attachment_sender.rs"]
+mod sender;
+use sender::Sender;
 #[cfg(test)]
 #[path = "attachment_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "attachment_v2_tests.rs"]
+mod v2_tests;
 use std::{collections::VecDeque, time::Duration};
 use tokio::{
     sync::{mpsc, watch},
@@ -196,7 +202,30 @@ pub async fn attach(
     generation: u64,
     config: AttachmentConfig,
 ) -> Result<(AttachmentHandle, mpsc::Receiver<Vec<u8>>, AttachmentTask), AttachmentError> {
+    attach_inner(session, generation, config, false).await
+}
+/// Explicit dual-coordinate v2 binding; shares the existing ACK/cancel supervisor.
+pub async fn attach_v2(
+    session: &SessionHandle,
+    generation: u64,
+    config: AttachmentConfig,
+) -> Result<(AttachmentHandle, mpsc::Receiver<Vec<u8>>, AttachmentTask), AttachmentError> {
+    attach_inner(session, generation, config, true).await
+}
+async fn attach_inner(
+    session: &SessionHandle,
+    generation: u64,
+    config: AttachmentConfig,
+    v2: bool,
+) -> Result<(AttachmentHandle, mpsc::Receiver<Vec<u8>>, AttachmentTask), AttachmentError> {
     config.validate()?;
+    if v2 && config.bytes < pulse_ipc::attach_v2::ENVELOPE_LEN + config.fragment.max(36) {
+        return Err(AttachmentError::Limits);
+    }
+    // v1 has one cursor: reject transcoding even before source and display diverge.
+    if !v2 && !session.state.borrow().source_is_utf8 {
+        return Err(AttachError::Invalid.into());
+    }
     if generation == 0 {
         return Err(AttachError::Generation.into());
     }
@@ -204,10 +233,11 @@ pub async fn attach(
         .diagnostic_subscribe(2000, 4 * 1024 * 1024, 1024 * 1024)
         .await?;
     let lease_id = stream.lease_id;
-    let bootstrap = &stream.bootstrap;
-    let sender = AttachmentSender::new(
+    let captured = stream.bootstrap.boundary.clone();
+    let sender = Sender::new(
+        v2,
         generation,
-        boundary(&bootstrap.boundary),
+        &captured,
         std::mem::take(&mut stream.bootstrap.history.bytes),
         std::mem::take(&mut stream.bootstrap.restore),
         config.fragment,
@@ -248,17 +278,9 @@ pub async fn attach(
         },
     ))
 }
-fn boundary(state: &SessionState) -> Boundary {
-    Boundary {
-        columns: state.size.columns(),
-        rows: state.size.rows(),
-        revision: state.revision,
-        parsed_bytes: state.parsed_bytes,
-    }
-}
 struct Driver {
     stream: SessionStream,
-    sender: AttachmentSender,
+    sender: Sender,
     wire: mpsc::Sender<Vec<u8>>,
     acks: mpsc::Receiver<(u64, u32)>,
     cancellation: watch::Receiver<bool>,
@@ -293,7 +315,7 @@ impl Driver {
         let mut pending_deadline = None;
         let mut record: Option<StreamRecord> = None;
         let mut at = 0;
-        let mut live_cursor = self.stream.bootstrap.boundary.parsed_bytes;
+        let mut live_cursor = self.stream.bootstrap.boundary.utf8_bytes;
         let mut drained = false;
         let mut ended = false;
         let mut status_open = true;
@@ -331,10 +353,10 @@ impl Driver {
                     hold,
                 }) = record.take()
             {
-                if state.parsed_bytes != live_cursor {
+                if state.utf8_bytes != live_cursor {
                     return Err(AttachError::Invalid.into());
                 }
-                self.sender.start_repair(boundary(&state), bytes)?;
+                self.sender.start_repair(&state, bytes)?;
                 self.repair_hold = hold;
                 self.repair_sending = true;
             }
@@ -365,43 +387,46 @@ impl Driver {
                             boundary: state,
                         } => {
                             if *start != live_cursor
-                                || start.checked_add(bytes.len() as u64) != Some(state.parsed_bytes)
+                                || start.checked_add(bytes.len() as u64) != Some(state.utf8_bytes)
                                 || state.size != self.stream.bootstrap.boundary.size
                             {
                                 return Err(AttachError::Invalid.into());
                             }
-                            let next_cursor = state.parsed_bytes;
+                            let next_cursor = state.utf8_bytes;
                             let len = bytes.len();
                             let end = (at + self.config.fragment).min(len);
-                            self.sender.data(&bytes[at..end]).map(|frame| {
-                                at = end;
-                                if at == len {
-                                    live_cursor = next_cursor;
-                                    record = None;
-                                    at = 0;
-                                }
-                                Some(frame)
-                            })
+                            let source_after = if end == len {
+                                state.parsed_bytes
+                            } else {
+                                self.sender.source_bytes()
+                            };
+                            self.sender
+                                .data(&bytes[at..end], source_after)
+                                .map(|frame| {
+                                    at = end;
+                                    if at == len {
+                                        live_cursor = next_cursor;
+                                        record = None;
+                                        at = 0;
+                                    }
+                                    Some(frame)
+                                })
                         }
                         StreamRecord::Repair { .. } => return Err(AttachError::Phase.into()),
-                        StreamRecord::Marker(state) => {
-                            self.sender.marker(boundary(state)).map(|frame| {
-                                record = None;
-                                Some(frame)
-                            })
-                        }
-                        StreamRecord::Fence(state) => {
-                            self.sender.checkpoint(boundary(state)).map(|frame| {
-                                record = None;
-                                Some(frame)
-                            })
-                        }
+                        StreamRecord::Marker(state) => self.sender.marker(state).map(|frame| {
+                            record = None;
+                            Some(frame)
+                        }),
+                        StreamRecord::Fence(state) => self.sender.checkpoint(state).map(|frame| {
+                            record = None;
+                            Some(frame)
+                        }),
                     }
                 } else if drained {
                     if status.end != StreamEnd::Session(Lifecycle::Ended) {
                         return Err(AttachmentError::Invalidated(status.end));
                     }
-                    self.sender.finish(boundary(&status.boundary)).map(|frame| {
+                    self.sender.finish(&status.boundary).map(|frame| {
                         ended = true;
                         Some(frame)
                     })
