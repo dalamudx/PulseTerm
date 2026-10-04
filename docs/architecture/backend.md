@@ -330,6 +330,7 @@ pub struct ActionDef {
 - token 在每次启动时随机生成，写入运行时目录中权限为 0600 的文件。
 - S5固定native验证中，CLI响应只确认真实窗口注册/visible状态，不声称页面已加载或compositor首帧；page-load/Destroyed另外监督。Linux样例native客户端收据约8–12ms而WebView页面加载约330ms，不能把前者当生产窗口完整可用50ms或冷启动验收。defaultdesktop不含cli-window-probe，未开放生产CLI窗口请求。
 - 主进程没有运行时，CLI 以 `--startup-actions` 参数启动 `pulseterm-desktop`，参数中带上本次的请求。`single-instance` 插件负责处理启动过程中的竞争（例如同时运行了两次 CLI）。
+- 当前只读Unix daemon startup probe独立证明：竞争只有一个主实例，第二实例不改active socket/token；仅取得exclusive lock后且所有socket/token对象类型/owner/mode/linkcount/format验证完成，才能清理受信任旧端点。SIGKILL释放OS文件锁，重启换token，旧token实测拒绝且不关闭新服务。此锁fixture不是对Tauri插件/生产bootstrap协议的已批准替换，coldGUI/WindowsACL仍待验证。
 
 ## 13. 错误模型
 

@@ -51,6 +51,10 @@ fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some("cli-probe-helper") {
         return cli_probe::helper();
     }
+    #[cfg(all(feature = "cli-probe", unix))]
+    if std::env::args().nth(1).as_deref() == Some("cli-startup-helper") {
+        return cli_probe::startup_helper();
+    }
     #[cfg(feature = "ssh-probe")]
     if std::env::args().nth(1).as_deref() == Some("ssh-system-helper") {
         return ssh_system_probe::helper();
@@ -119,6 +123,12 @@ fn main() -> Result<()> {
             ssh_certificate_probe::run()?;
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-certificate requires --features ssh-probe");
+        }
+        Some("probe-cli-startup") => {
+            #[cfg(all(feature = "cli-probe", unix))]
+            cli_probe::run_startup()?;
+            #[cfg(not(all(feature = "cli-probe", unix)))]
+            bail!("probe-cli-startup requires Unix --features cli-probe");
         }
         Some("probe-cli-window") => {
             #[cfg(all(feature = "cli-probe", unix))]

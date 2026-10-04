@@ -462,6 +462,14 @@ mise run probe-pty
 - 两次真实probe（最后修改只报告/negative/监督）通过。2新增xtask negative tests拒假visible/倒序native或load时间/缺清理/单sample，并允许nativeACK早于pageload（不混两个phase）；CLIfeature12xtask/native39tests、两featurestrictclippy、bindings drift与workspacecheck/tsc/Biome通过，MCP cli_window_probe Rust无error诊断。CI新增该native入口，保留oldchannel/v2/GBK/WM。锁文件只多desktop tempfile/zeroize已锁包边，无newversions/CSP放宽；allfeatureaudit仍6license/2maintenance门禁失败。
 - 限制：仅Linux/privatefixture nativeUDS，不是productioninterprocess/clap/Capability或跨用户/WindowsACL；当前重建WebView页面约330ms，完整显示与50ms目标仍需独立评估；未测试冷启动/single-instance/真实user窗口/IME/跨平台。主进程配置窗口与spawn同runtime并不等于productionCLI启动流程。
 
+## S5真实进程启动竞争/存活端点保护/崩溃恢复（只读daemon）
+
+- 新mise/xtask/CI probe-cli-startup，复用cli-probe/ownedUnixUDS/token/peerUID和只读ping，nativeGUI仍是独立检查。5个candidate加3个正常认证CLI和1个旧token拒绝CLI，共9个实际新进程。两个候选tokio并发launch，std1.95 File.try_lock原子竞选保证只有一个primary；stdin空/stdout仅PID+role/status，secret不在argv/env/report。
+- 额外live-secondary持相同election.lock尝试失败，在退出前后socketinode/token字节完全不变。primary完成2授权ping后受控退出，锁及endpoint清理。随后真正SIGKILL primary，OS自动释放锁而磁盘留下socket+token；recovery新实例拿锁，只有root0700/sockettype+UID+0600/tokenfile+UID+0600/nlink1/64hex检查全部完成才unlink旧endpoint，不误删普通文件/symlink/hardlink。
+- 恢复token真实轮换；父进程将旧token保管在另0600文件，由独立子进程实际提交hello，新服务认证拒（denials1），然后新token正常ping成功，证明坏认证只关闭该连接、不关闭恢复服务。server最多4个连接尝试、每个有限accept/serve deadline；临时listener/client/process/runtime均清理。未把uuid/token bytes写入报告。
+- 3新增单测拒flags-only、unknownregular/symlinksocket被误删、unsafe/hardlinkedtoken触发前确保旧socket仍在。CLIfeature15xtask tests/strictclippy，真实startup+原CLI回归与workspacecheck/tsc/Biome通过，Astrolabe startup模块无error诊断。无newcrate/lock/version/audit策略变化，既有release6license/2maintenance仍阻断。
+- 限制：只读daemon的冷启动election与IPC安全，不是Tauri single-instance插件、GUI未运行时拉起/--startup-actions转交、生产runtime路径/owner文件防TOCTOU、WindowsNamedPipeACL或真实跨用户威胁验收。文件检查依赖当前用户受信任0700目录，不能抵御同UID恶意进程；生产bootstrap仍须单独验收，不暗中改变已有Tauri插件架构。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

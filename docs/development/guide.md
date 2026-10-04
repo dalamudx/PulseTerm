@@ -77,6 +77,7 @@ mise run probe-window             # Linux独立Xvfb/Openbox的真实native minim
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
 mise run probe-cli                # cli-probe可选feature，私有UDS/10独立固定子进程/握手与长度/权限/EOF验证
 mise run probe-cli-window         # cli-window-probe显式构建；真实CLI→native可见注册/page-load/销毁，独立计时
+mise run probe-cli-startup        # 只读daemon真实进程竞争/存活端点保护/SIGKILL后安全恢复与旧token拒绝
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 mise run probe-ssh-jump           # 隔离双SSH host-key pin/单forward额度/GBK→actor/v2、输入/DSR回写与EOF清理

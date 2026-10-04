@@ -65,6 +65,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mise run probe-cli
+          mise run probe-cli-startup
           mise exec -- cargo test -p xtask --features cli-probe --locked
           mise exec -- cargo clippy -p xtask --features cli-probe --all-targets --locked -- -D warnings
       - name: Exercise native actor and wire acknowledgment backpressure

@@ -86,6 +86,10 @@ description = "Measure authenticated CLI request to real native window receipts"
 depends = ["desktop-cli-build"]
 run = "cargo run -p xtask --features cli-probe --locked -- probe-cli-window"
 
+[tasks.probe-cli-startup]
+description = "Validate fixed CLI runtime election, live endpoint preservation and owned crash recovery"
+run = "cargo run -p xtask --features cli-probe --locked -- probe-cli-startup"
+
 [tasks.probe-cli]
 description = "Validate authenticated fixed read-only CLI RPC over a private Unix socket"
 run = "cargo run -p xtask --features cli-probe --locked -- probe-cli"

@@ -1,4 +1,12 @@
 //! S5 fixed read-only probe. Native UDS only; not the interprocess production adapter.
+#[path = "cli_startup_probe.rs"]
+mod startup;
+pub fn run_startup() -> Result<()> {
+    startup::run()
+}
+pub fn startup_helper() -> Result<()> {
+    startup::helper()
+}
 #[cfg(test)]
 #[path = "cli_probe_tests.rs"]
 mod tests;
@@ -306,5 +314,5 @@ pub fn helper() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    runtime.block_on(async{let mut stream=UnixStream::connect(&socket).await?;ensure!(stream.peer_cred()?.uid()==uid,"unexpected server UID");let mut decoder=Decoder::default();match mode{"good"|"unknown-method"=>{let secret=std::str::from_utf8(token.as_slice())?;let hello=encode(&rpc("h","hello",json!({"protocolVersion":1,"token":secret})))?;for byte in hello.iter(){stream.write_all(&[*byte]).await?;}let accepted=reply(&mut stream,&mut decoder).await?;ensure!(accepted["jsonrpc"]=="2.0"&&accepted["id"]=="h"&&accepted["result"]["protocolVersion"]==1,"hello receipt");send(&mut stream,&rpc("p",if mode=="good"{"probe.ping"}else{"shell.exec"},json!({}))).await?;let response=reply(&mut stream,&mut decoder).await?;ensure!(response["jsonrpc"]=="2.0"&&response["id"]=="p","RPC id");if mode=="good"{ensure!(response["result"]["pong"]=="中文🌍","RPC Unicode reply");}else{ensure!(response["error"]["code"]==-32601,"unknown command executed");}},"wrong-token"|"wrong-version"=>send(&mut stream,&rpc("h","hello",json!({"protocolVersion":if mode=="wrong-version"{2}else{1},"token":if mode=="wrong-token"{"0".repeat(64)}else{std::str::from_utf8(token.as_slice())?.to_string()}}))).await?,"preauth"=>send(&mut stream,&rpc("p","probe.ping",json!({}))).await?,"oversize"=>stream.write_all(&u32::MAX.to_le_bytes()).await?,"partial"=>{stream.write_all(&[16,0]).await?;stream.shutdown().await?;},"idle"=>{},_=>anyhow::bail!("fixed helper mode required")};let mut byte=[0u8;1];ensure!(tokio::time::timeout(Duration::from_secs(2),stream.read(&mut byte)).await??==0,"connection did not retire");Ok::<_,anyhow::Error>(())})
+    runtime.block_on(async{let mut stream=UnixStream::connect(&socket).await?;ensure!(stream.peer_cred()?.uid()==uid,"unexpected server UID");let mut decoder=Decoder::default();match mode{"good"|"unknown-method"=>{let secret=std::str::from_utf8(token.as_slice())?;let hello=encode(&rpc("h","hello",json!({"protocolVersion":1,"token":secret})))?;for byte in hello.iter(){stream.write_all(&[*byte]).await?;}let accepted=reply(&mut stream,&mut decoder).await?;ensure!(accepted["jsonrpc"]=="2.0"&&accepted["id"]=="h"&&accepted["result"]["protocolVersion"]==1,"hello receipt");send(&mut stream,&rpc("p",if mode=="good"{"probe.ping"}else{"shell.exec"},json!({}))).await?;let response=reply(&mut stream,&mut decoder).await?;ensure!(response["jsonrpc"]=="2.0"&&response["id"]=="p","RPC id");if mode=="good"{ensure!(response["result"]["pong"]=="中文🌍","RPC Unicode reply");}else{ensure!(response["error"]["code"]==-32601,"unknown command executed");}},"wrong-token"|"wrong-version"|"denied-token"=>send(&mut stream,&rpc("h","hello",json!({"protocolVersion":if mode=="wrong-version"{2}else{1},"token":if mode=="wrong-token"{"0".repeat(64)}else{std::str::from_utf8(token.as_slice())?.to_string()}}))).await?,"preauth"=>send(&mut stream,&rpc("p","probe.ping",json!({}))).await?,"oversize"=>stream.write_all(&u32::MAX.to_le_bytes()).await?,"partial"=>{stream.write_all(&[16,0]).await?;stream.shutdown().await?;},"idle"=>{},_=>anyhow::bail!("fixed helper mode required")};let mut byte=[0u8;1];ensure!(tokio::time::timeout(Duration::from_secs(2),stream.read(&mut byte)).await??==0,"connection did not retire");Ok::<_,anyhow::Error>(())})
 }
