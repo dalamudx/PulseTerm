@@ -1078,6 +1078,7 @@ export async function verifySessionChannel(dom?: {
       final.revision.toString() !== result.revision ||
       final.parsedBytes.toString() !== result.parsedBytes ||
       !result.peerDenied ||
+      !result.peerTransferChecked ||
       !result.windowRevoked ||
       !result.sessionSurvived ||
       result.nativeExit !== 0 ||

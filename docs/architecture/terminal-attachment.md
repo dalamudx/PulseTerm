@@ -90,7 +90,7 @@
 - close/shutdown与await capture并发时，capture返回后再次检查owner，禁止死window复活view。成功capture提交后取消可能已替换旧lease；没有snapshot rollback。old wire/surface仍须由adapter丢弃，registry不能撤回已执行的xterm write。
 - native 2MiB压力探针已把input/ACK通过registry授权。`probe-channel`进一步接通Tauri实际调用者WebviewWindow、local origin检查（无外部host/port/credentials）、runtime `Destroyed`与application `Exit`事件，owner不来自frontend label/token。
 - 新增四个developer-only typed命令：probe_session、probe_session_go、probe_session_ack、probe_session_peer。仅运行固定finite Rust helper，不启动任意shell；Raw Channel载荷仍为二进制。真实WebView中的headless xterm callback完成之后才ACK，终态从joined actor的visible projection生成digest，不向已结束actor发命令。
-- 真实隐藏peer window尝试跨owner input/ACK必须被拒绝；销毁后token撤销而其native session仍Running，然后由可信registrar显式close/join。`reap_closed`只清理已终态actor，Running返回Busy，不是frontend command。失败时guard请求撤销peer/关闭helper，后台等候终态最多5秒；固定child另有40秒硬截止。超时不能伪装成完成join。
+- 真实隐藏peer window尝试跨owner input/ACK必须被拒绝；固定peer会话随后由backend可信transfer至main，Rust验证器消费v1/v2恢复后才ACK（不混入main Raw Channel）。source关闭必须等Destroyed回调撤销caller索引并从runtime移除，不能仅凭transfer后的source state拒绝冒充销毁；target会话仍Running，bound输入hidden让同child产生HIDDEN_SEED并再次精确capture。mandatory peerTransferChecked覆盖这些收据，不代表目标WebView DOM渲染或用户拖动验收。最后可信registrar显式close/join。`reap_closed`只清理已终态actor，Running返回Busy，不是frontend command。失败时guard请求撤销peer/关闭helper，后台等候终态最多5秒；固定child另有40秒硬截止。超时不能伪装成完成join。
 - 自动连续运行两次，重建相同peer label，backend generation递增；新run拒绝旧nonce、旧generation及错误generation ACK。两轮均有原生EOF、截断UTF-8排空和同边界digest证据；这仍不验证DOM绘制/selection或生产跨窗口迁移。
 
 

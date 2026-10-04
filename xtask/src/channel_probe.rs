@@ -120,7 +120,8 @@ fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool) -> Resul
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    validate(&report, minimize, external, dual)?;
+    validate(&report, minimize, external, dual)
+        .with_context(|| format!("native probe exited with {status}"))?;
     let actual: Value = serde_json::from_slice(&std::fs::read(&report)?)?;
     if encoding {
         validate_encoding(&actual)?;
@@ -219,6 +220,11 @@ fn attachment_mode_matches(report: &Value, dual: bool) -> bool {
         .iter()
         .all(|key| report[key]["attachmentVersion"] == version)
 }
+fn transfer_receipts_match(report: &Value) -> bool {
+    ["session", "domSession"]
+        .iter()
+        .all(|key| report[key]["peerTransferChecked"].as_bool() == Some(true))
+}
 fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
@@ -229,6 +235,7 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
         || report["completed"] != true
         || report["cancellation"] != true
         || !attachment_mode_matches(&report, dual)
+        || !transfer_receipts_match(&report)
     {
         bail!("native probe incomplete: {}", report["error"]);
     }
@@ -241,6 +248,7 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
                 .is_none_or(|n| n == 0)
             || session["nativeExit"] != 0
             || session["peerDenied"] != true
+            || session["peerTransferChecked"] != true
             || session["windowRevoked"] != true
             || session["sessionSurvived"] != true
             || session["idleChecked"] != true
@@ -358,6 +366,25 @@ mod tests {
         r["encoding"]["peakCreditBytes"] = serde_json::json!(65);
         assert!(validate_encoding(&r).is_err());
         assert!(validate_encoding(&serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn transfer_evidence_requires_both_runtime_receipts_not_truthy_values() {
+        let r = serde_json::json!({"session":{"peerTransferChecked":true},"domSession":{"peerTransferChecked":true}});
+        assert!(transfer_receipts_match(&r));
+        for key in ["session", "domSession"] {
+            for invalid in [
+                Value::Null,
+                Value::Bool(false),
+                Value::String("true".into()),
+                Value::from(1),
+            ] {
+                let mut wrong = r.clone();
+                wrong[key]["peerTransferChecked"] = invalid;
+                assert!(!transfer_receipts_match(&wrong));
+            }
+        }
+        assert!(!transfer_receipts_match(&serde_json::json!({})));
     }
 
     #[test]

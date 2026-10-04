@@ -1,6 +1,8 @@
 //! Local-only session validation. No user shell, remote navigation or frontend owner token.
 #[path = "encoding_probe.rs"]
 pub(crate) mod encoding_probe;
+#[path = "window_transfer_probe.rs"]
+mod transfer;
 use crate::raw_frame::RawFrame;
 use pulse_app::attachment::AttachmentConfig;
 use pulse_app::registry::{
@@ -309,6 +311,7 @@ pub(crate) struct SessionEvidence {
     pub peak_credit_bytes: u32,
     pub native_exit: u32,
     pub peer_denied: bool,
+    pub peer_transfer_checked: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -352,6 +355,7 @@ impl SessionEvidence {
                 .contains(&self.peak_credit_bytes)
             || self.native_exit != 0
             || !self.peer_denied
+            || !self.peer_transfer_checked
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -1012,10 +1016,25 @@ pub(crate) async fn probe_session(
         .await
         .map_err(|_| "session.peer_timeout".to_string())?
         .map_err(|_| "session.peer_cancelled".to_string())?;
+    let peer_transfer = transfer::handoff(
+        &state,
+        &window,
+        &peer,
+        owner,
+        peer_owner,
+        peer_id,
+        &peer_handle,
+    )
+    .await?;
     peer.close().map_err(error)?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if state.0.registry.state(peer_owner, peer_id).is_err() {
+            if state.caller(&peer).is_err()
+                && window
+                    .app_handle()
+                    .get_webview_window(peer.label())
+                    .is_none()
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1023,7 +1042,15 @@ pub(crate) async fn probe_session(
     })
     .await
     .map_err(|_| "session.window_revoke_timeout".to_string())?;
-    let session_survived = peer_handle.state.borrow().lifecycle == Lifecycle::Running;
+    let session_survived = peer_handle.state.borrow().lifecycle == Lifecycle::Running
+        && state
+            .0
+            .registry
+            .state(owner, peer_id)
+            .map_err(error)?
+            .lifecycle
+            == Lifecycle::Running;
+    transfer::after_source_destroyed(&state, owner, peer_id, &peer_handle, peer_transfer).await?;
     peer_handle.close();
     tokio::time::timeout(Duration::from_secs(5), peer_task.join())
         .await
@@ -1126,6 +1153,7 @@ pub(crate) async fn probe_session(
         peak_credit_bytes: u32::try_from(receipt.peak_credit_bytes).map_err(error)?,
         native_exit: native.exit_code,
         peer_denied,
+        peer_transfer_checked: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1211,6 +1239,7 @@ mod tests {
             peak_credit_bytes: 6092,
             native_exit: 0,
             peer_denied: true,
+            peer_transfer_checked: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1269,6 +1298,9 @@ mod tests {
         e.input_checked = false;
         assert!(e.validate().is_err());
         e.input_checked = true;
+        e.peer_transfer_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_transfer_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

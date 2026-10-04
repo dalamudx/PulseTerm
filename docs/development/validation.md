@@ -505,6 +505,14 @@ mise run probe-pty
 - probe-local-session新增transferred证据/schema5：只调用一次spawn_local启动既有portable interactive fixed Rust helper。源owner capture真实READY屏幕（19bytes），transfer到target并close源owner仍Running；新generation恢复与backend inspect逐cell完全一致，旧completion观察完仍check新binding成功。原ownerinput/ACK拒，新ownerboundinput中文在同helper实际read_line校验，最终PORTABLE_OK中/exit7，rawData连续19→63/EOF帧ACK/native read63及final state/digest/screen一致，所有native workers/directchildjoin。
 - 2报告negative回归拒missing/false receipts、twochildspawn、无generation递增/错字节/native退出码/非整数；报告验证在落盘前强制执行。fullcheck/真实PTYprobe与4core迁移tests通过。不是runtime WebView窗口，更不证明跨窗口DOM拖动；窗口owner仅trusted registry token，未声称不存在的公共childPID查询API或process-tree验收。默认任务/Unix CI已有probe-local-session即覆盖新增fixed分支；不新建生产迁移RPC/用户shell。
 
+## S11实际Tauri peer窗口→main窗口的PTY归属与Destroyed隔离
+
+- 扩展原固定peer验证，不新增frontendtransfer命令，不信任JSowner。main与peer均实际WebviewWindowBuilder/runtime install mint token，foreigninput/ACK/repair拒后，将peer既有native SessionId从peer转main；source及target使用请求的v1/v2有序恢复，Rust TerminalProbe逐cell/cursor screen与backend inspect一致后Commit ACK，旧completion不撤销新binding。每次run只transfer既有peer child，不另spawn替代child。
+- source.close后等runtime Destroyed revoke caller token AND get_webview_window消失（不能用因transfer已被拒的source state假称销毁）。main新owner的state仍Running；boundinput hidden产生真实child HIDDEN_SEED，无view时解析推进；target再次capture全屏精确，然后显式close/nativejoin/reap。主样例RawChannel/DOM不接peer数据，generation全registry单调跨两run。typed SessionEvidence/TS/总报告s.validate/xtask强制peerTransferChecked；native fixture false拒，xtask新负向拒两证据之一缺失/false/truthy值，旧报告不得冒充此scope。
+- 实测Linux v2及默认v1各两headless+两DOM run（每个run都有实际peer迁移分支），两最终报告transfer receipts都true；v2 final gen10/30（新增peer capture造成分配递增，不是跨版本合流）。typed bindings漂移/严格nativeclippy/39nativeunit/fullcheck/fulltests（49app/93term/33IPC/12route/210TS）通过；MCP新probe无error诊断。newxtask报告negative在其后targeted通过。无deps/lock/CSP/audit changes。
+- 首次v2运行未生成报告，进程已退出/no lingering children，但旧runner未保存native exitstatus/阶段，根因未知；不是已修复。新增bounded固定阶段diagnostic与runner错误的exitstatus context，无凭据/输出内容，保持原期限不延长；随后v2/v1复验通过但不宣称消除偶发故障。
+- 仍未完成目标WebView RawChannel与DOM消费peer恢复、生产多窗口拖动/输入退役/尺寸协调、WebView reload及关闭后orphan授权恢复，S11整体不通过。此处backend消费wire验证只是runtime authorization/lifecycle加真实PTY延续，不能将它当crosswindow视觉/IME验收。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

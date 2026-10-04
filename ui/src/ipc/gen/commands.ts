@@ -168,6 +168,7 @@ export type SessionEvidence = {
 	peakCreditBytes: number,
 	nativeExit: number,
 	peerDenied: boolean,
+	peerTransferChecked: boolean,
 	windowRevoked: boolean,
 	sessionSurvived: boolean,
 	idleChecked: boolean,
