@@ -246,11 +246,16 @@ export async function start(): Promise<void> {
 }
 
 export async function initialize(): Promise<void> {
-  if (
-    initialized ||
-    new URL(window.location.href).searchParams.has("session-peer")
-  )
-    return;
+  if (initialized) return;
   initialized = true;
+  if (new URL(window.location.href).searchParams.has("session-peer")) {
+    Object.assign(window, {
+      __PULSE_PEER_VIEW__: async (nonce: string, pageNonce: string) => {
+        const { verifyPeerView } = await import("../../ipc/peer-view-probe");
+        await verifyPeerView(nonce, pageNonce);
+      },
+    });
+    return;
+  }
   if (nativeAvailable && (await automaticMode())) await start();
 }

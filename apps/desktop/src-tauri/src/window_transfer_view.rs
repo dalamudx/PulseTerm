@@ -64,6 +64,18 @@ pub(crate) fn probe_transfer_ack(
     let (owner, _) = state.owned(&window, &nonce)?;
     let generation = parse_u64(&generation)?;
     let id = current(&state, owner, generation)?;
+    acknowledge_for(&state, owner, id, generation, sequence)
+}
+pub(super) fn acknowledge_for(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+    sequence: u32,
+) -> Result<()> {
+    if current(state, owner, generation)? != id {
+        return Err("session.transfer_stale".into());
+    }
     state
         .0
         .registry
@@ -91,6 +103,20 @@ pub(crate) async fn probe_transfer_confirm(
     let (owner, _) = state.owned(&window, &nonce)?;
     let generation = parse_u64(&generation)?;
     let id = current(&state, owner, generation)?;
+    compare_for(&state, owner, id, generation, rendered).await?;
+    state.owned(&window, &nonce)?;
+    confirm_for(&state, owner, id, generation)
+}
+pub(super) async fn compare_for(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+    rendered: RenderedProjection,
+) -> Result<()> {
+    if current(state, owner, generation)? != id {
+        return Err("session.transfer_stale".into());
+    }
     {
         let slot = state.0.transfer_view.lock().map_err(error)?;
         if !slot
@@ -116,12 +142,22 @@ pub(crate) async fn probe_transfer_confirm(
         .registry
         .compare_visible(owner, id, generation, rendered)
         .await
-        .map_err(error)?
+        .map_err(|e| match e {
+            pulse_app::registry::RegistryError::Busy => "session.transfer_compare_busy".to_string(),
+            _ => "session.transfer_compare_rejected".to_string(),
+        })?
         != VisibleComparison::Equal
     {
         return Err("session.transfer_screen_mismatch".into());
     }
-    state.owned(&window, &nonce)?;
+    Ok(())
+}
+pub(super) fn confirm_for(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+) -> Result<()> {
     let mut slot = state.0.transfer_view.lock().map_err(error)?;
     let confirm = slot
         .as_mut()

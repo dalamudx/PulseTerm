@@ -545,10 +545,19 @@ mise run probe-pty
 - 精确owner变更后的MCP window_sessions诊断超时，不算通过；此前将长shell与MCP放Promise.all导致fabric取消两条shell（status killed/无有效完成），未据此标通过。确认取消后顺序复验任务完整通过，source/controller注册和types以实际编译/tests为准，不安装语言服务器。首次无report未知风险依旧未声称修复。
 - 本scope只授予fixed peer的只读foreign-control拒绝探针，不授予peer自身input/ACK/attach：真实刷新后的画面仍Rust validator，不是授权新页面自己的DOM恢复。下一步把同页面nonce及owner门用于fixed peer只读Channel，native task继续应用所有，旧页面回调不得关PTY。不改变deps/lock/CSP/audit/release门禁，不标S11完成。
 
+## S11刷新新页面自己的只读DOM恢复（固定样例）
+
+- 固定peer窗口改为实际visible 600×400，新doc通过已验的UUIDnonce与精确runtimepeerToken确认身份后，lazy初始化只读480×208 host；rootReact独立，probehost放body且finally恢复root.hidden/移除host与pagehide listener。同原child RESIZE_SEED中文/emoji非空画面，从backend固定peer_id（不接前端session选择）经独立v1/v2Raw Channel输送。普通桌面和生产shell权限未开放。
+- probe_peer_view/ack/confirm/done四个typed端点均要求localcaller+run nonce+当前page2nonce+精确peer owner+backendsession owner，no input/resize/close。peer semaphore拒重复捕获（不替换当前view），render共用已验的ordered事务/3sACK/一帧/8212或8220credit、实际DOM write/settle后ACK；只有同CommitSeqACK与sameboundary摘要Equal才触发native单次确认。await后再次检查nonce，detach收据严格Detached，不把timeout当完成。原main迁移端点授权逻辑独立，sharehelper仅处理已授权的owner/id/gen。
+- positive render完成只markCaptured，不提前markRendered：新页还必须完成首次ACK前错误nonce/错generation拒、confirm前错误nonce拒以及positive后重复confirm拒，view.finish和清理流程均无失败才调用probe_peer_done。nonce锁内captured/rendered验证避免revoke竞态；Done single-use，Root5sreload wait要求auth2+rendered。新增mandatory peerReloadDisplayChecked贯穿nativeDTO/TS检查/xtask报告严格bool拒绝，既有peerDisplayChecked仍只标后续目标mainDOM，不能混用。
+- 首次新增sourceDOM→targetDOM紧邻触发Registry.compare_visible 500ms/session Busy：分类确认session.transfer_compare_busy，而不是改限频/重置owner额度。仅固定probe在source成功后按既有quota sleep500ms，再进行下一次目标compare；原3sACK/5sreload/40schilddeadline不变，不做隐式retry。这再次证明transfer保存comparisonquota。native错误日志只记录数字退出码/cancelled/resize，不记录终端、凭据或nonce。
+- 最新v2与默认v1各两headless+两DOM run（每codec4个刷新sourceDOM及4个后续targetDOM）完整报告，实际oldnonce拒和newdocDone完成。首次默认v1末轮native_exit_failed未保留分类，补无敏感退出收据诊断后复验通过；尚未复现/定位，不声称已修复这项偶发风险。46native/strictclippy/typeddrift/7报告负向与fullcheck/fulltests52app/93term/33IPC/12route/13xtask/219TS、baseprobe通过，MCP新peer模块无error。
+- 4新增TS是wrapper生命周期mock测试，不算绘制验收；覆盖scope参数/duplicate、pagehide取消在途native和latecompletion、rendererfailure、混版/7s截止清理且不能调用Done。真实绘制证据单独来自WebKitGTK实际probe。first page仍无自己的DOMChannel，live旧页面订阅跨导航、生产任意导航/IME/拖动/多平台、GBK及外部WM最新组合尚待验证；S11总体不标完成，deps/lock/CSP/audit/release门禁不变。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现45项测试通过（含PageLoad计数、2项每页nonce撤销/加载不等于认证回归及1项精确peer incarnation准入隔离）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：215 项测试通过（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器现46项测试通过（新增只读page2准入、captured/rendered双阶段single-use收据回归；保留nonce/peer incarnation与PageLoad回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：219 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

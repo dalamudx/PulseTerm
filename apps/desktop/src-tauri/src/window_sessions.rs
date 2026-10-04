@@ -1,6 +1,8 @@
 //! Local-only session validation. No user shell, remote navigation or frontend owner token.
 #[path = "encoding_probe.rs"]
 pub(crate) mod encoding_probe;
+#[path = "window_peer_view.rs"]
+pub(crate) mod peer_view;
 #[path = "window_reload_probe.rs"]
 mod reload;
 #[path = "window_transfer_probe.rs"]
@@ -32,6 +34,7 @@ struct Inner {
     observers: Mutex<HashMap<WindowToken, Arc<crate::native_visibility::NativeWatcher>>>,
     active: Mutex<Option<Active>>,
     transfer_view: Mutex<Option<transfer_view::Current>>,
+    peer_view_slot: Arc<Semaphore>,
     slot: Arc<Semaphore>,
     minimize: bool,
     dual: bool,
@@ -45,6 +48,7 @@ struct Active {
     peer: Option<oneshot::Sender<bool>>,
     peer_pages: reload::PageTracker,
     peer_owner: Option<WindowToken>,
+    peer_id: Option<SessionId>,
     visibility: Arc<crate::viewer_visibility::VisibilityGate>,
 }
 impl Active {
@@ -88,6 +92,7 @@ impl WindowSessions {
             observers: Mutex::new(HashMap::new()),
             active: Mutex::new(None),
             transfer_view: Mutex::new(None),
+            peer_view_slot: Arc::new(Semaphore::new(1)),
             slot: Arc::new(Semaphore::new(1)),
             minimize,
             dual,
@@ -345,6 +350,7 @@ pub(crate) struct SessionEvidence {
     pub peer_transfer_checked: bool,
     pub peer_display_checked: bool,
     pub peer_reload_checked: bool,
+    pub peer_reload_display_checked: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -391,6 +397,7 @@ impl SessionEvidence {
             || !self.peer_transfer_checked
             || !self.peer_display_checked
             || !self.peer_reload_checked
+            || !self.peer_reload_display_checked
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -1012,6 +1019,7 @@ pub(crate) async fn probe_session(
         peer: Some(peer_tx),
         peer_pages: pages.clone(),
         peer_owner: None,
+        peer_id: None,
         visibility: visibility.clone(),
     });
     let (peer_handle, peer_task) = native().await?;
@@ -1024,7 +1032,9 @@ pub(crate) async fn probe_session(
         "session-peer",
         WebviewUrl::App("index.html?session-peer=1".into()),
     )
-    .visible(false)
+    .visible(true)
+    .title("PulseTerm readonly reload validation")
+    .inner_size(600.0,400.0)
     .on_page_load(move |peer, payload| {
         loaded_pages.record(payload.event());
         let bound = if matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) {
@@ -1037,8 +1047,9 @@ pub(crate) async fn probe_session(
         } else {Err("session.peer_page_started".to_string())};
         if matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) && bound.is_ok(){
             if let Ok((current,previous))=loaded_pages.injection(){
+                let refreshed=previous.is_some();
                 let denied=previous.map(|old|format!("let denied=false;try{{await call({{nonce:'{nonce}',pageNonce:'{old}'}})}}catch{{denied=true}}if(!denied)throw new Error('session.peer_old_page_nonce_admitted');")).unwrap_or_default();
-                let script=format!("void(async()=>{{const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}})}})().catch(console.error)");
+                let script=format!("void(async()=>{{const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}});if({refreshed})await window.__PULSE_PEER_VIEW__('{nonce}','{current}')}})().catch(console.error)");
                 if peer.eval(&script).is_err(){eprintln!("session.peer_eval_failed");}
             }else{eprintln!("session.peer_page_not_ready");}
         }
@@ -1058,11 +1069,22 @@ pub(crate) async fn probe_session(
         .register(peer_owner, peer_handle.clone())
         .map_err(error)?;
     peer_guard.id = Some(peer_id);
+    state
+        .0
+        .active
+        .lock()
+        .map_err(error)?
+        .as_mut()
+        .ok_or("session.forbidden")?
+        .peer_id = Some(peer_id);
     let peer_denied = tokio::time::timeout(Duration::from_secs(10), peer_rx)
         .await
         .map_err(|_| "session.peer_timeout".to_string())?
         .map_err(|_| "session.peer_cancelled".to_string())?;
     reload::verify(&state, &peer, peer_owner, peer_id, &peer_handle, &pages).await?;
+    // Fixed sample performs two render comparisons on the SAME actor. Respect
+    // registry 500ms/session quota across ownership changes; never reset it.
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let peer_transfer = transfer::handoff(
         &state,
         &window,
@@ -1181,6 +1203,10 @@ pub(crate) async fn probe_session(
             .map_err(error)?
             .map_err(error)?;
     if native.exit_code != 0 {
+        eprintln!(
+            "session.native_exit_receipt code={} cancelled={} resizes={}",
+            native.exit_code, native.cancelled, native.resize_count
+        );
         return Err("session.native_exit_failed".into());
     }
     if native.cancelled {
@@ -1211,6 +1237,7 @@ pub(crate) async fn probe_session(
         peer_transfer_checked: true,
         peer_display_checked: true,
         peer_reload_checked: true,
+        peer_reload_display_checked: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1253,6 +1280,7 @@ mod tests {
             id,
             peer: Some(tx),
             peer_owner: None,
+            peer_id: None,
             peer_pages: pages,
             visibility: Arc::new(crate::viewer_visibility::VisibilityGate::default()),
         };
@@ -1353,6 +1381,7 @@ mod tests {
             peer_transfer_checked: true,
             peer_display_checked: true,
             peer_reload_checked: true,
+            peer_reload_display_checked: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1420,6 +1449,9 @@ mod tests {
         e.peer_reload_checked = false;
         assert!(e.validate().is_err());
         e.peer_reload_checked = true;
+        e.peer_reload_display_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_reload_display_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

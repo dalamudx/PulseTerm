@@ -9,6 +9,8 @@ struct Pages {
     invalid: bool,
     authenticated: u8,
     old_nonce_rejected: bool,
+    rendered: bool,
+    captured: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -110,6 +112,44 @@ impl PageTracker {
         require(accepted)
     }
 
+    pub(super) fn authorize_view(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let n = self.nonce.lock().map_err(error)?;
+        require(n.current == Some(parsed) && self.snapshot().ready(2))
+    }
+    pub(super) fn view_finished(&self) -> bool {
+        self.snapshot().captured
+    }
+    pub(super) fn mark_captured(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        require(nonce.current == Some(parsed))?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(2) && !p.captured && !p.rendered {
+                p.captured = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) fn mark_rendered(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        require(nonce.current == Some(parsed))?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(2) && p.captured && !p.rendered {
+                p.rendered = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+
     fn snapshot(&self) -> Pages {
         *self.events.borrow()
     }
@@ -158,7 +198,7 @@ pub(super) async fn verify(
         loop {
             let p = *changed.borrow();
             require(!p.invalid)?;
-            if p.ready(2) {
+            if p.ready(2) && p.rendered {
                 return Ok::<(), String>(());
             }
             changed.changed().await.map_err(error)?;
@@ -210,6 +250,37 @@ pub(super) async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readonly_view_requires_authenticated_fresh_page_and_rendered_receipt_is_single_use() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.authorize_view(&old).is_err());
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert!(p.authorize_view(&old).is_err());
+        assert!(p.mark_rendered(&old).is_err());
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let current = p.injection().unwrap_or_default().0;
+        assert!(p.authorize_view(&current).is_err());
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&current).is_ok());
+        assert!(p.authorize_view(&current).is_ok());
+        assert!(!p.view_finished());
+        assert!(p.mark_rendered(&old).is_err());
+        assert!(p.mark_rendered(&current).is_err());
+        assert!(p.mark_captured(&old).is_err());
+        assert!(p.mark_captured(&current).is_ok());
+        assert!(p.mark_captured(&current).is_err());
+        assert!(p.mark_rendered(&current).is_ok());
+        assert!(p.view_finished());
+        assert!(p.mark_rendered(&current).is_err());
+        assert!(p.revoke_nonce().is_ok());
+        assert!(p.authorize_view(&current).is_err());
+        assert!(p.mark_rendered(&current).is_err());
+    }
+
     #[test]
     fn navigation_nonce_is_revoked_and_duplicate_or_old_page_confirmation_cannot_reauthorize() {
         let p = PageTracker::new();
@@ -270,6 +341,8 @@ mod tests {
                 invalid: false,
                 authenticated: 0,
                 old_nonce_rejected: false,
+                rendered: false,
+                captured: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -283,6 +356,8 @@ mod tests {
                 invalid: false,
                 authenticated: 0,
                 old_nonce_rejected: false,
+                rendered: false,
+                captured: false,
             }
         );
         p.record(PageLoadEvent::Started);

@@ -225,6 +225,7 @@ fn transfer_receipts_match(report: &Value) -> bool {
         report[key]["peerTransferChecked"].as_bool() == Some(true)
             && report[key]["peerDisplayChecked"].as_bool() == Some(true)
             && report[key]["peerReloadChecked"].as_bool() == Some(true)
+            && report[key]["peerReloadDisplayChecked"].as_bool() == Some(true)
     })
 }
 fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<()> {
@@ -372,7 +373,7 @@ mod tests {
 
     #[test]
     fn transfer_evidence_requires_both_runtime_receipts_not_truthy_values() {
-        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true}});
+        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true}});
         assert!(transfer_receipts_match(&r));
         for key in ["session", "domSession"] {
             for invalid in [
@@ -388,7 +389,10 @@ mod tests {
                 wrong[key]["peerDisplayChecked"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
-                wrong[key]["peerReloadChecked"] = invalid;
+                wrong[key]["peerReloadChecked"] = invalid.clone();
+                assert!(!transfer_receipts_match(&wrong));
+                let mut wrong = r.clone();
+                wrong[key]["peerReloadDisplayChecked"] = invalid;
                 assert!(!transfer_receipts_match(&wrong));
             }
         }
