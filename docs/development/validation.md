@@ -411,10 +411,19 @@ mise run probe-pty
 - 两份actualGBK headlessprobe由裸attach迁移为registry-owned，外国window capture/ACK明确Forbidden，owner旧generation ACK Stale；boundInput中文真实传输driver收到GBK D6D0CEC4，raw相同而UTF8cursor错误的compare必须Stale，不能清risk或误判Equal。报告三个新增必需bool和TS validator强制检查，headlesshistory/屏幕/EOF source7/utf89与source82/utf884仍精确；没有把producerstaging ACK说成liveJScallback roundtrip。
 - no new deps/locks/capabilities/audit变化；此前v1真实WebView复验属于1214679检查点，当前registrywrapper变更采用45unit+realPTY与GBKprobe targeted checks。Tauri窗口v2选择、实际DOM和生产charsetbinarypreclassifier仍未验收，源码不能因backendregistry API存在就开放未批准的credentials/shell。
 
+## v2固定UTF8样例的真实Linux WebView/DOM验收
+
+- 新mise/xtask probe-channel-v2、backend --probe-v2明确选择codec2，仅owned fixed UTF8 PTY helper，没有GBK/任意shell/remotecredential入口。readonly generated probeSessionProtocol只在local origin可调用，frontend选择必须1或2，不从浏览器参数替换后端codec；allcapture/resize/resume用同registry.attach_v2。默认probe-channel/window/external仍codec1，reports独立channel-v2.json。
+- SessionEvidence attachmentVersion由backend产出，xtask/headless/DOM全部必须匹配请求mode；新增模式wrong/mixed/缺version unit，v1完整report不当v2。信用精确按fragment8192+envelope20/28，因此v1≤8212/v2≤8220，而不是全局放宽。native unit覆盖8213-v1拒、8220-v2允许/8221拒、unknown3拒，native报告复用sessionvalidator消除重复8212常量。
+- 新ProbeConsumer UTF8-only适配器底层为真实AttachmentV2Consumer，私有legacy renderer只在控制边界source==utf8时投影，source-onlyGBK marker/不等Begin明确在render/ACK前拒绝；不让shim冒充GBK显示支持。一般GBK客户端仍直接用双坐标sink。3TS回归mixedversion/flags/unequalbootstrap不reset不ACK/equal边界renderACK/unequalmarker拒，合计210TS，native36tests通过。
+- 实测channel-v2 completed=true：2headless/2DOM/7原测量，session attachmentVersion2/dom2，headlesspeak8220/dom8101，DOM每轮resize3/paused2/input+repair+idle+native visibility与EOF一致，实际Raw Channel仍ArrayBuffer。不是性能三平台或GBK DOM声明。第一次因budget误用8212被capture前拒绝；修到8220后两DOM完成但总report重复v1常量拒，改复用版本化SessionEvidence后最终成功。两处都保留hardgate，未扩超时或skipchecks。
+- 最终default-v1真实probe-channel completed、typed bindings-check、workspacecheck/tsc/Biome/nativeclippy-Dwarnings再次成功，先前v2有36native tests/210TS，xtask新mode单测通过；CI新增Linuxv2但保留v1/WM测试。无newdependencies/locks/audit/CSP改变。既有native_visibility采样一次失败仍rootcause未定位，不能因最终通过宣称全解决。
+- 当前完成v2固定UTF8真实窗口组合，不是productioncharset；GBK DOM、binary/Zmodem预分类、temporary charset切换、真实设备、Windows/macOS依然pending。release6license/2maintenance门禁不放宽。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
-- TS：207 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现7项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- TS：210 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

@@ -25,6 +25,7 @@ struct Inner {
     active: Mutex<Option<Active>>,
     slot: Arc<Semaphore>,
     minimize: bool,
+    dual: bool,
     external_control: Option<std::path::PathBuf>,
 }
 struct Active {
@@ -36,11 +37,15 @@ struct Active {
 }
 impl Default for WindowSessions {
     fn default() -> Self {
-        Self::new(false, None)
+        Self::new(false, None, false)
     }
 }
 impl WindowSessions {
-    pub(crate) fn new(minimize: bool, external_control: Option<std::path::PathBuf>) -> Self {
+    pub(crate) fn new(
+        minimize: bool,
+        external_control: Option<std::path::PathBuf>,
+        dual: bool,
+    ) -> Self {
         Self(Arc::new(Inner {
             registry: SessionRegistry::new(),
             windows: Mutex::new(HashMap::new()),
@@ -48,10 +53,40 @@ impl WindowSessions {
             active: Mutex::new(None),
             slot: Arc::new(Semaphore::new(1)),
             minimize,
+            dual,
             external_control,
         }))
     }
 }
+impl Inner {
+    async fn attach_codec(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        config: AttachmentConfig,
+    ) -> std::result::Result<
+        pulse_app::registry::RegisteredAttachment,
+        pulse_app::registry::RegistryError,
+    > {
+        if self.dual {
+            self.registry.attach_v2(owner, id, config).await
+        } else {
+            self.registry.attach(owner, id, config).await
+        }
+    }
+}
+#[tauri::command]
+#[specta::specta]
+pub(crate) fn probe_session_protocol(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+) -> Result<u8> {
+    if !local_url(&window.url().map_err(error)?) {
+        return Err("session.remote_origin".into());
+    }
+    Ok(if state.0.dual { 2 } else { 1 })
+}
+
 fn error(_: impl std::fmt::Display) -> String {
     "session.probe_failed".into()
 }
@@ -260,6 +295,7 @@ impl Drop for PeerGuard {
 #[derive(serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SessionEvidence {
+    pub attachment_version: u8,
     pub generation: String,
     pub digest: String,
     pub revision: String,
@@ -286,7 +322,8 @@ pub(crate) struct SessionEvidence {
 impl SessionEvidence {
     pub(crate) fn validate(&self) -> Result<()> {
         parse_u64(&self.generation)?;
-        if self.resize_count > 3
+        if !matches!(self.attachment_version, 1 | 2)
+            || self.resize_count > 3
             || self.pause_count > 2
             || (self.native_window_checked && self.pause_count == 0)
             || (self.native_minimize_checked && !self.native_window_checked)
@@ -306,7 +343,8 @@ impl SessionEvidence {
                 .bytes()
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             || !(4..=16_384).contains(&self.frames)
-            || !(1..=8212).contains(&self.peak_credit_bytes)
+            || !(1..=8192 + if self.attachment_version == 2 { 28 } else { 20 })
+                .contains(&self.peak_credit_bytes)
             || self.native_exit != 0
             || !self.peer_denied
             || !self.window_revoked
@@ -991,13 +1029,12 @@ pub(crate) async fn probe_session(
     let config = AttachmentConfig {
         fragment: 8192,
         frames: 1,
-        bytes: 8212,
+        bytes: 8192 + if state.0.dual { 28 } else { 20 },
         ack_timeout: Duration::from_secs(10),
     };
     let mut attachment = state
         .0
-        .registry
-        .attach(owner, id, config)
+        .attach_codec(owner, id, config)
         .await
         .map_err(|_| "session.capture_failed".to_string())?;
     let relay = async {
@@ -1020,8 +1057,7 @@ pub(crate) async fn probe_session(
                     resizes += 1;
                     attachment = state
                         .0
-                        .registry
-                        .attach(owner, id, config)
+                        .attach_codec(owner, id, config)
                         .await
                         .map_err(|_| "session.recapture_failed".to_string())?;
                 }
@@ -1040,8 +1076,7 @@ pub(crate) async fn probe_session(
                     pauses += 1;
                     attachment = state
                         .0
-                        .registry
-                        .attach(owner, id, config)
+                        .attach_codec(owner, id, config)
                         .await
                         .map_err(|_| "session.resume_capture_failed".to_string())?;
                 }
@@ -1077,6 +1112,7 @@ pub(crate) async fn probe_session(
         return Err("session.closed_by_window".into());
     }
     Ok(SessionEvidence {
+        attachment_version: if state.0.dual { 2 } else { 1 },
         generation: generation.to_string(),
         digest: pulse_term::reconciliation::screen_digest(&screen),
         revision: receipt.boundary.revision.to_string(),
@@ -1161,6 +1197,7 @@ mod tests {
     #[test]
     fn report_requires_canonical_native_session_evidence() {
         let mut e = SessionEvidence {
+            attachment_version: 1,
             generation: "2".into(),
             digest: "9e1323ca657a4985".into(),
             revision: "777".into(),
@@ -1209,6 +1246,14 @@ mod tests {
         e.digest = "9e1323ca657a4985".into();
         e.peak_credit_bytes = 8213;
         assert!(e.validate().is_err());
+        e.attachment_version = 2;
+        e.peak_credit_bytes = 8220;
+        assert!(e.validate().is_ok());
+        e.peak_credit_bytes = 8221;
+        assert!(e.validate().is_err());
+        e.attachment_version = 3;
+        assert!(e.validate().is_err());
+        e.attachment_version = 1;
         e.peak_credit_bytes = 6092;
         e.marker_checked = false;
         assert!(e.validate().is_err());

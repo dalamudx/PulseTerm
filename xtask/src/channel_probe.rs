@@ -6,23 +6,28 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
-    run_mode(false, false)
+    run_mode(false, false, false)
 }
 pub fn run_window() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("probe-window currently requires isolated Linux X11/Openbox");
     }
-    run_mode(true, false)
+    run_mode(true, false, false)
 }
 pub fn run_window_external() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("external window probe requires isolated X11/Openbox");
     }
-    run_mode(true, true)
+    run_mode(true, true, false)
 }
-fn run_mode(minimize: bool, external: bool) -> Result<()> {
+pub fn run_v2() -> Result<()> {
+    run_mode(false, false, true)
+}
+fn run_mode(minimize: bool, external: bool, dual: bool) -> Result<()> {
     let root = super::root()?;
-    let report = root.join(if external {
+    let report = root.join(if dual {
+        "target/probes/channel-v2.json"
+    } else if external {
         "target/probes/window-external.json"
     } else if minimize {
         "target/probes/window-minimize.json"
@@ -74,7 +79,9 @@ fn run_mode(minimize: bool, external: bool) -> Result<()> {
     };
     command
         .args([
-            if external {
+            if dual {
+                "--probe-v2"
+            } else if external {
                 "--probe-window-external"
             } else if minimize {
                 "--probe-window"
@@ -106,7 +113,7 @@ fn run_mode(minimize: bool, external: bool) -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    validate(&report, minimize, external)?;
+    validate(&report, minimize, external, dual)?;
     if external {
         let actions = root.join("target/probes/window-external-actions.log");
         if std::fs::metadata(&actions)?.len() > 128 {
@@ -152,7 +159,13 @@ fn window_mode_matches(report: &Value, minimize: bool) -> bool {
     report["domSession"]["nativeMinimizeChecked"].as_bool() == Some(minimize)
         && report["session"]["nativeMinimizeChecked"].as_bool() == Some(false)
 }
-fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
+fn attachment_mode_matches(report: &Value, dual: bool) -> bool {
+    let version = if dual { 2 } else { 1 };
+    ["session", "domSession"]
+        .iter()
+        .all(|key| report[key]["attachmentVersion"] == version)
+}
+fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<()> {
     let report: Value =
         serde_json::from_slice(&std::fs::read(path).context("WebView did not write a report")?)?;
     if report["schemaVersion"] != 4
@@ -161,15 +174,17 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
         || report["typedEvents"] != true
         || report["completed"] != true
         || report["cancellation"] != true
+        || !attachment_mode_matches(&report, dual)
     {
         bail!("native probe incomplete: {}", report["error"]);
     }
     for key in ["session", "domSession"] {
         let session = &report[key];
-        if session["generation"]
-            .as_str()
-            .and_then(|s| s.parse::<u64>().ok())
-            .is_none_or(|n| n == 0)
+        if session["attachmentVersion"] != if dual { 2 } else { 1 }
+            || session["generation"]
+                .as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .is_none_or(|n| n == 0)
             || session["nativeExit"] != 0
             || session["peerDenied"] != true
             || session["windowRevoked"] != true
@@ -181,7 +196,7 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
             || session["frames"].as_u64().is_none_or(|n| n < 4)
             || session["peakCreditBytes"]
                 .as_u64()
-                .is_none_or(|n| n > 8212 || n == 0)
+                .is_none_or(|n| n > 8192 + if dual { 28 } else { 20 } || n == 0)
             || session["parsedBytes"]
                 .as_str()
                 .and_then(|s| s.parse::<u64>().ok())
@@ -276,6 +291,21 @@ fn validate(path: &Path, minimize: bool, external: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn attachment_version_evidence_cannot_substitute_v1_for_v2_or_mix_runs() {
+        for dual in [false, true] {
+            let version = if dual { 2 } else { 1 };
+            let r = serde_json::json!({"session":{"attachmentVersion":version},"domSession":{"attachmentVersion":version}});
+            assert!(attachment_mode_matches(&r, dual));
+            assert!(!attachment_mode_matches(&r, !dual));
+        }
+        assert!(!attachment_mode_matches(&serde_json::json!({}), false));
+        assert!(!attachment_mode_matches(
+            &serde_json::json!({"session":{"attachmentVersion":2},"domSession":{"attachmentVersion":1}}),
+            true
+        ));
+    }
+
     #[test]
     fn external_evidence_requires_two_distinct_ordered_minimize_restore_pairs() {
         assert!(

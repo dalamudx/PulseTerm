@@ -76,6 +76,9 @@ jobs:
       - name: Validate Linux native sessions, windows and transports
         if: runner.os == 'Linux'
         run: mise run probe-channel
+      - name: Validate explicit v2 bindings in the Linux WebView
+        if: runner.os == 'Linux'
+        run: mise run probe-channel-v2
       - name: Validate native minimized-window recovery under Openbox
         if: runner.os == 'Linux'
         run: mise run probe-window

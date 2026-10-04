@@ -19,8 +19,7 @@ import {
   GenerationViewHost,
   type ViewScope,
 } from "../features/terminal/view-host";
-import { type AttachBoundary, attachmentEnvelope } from "./attachment";
-import { AttachmentConsumer } from "./attachment-consumer";
+import type { AttachBoundary } from "./attachment";
 import { decodeFrame } from "./frames";
 import {
   commands,
@@ -28,6 +27,12 @@ import {
   type NativeVisibilitySample,
   type SessionEvidence,
 } from "./gen/commands";
+import {
+  createProbeConsumer,
+  type ProbeAttachmentVersion,
+  type ProbeConsumer,
+  probeAttachmentEnvelope,
+} from "./probe-attachment-codec";
 import { forCurrentSurface, SurfaceGeneration } from "./surface-generation";
 
 type ProbeTerminal = Pick<
@@ -91,6 +96,10 @@ export async function verifySessionChannel(dom?: {
     resume: () => void;
   };
 }): Promise<SessionEvidence> {
+  const selected = await commands.probeSessionProtocol();
+  if (selected !== 1 && selected !== 2)
+    throw new Error("session.unsupported_attachment_version");
+  const protocol: ProbeAttachmentVersion = selected;
   const nonce = crypto.randomUUID();
   let terminal: ProbeTerminal | undefined;
   let renderer: DomRenderer | undefined;
@@ -117,7 +126,7 @@ export async function verifySessionChannel(dom?: {
   let inputText = "";
   const inputJobs: Promise<void>[] = [];
   let final: { revision: bigint; parsedBytes: bigint } | undefined;
-  let consumer: AttachmentConsumer | undefined;
+  let consumer: ProbeConsumer | undefined;
   let failed: unknown;
   const views = new GenerationViewHost(lifetime.signal, (error) => {
     failed ??= error;
@@ -219,7 +228,7 @@ export async function verifySessionChannel(dom?: {
       wireCount++;
       if (surfaceHidden) return;
       if (frame.kind !== 8) throw new Error("session.frame_kind");
-      const header = attachmentEnvelope(frame.payload);
+      const header = probeAttachmentEnvelope(frame.payload, protocol);
       const route = generations.accept(
         header.generation,
         header.part === 1,
@@ -279,7 +288,8 @@ export async function verifySessionChannel(dom?: {
         generationSeen = generation;
         const view = views.begin(generation);
         viewScope = view;
-        consumer = new AttachmentConsumer(
+        consumer = createProbeConsumer(
+          protocol,
           generation,
           {
             reset: async (boundary, signal) => {
@@ -1071,7 +1081,8 @@ export async function verifySessionChannel(dom?: {
       !result.windowRevoked ||
       !result.sessionSurvived ||
       result.nativeExit !== 0 ||
-      result.peakCreditBytes > 8212 ||
+      result.attachmentVersion !== protocol ||
+      result.peakCreditBytes > 8192 + (protocol === 2 ? 28 : 20) ||
       !delayed ||
       !idleChecked ||
       !markerChecked ||

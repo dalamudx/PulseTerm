@@ -14,6 +14,7 @@ export const commands = {
 	probeFinish: (report: ProbeReport) => __TAURI_INVOKE<null>("probe_finish", { report }),
 	probeEvent: (nonce: string) => __TAURI_INVOKE<null>("probe_event", { nonce }),
 	probeSession: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel }),
+	probeSessionProtocol: () => __TAURI_INVOKE<number>("probe_session_protocol"),
 	probeSessionAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_session_ack", { nonce, generation, sequence }),
 	probeSessionCompare: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<ComparisonEvidence>("probe_session_compare", { nonce, generation, rendered }),
 	probeSessionRepair: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<RepairEvidence>("probe_session_repair", { nonce, generation, rendered }),
@@ -137,6 +138,7 @@ export type RenderedProjection = {
 export type RepairEvidence = "equal" | "stale" | "queued";
 
 export type SessionEvidence = {
+	attachmentVersion: number,
 	generation: string,
 	digest: string,
 	revision: string,

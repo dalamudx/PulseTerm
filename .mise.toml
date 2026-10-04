@@ -123,6 +123,11 @@ description = "Measure real WebView Channel and loopback WebSocket"
 depends = ["desktop-build"]
 run = "cargo xtask probe-channel"
 
+[tasks.probe-channel-v2]
+description = "Validate explicit dual-coordinate bindings in the real UTF-8 WebView sample"
+depends = ["desktop-build"]
+run = "cargo xtask probe-channel-v2"
+
 [tasks.probe-window]
 description = "Validate native minimize/resume under isolated Linux X11/Openbox"
 depends = ["desktop-build"]

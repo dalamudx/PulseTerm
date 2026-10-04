@@ -13,14 +13,14 @@
 
 ## v2双坐标（ADR-029，明确选择而非隐式升级）
 
-`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；注册层提供显式SessionRegistry::attach_v2，共用owner/generation/capture锁/monitor额度与晚完成隔离；当前Tauri窗口适配/真实桌面仍v1-only，没有自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
+`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；注册层提供显式SessionRegistry::attach_v2，共用owner/generation/capture锁/monitor额度与晚完成隔离；默认Tauri窗口仍v1；仅--probe-v2固定UTF8样例明确选择v2，resize/resume沿用同codec，无自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
 
 - envelope28字节：version:u8=2、part:u8、reserved:u16=0、generation:u64、offset:u64、source_after:u64。Begin body36：columns:u16、rows:u16、revision:u64、source:u64、UTF8:u64、history_len:u32、restore_len:u32；Begin source需与envelope一致。全部小端，JS仍bigint。
 - Data.offset是normalized UTF8游标，按body真实长度连续递增，source_after独立单调（可不增加）。一份normalized record分片时，前片保留previous source边界，最后一片提交该record source endpoint，不能推算每个UTF8字节映射到哪个source byte。完整raw chunk展开超过64KiB时，actor把source consumed计入第一份显示record，后续显示record不再增加source。两种分段都不声明raw↔display逐字节映射。
 - 无显示输出的decoder pending消费以同队列Marker发布source增量，UTF8不动，不feed VT/flush sync。Checkpoint/End要求source和UTF8都与当前stream一致，revision不回退。RepairBegin/Bytes/Commit保持两个游标，source变化或一个游标不符均拒；History/Restore/RepairBytes的offset仍section-local。
 - Begin/history/restore/repair staging界限不变；credit按实际v2 envelope+body（outer6byte header独立），不以raw或UTF8累计量释放。NoCredit不能变任何游标/阶段；旧generation ACK拒绝。Consumer先有界staging，完整Commit后render，write/marker/repair/EOF callback完成后ACK，取消或迟到callback不ACK。
 - actor SessionState保留parsed_bytes=原始source，再加utf8_bytes/source_is_utf8；完整状态比较天然同时包括两坐标与encoding mode，不能只依据source一致清除风险。validation-only spawn_gbk_text_session使用已分类GBK文本，decoder跨detach/lease存活、input和query反向编码。raw≤64KiB，单次UTF8展开≤3×64KiB+4工作buffer，再≤64KiBrecords，满队列阻止继续解析和transport读取；多出的decoder scratch/pending内存须计入预算。
-- 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实设备和窗口v2注册授权/DOM验收仍待完成。
+- 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实GBK设备/GBK窗口DOM验收仍待完成；固定UTF8-v2已通过Linux2headless/2DOM/resize3/pause2组合。
 
 ## 原子live诊断lease
 

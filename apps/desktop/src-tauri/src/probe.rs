@@ -533,7 +533,7 @@ impl ProbeReport {
                             || !s.window_revoked
                             || !s.session_survived
                             || s.native_exit != 0
-                            || s.peak_credit_bytes > 8212
+                            || s.validate().is_err()
                             || s.frames < 4
                     })
                     || self.error.is_some()
@@ -618,6 +618,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             probe_finish,
             probe_event,
             crate::window_sessions::probe_session,
+            crate::window_sessions::probe_session_protocol,
             crate::window_sessions::probe_session_ack,
             crate::window_sessions::probe_session_compare,
             crate::window_sessions::probe_session_repair,
@@ -698,7 +699,8 @@ pub fn run() {
     } else {
         None
     };
-    let automatic = minimize || args.iter().any(|arg| arg == "--probe");
+    let dual = args.iter().any(|arg| arg == "--probe-v2");
+    let automatic = minimize || dual || args.iter().any(|arg| arg == "--probe");
     let report_path = args
         .iter()
         .position(|arg| arg == "--report")
@@ -715,7 +717,7 @@ pub fn run() {
     let bindings = command_bindings();
     let result = tauri::Builder::default()
         .manage(state)
-        .manage(WindowSessions::new(minimize, external_control))
+        .manage(WindowSessions::new(minimize, external_control, dual))
         .invoke_handler(bindings.invoke_handler())
         .setup(move |app| {
             bindings.mount_events(app);

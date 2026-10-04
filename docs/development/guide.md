@@ -72,6 +72,7 @@ mise run fmt                      # 统一格式
 mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
 mise run desktop                  # 打开原生开发验证界面（不是完整终端）
 mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data idle Marker及精确屏幕修复，两轮headless+两轮可见DOM及7组测量
+mise run probe-channel-v2         # --probe-v2固定UTF8样例，两轮headless/DOM、版本收据和8220-byte窗口
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
