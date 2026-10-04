@@ -1,4 +1,4 @@
-// Fixed runtime-transfer capture only. Separate queue/ACK path from primary session.
+// Fixed readonly validation surface. Separate queue/ACK path from primary session.
 import type { Terminal as TerminalType } from "@xterm/headless";
 import type { DomRenderer } from "../features/probe/dom-renderer";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
@@ -48,6 +48,15 @@ export class TransferViewProbe {
         boundary: AttachBoundary,
         digest: string,
       ) => Promise<void>;
+      /** Validation-only retained view; snapshots still reject all continuation frames. */
+      live?: {
+        ready: () => Promise<void>;
+        marker: (
+          generation: string,
+          boundary: AttachBoundary,
+          digest: string,
+        ) => Promise<void>;
+      };
       digest: (terminal: TransferTerminal) => string;
       failed: (error: unknown) => void;
     },
@@ -109,6 +118,18 @@ export class TransferViewProbe {
               const input = this.terminal.onData(() => this.replies++);
               this.cleanup.push(query, () => input.dispose());
             },
+            marker: async (_revision, _parsedBytes, signal) => {
+              if (
+                !this.options.live ||
+                !this.confirmed ||
+                signal.aborted ||
+                this.lifetime.signal.aborted
+              )
+                throw new Error("transfer.marker_unsupported");
+              await this.renderer?.settle(
+                AbortSignal.any([signal, this.lifetime.signal]),
+              );
+            },
             write: async (bytes, signal) => {
               if (
                 !this.terminal ||
@@ -149,16 +170,57 @@ export class TransferViewProbe {
         );
       }
       if (
-        this.confirmed ||
+        (this.confirmed &&
+          !(this.options.live && (header.part === 5 || header.part === 8))) ||
         this.committing ||
         header.generation !== this.generation ||
         header.part < 1 ||
-        header.part > 4
+        (header.part > 4 &&
+          !(
+            this.options.live &&
+            this.confirmed &&
+            (header.part === 5 || header.part === 8)
+          ))
       )
         throw new Error("transfer.unexpected_frame");
       if (header.part === 4) this.committing = true;
       const job = this.consumer.enqueue(wire).then(async (receipt) => {
         if (!receipt || receipt.event.kind === "staged") return;
+        if (receipt.event.kind === "data") {
+          if (
+            !this.options.live ||
+            !this.confirmed ||
+            !this.terminal ||
+            this.lifetime.signal.aborted
+          )
+            throw new Error("transfer.unexpected_data");
+          return;
+        }
+        if (receipt.event.kind === "marker") {
+          if (
+            !this.options.live ||
+            !this.confirmed ||
+            !this.terminal ||
+            !this.boundary ||
+            this.generation === undefined ||
+            this.lifetime.signal.aborted ||
+            this.replies !== 0
+          )
+            throw new Error("transfer.invalid_marker");
+          this.boundary = {
+            ...this.boundary,
+            revision: receipt.event.revision,
+            parsedBytes: receipt.event.parsedBytes,
+          };
+          await this.options.live.marker(
+            this.generation.toString(),
+            this.boundary,
+            this.options.digest(this.terminal),
+          );
+          if (this.lifetime.signal.aborted)
+            throw new Error("transfer.cancelled");
+          return;
+        }
         if (
           receipt.event.kind !== "ready" ||
           !this.terminal ||
@@ -175,7 +237,12 @@ export class TransferViewProbe {
         );
         if (this.lifetime.signal.aborted) throw new Error("transfer.cancelled");
         this.confirmed = true;
-        this.releaseSurface();
+        this.committing = false;
+        if (this.options.live) {
+          await this.options.live.ready();
+          if (this.lifetime.signal.aborted)
+            throw new Error("transfer.cancelled");
+        } else this.releaseSurface();
       });
       this.latest = job;
       void job.catch((error) => this.fail(error));

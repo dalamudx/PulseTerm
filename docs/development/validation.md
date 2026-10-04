@@ -582,10 +582,18 @@ mise run probe-pty
 - latestv1/v2各两headless+两DOM run（三阶段各4次firstDOM/freshDOM/targetDOM）完整，actualStarted retired及initial/fresh receipts true；default/encoding-probe各53native、strictclippy/typeddrift/fullcheck/fulltests52app/93term/33IPC/12route/13xtask/220TS通过，MCP reload模块无error。
 - firstpage是只读snapshot，完成后该Channel/surface被释放；reload瞬间Open lease仍由Rust validator持有，并非旧DOMliveData正在持续接收。下一步需要将firstpage订阅保留至navigation，让RuntimeStarted撤销真实renderer lease；不能提前宣称liveData跨reload完整验收。最新GBK/外部WM此firstpage扩展未重跑，生产/IME/跨平台和偶发非零退出风险仍保持，deps/CSP/audit不变。
 
+## S11保留readonly renderer的前端续流与就绪握手（native live relay待接）
+
+- TransferViewProbe增加显式validation-only live配置，bootstrap ACK/摘要后保留surface、Unicode provider、查询屏蔽与UTF8Stream，允许有界Data及纯Marker；snapshot默认仍拒Commit后的任意帧。Marker sink只等DOM绘制，不送VT、不finish pendingUTF8或flush同步更新；同seq ACK完成之后才调用带revision/source边界的marker摘要确认。取消/确认失败丢弃本代，不重用surface或清理新代。
+- 6新增v1/v2实际headless回归：半emoji跨Data/Marker保持（含已写空格），暂停MarkerACK时不能确认，续字节完成🌍，DSR查询不会产生重复onData响应，lateData/marker确认失败不能被当成功；默认snapshot续流继续拒绝。6项是headless数据面证据，不是native live订阅跨reload证明，尚未启用第一页面live模式。
+- 默认snapshot真实回归首次报peer_initial_display_deadline，未通过。实现审查确认Finished/greeting可能早于React effect安装__PULSE_PEER_VIEW__；新增单document resolver握手：Finished script先等已有hook或一个resolver，installPeerBootstrap先发布hook、清resolver再唤醒，无轮询、重试、nonce getter或deadline扩大。3单测直接读取/执行actualRust静态脚本，覆盖提前/迟到装hook、跨doc隔离和重复安装拒绝。复验过并不证明那次timeout的全部根因已定位。
+- latestdefault v1/v2snapshot实际first/fresh/targetDOM及53native、fullcheck/typeddrift/tsc/Biome与229TS通过，CI原有actualprobe含新握手。前次firstpage构建GBK和外部WM实际组合也已过完整独立initial/fresh/retired报告；本次新的前端live/握手后这两模式未复验。无deps/lock/CSP/audit改变。
+- 下一步把显式live接到native application-owned订阅监督：bootstrap确认、Data/Marker确认、Started撤销与oldviewjoin须分开；不能在窗口卸载时取消PTY。snapshot或headless通过不等于oldDOM仍在消费输出时的真实刷新验收。S11整体/生产/跨平台仍未完成，既有偶发退出风险保持。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各53项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：220 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- TS：229 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

@@ -1105,7 +1105,7 @@ pub(crate) async fn probe_session(
                 let refreshed=previous.is_some();
                 let old_page=previous.as_ref().map(|n|format!("'{n}'")).unwrap_or_else(||"undefined".to_string());
                 let denied=previous.map(|old|format!("let denied=false;try{{await call({{nonce:'{nonce}',pageNonce:'{old}'}})}}catch{{denied=true}}if(!denied)throw new Error('session.peer_old_page_nonce_admitted');")).unwrap_or_default();
-                let script=format!("void(async()=>{{const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}});if({refreshed})await window.__PULSE_PEER_VIEW__('{nonce}','{current}',{old_page})}})().catch(console.error)");
+                let script=format!("void(async()=>{{{}const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}});if({refreshed})await window.__PULSE_PEER_VIEW__('{nonce}','{current}',{old_page})}})().catch(console.error)",reload::WAIT_BOOTSTRAP);
                 if peer.eval(&script).is_err(){eprintln!("session.peer_eval_failed");}
             }else{eprintln!("session.peer_page_not_ready");}
         }

@@ -2,6 +2,9 @@
 use super::*;
 use tauri::webview::PageLoadEvent;
 use tokio::sync::watch;
+// Native Finished can precede the React effect installing the fixed peer hook.
+// No timers/retries/nonce getter: either already installed or one document-local resolver.
+pub(super) const WAIT_BOOTSTRAP: &str = "await new Promise(resolve=>{if(typeof window.__PULSE_PEER_VIEW__==='function'){resolve();}else{window.__PULSE_PEER_VIEW_READY__=resolve;}});";
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Pages {
     started: u8,

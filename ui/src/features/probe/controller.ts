@@ -5,6 +5,7 @@ import type {
   SessionEvidence,
 } from "../../ipc/gen/commands";
 import { commands } from "../../ipc/gen/commands";
+import { installPeerBootstrap } from "../../ipc/peer-bootstrap";
 import {
   automaticMode,
   finishReport,
@@ -249,16 +250,13 @@ export async function initialize(): Promise<void> {
   if (initialized) return;
   initialized = true;
   if (new URL(window.location.href).searchParams.has("session-peer")) {
-    Object.assign(window, {
-      __PULSE_PEER_VIEW__: async (
-        nonce: string,
-        pageNonce: string,
-        previousPageNonce?: string,
-      ) => {
+    installPeerBootstrap(
+      window,
+      async (nonce: string, pageNonce: string, previousPageNonce?: string) => {
         const { verifyPeerView } = await import("../../ipc/peer-view-probe");
         await verifyPeerView(nonce, pageNonce, previousPageNonce);
       },
-    });
+    );
     return;
   }
   if (nativeAvailable && (await automaticMode())) await start();
