@@ -175,6 +175,16 @@ pub(super) async fn render(
     previous: u64,
     channel: &Channel<RawFrame>,
 ) -> Result<()> {
+    // Reserve the shared sender lane BEFORE capture can replace a live lease.
+    let _permit = state
+        .0
+        .transfer_view_slot
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "session.transfer_busy".to_string())?;
+    if state.0.transfer_view.lock().map_err(error)?.is_some() {
+        return Err("session.transfer_busy".into());
+    }
     let mut view = state
         .0
         .attach_codec(
@@ -189,6 +199,12 @@ pub(super) async fn render(
         )
         .await
         .map_err(error)?;
+    let _guard = Guard {
+        state: state.clone(),
+        owner,
+        id,
+        generation: view.generation,
+    };
     if view.generation <= previous {
         return Err("session.transfer_generation".into());
     }
@@ -207,12 +223,6 @@ pub(super) async fn render(
             commit_acknowledged: false,
         });
     }
-    let _guard = Guard {
-        state: state.clone(),
-        owner,
-        id,
-        generation: view.generation,
-    };
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let wire = view.wire.recv().await.ok_or("session.transfer_wire")?;
@@ -271,6 +281,140 @@ pub(super) async fn render(
 mod tests {
     use super::*;
     use pulse_term::session::{self, ChannelTransport};
+    #[tokio::test]
+    async fn failed_capture_order_detaches_its_lease_and_releases_sender_credit_without_closing_actor()
+     {
+        for dual in [false, true] {
+            let state = WindowSessions::new(false, None, dual, false);
+            let owner = state.0.registry.open_window().unwrap();
+            let (transport, driver) = session::ChannelTransport::bounded_driver();
+            let (handle, task) =
+                session::spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+            let id = state.0.registry.register(owner, handle).unwrap();
+            let sent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let count = sent.clone();
+            let channel = Channel::<RawFrame>::new(move |_| {
+                count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            });
+            assert_eq!(
+                render(&state, owner, id, u64::MAX, &channel)
+                    .await
+                    .unwrap_err(),
+                "session.transfer_generation"
+            );
+            assert_eq!(sent.load(std::sync::atomic::Ordering::Relaxed), 0);
+            assert_eq!(state.0.transfer_view_slot.available_permits(), 1);
+            assert!(state.0.transfer_view.lock().unwrap().is_none());
+            assert!(state.0.registry.check_binding(owner, id, 1).is_err());
+            assert_eq!(
+                state.0.registry.state(owner, id).unwrap().lifecycle,
+                Lifecycle::Running
+            );
+            let next = state
+                .0
+                .attach_codec(
+                    owner,
+                    id,
+                    AttachmentConfig {
+                        fragment: 64,
+                        frames: 1,
+                        bytes: 128,
+                        ack_timeout: Duration::from_secs(3),
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(next.generation, 2);
+            state
+                .0
+                .registry
+                .check_binding(owner, id, next.generation)
+                .unwrap();
+            state.0.registry.close_session(owner, id).unwrap();
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(1), task.join())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .lifecycle,
+                Lifecycle::Closed
+            );
+            drop((next, driver));
+        }
+    }
+
+    #[tokio::test]
+    async fn occupied_sender_lane_rejects_before_capture_without_replacing_or_spending_generation()
+    {
+        for dual in [false, true] {
+            let state = WindowSessions::new(false, None, dual, false);
+            let owner = state.0.registry.open_window().unwrap();
+            let (transport, driver) = session::ChannelTransport::bounded_driver();
+            let (handle, task) =
+                session::spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+            let id = state.0.registry.register(owner, handle).unwrap();
+            let config = AttachmentConfig {
+                fragment: 64,
+                frames: 1,
+                bytes: 128,
+                ack_timeout: Duration::from_secs(3),
+            };
+            let first = state.0.attach_codec(owner, id, config).await.unwrap();
+            let permit = state
+                .0
+                .transfer_view_slot
+                .clone()
+                .try_acquire_owned()
+                .unwrap();
+            let sent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let observed = sent.clone();
+            let channel = Channel::<RawFrame>::new(move |_| {
+                observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            });
+            assert_eq!(
+                render(&state, owner, id, first.generation, &channel)
+                    .await
+                    .unwrap_err(),
+                "session.transfer_busy"
+            );
+            assert_eq!(sent.load(std::sync::atomic::Ordering::Relaxed), 0);
+            state
+                .0
+                .registry
+                .check_binding(owner, id, first.generation)
+                .unwrap();
+            assert!(state.0.transfer_view.lock().unwrap().is_none());
+            drop(permit);
+            let next = state.0.attach_codec(owner, id, config).await.unwrap();
+            assert_eq!(next.generation, first.generation + 1);
+            state
+                .0
+                .registry
+                .check_binding(owner, id, next.generation)
+                .unwrap();
+            let _ = tokio::time::timeout(Duration::from_secs(1), first.completion)
+                .await
+                .unwrap();
+            state
+                .0
+                .registry
+                .check_binding(owner, id, next.generation)
+                .unwrap();
+            state.0.registry.close_session(owner, id).unwrap();
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(1), task.join())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .lifecycle,
+                Lifecycle::Closed
+            );
+            drop((next, driver));
+        }
+    }
+
     #[tokio::test]
     async fn gate_denies_foreign_old_and_already_confirmed_without_touching_current_binding() {
         let state = WindowSessions::default();
