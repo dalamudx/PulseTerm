@@ -165,7 +165,13 @@ pub(super) async fn handoff(
         .await
         .map_err(error)?
         .map_err(error)?;
-    require(old_receipt.is_err())?;
+    require(matches!(
+        old_receipt,
+        Err(pulse_app::attachment::AttachmentError::Detached
+            | pulse_app::attachment::AttachmentError::Invalidated(
+                pulse_term::session::StreamEnd::Replaced
+            ))
+    ))?;
     state
         .0
         .registry
@@ -182,7 +188,10 @@ pub(super) async fn handoff(
         .await
         .map_err(error)?
         .map_err(error)?;
-    require(completion.is_err())?;
+    require(matches!(
+        completion,
+        Err(pulse_app::attachment::AttachmentError::Detached)
+    ))?;
     Ok(next.generation)
 }
 pub(super) async fn after_source_destroyed(
@@ -191,6 +200,7 @@ pub(super) async fn after_source_destroyed(
     id: SessionId,
     handle: &SessionHandle,
     previous: u64,
+    channel: &Channel<RawFrame>,
 ) -> Result<()> {
     eprintln!("session.peer_transfer.source_destroyed");
     let before = state.0.registry.state(owner, id).map_err(error)?;
@@ -211,7 +221,10 @@ pub(super) async fn after_source_destroyed(
         .await
         .map_err(error)?
         .map_err(error)?;
-    require(result.is_err())?;
+    require(matches!(
+        result,
+        Err(pulse_app::attachment::AttachmentError::Detached)
+    ))?;
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let screen = handle.inspect().await.map_err(error)?;
@@ -239,17 +252,6 @@ pub(super) async fn after_source_destroyed(
     .await
     .map_err(|_| "session.peer_transfer_input_deadline".to_string())??;
     eprintln!("session.peer_transfer.after_input_capture");
-    let final_view = capture(state, owner, id, handle).await?;
-    require(final_view.generation > binding.generation)?;
-    state
-        .0
-        .registry
-        .detach(owner, id, final_view.generation)
-        .map_err(error)?;
-    let result = tokio::time::timeout(Duration::from_secs(3), final_view.completion)
-        .await
-        .map_err(error)?
-        .map_err(error)?;
-    require(result.is_err())?;
+    transfer_view::render(state, owner, id, binding.generation, channel).await?;
     Ok(())
 }

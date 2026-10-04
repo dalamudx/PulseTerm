@@ -646,6 +646,8 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             probe_event,
             crate::window_sessions::probe_session,
             crate::window_sessions::probe_session_protocol,
+            crate::window_sessions::transfer_view::probe_transfer_ack,
+            crate::window_sessions::transfer_view::probe_transfer_confirm,
             crate::window_sessions::encoding_probe::probe_encoding,
             crate::window_sessions::encoding_probe::probe_encoding_mode,
             crate::window_sessions::encoding_probe::probe_encoding_input,

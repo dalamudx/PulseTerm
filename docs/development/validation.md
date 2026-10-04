@@ -513,10 +513,19 @@ mise run probe-pty
 - 首次v2运行未生成报告，进程已退出/no lingering children，但旧runner未保存native exitstatus/阶段，根因未知；不是已修复。新增bounded固定阶段diagnostic与runner错误的exitstatus context，无凭据/输出内容，保持原期限不延长；随后v2/v1复验通过但不宣称消除偶发故障。
 - 仍未完成目标WebView RawChannel与DOM消费peer恢复、生产多窗口拖动/输入退役/尺寸协调、WebView reload及关闭后orphan授权恢复，S11整体不通过。此处backend消费wire验证只是runtime authorization/lifecycle加真实PTY延续，不能将它当crosswindow视觉/IME验收。
 
+## S11迁移末次capture实际目标WebView Channel与DOM回调
+
+- peer源码窗口的首轮capture仍由Rust消费，但source Destroyed后含HIDDEN_SEED的末次capture改由独立Channel<ArrayBuffer>送目标main WebView。主session/channel未Begin时临时创建独立xterm surface，用SharedUnicode17/query suppression/UTF8 stream与现有v1/v2Consumer；主通道和迁移通道各自queue/ACK/nonce/gen，禁止frame混流。目标DOM每次write真实callback后settle检查实际绘制rows再ACK，不把headless视为DOM。ready回执后计算visible digest，backend exactsameboundary compare Equal才消费一次确认票据；清理只自己的root，不误删随后主surface。
+- 新typed probe_transfer_ack/confirm开发命令不收sessionId/owner/目的windowlabel，由current主run的runtime caller+nonce定位固定已迁移peer；permit最多一份。old/foreign/confirmed请求拒绝，guarddrop仅清理自己的generation且不关闭actor，新guard不被迟到olddrop清掉。确认还须backend已送Commit并收到该seq的ACK准入标记；这仍是consumer提交ACK而不是用户看见画面的通用安全证明。driver保持原protocol/ACKtimeout监督，不改credits。明确只接受预期Detached收尾，旧source撤销允许Detached/Invalidated(Replaced)竞态，AckTimeout/Protocol/Failed不能冒充成功迁移。
+- mandatory peerDisplayChecked 与 peerTransferChecked分别记录真实targetdisplay/runtime归属。TSfinish必须一次readyconfirm且无query泄漏，reject live/repair/end/mixedcodec/额外Begin/Commit或cancel/confirm失败。native报告false拒，xtask两份报告都须严格bool true，null/string/数字皆拒。实际endpoint负向：wrongnonce transfer ACK、wronggen确认、将peer ACK送主session命令、重复确认均被拒而currentpeer仍正确完成。
+- strictCommit门收紧之前的最终v1/v2 actual报告均completed=true、两headless+两DOM、两组transfer/display收据true；全workspacecheck/test（49app/93term/33IPC/12route/13xtask/215TS）/typedbindings/40native/strictclippy/基础probe通过。MCP新native模块无error诊断。新5项TS回归使用actual headless xterm中文屏幕及可控CommitACKpromise，确认不会先于callback ACK，取消/确认失败不当成功；1nativegate回归测试foreign/old/consumed及oldguard不伤replacement。
+- 最新strictCommitseq/ACK前置与具体Detach收据收紧后的v2→v1真实复验最终通过（两版各两headless+两DOM的runtime/display收据均true），native40/typedbindings/strictclippy通过；gate回归还直接验证无Commit、无ACK、foreign、old以及consumed确认拒绝。原首次无report的未知风险仍保留，不声称修复。
+- 本轮mise run audit仍明确FAILED（6license拒、paste RUSTSEC-2024-0436/proc-macro-error RUSTSEC-2024-0370两项unmaintained；bans/sources过），无新dependency/lock/allowlist/CSP变化，不得打包。后续生产多窗口drag/目标实际输入与尺寸协调、source端DOM退役、WebView reload/关闭后orphan权限恢复、跨平台/IME/用户按钮仍待验证；S11整体未通过。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
-- TS：210 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 49项测试通过（含4项可信活窗口transfer/旧输入/ABA/额度保持/EOF拒绝回归）；额外178项原上游测试通过；原生适配器现40项测试通过（含原visibility/park回归及1项目标迁移确认gate/旧guard隔离回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：215 项测试通过（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

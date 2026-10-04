@@ -3,6 +3,8 @@
 pub(crate) mod encoding_probe;
 #[path = "window_transfer_probe.rs"]
 mod transfer;
+#[path = "window_transfer_view.rs"]
+pub(crate) mod transfer_view;
 use crate::raw_frame::RawFrame;
 use pulse_app::attachment::AttachmentConfig;
 use pulse_app::registry::{
@@ -27,6 +29,7 @@ struct Inner {
     windows: Mutex<HashMap<String, WindowToken>>,
     observers: Mutex<HashMap<WindowToken, Arc<crate::native_visibility::NativeWatcher>>>,
     active: Mutex<Option<Active>>,
+    transfer_view: Mutex<Option<transfer_view::Current>>,
     slot: Arc<Semaphore>,
     minimize: bool,
     dual: bool,
@@ -57,6 +60,7 @@ impl WindowSessions {
             windows: Mutex::new(HashMap::new()),
             observers: Mutex::new(HashMap::new()),
             active: Mutex::new(None),
+            transfer_view: Mutex::new(None),
             slot: Arc::new(Semaphore::new(1)),
             minimize,
             dual,
@@ -312,6 +316,7 @@ pub(crate) struct SessionEvidence {
     pub native_exit: u32,
     pub peer_denied: bool,
     pub peer_transfer_checked: bool,
+    pub peer_display_checked: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -356,6 +361,7 @@ impl SessionEvidence {
             || self.native_exit != 0
             || !self.peer_denied
             || !self.peer_transfer_checked
+            || !self.peer_display_checked
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -951,6 +957,7 @@ pub(crate) async fn probe_session(
     state: State<'_, WindowSessions>,
     nonce: String,
     channel: Channel<RawFrame>,
+    transfer_channel: Channel<RawFrame>,
 ) -> Result<SessionEvidence> {
     let nonce = uuid::Uuid::parse_str(&nonce).map_err(error)?.to_string();
     let state = state.inner().clone();
@@ -1050,7 +1057,15 @@ pub(crate) async fn probe_session(
             .map_err(error)?
             .lifecycle
             == Lifecycle::Running;
-    transfer::after_source_destroyed(&state, owner, peer_id, &peer_handle, peer_transfer).await?;
+    transfer::after_source_destroyed(
+        &state,
+        owner,
+        peer_id,
+        &peer_handle,
+        peer_transfer,
+        &transfer_channel,
+    )
+    .await?;
     peer_handle.close();
     tokio::time::timeout(Duration::from_secs(5), peer_task.join())
         .await
@@ -1154,6 +1169,7 @@ pub(crate) async fn probe_session(
         native_exit: native.exit_code,
         peer_denied,
         peer_transfer_checked: true,
+        peer_display_checked: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1240,6 +1256,7 @@ mod tests {
             native_exit: 0,
             peer_denied: true,
             peer_transfer_checked: true,
+            peer_display_checked: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1301,6 +1318,9 @@ mod tests {
         e.peer_transfer_checked = false;
         assert!(e.validate().is_err());
         e.peer_transfer_checked = true;
+        e.peer_display_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_display_checked = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

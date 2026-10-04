@@ -34,6 +34,7 @@ import {
   probeAttachmentEnvelope,
 } from "./probe-attachment-codec";
 import { forCurrentSurface, SurfaceGeneration } from "./surface-generation";
+import { TransferViewProbe } from "./transfer-view-probe";
 
 type ProbeTerminal = Pick<
   TerminalType,
@@ -162,6 +163,46 @@ export async function verifySessionChannel(dom?: {
         ).some((line) => line.includes(text))
       : false;
   };
+  const transferChannel = new Channel<ArrayBuffer>();
+  const transferView = new TransferViewProbe({
+    version: protocol,
+    host: dom?.host,
+    signal: lifetime.signal,
+    ack: async (generation, sequence) => {
+      await commands.probeTransferAck(nonce, generation, sequence);
+    },
+    confirm: async (generation, boundary, value) => {
+      const rendered = {
+        columns: boundary.columns,
+        rows: boundary.rows,
+        revision: boundary.revision.toString(),
+        parsedBytes: boundary.parsedBytes.toString(),
+        digest: value,
+      };
+      await requireRejected(
+        commands.probeTransferAck(crypto.randomUUID(), generation, 0),
+      );
+      await requireRejected(
+        commands.probeTransferConfirm(
+          nonce,
+          (BigInt(generation) + 1n).toString(),
+          rendered,
+        ),
+      );
+      await requireRejected(commands.probeSessionAck(nonce, generation, 0));
+      await commands.probeTransferConfirm(nonce, generation, rendered);
+      await requireRejected(
+        commands.probeTransferConfirm(nonce, generation, rendered),
+      );
+    },
+    digest,
+    failed: (error) => {
+      failed ??= error;
+      cancel();
+    },
+  });
+  transferChannel.onmessage = (data) => transferView.receive(data);
+
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
   let idleChecked = false;
@@ -1045,7 +1086,7 @@ export async function verifySessionChannel(dom?: {
       stopAbort = () => lifetime.signal.removeEventListener("abort", abort);
     });
     const native = commands
-      .probeSession(nonce, channel)
+      .probeSession(nonce, channel, transferChannel)
       .catch((error: unknown) => {
         throw failed ?? error;
       });
@@ -1066,6 +1107,7 @@ export async function verifySessionChannel(dom?: {
       }),
     ]);
     await latest;
+    await transferView.finish();
     if (failed) throw failed;
     if (
       !terminal ||
@@ -1079,6 +1121,7 @@ export async function verifySessionChannel(dom?: {
       final.parsedBytes.toString() !== result.parsedBytes ||
       !result.peerDenied ||
       !result.peerTransferChecked ||
+      !result.peerDisplayChecked ||
       !result.windowRevoked ||
       !result.sessionSurvived ||
       result.nativeExit !== 0 ||
@@ -1145,6 +1188,8 @@ export async function verifySessionChannel(dom?: {
     lifetime.abort();
     dom?.signal.removeEventListener("abort", cancel);
 
+    transferView.dispose();
+    transferChannel.onmessage = () => {};
     channel.onmessage = () => {};
     if (dom) {
       dom.host.hidden = false;
