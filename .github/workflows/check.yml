@@ -55,6 +55,7 @@ jobs:
           sudo mkdir -p /run/sshd
           mise run probe-ssh-system
           mise run probe-ssh-jump
+          mise run probe-ssh-pressure
           mise run probe-ssh-certificate
           mise run probe-ssh-agent
           mise run probe-ssh-legacy

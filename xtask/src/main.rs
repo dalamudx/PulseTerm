@@ -112,6 +112,12 @@ fn main() -> Result<()> {
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-certificate requires --features ssh-probe");
         }
+        Some("probe-ssh-pressure") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_jump_probe::run_pressure()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-ssh-pressure requires --features ssh-probe");
+        }
         Some("probe-ssh-jump") => {
             #[cfg(feature = "ssh-probe")]
             ssh_jump_probe::run()?;

@@ -177,6 +177,8 @@ pub trait Dialer { async fn dial(&self, route: &Route, target: (Host, u16)) -> R
 ```
 
 - **SSH 连接池**：以 `(endpoint, identity, route)` 区分连接，并做引用计数。同一主机的 shell、SFTP、端口转发和以它为跳板的连接共用一条 SSH 连接；最后一个使用者离开后延迟 30 秒再断开（SSH-06）。
+- **当前复用验收阻塞**：锁定russh0.63.3的client CHANNEL_DATA/EXTENDED_DATA在连接循环里await有界channel.send；单通道收件队列满会阻塞同连接其它通道/控制处理。probe-ssh-pressure已实测暂停ACK可停止远端生产者、但同连接control被阻塞，独立连接仍响应，ACK/撤视图/超时后control恢复。不能把连接池示意当生产策略已验收；解决单channel window-credit/分发隔离前，不得宣称SSH-06/SFTP/转发同连接互不阻塞。没有为绕过背压改用无限queue，也未变更russh或默默采纳默认多连接的新架构。
+
 - **认证流程**：按顺序尝试 Agent 中的密钥、配置的密钥、密码、keyboard-interactive。需要用户输入时（MFA 码、密码、私钥口令），会话状态变为 `Prompt { id, kind, text }`，前端弹窗后通过 `session_prompt_reply` 回传。用户输入的内容用 `Zeroizing` 包装，用完即清除。
 - **主机密钥校验**：先查自己的 `known_hosts` 表，再查 `~/.ssh/known_hosts`（只读）。密钥变化时会话直接失败，错误码 `ssh.hostkey_changed`，需要用户在界面中明确确认后才能更新。
 - **算法**：默认使用 russh 的安全算法列表，按主机可以开启旧算法（SSH-09）。

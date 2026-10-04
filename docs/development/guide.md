@@ -78,6 +78,7 @@ mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复�
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 mise run probe-ssh-jump           # 隔离双SSH host-key pin/单forward额度/GBK→actor/v2、输入/DSR回写与EOF清理
+mise run probe-ssh-pressure       # 真远端window-aware生产者；ACK背压/detach/timeout及共享连接HOL限制
 mise run probe-ssh-certificate    # 临时CA、principal/有效期/critical options/私钥持有证明
 mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签名/auth/删除/清理
 mise run probe-ssh-legacy         # 仅test profile旧KEX/MAC，安全default前后明确拒绝

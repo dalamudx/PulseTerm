@@ -436,6 +436,15 @@ mise run probe-pty
 - actualSSH probe通过；2新增metadata negative tests拒同raw/display、假pendingUTF8、65credit和缺query/input/EOFstage证明。27 SSHfeature tests、SSHfeatureclippy-Dwarnings、全workspacecheck/tsc/Biome通过。无newdependencies/lock/desktoppermissions或audit变化，既有CI jump现在强制gbkActor证据。MCP首先找出新增testmod与innerdoc顺序错误，已修复并经编译/clippy确认；一次随后诊断仍返回旧line5错误，缓存不能当最终通过。
 - 限制：每阶段有限echo并施加timeout/bytes cap，尚非SSH slow-consumer端到端窗口/ACK压力验收；没有生产SSH transport、GBK远端设备、同条网络到DOM组合、binary/Zmodem预分类或charset切换，不标S4完整通过。先前GBKDOM来自固定本地driver，此处是另一独立真实网络检查。
 
+## 真实远端SSH发送窗口背压与共享连接HOL限制
+
+- 新mise/xtask/CI probe-ssh-pressure，仅私有回环russh端点/合成credential。remote fixedexec产生4193280 GBK source（8190×512），通过真实ChannelWriteHalf.data按SSH窗口reserve发送，utf8显示4892160。client receivewindow32768/channel_buffer2/packet8192，actor transport queue8和lease/wire有界，frames1/credit8220。初版同步Session.data echo将4MiB排到server内部pending，即使actor/reader停也不阻producer，失败已确认，改为window-aware生产者重测，未放宽停止断言或修改第三方源码。
+- ACKhold后700ms与后续窗口稳定：actor source57338、bridge读114660、remote生产155610，三者均停止，remote producer未完成；actor diagnostic_digest300ms回应，UI无ACK不阻actor控制。恢复ACK后逐UTF8字节pattern/offset/source monotonic和唯一EOF检查通过，backend全Screen同reference、normalEnded、远端EOF/Close完整，private producer/连接/listener全drain/join。原jump（UTF8+GBK+actor16bytes）再次通过。
+- 共享connectioncontrol350ms不能完成，独立connectioncontrol500ms回应，恢复ACK后原control3s内成功。源码client/encrypted.rs的boundedchan.send.await确认HOL；handler callbacks在这之后执行，不能仅改应用Callback消掉阻塞。该失败语义在报告显式oldConnectionControlBlocked=true/limits中，意味着生产SSH复用/混合SFTP+shell+forward仍未验收，不是复用通过。
+- 另两条real SSH压力路径Detach及AckTimeout精确匹配理由，均仅撤view，remote继续完整4193280/4892160，actor normalEnded全Screen同reference，同连接control恢复，producer/连接/listener清理。超时3s只用于该受控样例；未改变生产超时或命令队列。禁止把正常cancel当完整有序viewEOF，但底层SSH EOF/Close与actor EOF均完成。
+- 3新增负向用例拒remote全部提前完成、bridge超1MiB、假HOL/缺独立连接证明、错releasekind/误关actor/信用8221。30SSHfeaturetests、SSHfeaturestrictclippy、jump兼容与workspacecheck/tsc/Biome通过，Astrolabe新pressure文件无error诊断。all-featureaudit重跑仍原6license/2unmaintained阻塞，sources/bans通过，未ignore/变白名单/升级依赖或锁版本。
+- 未完成：生产SSH adapter/每通道credit调度与复用隔离、真实设备/多版本压力矩阵、GBK同条SSH到DOM组合、binary preclassifier/charset切换。此处已确认的同连接HOL必须进入后续设计门禁，不能用headless/受控回环推断真实网络性能。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

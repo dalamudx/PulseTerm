@@ -85,6 +85,10 @@ run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh"
 description = "Validate russh against an isolated real OpenSSH server and native PTY"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-system"
 
+[tasks.probe-ssh-pressure]
+description = "Verify remote SSH stalls on withheld ACK and expose connection-level blocking"
+run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-pressure"
+
 [tasks.probe-ssh-jump]
 description = "Validate separately pinned SSH hops and bounded direct-tcpip relay"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-jump"

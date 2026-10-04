@@ -21,6 +21,27 @@ use tokio::{
 };
 const USER: &str = "jump-probe";
 const PASS: &str = "synthetic-jump-password";
+#[path = "ssh_pressure_probe.rs"]
+mod pressure;
+pub fn run_pressure() -> Result<()> {
+    let root = super::root()?;
+    let path = root.join("target/probes/ssh-pressure.json");
+    std::fs::create_dir_all(root.join("target/probes"))?;
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?;
+    let report = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(40), pressure::probe()).await
+    })??;
+    pressure::validate(&report)?;
+    std::fs::write(path, serde_json::to_vec_pretty(&report)?)?;
+    println!("PASS SSH ACK pressure and shared-connection head-of-line limitation observed");
+    Ok(())
+}
 #[derive(Default)]
 struct Metrics {
     active: AtomicUsize,
@@ -28,15 +49,23 @@ struct Metrics {
     forward_peak: AtomicUsize,
     denied: AtomicUsize,
     bytes: AtomicUsize,
+    produced: AtomicUsize,
+    producing: AtomicUsize,
+    producer_done: AtomicBool,
 }
 struct Handler {
     metrics: Arc<Metrics>,
     target: Option<SocketAddr>,
     slots: Arc<Semaphore>,
     connection: bool,
+    writers: std::collections::HashMap<ChannelId, russh::ChannelWriteHalf<server::Msg>>,
+    producers: Vec<tokio::task::JoinHandle<()>>,
 }
 impl Drop for Handler {
     fn drop(&mut self) {
+        for task in &self.producers {
+            task.abort();
+        }
         if self.connection {
             self.metrics.active.fetch_sub(1, Ordering::SeqCst);
         }
@@ -51,6 +80,8 @@ impl server::Server for Handler {
             target: self.target,
             slots: self.slots.clone(),
             connection: true,
+            writers: Default::default(),
+            producers: vec![],
         }
     }
 }
@@ -69,15 +100,40 @@ impl server::Handler for Handler {
     }
     async fn channel_open_session(
         &mut self,
-        _channel: Channel<server::Msg>,
+        channel: Channel<server::Msg>,
         reply: server::ChannelOpenHandle,
         _session: &mut server::Session,
     ) -> std::result::Result<(), Self::Error> {
-        if self.target.is_none() {
+        if self.target.is_none() && self.writers.len() < 4 {
+            let id = channel.id();
+            let (_read, write) = channel.split();
+            self.writers.insert(id, write);
             reply.accept().await;
         }
         Ok(())
     }
+    async fn exec_request(
+        &mut self,
+        channel: ChannelId,
+        data: &[u8],
+        session: &mut server::Session,
+    ) -> std::result::Result<(), Self::Error> {
+        if self.target.is_some() || data != pressure::EXEC || !self.producers.is_empty() {
+            session.channel_failure(channel)?;
+            return Ok(());
+        }
+        let Some(writer) = self.writers.remove(&channel) else {
+            session.channel_failure(channel)?;
+            return Ok(());
+        };
+        session.channel_success(channel)?;
+        let metrics = self.metrics.clone();
+        self.producers.push(tokio::spawn(async move {
+            let _ = pressure::produce(writer, metrics).await;
+        }));
+        Ok(())
+    }
+
     async fn data(
         &mut self,
         channel: ChannelId,
@@ -181,6 +237,8 @@ async fn endpoint(target: Option<SocketAddr>) -> Result<Endpoint> {
         target,
         slots: Arc::new(Semaphore::new(1)),
         connection: false,
+        writers: Default::default(),
+        producers: vec![],
     };
     let cfg = Arc::new(server::Config {
         keys: vec![key],
@@ -239,6 +297,7 @@ async fn drained(endpoint: &Endpoint) -> Result<()> {
     tokio::time::timeout(Duration::from_secs(3), async {
         while endpoint.metrics.active.load(Ordering::SeqCst) != 0
             || endpoint.metrics.forward.load(Ordering::SeqCst) != 0
+            || endpoint.metrics.producing.load(Ordering::SeqCst) != 0
         {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
