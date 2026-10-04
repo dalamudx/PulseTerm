@@ -17,6 +17,7 @@ pulse-ipc.workspace = true
 pulse-term = { workspace = true, features = ["validation"] }
 pulse-pty.workspace = true
 pulse-app.workspace = true
+pulse-route.workspace = true
 tokio = { workspace = true, features = ["io-util", "process"] }
 russh = { version = "=0.63.3", default-features = false, features = ["ring"], optional = true }
 rand = { version = "0.10", optional = true }

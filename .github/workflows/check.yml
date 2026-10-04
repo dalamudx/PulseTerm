@@ -68,6 +68,8 @@ jobs:
           mise run probe-cli-startup
           mise exec -- cargo test -p xtask --features cli-probe --locked
           mise exec -- cargo clippy -p xtask --features cli-probe --all-targets --locked -- -D warnings
+      - name: Exercise protocol-neutral HTTP and SOCKS byte routes
+        run: mise run probe-route
       - name: Exercise native actor and wire acknowledgment backpressure
         run: mise run probe-local-session
       - name: Exercise native PTY on all platforms

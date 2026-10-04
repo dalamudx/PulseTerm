@@ -14,6 +14,7 @@ mod local_session_probe;
 mod portable_pty_probe;
 mod pty_probe;
 mod query_probe;
+mod route_probe;
 mod snapshot_probe;
 mod software_probe;
 #[cfg(feature = "ssh-probe")]
@@ -95,6 +96,7 @@ fn main() -> Result<()> {
         }
         Some("check-deps") => check_deps()?,
         Some("probe") => probe()?,
+        Some("probe-route") => route_probe::run()?,
         Some("probe-channel") => channel_probe::run()?,
         Some("probe-channel-v2") => channel_probe::run_v2()?,
         Some("probe-encoding-window") => channel_probe::run_encoding()?,
@@ -216,6 +218,7 @@ fn check_deps() -> Result<()> {
                 "pulse-ipc" => &["pulse-core"],
                 "pulse-term" => &["pulse-core", "pulse-ipc"],
                 "pulse-pty" => &["pulse-core"],
+                "pulse-route" => &[],
                 "pulse-app" => &["pulse-core", "pulse-pty", "pulse-term", "pulse-ipc"],
                 _ => continue,
             };

@@ -3424,6 +3424,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulse-route"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "thiserror 2.0.21",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "pulse-term"
 version = "0.1.0"
 dependencies = [
@@ -6087,6 +6097,7 @@ dependencies = [
  "pulse-core",
  "pulse-ipc",
  "pulse-pty",
+ "pulse-route",
  "pulse-term",
  "rand 0.10.3",
  "russh",

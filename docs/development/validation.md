@@ -470,6 +470,15 @@ mise run probe-pty
 - 3新增单测拒flags-only、unknownregular/symlinksocket被误删、unsafe/hardlinkedtoken触发前确保旧socket仍在。CLIfeature15xtask tests/strictclippy，真实startup+原CLI回归与workspacecheck/tsc/Biome通过，Astrolabe startup模块无error诊断。无newcrate/lock/version/audit策略变化，既有release6license/2maintenance仍阻断。
 - 限制：只读daemon的冷启动election与IPC安全，不是Tauri single-instance插件、GUI未运行时拉起/--startup-actions转交、生产runtime路径/owner文件防TOCTOU、WindowsNamedPipeACL或真实跨用户威胁验收。文件检查依赖当前用户受信任0700目录，不能抵御同UID恶意进程；生产bootstrap仍须单独验收，不暗中改变已有Tauri插件架构。
 
+## S18通用Direct/HTTP CONNECT/SOCKS5组合字节流基础
+
+- 新独立pulse-route库，默认workspace及层级检查纳入。公共Destination/Credentials/Hop/Route/Dialer/NetworkDialer/BoxStream均已实现，返回protocolneutral TokioAsyncRead+AsyncWrite流；只trusted backend配置，不开放desktop/CLI/frontend endpoint。host/port安全验证、IPv6authority括号、ASCII/IDNAupstream要求、8hop深度/8KiBheader、≤30s总deadline，无每byte重置deadline/自动直连fallback。已锁base64.22/zeroize/Tokio边，无newthirdparty版本。
+- HTTPBasic显式凭据/ownedscratch零化，HTTP全2xx成功/407auth/其它refused，status与field/control/obsfold严格检查。SOCKS noauth或RFC1929只offer对应method，server改noauth拒且不发credential；IPv4/IPv6/domainCONNECT与boundreply精确消费。header逐byte有界读不overreadapplication首bytes，SOCKS响应相同，UTF8解码不接触tunnelpayload。
+- 实际probe-route 5场景：Direct、HTTP→SOCKS、SOCKS→HTTP各256KiB arbitrarybinary echo及8byte binaryprefix逐byte一致，writer半关闭后仍读完整剩余bytes并收到EOF，全部listeners/relay tasks已join。另错误HTTP认证时inner/targetaccept0；错误SOCKS认证时outer已forward1但targetaccept0。报告强制各mode/顺序/bytecounts/prefix/halfclose/acceptforward数值，不接受旗标替代。
+- 12librarytests覆盖CRLF配置/secret/depth、同packetheader+binary/IPv4IPv6domainreplyprefix、真实TCP超时/取消未来drop后remoteEOF、DNSname原样透传代理、协议badstatus/header/2xx/authdowngrade/rep/reserved/emptydomain/truncatedEOF。2新增xtaskmetadata回归缺payload/双顺序复用/认证后冒出targetaccept/缺EOF与cleanup明确拒。真实probe+workspacecheck/fulltests/sharedprobe通过（93term/45app/33IPC/12route/10xtask/210TS），库及probeMCP无error诊断；CI注册probe-route跨平台运行但本机只有Linux证据。
+- relay任务deadline须借用JoinHandle直到完成，不take后timeout丢后台任务；错误时EndpointDrop abort，成功明确awaitJoin。credential/error不写report；allfeatureaudit仍6license/2maintenance失败，sources/bans通过，无豁免。
+- 未完成：真实企业代理/NTLM/HTTPSproxyTLS、SSH与该Dialer同条链协议复用（后续验证）、ProxyCommand/SSHJump hop、route pool/配置secretref/UI/productionCapability入口、三平台及网络慢消费性能。fixtureRFB样式prefix仅任意字节，不声称VNC/RDP互通或S18全通过，SSH共享连接HOL门禁仍在。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

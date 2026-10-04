@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 exclude = ["vendor/alacritty_terminal"]
-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-app", "apps/desktop/src-tauri", "xtask"]
-default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-app", "xtask"]
+members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -21,6 +21,7 @@ serde_json = "1"
 subtle = "=2.6.1"
 zeroize = "=1.9.0"
 tempfile = "3"
+base64 = "=0.22.1"
 thiserror = "2"
 tauri = "=2.12.1"
 tauri-build = "=2.7.1"
@@ -37,6 +38,7 @@ pulse-ipc = { path = "crates/pulse-ipc", version = "0.1.0" }
 pulse-term = { path = "crates/pulse-term", version = "0.1.0" }
 pulse-pty = { path = "crates/pulse-pty", version = "0.1.0" }
 pulse-app = { path = "crates/pulse-app", version = "0.1.0" }
+pulse-route = { path = "crates/pulse-route", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -20,6 +20,10 @@ run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
 description = "Compare Rust terminal state and xterm headless"
 run = ["cargo xtask probe", "pnpm --filter ui probe"]
 
+[tasks.probe-route]
+description = "Exercise real HTTP CONNECT and SOCKS5 byte-route composition and refusal"
+run = "cargo xtask probe-route"
+
 [tasks.probe-software]
 description = "Record vim/less/htop/tmux native streams and compare headless recovery"
 run = ["cargo xtask probe-software", "pnpm --filter ui exec tsx scripts/software-probe.ts"]
