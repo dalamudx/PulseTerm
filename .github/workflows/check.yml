@@ -55,6 +55,7 @@ jobs:
           mise run probe-ssh-jump
           mise run probe-ssh-certificate
           mise run probe-ssh-agent
+          mise run probe-ssh-legacy
           mise exec -- cargo clippy -p xtask --features ssh-probe --all-targets --locked -- -D warnings
           mise exec -- cargo test -p xtask --features ssh-probe --locked
       - name: Exercise native actor and wire acknowledgment backpressure

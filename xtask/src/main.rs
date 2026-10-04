@@ -110,6 +110,12 @@ fn main() -> Result<()> {
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-jump requires --features ssh-probe");
         }
+        Some("probe-ssh-legacy") => {
+            #[cfg(feature = "ssh-probe")]
+            ssh_system_probe::run_legacy()?;
+            #[cfg(not(feature = "ssh-probe"))]
+            bail!("probe-ssh-legacy requires --features ssh-probe");
+        }
         Some("probe-ssh-system") => {
             #[cfg(feature = "ssh-probe")]
             ssh_system_probe::run()?;

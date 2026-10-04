@@ -97,6 +97,10 @@ run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-certificate
 description = "Validate an isolated software SSH Agent signer without ambient identities"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-agent"
 
+[tasks.probe-ssh-legacy]
+description = "Validate test-only explicit legacy KEX/MAC while secure defaults reject"
+run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-legacy"
+
 [tasks.desktop-build]
 description = "Build the native WebView validation app"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features desktop --locked"]

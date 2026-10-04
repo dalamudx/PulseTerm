@@ -379,6 +379,13 @@ mise run probe-pty
 - report.forwarding新增五字段（explicitChannelGrant/disabledRefused/signVerified/credit1/taskDrained）validator硬要求，新增permit/Guard生命周期单测，18 SSH-feature tests/clippy-Dwarnings通过；实际probe-ssh-agent、原4SSH probes和全默认check/test199TS/39app/89core/16IPC/6xtask再次成功。没有新dependencies/lock/audit/CSP/vendor修改，上游remove-all帧bug仍记录、没有忽略。
 - 仅受控OpenSSH-client→russh-server/private软件Agent转发，尚未实现/验收Pulse客户端reverse-channel bridge或生产默认禁用/按host确认UX、realFIDO2触摸/PIN/断开/复杂Agent操作取消、Pageant/Windows pipes/macOS、任意remote forward或长期pressure。单task额度不承诺Agent硬件操作会随网络timeout取消；S4仍部分证据。
 
+## S4旧KEX/MAC的显式test-profile opt-in（Linux）
+
+- 新probe-ssh-legacy复用private real OpenSSH10 daemon，仅其临时config offer diffie-hellman-group14-sha1/aes128-ctr/hmac-sha1。client普通Preferred默认连接在host-key hook/认证前typed Error::NoCommonAlgo(kind=Kex)拒绝，不能用generic网络/timeout/主机key错误伪安全拒绝。
+- 仅此显式CLI/profile构造Cow owned列表1旧KEX/1MAC/1cipher+Ed25519 hostkey，复用真实sshd正确pinned key/publickey/native PTY/stty80×24→91×37/UTF8/exit7/EOF及owned children/master join；wrong pinned host仍拒绝。之后再次ordinary default连接同legacy-only daemon仍typed拒绝，说明opt-in没有修改global defaults或auto retry/downgrade。现代profile完整再通过，flag分别false/true并存独立ssh-system.json/ssh-system-legacy.json，mode_matches禁止错模式、缺bool或string冒充。
+- 2新增单测检查create legacy后默认KEX/MAC相等且不含SHA1、legacy只Ed25519，以及report互斥/缺flag拒绝；20 SSH-feature tests/clippy-Dwarnings与modern+legacy实际运行通过。其余K-I/jump/cert/Agent-forward4探针及default check再成功，CI追加明确legacy调用；没有新依赖/lock/audit/CSP/正常daemon配置改变。
+- 注意russh Preferred默认safe KEX/CIPHER/MAC排除旧SHA1/CBC，但key列表仍含RSA{hash:None}（ssh-rsa）；本profile RSA feature关闭且只有Ed25519，不能据此承诺启用RSA后的host-key列表也完全现代。生产legacy-per-host政策需另行过滤旧host-key算法并明确用户opt-in，不照搬全DEFAULT key列表。未启group1/DSA/3DES/RSA-SHA1，不验证真实旧设备及用户警告UX；S4矩阵未全完成。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

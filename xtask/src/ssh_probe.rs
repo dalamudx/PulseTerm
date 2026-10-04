@@ -262,7 +262,16 @@ pub(crate) async fn connect(
     key: PublicKey,
     mismatch: Arc<AtomicBool>,
 ) -> Result<client::Handle<PinnedClient>> {
+    connect_with_preferred(address, key, mismatch, russh::Preferred::default()).await
+}
+pub(crate) async fn connect_with_preferred(
+    address: std::net::SocketAddr,
+    key: PublicKey,
+    mismatch: Arc<AtomicBool>,
+    preferred: russh::Preferred,
+) -> Result<client::Handle<PinnedClient>> {
     let config = Arc::new(client::Config {
+        preferred,
         inactivity_timeout: Some(Duration::from_secs(5)),
         maximum_packet_size: 8192,
         ..Default::default()

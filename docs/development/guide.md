@@ -79,6 +79,7 @@ mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认
 mise run probe-ssh-jump           # 两个隔离SSH端点，逐跳host-key pin/单forward额度/UTF8与清理
 mise run probe-ssh-certificate    # 临时CA、principal/有效期/critical options/私钥持有证明
 mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签名/auth/删除/清理
+mise run probe-ssh-legacy         # 仅test profile旧KEX/MAC，安全default前后明确拒绝
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。
@@ -104,6 +105,8 @@ finite terminal sink现在使用GenerationViewHost/ViewScope按后端Begin管理
 `probe-ssh-certificate`使用临时Ed25519 CA/subject/server，只owned loopback。签名+trusted CA指纹+valid_after≤now<valid_before不足以授权：必须User类型、exact user principal、正确username、critical options为空（当前test policy未知选项全部拒绝）；拒空principals的golden ticket。实际6invalid cert及错username/错leaf私钥全部auth失败，1valid cert固定exec/exit7/EOF/Close与connection-before-stop drain通过。subject持私钥证明由russh协议验签，并单列证据，不能把CA签名当client持钥。输出ssh-certificate.json与validator；15feature tests及CI登记。未实现生产CA存储/撤销/证书UX/设备矩阵，不输入用户certificate、CA secret或Agent/FIDO2。
 
 `probe-ssh-agent`当前Unix，ssh-agent -D/private temp sock启动，明确connect_uds私有路径，不read/connect_env或操作用户SSH_AUTH_SOCK/已有Agent。初始identities空，ssh-add仅向private socket加载1份synthetic Ed25519（30秒TTL、temp key0600/dir0700），raw signature经signature::Verifier验证，authenticate_publickey_with通过Agent Signer而非传SSH私钥。固定exec/exit7/EOF/Close、SSH connection-before-stop排空后只remove_identity该synthetic key，列表空+removed-key签名AgentProtocolError且Agent仍可list确认；最后join owned agent daemon。上游russh0.63.3 remove_all_identities帧header有bug导致OpenSSH Agent EOF，不调用、不patch源码，详dependency-review。另含controlled Agent forwarding：OpenSSH -a 未grant的原channel明确拒fixed-forward exec，-A按该channel授予permission后server channel_open_agent远端查询唯一synthetickey并raw sign/verify，单task permit/3秒监督、fixed stdout/exit7及worker/连接排空；18feature tests和report.forwarding必须齐全。仅OpenSSH-client→russh-server受控路径，不代表Pulse client默认授权/转发UX、FIDO2、Pageant/macOS矩阵通过。
+
+`probe-ssh-legacy`只在独立test连接显式启用DH-group14-SHA1/AES128-CTR/HMAC-SHA1，私有sshd仅offer该组合，host仍Ed25519且pinned。普通client必须typed NoCommonAlgo(Kex)拒绝，不能把任何network/timeout/host-key失败冒充secure-default；显式profile完成原native PTY/尺寸/UTF8/EOF后新普通client再次拒绝，证明没有全局downgrade/retry。模式flag必须与CLI请求匹配，现代/legacy report文件独立，20feature tests+CI登记；不含RSA-SHA1/DSA/group1/3DES或真实旧设备/用户确认UX。
 
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 
