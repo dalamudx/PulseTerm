@@ -372,6 +372,13 @@ mise run probe-pty
 - report ssh-agent.json/isolation/software-vs-hardware/签名/auth/移除拒签/EOF/server+Agent cleanup全字段validator硬要求，缺completed-only拒绝；2新增单测，17SSHfeaturetests/clippy-Dwarnings、实际Agent probe通过。全默认check/test199TS/39app/89core/16IPC/6xtask与此前K-I/real OpenSSH10server/jump/certificate4探针再次成功，CI Unix-Linux调用已注册。无新增依赖/locks/audit修改。
 - 这只是软件Ed25519 Agent路径，不算sk-ssh-ed25519/FIDO2真实触摸/PIN、hardware失联/用户确认、remote agent forwarding/Pageant/windows pipe/macOS矩阵、production credential vault或actor SSH adapter完成。S4仍有真实设备/实现矩阵未验证，release gate6license/2maintenance不放宽。
 
+## S4受控Agent forwarding显式channel grant（Linux）
+
+- 扩展私有软件Agent场景，system OpenSSH client -a与-A分别连owned pinned russh server，仍-F空config/private known_hosts/private IdentityAgent/socket/key；不接用户Agent或其它identity。server按当前ChannelId记录agent-request授权，不把connection一次授权泛化到任意channel；未grant的forward-fixed-exec明确channel_failure并denied计数1，不能把客户端generic网络失败算作权限拒绝。
+- -A明确开启请求后，server handle.channel_open_agent经SSH认证通道反向拿Agent流，request-identities必须仅唯一synthetic publickey、raw sign固定数据并本地Verifier验签。只签名和public身份通过隧道，不传private key给server。一个owned task permit贯穿3秒query/sign/reply直到实际task结束，Guard计active与completed，最终completed1/denied1/active0与全部SSH connections0在listener stop之前证明；系统client exact FORWARDED_OK/exit7/stdout drain，之后仍scoped移除synthetickey并拒签/ownedAgent daemon join。
+- report.forwarding新增五字段（explicitChannelGrant/disabledRefused/signVerified/credit1/taskDrained）validator硬要求，新增permit/Guard生命周期单测，18 SSH-feature tests/clippy-Dwarnings通过；实际probe-ssh-agent、原4SSH probes和全默认check/test199TS/39app/89core/16IPC/6xtask再次成功。没有新dependencies/lock/audit/CSP/vendor修改，上游remove-all帧bug仍记录、没有忽略。
+- 仅受控OpenSSH-client→russh-server/private软件Agent转发，尚未实现/验收Pulse客户端reverse-channel bridge或生产默认禁用/按host确认UX、realFIDO2触摸/PIN/断开/复杂Agent操作取消、Pageant/Windows pipes/macOS、任意remote forward或长期pressure。单task额度不承诺Agent硬件操作会随网络timeout取消；S4仍部分证据。
+
 ## 检查结果
 
 - Rust：89 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 16项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 39项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
