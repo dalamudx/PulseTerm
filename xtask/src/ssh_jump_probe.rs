@@ -365,6 +365,8 @@ async fn probe() -> Result<serde_json::Value> {
     })
     .await??;
     let gbk_report = super::gbk_probe::verify_network_reply(&gbk_returned)?;
+    let actor_report =
+        super::ssh_actor_probe::run(connection.channel_open_session().await?).await?;
 
     channel.eof().await?;
     let mut eof = false;
@@ -396,13 +398,13 @@ async fn probe() -> Result<serde_json::Value> {
     ensure!(
         outer.metrics.forward_peak.load(Ordering::SeqCst) == 1
             && outer.metrics.denied.load(Ordering::SeqCst) == 2
-            && inner.metrics.bytes.load(Ordering::SeqCst) == payload.len() + gbk_bytes.len(),
+            && inner.metrics.bytes.load(Ordering::SeqCst) == payload.len() + gbk_bytes.len() + 16,
         "jump evidence counters missing"
     );
     stop(&mut outer).await?;
     stop(&mut inner).await?;
     Ok(
-        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"gbk":gbk_report,"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or actor SSH transport"],"platform":std::env::consts::OS}),
+        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"gbk":gbk_report,"gbkActor":actor_report,"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or production actor SSH transport"],"platform":std::env::consts::OS}),
     )
 }
 fn validate_report(r: &serde_json::Value) -> Result<()> {
@@ -430,6 +432,7 @@ fn validate_report(r: &serde_json::Value) -> Result<()> {
         "jump byte evidence"
     );
     super::gbk_probe::validate_report(&r["gbk"])?;
+    super::ssh_actor_probe::validate(&r["gbkActor"])?;
     ensure!(
         r["limitations"].as_array().is_some_and(|a| !a.is_empty()),
         "jump limitations missing"

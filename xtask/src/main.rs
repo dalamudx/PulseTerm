@@ -12,6 +12,8 @@ mod pty_probe;
 mod query_probe;
 mod snapshot_probe;
 mod software_probe;
+#[cfg(feature = "ssh-probe")]
+mod ssh_actor_probe;
 #[cfg(all(feature = "ssh-probe", unix))]
 mod ssh_agent_probe;
 #[cfg(feature = "ssh-probe")]

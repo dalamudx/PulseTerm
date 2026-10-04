@@ -429,6 +429,13 @@ mise run probe-pty
 - 最终普通v2重建（encodingRuns0、encodingnull）/check/fulltests/GBKheadless/encoding-probe严格clippy全通过；核心93term/45app/23IPC、39native、210TS、8xtask。defaultAPI隔离/GBKmode明确拒绝及bindings-check通过，Astrolabe Rust新模块无error诊断；TS证据来自tsc。无lock/newdependency版本/CSP/audit豁免；only featureedge启用已有encoding_rs。
 - 未完成：真实GBK SSH/PTY传输与设备端画面、binary/Zmodem预分类、临时charset切换、生产入口、三平台/IME。已批准strict策略仅对分类fixture有效，不能标S2/S4全通过。
 
+## S4受控双跳SSH到GBK actor/registry/v2桥接
+
+- 既有probe-ssh-jump强制新增独立authenticated session，reuse两hop单独pinned hostkey和temporary synthcredentials。realSSH收到leadD6才喂boundedDriverEndpoint，source1/display0时capturev2，v1拒绝且旧lease被commit替换。trailD0在重建后续接，boundInput中文经actor反编码D6D0CEC4再发送SSH，原样echo回actor，不做from_utf8强解。
+- 远端echo DSR触发backend专有TransportWrite::Reply，明确与用户Input区分；收到ESC[1;7R并实际回写SSH，再按raw字节echo解析，backend仅答一次。remoteEOF/Close两收据都成功后才drop driver，actor正常EOF排空，wire.Data UTF8offset按bodylen连续/source单调，唯一End source16/UTF819，与SessionState及UTF8 reference全Screen相同；PeakCredit64。SSHserver总应用bytes增16，原4433变4449，双连接/relay仍drained/listeners joined。
+- actualSSH probe通过；2新增metadata negative tests拒同raw/display、假pendingUTF8、65credit和缺query/input/EOFstage证明。27 SSHfeature tests、SSHfeatureclippy-Dwarnings、全workspacecheck/tsc/Biome通过。无newdependencies/lock/desktoppermissions或audit变化，既有CI jump现在强制gbkActor证据。MCP首先找出新增testmod与innerdoc顺序错误，已修复并经编译/clippy确认；一次随后诊断仍返回旧line5错误，缓存不能当最终通过。
+- 限制：每阶段有限echo并施加timeout/bytes cap，尚非SSH slow-consumer端到端窗口/ACK压力验收；没有生产SSH transport、GBK远端设备、同条网络到DOM组合、binary/Zmodem预分类或charset切换，不标S4完整通过。先前GBKDOM来自固定本地driver，此处是另一独立真实网络检查。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
