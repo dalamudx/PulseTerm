@@ -303,6 +303,24 @@ impl SessionRegistry {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<RegisteredAttachment, RegistryError> {
+        self.attach_version(owner, id, config, false).await
+    }
+    /// Explicit dual-coordinate codec; identical trusted-owner and generation admission.
+    pub async fn attach_v2(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        config: AttachmentConfig,
+    ) -> Result<RegisteredAttachment, RegistryError> {
+        self.attach_version(owner, id, config, true).await
+    }
+    async fn attach_version(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        config: AttachmentConfig,
+        v2: bool,
+    ) -> Result<RegisteredAttachment, RegistryError> {
         let entry = Self::entry(&*self.lock()?, owner, id)?;
         let monitor = self
             .monitors
@@ -321,7 +339,11 @@ impl SessionRegistry {
             state.next_generation = n.checked_add(1).ok_or(RegistryError::Unavailable)?;
             n
         };
-        let (handle, wire, task) = attachment::attach(&entry.handle, generation, config).await?;
+        let (handle, wire, task) = if v2 {
+            attachment::attach_v2(&entry.handle, generation, config).await?
+        } else {
+            attachment::attach(&entry.handle, generation, config).await?
+        };
         // A closed window cannot resurrect a view even if capture was already admitted.
         let installed = {
             let mut state = self.lock()?;
@@ -489,3 +511,6 @@ pub use comparison::{RenderedScreen, VisibleComparison};
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "registry_v2_tests.rs"]
+mod v2_tests;

@@ -15,6 +15,9 @@ interface Case {
   sourceBytes: string;
   utf8Bytes: string;
   sourceOnlyPrefix: boolean;
+  registryOwnerAndAckAuthorized: boolean;
+  boundInputReverseEncoded: boolean;
+  singleCoordinateMismatchRefused: boolean;
   v1RefusalPreservedOldLease: boolean;
   v2AtomicReplacement: boolean;
   orderedEofAcked: boolean;
@@ -31,6 +34,9 @@ assert.equal(report.cases.length, 2);
 for (const entry of report.cases) {
   assert.ok(
     entry.sourceOnlyPrefix &&
+      entry.registryOwnerAndAckAuthorized &&
+      entry.boundInputReverseEncoded &&
+      entry.singleCoordinateMismatchRefused &&
       entry.v1RefusalPreservedOldLease &&
       entry.v2AtomicReplacement &&
       entry.orderedEofAcked,

@@ -402,11 +402,18 @@ mise run probe-pty
 - 共享attachment-v2.hex由Rust sender byte-for-byte校验，包含独立bigintsource/display、source-onlyMarker、中文展开Data、samecursorRepair与EOF；TS8tests检验mixedversion/duplicatedsource/sourceRegression/repair+EOF mismatch/oldgen/queuedcallbackACK/cancel+latewrite/unsupportedmarker/overflow。Rust额外pre-copybody bound与Commit释放bootstrapVec容量回归；v1原全部用例保持。
 - 新mise/xtask/CI probe-encoding-attachment两份actualactor→v2→headless样例（含history），准确半GBK捕获与新lease重建，EOF source7/UTF89和source82/UTF884均与Rustscreen一致，无frontendquery泄漏。生成阶段ACK先保存wire以运行actor，TS独立callbackgated消费再ACK，不称同进程roundtrip或realWebViewGBK证据。默认prod-feature独立consumer禁止test-onlyGBK入口，existingreplay/Echo门禁保持。
 - 验证记录：核心组合check/test207TS、93core/42app/22IPC（后续pre-copy回归增至23）、v1五headlesscase与v2两case通过，默认API隔离通过。原生UTF8-v1真实Channel/DOM复验completed=true（2sessionRuns/2domRuns/7measurements），bindings-check/native clippy-Dwarnings/36native tests通过；encoding_rs没有新版本，仅lock增加pulse-term可选依赖边，审计许可/公告门禁没有豁免。首次运行在2headless之后/首DOM期间native_query_failed，root cause未定位；补static分类日志但500ms/failclosed不放宽，后续通过不宣称根因已修。
-- 未完成：productionbinarypreclassifier/临时encoding切换、多charset/真实GBK设备、生产registry/windowv2授权/DOM/三平台编码acceptance，S2/S4仍不标全过。UTF8原有invalid字节/EOF replacement行为不改，strictGBK拒绝政策目前只对已分类测试文本有效。
+- 未完成：productionbinarypreclassifier/临时encoding切换、多charset/真实GBK设备、Tauri窗口v2适配/DOM/三平台编码acceptance，S2/S4仍不标全过。UTF8原有invalid字节/EOF replacement行为不改，strictGBK拒绝政策目前只对已分类测试文本有效。
+
+## v2注册层授权与实际GBK bound input/单坐标摘要拒绝
+
+- 新SessionRegistry.attach_v2显式选codec，复用相同attach_version实现，不新增授权token或generationcounter。先owner/session校验，预留monitor/capture锁，再mint generation，captured后再次核对owner才install，oldbinding detach和latecompletion只清当前matching generation。默认attach仍v1；只有可信backendcaller选择v2，未增加Tauri前端参数/任意会话入口。
+- 3新增registry tests：foreign v2capture/ACK/input拒绝、windowclose撤view（appshutdown才关actor）、v1→v2 replacement后oldACK/oldDetach/lateCompletion不能影响newbinding、invalidv2credit保旧v1。45app tests、wholeworkspaceclippy/check与真实probe-local-session native ACK/2MiB pressure/detach/EOF链通过。
+- 两份actualGBK headlessprobe由裸attach迁移为registry-owned，外国window capture/ACK明确Forbidden，owner旧generation ACK Stale；boundInput中文真实传输driver收到GBK D6D0CEC4，raw相同而UTF8cursor错误的compare必须Stale，不能清risk或误判Equal。报告三个新增必需bool和TS validator强制检查，headlesshistory/屏幕/EOF source7/utf89与source82/utf884仍精确；没有把producerstaging ACK说成liveJScallback roundtrip。
+- no new deps/locks/capabilities/audit变化；此前v1真实WebView复验属于1214679检查点，当前registrywrapper变更采用45unit+realPTY与GBKprobe targeted checks。Tauri窗口v2选择、实际DOM和生产charsetbinarypreclassifier仍未验收，源码不能因backendregistry API存在就开放未批准的credentials/shell。
 
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 42项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 23项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现36项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现6项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。
 - TS：207 项测试通过（新增8项parked claim/ViewSlotOwner恢复/observer异常回归和9项PaneVisibility identity/同步通知/失败清理回归）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

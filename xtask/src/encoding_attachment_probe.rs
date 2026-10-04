@@ -1,6 +1,9 @@
 //! Actual actor/decoder/lease/credit, then cross-language headless rendering.
 use anyhow::{Result, ensure};
-use pulse_app::attachment::{AttachmentConfig, attach, attach_v2};
+use pulse_app::{
+    attachment::AttachmentConfig,
+    registry::{RegistryError, SessionRegistry},
+};
 use pulse_core::TermSize;
 use pulse_ipc::{
     attach::Part,
@@ -12,8 +15,12 @@ use serde_json::json;
 use std::time::Duration;
 async fn case(history: bool) -> Result<serde_json::Value> {
     let size = TermSize::new(32, 8)?;
-    let (transport, driver) = ChannelTransport::bounded_driver();
+    let (transport, mut driver) = ChannelTransport::bounded_driver();
     let (handle, task) = spawn_gbk_text_session(size, 128, transport);
+    let registry = SessionRegistry::new();
+    let owner = registry.open_window()?;
+    let other = registry.open_window()?;
+    let id = registry.register(owner, handle.clone())?;
     let mut old = handle
         .diagnostic_subscribe(2000, 4 * 1024 * 1024, 1024 * 1024)
         .await?;
@@ -36,7 +43,8 @@ async fn case(history: bool) -> Result<serde_json::Value> {
         "pending GBK boundary"
     );
     ensure!(
-        attach(&handle, 1, AttachmentConfig::default())
+        registry
+            .attach(owner, id, AttachmentConfig::default())
             .await
             .is_err(),
         "v1 accepted normalized mode"
@@ -45,14 +53,29 @@ async fn case(history: bool) -> Result<serde_json::Value> {
         old.status.borrow().end == StreamEnd::Open,
         "v1 refusal changed old lease"
     );
-    let generation = (1u64 << 60) + 7;
     let config = AttachmentConfig {
         fragment: 7,
         frames: 1,
         bytes: 64,
         ack_timeout: Duration::from_secs(2),
     };
-    let (ack, mut wire, binding) = attach_v2(&handle, generation, config).await?;
+    ensure!(
+        matches!(
+            registry.attach_v2(other, id, config).await,
+            Err(RegistryError::Forbidden)
+        ),
+        "foreign v2 capture accepted"
+    );
+    let binding = registry.attach_v2(owner, id, config).await?;
+    let generation = binding.generation;
+    let mut wire = binding.wire;
+    ensure!(
+        matches!(
+            registry.acknowledge(other, id, generation, 0),
+            Err(RegistryError::Forbidden)
+        ),
+        "foreign ACK accepted"
+    );
     ensure!(
         old.status.borrow().end == StreamEnd::Replaced,
         "v2 capture did not commit replacement"
@@ -68,7 +91,7 @@ async fn case(history: bool) -> Result<serde_json::Value> {
                 begin = Some(decode_begin(p.body)?.0);
             }
             let committed = p.part == Part::Commit;
-            ack.acknowledge(generation, f.sequence)?;
+            registry.acknowledge(owner, id, generation, f.sequence)?;
             frames.push(frame);
             if committed {
                 restore_reached = true;
@@ -85,6 +108,45 @@ async fn case(history: bool) -> Result<serde_json::Value> {
                     && b.utf8_bytes == capture.utf8_bytes),
         "wrong captured coordinates"
     );
+    ensure!(
+        matches!(
+            registry.acknowledge(owner, id, generation - 1, 0),
+            Err(RegistryError::Stale)
+        ),
+        "stale ACK reached new driver"
+    );
+    let mut wrong = registry.state(owner, id)?;
+    wrong.utf8_bytes += 1;
+    ensure!(
+        matches!(
+            registry
+                .compare_visible(
+                    owner,
+                    id,
+                    generation,
+                    pulse_app::registry::RenderedScreen {
+                        boundary: wrong,
+                        digest: "0000000000000000".into()
+                    }
+                )
+                .await?,
+            pulse_app::registry::VisibleComparison::Stale
+        ),
+        "matching raw source alone cleared stale UTF8 boundary"
+    );
+    registry
+        .input_bound(owner, id, generation, "中文".as_bytes().to_vec())
+        .await?;
+    let Some(pulse_term::session::TransportWrite::Input(encoded)) =
+        tokio::time::timeout(Duration::from_secs(1), driver.input.recv()).await?
+    else {
+        anyhow::bail!("bound GBK input missing");
+    };
+    ensure!(
+        encoded == [0xd6, 0xd0, 0xce, 0xc4],
+        "registry input did not reverse encode"
+    );
+
     driver
         .output
         .send(vec![0xd0, 0xce, 0xc4, b'!', b'\r', b'\n'])
@@ -93,13 +155,13 @@ async fn case(history: bool) -> Result<serde_json::Value> {
     tokio::time::timeout(Duration::from_secs(3), async {
         while let Some(frame) = wire.recv().await {
             let sequence = decode(&frame)?.sequence;
-            ack.acknowledge(generation, sequence)?;
+            registry.acknowledge(owner, id, generation, sequence)?;
             frames.push(frame);
         }
         Ok::<_, anyhow::Error>(())
     })
     .await??;
-    let receipt = binding.join().await?;
+    let receipt = binding.completion.await??;
     let (final_state, expected) = task.join_with_screen().await?;
     ensure!(
         final_state.lifecycle == Lifecycle::Ended && receipt.boundary == final_state,
@@ -111,7 +173,7 @@ async fn case(history: bool) -> Result<serde_json::Value> {
         "source versus display final counters"
     );
     Ok(
-        json!({"name":if history{"gbk-history-pending-reattach"}else{"gbk-pending-reattach"},"generation":generation.to_string(),"frames":frames,"expected":expected,"sourceBytes":final_state.parsed_bytes.to_string(),"utf8Bytes":final_state.utf8_bytes.to_string(),"sourceOnlyPrefix":true,"v1RefusalPreservedOldLease":true,"v2AtomicReplacement":true,"orderedEofAcked":true,"peakCreditBytes":receipt.peak_credit_bytes}),
+        json!({"name":if history{"gbk-history-pending-reattach"}else{"gbk-pending-reattach"},"generation":generation.to_string(),"frames":frames,"expected":expected,"sourceBytes":final_state.parsed_bytes.to_string(),"utf8Bytes":final_state.utf8_bytes.to_string(),"sourceOnlyPrefix":true,"v1RefusalPreservedOldLease":true,"v2AtomicReplacement":true,"orderedEofAcked":true,"registryOwnerAndAckAuthorized":true,"boundInputReverseEncoded":true,"singleCoordinateMismatchRefused":true,"peakCreditBytes":receipt.peak_credit_bytes}),
     )
 }
 pub fn run() -> Result<()> {

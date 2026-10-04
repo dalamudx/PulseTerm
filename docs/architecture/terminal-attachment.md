@@ -13,7 +13,7 @@
 
 ## v2双坐标（ADR-029，明确选择而非隐式升级）
 
-`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；当前窗口注册层/真实桌面仍v1-only，没有自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
+`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；注册层提供显式SessionRegistry::attach_v2，共用owner/generation/capture锁/monitor额度与晚完成隔离；当前Tauri窗口适配/真实桌面仍v1-only，没有自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
 
 - envelope28字节：version:u8=2、part:u8、reserved:u16=0、generation:u64、offset:u64、source_after:u64。Begin body36：columns:u16、rows:u16、revision:u64、source:u64、UTF8:u64、history_len:u32、restore_len:u32；Begin source需与envelope一致。全部小端，JS仍bigint。
 - Data.offset是normalized UTF8游标，按body真实长度连续递增，source_after独立单调（可不增加）。一份normalized record分片时，前片保留previous source边界，最后一片提交该record source endpoint，不能推算每个UTF8字节映射到哪个source byte。完整raw chunk展开超过64KiB时，actor把source consumed计入第一份显示record，后续显示record不再增加source。两种分段都不声明raw↔display逐字节映射。
