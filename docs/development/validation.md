@@ -479,6 +479,13 @@ mise run probe-pty
 - relay任务deadline须借用JoinHandle直到完成，不take后timeout丢后台任务；错误时EndpointDrop abort，成功明确awaitJoin。credential/error不写report；allfeatureaudit仍6license/2maintenance失败，sources/bans通过，无豁免。
 - 未完成：真实企业代理/NTLM/HTTPSproxyTLS、SSH与该Dialer同条链协议复用（后续验证）、ProxyCommand/SSHJump hop、route pool/配置secretref/UI/productionCapability入口、三平台及网络慢消费性能。fixtureRFB样式prefix仅任意字节，不声称VNC/RDP互通或S18全通过，SSH共享连接HOL门禁仍在。
 
+## S18同通用代理字节流接真实pinned SSH协议
+
+- probe-ssh-jump复用owned HTTP→SOCKS双认证fixture（两个独立listen/relay），调用pulse-route NetworkDialer返回同publicBoxStream，再直接交russh connect_stream完成协议。proxy不知道SSH，不另造SSH特有代理实现或frontend入口；finaltarget仍新建隔离SSH服务，不访问外部网络/用户凭据。
+- 第一次通过两个proxy对SSH目标提交错误expectedhostkey，Pin回调实际拒绝，connection失败且两relay正常join；target连接drained，不能因代理认证成功就信任SSH。第二次正确key与password后session传512任意binary逐byteexact，remoteEOF+Close都收到、clientdisconnect、两proxy/listener/tasks join和SSH连接drained成功。server应用bytes原4449追加512，共4961，原UTF8/GBK/actor/两个SSHhop拒绝矩阵继续通过。
+- 1新增routed report negative regression拒缺keymismatch/错误hop或bytecounts/flags-only；33SSHfeaturetests/strictclippy以及真实组合jump通过。已有CIjump现在强制routedSsh，不增加新crate/lock/audit/CSP修改。
+- 限制：已说明S18协议-neutral复用在受控SSH上成立，但不是企业HTTP/SOCKS服务器矩阵、SSHJumpHop池/ProxyCommand、proxy链端到端ACK背压或productionroute配置；原共享SSH连接HOL门禁保持。下一步将原有4MiB慢ACK样例显式经此代理链验证，不将512bytes正常echo当压力验收。
+
 ## 检查结果
 
 - Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 45项测试通过（新增check_binding只读owner/generation/换绑/撤销无输入信用回归）；额外178项原上游测试通过；原生适配器现39项测试通过（新增2项先pool pause票据消费再native新generation/Destroyed禁止后续pause回归）；xtask现8项报告负向测试通过（新增2项外部WM动作收据完整/顺序/正整数规范/有界长度回归）；本轮未修改parser补丁或上游源码。

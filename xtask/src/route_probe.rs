@@ -348,6 +348,50 @@ fn validate(r: &Value) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "ssh-probe")]
+pub(crate) struct ProxyChain {
+    inner: Endpoint,
+    outer: Endpoint,
+}
+#[cfg(feature = "ssh-probe")]
+impl ProxyChain {
+    pub(crate) async fn connect(target: SocketAddr) -> Result<(Self, pulse_route::BoxStream)> {
+        ensure!(
+            target.ip().is_loopback(),
+            "proxy fixture destination must be owned loopback"
+        );
+        let inner = endpoint(Kind::Socks, Some(target)).await?;
+        let outer = endpoint(Kind::Http, Some(inner.address)).await?;
+        let route = Route::new(vec![
+            Hop::http_connect(outer.address, Some(credential(false)?))?,
+            Hop::socks5(inner.address, Some(credential(false)?))?,
+        ])?;
+        let chain = Self { inner, outer };
+        let target = Destination::new(target.ip().to_string(), target.port())?;
+        let stream = NetworkDialer::new(Duration::from_secs(3))?
+            .dial(&route, &target)
+            .await?;
+        Ok((chain, stream))
+    }
+    pub(crate) async fn finish(&mut self) -> Result<()> {
+        for endpoint in [&mut self.outer, &mut self.inner] {
+            ensure!(
+                endpoint.accepted.load(Ordering::SeqCst) == 1
+                    && endpoint.forwarded.load(Ordering::SeqCst) == 1,
+                "protocol routed proxy admission counters"
+            );
+            let task = endpoint
+                .task
+                .as_mut()
+                .context("protocol relay task missing")?;
+            tokio::time::timeout(Duration::from_secs(3), task).await???;
+            endpoint.task = None;
+            endpoint.stop().await?;
+        }
+        Ok(())
+    }
+}
+
 pub fn run() -> Result<()> {
     let root = super::root()?;
     let path = root.join("target/probes/route.json");

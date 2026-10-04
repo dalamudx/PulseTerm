@@ -334,6 +334,134 @@ async fn stop(endpoint: &mut Endpoint) -> Result<()> {
     endpoint.task = None;
     drained(endpoint).await
 }
+async fn routed_ssh(inner: &Endpoint) -> Result<serde_json::Value> {
+    let (mut refused_proxies, refused_stream) =
+        super::route_probe::ProxyChain::connect(inner.address).await?;
+    let rejected_wrong = Arc::new(AtomicBool::new(false));
+    let wrong = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519)?
+        .public_key()
+        .clone();
+    let refused = tokio::time::timeout(
+        Duration::from_secs(3),
+        client::connect_stream(
+            Arc::new(client::Config::default()),
+            refused_stream,
+            Pin {
+                key: wrong,
+                rejected: rejected_wrong.clone(),
+            },
+        ),
+    )
+    .await?;
+    ensure!(
+        refused.is_err() && rejected_wrong.load(Ordering::SeqCst),
+        "proxy route bypassed SSH host key verification"
+    );
+    refused_proxies.finish().await?;
+    drained(inner).await?;
+    let (mut proxies, stream) = super::route_probe::ProxyChain::connect(inner.address).await?;
+    let rejected = Arc::new(AtomicBool::new(false));
+    let config = Arc::new(client::Config {
+        inactivity_timeout: Some(Duration::from_secs(5)),
+        maximum_packet_size: 8192,
+        ..Default::default()
+    });
+    let mut connection = tokio::time::timeout(
+        Duration::from_secs(3),
+        client::connect_stream(
+            config,
+            stream,
+            Pin {
+                key: inner.key.clone(),
+                rejected: rejected.clone(),
+            },
+        ),
+    )
+    .await??;
+    ensure!(
+        !rejected.load(Ordering::SeqCst)
+            && connection
+                .authenticate_password(USER, PASS)
+                .await?
+                .success(),
+        "routed SSH hostkey/authentication failed"
+    );
+    let mut channel = connection.channel_open_session().await?;
+    let payload: Vec<_> = (0..512).map(|n| (n % 251) as u8).collect();
+    channel.data(payload.as_slice()).await?;
+    let mut received = vec![];
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while received.len() < payload.len() {
+            match channel.wait().await {
+                Some(ChannelMsg::Data { data }) => {
+                    ensure!(
+                        received.len() + data.len() <= 512,
+                        "routed SSH payload bound"
+                    );
+                    received.extend_from_slice(&data);
+                }
+                Some(ChannelMsg::Close | ChannelMsg::Eof) | None => {
+                    anyhow::bail!("routed SSH premature EOF")
+                }
+                _ => {}
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await??;
+    ensure!(received == payload, "routed SSH byte corruption");
+    channel.eof().await?;
+    let (mut eof, mut close) = (false, false);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while let Some(message) = channel.wait().await {
+            match message {
+                ChannelMsg::Eof => eof = true,
+                ChannelMsg::Close => {
+                    close = true;
+                    break;
+                }
+                ChannelMsg::Data { .. } | ChannelMsg::ExtendedData { .. } => {
+                    anyhow::bail!("routed SSH unexpected tail")
+                }
+                _ => {}
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    })
+    .await??;
+    ensure!(eof && close, "routed SSH EOF/Close missing");
+    connection
+        .disconnect(Disconnect::ByApplication, "", "en")
+        .await?;
+    drop(channel);
+    drop(connection);
+    proxies.finish().await?;
+    Ok(
+        json!({"proxyOrder":["http-connect","socks5"],"proxyCount":2,"binaryBytes":512,"protocolNeutralBoxStream":true,"sshHostKeyPinned":true,"hostKeyMismatchRejected":true,"refusedConnectionRelaysJoined":true,"sshPasswordAuthenticated":true,"binaryChannelBytesExact":true,"sshEofAndClose":true,"proxyListenersAndRelaysJoined":true}),
+    )
+}
+fn validate_routed(r: &serde_json::Value) -> Result<()> {
+    ensure!(
+        r["proxyOrder"] == json!(["http-connect", "socks5"])
+            && r["proxyCount"] == 2
+            && r["binaryBytes"] == 512,
+        "routed SSH proxy/byte counts"
+    );
+    for field in [
+        "protocolNeutralBoxStream",
+        "sshHostKeyPinned",
+        "hostKeyMismatchRejected",
+        "refusedConnectionRelaysJoined",
+        "sshPasswordAuthenticated",
+        "binaryChannelBytesExact",
+        "sshEofAndClose",
+        "proxyListenersAndRelaysJoined",
+    ] {
+        ensure!(r[field] == true, "routed SSH evidence missing");
+    }
+    Ok(())
+}
+
 async fn probe() -> Result<serde_json::Value> {
     let mut inner = endpoint(None).await?;
     let mut outer = endpoint(Some(inner.address)).await?;
@@ -454,16 +582,19 @@ async fn probe() -> Result<serde_json::Value> {
     drop(outer_session);
     drained(&outer).await?;
     drained(&inner).await?;
+    let routed_report = routed_ssh(&inner).await?;
+    drained(&inner).await?;
     ensure!(
         outer.metrics.forward_peak.load(Ordering::SeqCst) == 1
             && outer.metrics.denied.load(Ordering::SeqCst) == 2
-            && inner.metrics.bytes.load(Ordering::SeqCst) == payload.len() + gbk_bytes.len() + 16,
+            && inner.metrics.bytes.load(Ordering::SeqCst)
+                == payload.len() + gbk_bytes.len() + 16 + 512,
         "jump evidence counters missing"
     );
     stop(&mut outer).await?;
     stop(&mut inner).await?;
     Ok(
-        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"gbk":gbk_report,"gbkActor":actor_report,"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or production actor SSH transport"],"platform":std::env::consts::OS}),
+        json!({"schemaVersion":1,"twoLoopbackSshEndpoints":true,"eachHopHostKeyPinned":true,"innerKeyMismatchRejected":true,"unapprovedDestinationRejected":true,"singleForwardCredit":1,"secondForwardRejected":true,"nestedUtf8Bytes":payload.len(),"gbk":gbk_report,"gbkActor":actor_report,"routedSsh":routed_report,"nestedBytesExact":true,"innerEofAndClose":true,"bothEndpointConnectionsAndRelaysDrained":true,"bothListenersJoined":true,"limitations":["Controlled russh hop/target, not real jump-host implementation matrix","No production Route pool, remote forwarding, arbitrary destinations, SFTP, Agent/FIDO2 or production actor SSH transport"],"platform":std::env::consts::OS}),
     )
 }
 fn validate_report(r: &serde_json::Value) -> Result<()> {
@@ -492,6 +623,7 @@ fn validate_report(r: &serde_json::Value) -> Result<()> {
     );
     super::gbk_probe::validate_report(&r["gbk"])?;
     super::ssh_actor_probe::validate(&r["gbkActor"])?;
+    validate_routed(&r["routedSsh"])?;
     ensure!(
         r["limitations"].as_array().is_some_and(|a| !a.is_empty()),
         "jump limitations missing"
@@ -520,6 +652,18 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn routed_ssh_report_requires_key_refusal_and_exact_binary_protocol_counts() {
+        let mut r = json!({"proxyOrder":["http-connect","socks5"],"proxyCount":2,"binaryBytes":512,"protocolNeutralBoxStream":true,"sshHostKeyPinned":true,"hostKeyMismatchRejected":true,"refusedConnectionRelaysJoined":true,"sshPasswordAuthenticated":true,"binaryChannelBytesExact":true,"sshEofAndClose":true,"proxyListenersAndRelaysJoined":true});
+        assert!(validate_routed(&r).is_ok());
+        r["hostKeyMismatchRejected"] = json!(false);
+        assert!(validate_routed(&r).is_err());
+        r["hostKeyMismatchRejected"] = json!(true);
+        r["proxyCount"] = json!(1);
+        assert!(validate_routed(&r).is_err());
+        assert!(validate_routed(&json!({"completed":true})).is_err());
+    }
+
     #[test]
     fn only_owned_loopback_target_and_exact_port_are_allowed() {
         let address = SocketAddr::from(([127, 0, 0, 1], 2222));
