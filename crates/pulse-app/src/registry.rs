@@ -54,9 +54,9 @@ struct Entry {
     owner: WindowToken,
     handle: SessionHandle,
     capture: Arc<AsyncMutex<()>>,
-    comparison: AsyncMutex<Option<tokio::time::Instant>>,
-    marker: AsyncMutex<Option<tokio::time::Instant>>,
-    repair: AsyncMutex<Option<tokio::time::Instant>>,
+    comparison: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
+    marker: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
+    repair: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
 }
 struct Binding {
     generation: u64,
@@ -193,13 +193,68 @@ impl SessionRegistry {
                 owner,
                 handle,
                 capture: Arc::new(AsyncMutex::new(())),
-                comparison: AsyncMutex::new(None),
-                marker: AsyncMutex::new(None),
-                repair: AsyncMutex::new(None),
+                comparison: Arc::new(AsyncMutex::new(None)),
+                marker: Arc::new(AsyncMutex::new(None)),
+                repair: Arc::new(AsyncMutex::new(None)),
             }),
         );
         Ok(id)
     }
+    /// Trusted backend ownership handoff between two live window incarnations.
+    /// Never expose runtime tokens as frontend arguments. Target UI confirmation and
+    /// geometry/attach coordination belong to the adapter, not this transaction.
+    /// Capture already in progress returns Busy with no effects; same-owner is a no-op.
+    /// Old bindings are revoked atomically, but already admitted native writes/resizes
+    /// cannot be rolled back. No session close, spawn, capture, input or ACK occurs here.
+    pub fn transfer(
+        &self,
+        source: WindowToken,
+        target: WindowToken,
+        id: SessionId,
+    ) -> Result<(), RegistryError> {
+        let mut state = self.lock()?;
+        let entry = Self::entry(&state, source, id)?;
+        if !state.windows.contains(&target) {
+            return Err(RegistryError::Forbidden);
+        }
+        if source == target {
+            return Ok(());
+        }
+        let _capture = entry
+            .capture
+            .clone()
+            .try_lock_owned()
+            .map_err(|_| RegistryError::Busy)?;
+        if entry.handle.state.borrow().lifecycle != pulse_term::session::Lifecycle::Running {
+            return Err(RegistryError::Session(SessionError::Closed));
+        }
+        let next = Arc::new(Entry {
+            owner: target,
+            handle: entry.handle.clone(),
+            capture: entry.capture.clone(),
+            comparison: entry.comparison.clone(),
+            marker: entry.marker.clone(),
+            repair: entry.repair.clone(),
+        });
+        if let Some(binding) = state.bindings.remove(&id) {
+            binding.handle.detach();
+        }
+        state.sessions.insert(id, next);
+        Ok(())
+    }
+    fn current_entry(
+        state: &State,
+        owner: WindowToken,
+        id: SessionId,
+        expected: &Arc<Entry>,
+    ) -> Result<(), RegistryError> {
+        let current = Self::entry(state, owner, id)?;
+        if !Arc::ptr_eq(&current, expected) {
+            return Err(RegistryError::Forbidden);
+        }
+        Ok(())
+    }
+
     /// Resolve a frontend decimal id only after trusted runtime ownership checks.
     pub fn resolve(&self, owner: WindowToken, raw: u64) -> Result<SessionId, RegistryError> {
         let id = SessionId(raw);
@@ -334,7 +389,7 @@ impl SessionRegistry {
             .map_err(|_| RegistryError::Busy)?;
         let generation = {
             let mut state = self.lock()?;
-            Self::entry(&state, owner, id)?;
+            Self::current_entry(&state, owner, id, &entry)?;
             let n = state.next_generation;
             state.next_generation = n.checked_add(1).ok_or(RegistryError::Unavailable)?;
             n
@@ -347,7 +402,7 @@ impl SessionRegistry {
         // A closed window cannot resurrect a view even if capture was already admitted.
         let installed = {
             let mut state = self.lock()?;
-            if Self::entry(&state, owner, id).is_ok() {
+            if Self::current_entry(&state, owner, id, &entry).is_ok() {
                 if let Some(old) = state.bindings.insert(
                     id,
                     Binding {
@@ -462,8 +517,8 @@ impl SessionRegistry {
         Ok(())
     }
     /// Revoke this incarnation's capabilities and bindings, NOT its sessions. Handles
-    /// remain owned by the application for explicit migration/shutdown, which is not
-    /// exposed by this single-owner API yet. Previously admitted input is not retracted.
+    /// remain owned by the application for shutdown. Explicit transfer requires both
+    /// windows still alive BEFORE closing the source. Already admitted input is not retracted.
     pub fn close_window(&self, owner: WindowToken) -> Result<(), RegistryError> {
         let mut state = self.lock()?;
         state.windows.remove(&owner);
@@ -511,6 +566,9 @@ pub use comparison::{RenderedScreen, VisibleComparison};
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "registry_transfer_tests.rs"]
+mod transfer_tests;
 #[cfg(test)]
 #[path = "registry_v2_tests.rs"]
 mod v2_tests;

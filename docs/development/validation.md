@@ -5,7 +5,7 @@
 ## 工程基础
 
 - `.mise.toml` 固定 Rust 1.95.0、Node 22.23.3、pnpm 10.34.6、cargo-deny 0.20.2；任务统一使用 `mise run`。
-- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term`、`pulse-pty`、`pulse-app`、`pulseterm-desktop` 与 `xtask`；原生 GUI 依赖受 `desktop` feature 控制，默认仍可做 headless 核心检查。
+- workspace 实例化 `pulse-core`、`pulse-ipc`、`pulse-term`、`pulse-pty`、`pulse-route`、`pulse-app`、`pulseterm-desktop` 与 `xtask`；原生 GUI 依赖受 `desktop` feature 控制，默认仍可做 headless 核心检查。
 - `cargo xtask check-deps` 检查已实例化 crate 的直接依赖方向、Tauri 隔离和领域层已知 I/O 依赖；这是初始规则，不是完整的传递依赖/源码安全证明。
 - Rust 禁止 unsafe；生产代码禁止 unwrap/expect；TS 开启 strict 和 noUncheckedIndexedAccess，使用 Biome。
 - GitHub Actions 配置 Linux/Windows/macOS 检查、测试和探针；VT 样例禁止换行归一化。
@@ -492,6 +492,13 @@ mise run probe-pty
 - actualwindow-aware远端producer固定4193280 sourcebytes（512×8190），归一化4892160 UTF8，trueactor/registry/v2/credit8220。暂停ACK稳定时actor/reader/remoteProduced三个计数不动，本轮remoteProduced155610<TOTAL，独立连接control响应、同连接control阻塞。恢复ACK后全部raw+UTF8逐byteexact/最终backend画面匹配/SSHEOF+Close/v2EOFACK成功；撤视图或3sACKtimeout两条路径只退binding，会话存活/远端与sameconnectioncontrol恢复，最后完整producer排空与actorEnded。每条disconnect后两proxy/listeners/tasks正常join。
 - report强制请求proxyOrder同时匹配mainACK/detached/timedOut且proxyRelaysJoined=true，不能用direct成功报告替代某一proxyphase。1新mode错配回归、34SSHfeaturetests/strictclippy、原direct三路径回归/workspacecheck/tsc/Biome通过，MCP pressure模块无error诊断；新route三路径actualprobe通过。无依赖/lock/CSP/audit变动。
 - 仍限制：proxy链加入未改善russh同连接HOL，不能准许生产SSH共享池/SFTP/转发复用；受控回环不能当企业代理/网络设备/三平台性能。用显式routeJSON区分多bufferTCP链也不代表复杂真实网络永不积压；没有生产SSH adapter/ProxyCommand/HTTPS TLS/二进制Zmodem预分类。
+
+## S11可信活窗口之间的会话ownership事务（尚无迁移DOM验收）
+
+- 新SessionRegistry::transfer(source,target,id)可信backendAPI，无frontend/CLI命令，不序列化WindowToken。source须authorized+open、target须open、session Running；samewindow是no-op，capture在途try-lock Busy，不等待/不改healthybinding。迁移仅换Entry owner并撤原binding，保留actor/sessionId/native工作，不发送input/ACK/resize/close。目标重新capture/attach才有新generation。
+- compare/marker/repair/capture gate的Arc及历史时间沿迁移共享，不重置限频。capture准入及提交时除owner外还检验Entry Arc身份，A→B→A不会使旧Entry的迟到请求复活；跨迁移捕获已持gate则迁移Busy，旧monitor只按generation清理。原owner已native准入的write/resize不能回滚，接入adapter需先retire本地input/ACK/UI，再明确调用事务与准确重绑。
+- 4新增actor-registry回归：有输出时迁移/原window随后close仍继续解析/目标newgeneration bootstrap+输入；旧bindinghandle迟到input不写driver，旧ACK/detach/foreign/closedtarget拒；sameowner/Busy无副作用；ABA/rate锁保留；EOF后拒迁移且原owner不变。最初3项及完整workspacecheck/fulltests（48app/93term/33IPC/12route/210TS）/真实PTY2MiB/v1五headless/v2两GBKheadless回归通过；第4项新增后targeted tests通过。生产Mutex不跨await，测试guard改词法scope通过strictclippy；MCP registry无error诊断。
+- 真实native v2WebView、typedbindings drift、nativeclippy-Dwarnings与39nativeunit回归最终通过，但这些是既有窗口兼容验证，不是新跨窗迁移DOM证据。后续还需固定真实跨窗口Channel/DOM迁移、原视图retire/目标容器接收/尺寸协调/用户拖动确认和关闭后orphan授权恢复；目前不能标S11完整通过。不改变audit/第三方deps或恢复serializer门禁。
 
 ## 检查结果
 
