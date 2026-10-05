@@ -152,6 +152,8 @@ reader ─► 有界队列(64 块 × 最大 64KB) ─► actor:
 
 - 使用 `portable-pty`。Windows 上通过 `pulse-platform::conpty` 加载随应用分发的 `conpty.dll` 和 `OpenConsole.exe`（由 `cargo xtask fetch-conpty` 从官方 NuGet 包下载），失败时回退到系统自带版本。portable-pty 是否能加载指定的 dll 要在 S10 验证，不支持的话就在 platform 中自己封装一层。
 - **Shell 自动探测**：扫描 PATH 和常见安装目录，用 `wsl.exe --list --quiet` 获取 WSL 发行版列表（输出是 UTF-16LE，需要解码）。探测结果作为动态 profile，已生成过的 profile 记录在应用状态中，用户删除后不会再自动出现。
+- **已实现基础**：`pulse-pty::profiles`提供Unix只读元数据发现（bash/zsh/fish/sh/pwsh）、每kind一个稳定自动profile、隐藏状态刷新保留与可导出/恢复的删除tombstone。程序沿用发现路径，不将`sh`替换成symlink目标。PATH最多64个组件/64KiB、程序路径最多4KiB，忽略相对/空组件及无执行位文件。此处只判元数据候选，不保证当前用户ACL/挂载exec策略或程序内容合法，native launch仍可失败；需在阻塞worker上执行。设置持久化、用户自定义profile/默认选择、Windows/WSL发现与macOS登录启动尚未接入。
+- **启动字段边界**：`PtyCommand::validate`在任何native PTY分配前拒绝NUL、非法env键/空cwd及128参数/128环境覆盖/128KiB显式字段预算；空参数和最后env覆盖保持字面语义，Debug只显示数量/是否设置，不显示程序、argv、cwd、环境键值。继承环境与OS-specific argv限制未计入该预算；这不是启动授权或完整敏感数据存储。
 - **启动时的环境变量**：
   - `TERM=xterm-256color`、`COLORTERM=truecolor`、`TERM_PROGRAM=PulseTerm`、`TERM_PROGRAM_VERSION`；
   - `PULSE_PANE_ID`、`PULSE_SOCKET`（供 CLI 定位当前窗格）；

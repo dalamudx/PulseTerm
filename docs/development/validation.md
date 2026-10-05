@@ -636,9 +636,19 @@ mise run probe-pty
 
 - 未ACK导航检查点已签名提交 `e39c5fa`；后续已验收变更保留独立签名提交边界。没有新增shell入口/输入权限、wire opcode、依赖或审计豁免。
 
+## LOCAL-01/02 Unix自动Shell/Profile与启动字段基础
+
+- 新公开`pulse-pty::profiles::{ShellKind,ShellCandidate,AutoProfile,AutoProfileCatalog,discover_unix_shells}`。Unix读取 supplied PATH/SHELL快照与常见目录的文件元数据，不执行候选或读取用户Shell配置。preferred已识别absolute shell优先，PATH顺序每kind选择第一份；目录/无执行位/相对及空PATH跳过，最多64组件/64KiB PATH/4KiB程序/5kind。执行位只是候选检查，不等于有效用户access/ACL/noexec判定或程序认证。
+- 自动身份按kind稳定，refresh换路径保留hidden；缺失shell保持profile但unavailable，不准构造launch；remove记录deleted且重装、PATH变动及tombstone恢复后不自动重生。reconcile先验预算/duplicate，再原子改变metadata。此为in-memory backend模型，不是持久数据库/完整用户Profile/默认选择或窗口RPC。`sh`调用名保留，不能canonicalize到bash/dash改变Shell语义。
+- `PtyCommand`新增pure validate，所有spawn在native分配前检查NUL、空env键/含equals的键、空cwd，最大128argv/128override/128KiB显式字段（含终止符）。保留空argv及最后env覆盖，Debug全部程序/参数/cwd/环境键值脱敏。继承环境、实际目录存在及OS argv上限仍由native层处理，底层native错误仍须adapter脱敏。
+- 新9项profile回归覆盖private0700元数据fixture没有executed副作用、PATH/preferred优先、目录/执行位/relative过滤、symlink调用名、NUL/预算与隐藏/删除/恢复/atomic规则；4项command回归覆盖分配前拒绝、边界一字节、空参数/duplicate环境与无敏感Debug。pulse-pty共16项单测及严格clippy通过；xtask report新增missing/false/truthy/预算/exit/platform/schema负向门。
+- 新`mise run probe-profiles`已注册xtask及Unix CI，不把登记当跨平台证据。实际Linux由/bin:/usr/bin元数据发现sh、以固定`exec "$@"`转发字面argv到自有Rust有限helper，核对TTY/cwd/env/中文emoji输出、exit7/EOF/reader join/direct-child reap，以及真实snapshot下hidden与deleted/tombstone恢复。候选发现本身不执行`--version`或其它命令，报告不含本机路径/环境值/输入内容。输出预算4096、helper3秒自退、worker12秒监督；固定脚本不接受任意CLI参数或远端输入，也不声称一般Shell树清理。
+- 首次12profile/native单测与实际probe后严格lint发现let-chain/from_ref/print-newline问题，均修正且没有豁免；最新16PTYtests/strictlint已过，完整check/test/真实ProfileProbe/UnixPTY/portablePTY/actor/probe组合已通过（16PTY、57app、93term、33IPC、14xtask与238TS）；实际profiles.json所有独立收据true、shellCount=2、exit7/output23bytes。无manifest/lock/第三方依赖改变，audit仍原6拒license及paste/proc-macro-error两维护公告失败，bans/sources通过，发布禁令不变。MCP profiles模块Exact无error；首次引用缺path的Unknown未算通过，补path后Exact引用。
+- LOCAL-01/02未全验收：Windows PowerShell/cmd/Git Bash/每发行版WSL、用户自定义命令参数/外观/默认profile、存储/UI、macOS登录及Windows注册表环境刷新均未实现或实测。锁定portable-pty只在默认program路径内部设置login argv0，显式profile未提供独立argv0覆盖；不能用`-bash`当executable或默认builder冒充自定义登录支持，本轮未patch依赖。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：16项pulse-pty测试通过（profile目录与启动字段）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认14项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

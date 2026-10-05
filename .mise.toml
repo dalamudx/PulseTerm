@@ -40,6 +40,10 @@ run = "cargo xtask probe-local-session"
 description = "Exercise native PTY with a platform-neutral finite Rust helper"
 run = "cargo xtask probe-pty-portable"
 
+[tasks.probe-profiles]
+description = "Exercise Unix shell discovery, profile reconciliation and literal native launch"
+run = "cargo xtask probe-profiles"
+
 [tasks.probe-pty]
 description = "Exercise native PTY input, queries, resize, output and teardown"
 run = "cargo xtask probe-pty"

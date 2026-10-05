@@ -2,6 +2,15 @@
 //! Callers supervise blocking I/O and keep draining output while closing ConPTY.
 #![forbid(unsafe_code)]
 pub use portable_pty::ExitStatus;
+mod command_validation;
+/// Bounded local shell discovery and automatic profile reconciliation.
+pub mod profiles;
+/// Maximum literal arguments accepted before allocating a PTY.
+pub const MAX_COMMAND_ARGS: usize = 128;
+/// Maximum explicit environment overrides accepted before allocating a PTY.
+pub const MAX_COMMAND_ENV: usize = 128;
+/// Maximum encoded bytes across explicit launch fields; inherited environment excluded.
+pub const MAX_COMMAND_BYTES: usize = 128 * 1024;
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize};
 use pulse_core::TermSize;
 use std::ffi::OsString;
@@ -9,7 +18,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 /// Literal executable and argv, never interpolated into a shell command.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PtyCommand {
     /// Executable path or name resolved by the native backend.
     pub program: OsString,
@@ -19,6 +28,16 @@ pub struct PtyCommand {
     pub cwd: Option<PathBuf>,
     /// Overrides; remaining environment is inherited when building the command.
     pub env: Vec<(OsString, OsString)>,
+}
+impl std::fmt::Debug for PtyCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PtyCommand")
+            .field("program", &"<redacted>")
+            .field("argument_count", &self.args.len())
+            .field("working_directory_set", &self.cwd.is_some())
+            .field("environment_override_count", &self.env.len())
+            .finish_non_exhaustive()
+    }
 }
 impl PtyCommand {
     /// Explicit command without arguments or overrides.
@@ -30,10 +49,13 @@ impl PtyCommand {
             env: vec![],
         }
     }
+    /// Validate explicit launch fields before native allocation. Inherited environment
+    /// and OS-specific command-line limits still require native validation.
+    pub fn validate(&self) -> Result<(), PtyError> {
+        command_validation::validate(self)
+    }
     fn build(&self) -> Result<CommandBuilder, PtyError> {
-        if self.program.is_empty() {
-            return Err(PtyError::EmptyProgram);
-        }
+        self.validate()?;
         let mut command = CommandBuilder::new(&self.program);
         command.args(&self.args);
         if let Some(cwd) = &self.cwd {
@@ -52,6 +74,12 @@ pub enum PtyError {
     /// Empty program rejected before OS allocation.
     #[error("PTY executable must not be empty")]
     EmptyProgram,
+    /// Malformed program, argument, environment key/value, or working directory.
+    #[error("PTY command contains invalid fields")]
+    InvalidCommand,
+    /// Explicit launch fields exceeded the bounded item or byte budget.
+    #[error("PTY command exceeds launch budget")]
+    CommandLimit,
     /// Native backend failure.
     #[error("PTY backend: {0}")]
     Backend(String),

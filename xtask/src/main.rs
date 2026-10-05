@@ -12,6 +12,7 @@ mod encoding_attachment_probe;
 mod gbk_probe;
 mod local_session_probe;
 mod portable_pty_probe;
+mod profile_probe;
 mod pty_probe;
 mod query_probe;
 mod route_probe;
@@ -48,6 +49,9 @@ fn root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("profile-probe-helper") {
+        return profile_probe::helper();
+    }
     #[cfg(all(feature = "cli-probe", unix))]
     if std::env::args().nth(1).as_deref() == Some("cli-probe-helper") {
         return cli_probe::helper();
@@ -103,6 +107,8 @@ fn main() -> Result<()> {
         Some("probe-window") => channel_probe::run_window()?,
         Some("probe-window-external") => channel_probe::run_window_external()?,
         Some("probe-pty") => pty_probe::run()?,
+        Some("probe-profiles") => profile_probe::run()?,
+        Some("probe-profiles-worker") => profile_probe::worker()?,
         Some("probe-pty-portable") => portable_pty_probe::run()?,
         Some("probe-local-session") => local_session_probe::run()?,
         Some("probe-software") => software_probe::run()?,
@@ -180,7 +186,9 @@ fn main() -> Result<()> {
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh requires --features ssh-probe");
         }
-        _ => bail!("usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty>"),
+        _ => bail!(
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles>"
+        ),
     }
     Ok(())
 }
