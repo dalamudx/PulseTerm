@@ -5,6 +5,8 @@ pub use portable_pty::ExitStatus;
 mod command_validation;
 /// Bounded local shell discovery and automatic profile reconciliation.
 pub mod profiles;
+/// Strict decoding and literal launch construction for Windows WSL discovery output.
+pub mod wsl;
 /// Maximum literal arguments accepted before allocating a PTY.
 pub const MAX_COMMAND_ARGS: usize = 128;
 /// Maximum explicit environment overrides accepted before allocating a PTY.
