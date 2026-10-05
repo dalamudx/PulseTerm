@@ -78,6 +78,9 @@ jobs:
       - name: Exercise Unix login builder selection and argv0
         if: runner.os != 'Windows'
         run: mise run probe-login
+      - name: Exercise Unix profile login through session actor and authorized ACK backpressure
+        if: runner.os != 'Windows'
+        run: mise run probe-local-profile-session
       - name: Exercise Unix explicit login arguments and missing-program rejection
         if: runner.os != 'Windows'
         run: mise run probe-login-arguments

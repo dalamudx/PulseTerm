@@ -15,6 +15,7 @@ mod login_arguments_probe;
 mod login_probe;
 mod portable_pty_probe;
 mod profile_probe;
+mod profile_session_probe;
 mod pty_probe;
 mod query_probe;
 mod route_probe;
@@ -120,6 +121,7 @@ fn main() -> Result<()> {
         Some("probe-profiles-worker") => profile_probe::worker()?,
         Some("probe-pty-portable") => portable_pty_probe::run()?,
         Some("probe-local-session") => local_session_probe::run()?,
+        Some("probe-local-profile-session") => profile_session_probe::run()?,
         Some("probe-software") => software_probe::run()?,
         Some("probe-software-worker") => software_probe::worker()?,
         Some("probe-pty-portable-worker") => portable_pty_probe::worker()?,
@@ -196,7 +198,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-login|probe-login-arguments>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-login|probe-login-arguments|probe-local-profile-session>"
         ),
     }
     Ok(())

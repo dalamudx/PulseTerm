@@ -26,7 +26,7 @@ async fn visible(handle: &SessionHandle, marker: &str) -> Result<()> {
     .context("visible marker deadline")??;
     Ok(())
 }
-fn command(mode: &str) -> Result<PtyCommand> {
+pub(crate) fn command(mode: &str) -> Result<PtyCommand> {
     let mut command = PtyCommand::new(std::env::current_exe()?);
     command.args = vec![mode.into(), "literal ; $(argv)".into()];
     command.cwd = Some(super::root()?.join("target/probes"));
@@ -217,11 +217,15 @@ async fn detached_session() -> Result<serde_json::Value> {
 }
 
 async fn wire_streaming() -> Result<serde_json::Value> {
+    wire_streaming_command(command("portable-pty-helper-stream")?).await
+}
+pub(crate) async fn wire_streaming_command(
+    native_command: PtyCommand,
+) -> Result<serde_json::Value> {
     use pulse_app::{attachment::AttachmentConfig, registry::SessionRegistry};
     use pulse_ipc::attach::{Part, decode_fragment};
     let size = TermSize::new(80, 24)?;
-    let (session, task) =
-        pulse_app::spawn_local(command("portable-pty-helper-stream")?, size, 128).await?;
+    let (session, task) = pulse_app::spawn_local(native_command, size, 128).await?;
     visible(&session, "PORTABLE_STREAM_READY").await?;
     let config = AttachmentConfig {
         frames: 1,
@@ -238,6 +242,7 @@ async fn wire_streaming() -> Result<serde_json::Value> {
     let mut sequence = 0;
     let mut offset = None;
     let mut pause = None;
+    let mut burst_bytes = 0usize;
     let mut end = false;
     tokio::time::timeout(Duration::from_secs(12), async {
         while let Some(bytes) = wire.recv().await {
@@ -260,6 +265,7 @@ async fn wire_streaming() -> Result<serde_json::Value> {
                 }
                 Part::Data => {
                     ensure!(Some(part.offset) == offset, "wire duplicate/loss");
+                    burst_bytes += part.body.iter().filter(|byte| **byte == b'X').count();
                     offset = Some(part.offset + part.body.len() as u64);
                     replay.feed(part.body);
                     replay.take_replies();
@@ -307,6 +313,11 @@ async fn wire_streaming() -> Result<serde_json::Value> {
         receipt.peak_credit_bytes <= config.bytes,
         "wire credit bound"
     );
+    #[cfg(unix)]
+    ensure!(
+        burst_bytes == 2 * 1024 * 1024,
+        "wire burst byte loss/duplication"
+    );
     let text = replay.screen().cells[0]
         .iter()
         .map(|cell| cell.text.as_str())
@@ -316,7 +327,7 @@ async fn wire_streaming() -> Result<serde_json::Value> {
         "wire final screen"
     );
     Ok(
-        json!({"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
+        json!({"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"burstBytes":burst_bytes,"burstExactChecked":cfg!(unix),"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
     )
 }
 async fn streaming() -> Result<serde_json::Value> {
