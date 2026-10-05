@@ -6,7 +6,7 @@ fn receipts() -> [Value; 5] {
     receipts[0]["receipt"] = json!({"initialized":true});
     receipts[1]["receipt"] = json!({"edited":true});
     receipts[2]["receipt"] = json!({"edited":true});
-    receipts[3]["receipt"] = json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"groupRevision":3,"hostRevision":1});
+    receipts[3]["receipt"] = json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"backgroundSourceChecked":true,"sourceTaskJoined":true,"groupRevision":3,"hostRevision":1});
     receipts[4]["receipt"] = json!({"abaRejected":true,"rowPreserved":true});
     receipts
 }
@@ -28,6 +28,8 @@ fn source_receipts_cannot_be_truthy_missing_or_substituted() -> Result<()> {
         (3, "registryWindowAuthorizationChecked"),
         (3, "registryRefreshChecked"),
         (3, "registryTransferChecked"),
+        (3, "backgroundSourceChecked"),
+        (3, "sourceTaskJoined"),
         (4, "abaRejected"),
         (4, "rowPreserved"),
     ] {

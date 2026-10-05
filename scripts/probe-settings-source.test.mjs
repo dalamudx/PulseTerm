@@ -1,0 +1,7 @@
+import assert from "node:assert/strict";
+import {test} from "node:test";
+import {SOURCE_TESTS,sourceProbeAllowed,sourceReceiptAccepted} from "./probe-settings-source.mjs";
+function receipt(){return{status:0,stdout:SOURCE_TESTS.map(n=>`test settings_source::tests::${n} ... ok`).join("\n")+"\ntest result: ok. 12 passed; 0 failed; 0 ignored; 112 filtered out;"};}
+test("only supported private-IO platforms are admitted",()=>{for(const p of ["linux","darwin"])assert.equal(sourceProbeAllowed(p),true);for(const p of ["win32","freebsd",undefined,0])assert.equal(sourceProbeAllowed(p),false);});
+test("exact source rows and total are mandatory, not zero/substitute/partial",()=>{const good=receipt();assert.equal(sourceReceiptAccepted(good),true);for(const n of SOURCE_TESTS){assert.equal(sourceReceiptAccepted({...good,stdout:good.stdout.replace(`test settings_source::tests::${n} ... ok`,"")}),false);assert.equal(sourceReceiptAccepted({...good,stdout:good.stdout+`\ntest settings_source::tests::${n} ... ok`}),false);}for(const s of ["",good.stdout.replace("12 passed","0 passed"),good.stdout.replace("12 passed","13 passed"),good.stdout.replaceAll("settings_source::tests::","settings_reload::tests::")])assert.equal(sourceReceiptAccepted({...good,stdout:s}),false);});
+test("nonzero exit, signal, error or nontext cannot become success",()=>{const good=receipt();for(const extra of [{status:1},{status:null},{signal:"SIGKILL"},{error:new Error("timeout")},{stdout:undefined}])assert.equal(sourceReceiptAccepted({...good,...extra}),false);});

@@ -64,6 +64,14 @@ run = ["node --test scripts/probe-store-owner.test.mjs", "node scripts/probe-sto
 description = "Verify owner probe admission and refusal of zero or mismatched test receipts; no privileges required"
 run = "node --test scripts/probe-store-owner.test.mjs"
 
+[tasks.probe-settings-source]
+description = "Verify bounded background user settings reads, exact coalescing and owner/worker retirement"
+run = ["node --test scripts/probe-settings-source.test.mjs", "node scripts/probe-settings-source.mjs"]
+
+[tasks.check-settings-source-probe]
+description = "Reject unsupported platforms, zero, substituted and incomplete source test receipts"
+run = "node --test scripts/probe-settings-source.test.mjs"
+
 [tasks.probe-settings-file]
 description = "Verify fixed private settings saves, strict conflict receipts and actual process-kill atomicity"
 run = ["node --test scripts/probe-settings-file.test.mjs", "node scripts/probe-settings-file.mjs"]

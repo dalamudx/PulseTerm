@@ -102,6 +102,11 @@ jobs:
       - name: Exercise private settings atomic saves and abrupt process termination
         if: runner.os != 'Windows'
         run: mise run probe-settings-file
+      - name: Verify settings source probe admission and exact receipts
+        run: mise run check-settings-source-probe
+      - name: Exercise bounded background user settings reads
+        if: runner.os != 'Windows'
+        run: mise run probe-settings-source
       - name: Exercise SQLite abrupt process termination and WAL recovery
         run: mise run probe-store-crash
       - name: Exercise Unix shell discovery and profile reconciliation

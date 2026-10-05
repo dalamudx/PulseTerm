@@ -14,6 +14,8 @@ pub mod settings_reload;
 pub mod settings_remove;
 /// Non-secret group/host sparse settings; scope IDs are not permission tokens.
 pub mod settings_scope;
+/// Managed single-worker user setting reads; no filesystem watcher or UI authority.
+pub mod settings_source;
 mod settings_store;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
 pub mod vault_crypto;
