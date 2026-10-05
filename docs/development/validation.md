@@ -813,6 +813,15 @@ mise run probe-pty
 - 864次生成布局oracle通过（6排列×3布局×转义键/CRLF/尾换行/trailingcomma），每次还验证第二次删除byte-identical。期望删除区间在生成时记录，不由被测parser倒推；评论故意含同名赋值和逗号，避免全局替换假通过。strict all-target lint、MCP Exact无诊断；初始符号工具stale未计精确通过。
 - 完整check/test/schema漂移/probe/五进程通过，79普通store/1Root-only ignored/2真实崩溃/6 compile_fail，62app/43PTY/107term/242TS保持。无依赖/schema/前端/Native/帧变化，未重复上一阶段已过63native、2MiB、DOM或audit；发布仍由原有license/advisory阻断。此处无用户文件读写、原子保存或watcher，不能计完整VAULT-07。
 
+## 私有设置文件冲突检查与原子安装
+
+- `settings_file::SettingsFile`只处理可信绝对私有目录里的固定settings.toml；snapshot保留原文、文件/目录身份，未实现Debug/serde（comments可能不适合日志）。同步操作须离开GUI线程。pinned dir fd、openat no-follow/nonblock/CLOEXEC、700目录/600有效UID单链接regular文件，readonly intent也拒绝且不修权限；不建立Windows ACL的假替代。
+- 跨进程每操作独立open-description try-lock，比较完整snapshot后才允许typed set/remove。temp随机exclusive同目录、write+fsync，临近安装再次比较及检查lock/dir/temp身份；首次NOReplace、更新rename+directory fsync。rename之后失败返回Uncertain，禁止自动回放；坏/未来/重复/超64KiB文档、符号/硬链接、外来目录snapshot、宽/只读权限都不会重置目标。只清本次且身份仍匹配的temp，进程kill的orphan/无关文件不回收。
+- 首轮并行出现意外Busy；阶段诊断证明是锁类别而非NOReplace覆盖。只关fd会让fork/dup共享描述符继续持有flock，新增显式unlock守卫及clone-fd确定性回归；保留Conflict与超时断言后，含独立child/强杀的12例suite连续12轮通过。原“换inode”夹具改为真正同内容rename，不依赖原地同文重写时戳必变。
+- 两独立进程先持同一snapshot，第一提交、第二明确Conflict；精确阶段/PID收据后SIGKILL：temp fsync前后但rename之前仍是完整旧目标，rename之后可重开完整新目标，运行时锁Busy而进程死后释放。仅证明进程故障，不等于电源/文件系统故障。post-install故障注入明确Uncertain，原文或已安装新文的断言都保持。
+- `probe-settings-file`和CI注册严格12例receipt（3真实进程边界、9文件/锁回归），3脚本否定覆盖不支持平台/0tests/缺例/不完整summary/signal/timeout；mac候选实现与CI未运行不能称通过，Windows/其他平台拒绝。fullcheck/test/probe/schema、SQLite crash/五进程、native strictlint/63tests通过，91普通store/2ignored（Root及fixed-child）、242TS；MCP Exact无诊断。Rustix既有锁定版本仅将fs feature用于production backend，无版本/帧/UI变化，原有audit门禁未豁免。
+- 仍不保证非合作同UID编辑器在最后compare之后的原子CAS、全部祖先链/TOCTOU或Windows ACL；尚无生产配置目录/UI授权/自动监视。计划notify8.2.0元数据许可为CC0-1.0，当前许可策略未允许，问卷未返回授权；未采用依赖或修改deny规则。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

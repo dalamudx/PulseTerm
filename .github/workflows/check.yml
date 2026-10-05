@@ -94,6 +94,11 @@ jobs:
         run: mise run probe-profile-store
       - name: Reject unsupported or empty owner probe receipts without requiring privileges
         run: mise run check-store-owner-probe
+      - name: Validate strict settings file probe admission
+        run: mise run check-settings-file-probe
+      - name: Exercise private settings atomic saves and abrupt process termination
+        if: runner.os != 'Windows'
+        run: mise run probe-settings-file
       - name: Exercise SQLite abrupt process termination and WAL recovery
         run: mise run probe-store-crash
       - name: Exercise Unix shell discovery and profile reconciliation

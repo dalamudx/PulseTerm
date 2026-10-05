@@ -5,6 +5,8 @@ pub mod profiles;
 /// Pure bounded terminal setting overlays; no file I/O or permissions.
 pub mod settings;
 pub mod settings_edit;
+/// Fixed-name private settings snapshots and synchronous atomic saves.
+pub mod settings_file;
 /// Pure removal of supported overrides, retaining non-target bytes.
 pub mod settings_remove;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
