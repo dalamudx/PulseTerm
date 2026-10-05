@@ -124,6 +124,7 @@ pub(super) fn prepare(
         .map_err(SessionRestoreError::Gap)?;
     Ok(SessionBootstrap {
         boundary: boundary.clone(),
+        digest: terminal.screen_digest(),
         history,
         restore: restore.bytes,
     })

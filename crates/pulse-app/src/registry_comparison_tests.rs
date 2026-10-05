@@ -326,3 +326,141 @@ async fn window_revocation_wins_over_pending_evidence() {
     drop(f.driver);
     f.task.join().await.unwrap();
 }
+#[tokio::test]
+async fn output_during_bootstrap_keeps_capture_exact_but_latest_confirmation_stale() {
+    use pulse_ipc::attach::Part;
+    use pulse_term::TerminalProbe;
+    for dual in [false, true] {
+        let registry = SessionRegistry::new();
+        let owner = registry.open_window().unwrap();
+        let (h, task, d) = session();
+        let id = registry.register(owner, h.clone()).unwrap();
+        let mut observed = h.state.clone();
+        d.output.send(b"a".to_vec()).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while observed.borrow().parsed_bytes < 1 {
+                observed.changed().await.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+        let captured = h.diagnostic_digest().await.unwrap();
+        let mut binding = if dual {
+            registry.attach_v2(owner, id, config()).await.unwrap()
+        } else {
+            registry.attach(owner, id, config()).await.unwrap()
+        };
+        // No bootstrap ACK yet. Real actor advances and queues post-boundary output.
+        d.output.send(b"b".to_vec()).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while observed.borrow().parsed_bytes < 2 {
+                observed.changed().await.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+        let latest = h.diagnostic_digest().await.unwrap();
+        assert_ne!(latest.boundary, captured.boundary);
+        let mut restore = Vec::new();
+        loop {
+            let bytes =
+                tokio::time::timeout(std::time::Duration::from_secs(1), binding.wire.recv())
+                    .await
+                    .unwrap()
+                    .unwrap();
+            let frame = pulse_ipc::decode(&bytes).unwrap();
+            let (part, body) = if dual {
+                let p = pulse_ipc::attach_v2::decode_fragment(frame.payload).unwrap();
+                (p.part, p.body)
+            } else {
+                let p = pulse_ipc::attach::decode_fragment(frame.payload).unwrap();
+                (p.part, p.body)
+            };
+            match part {
+                Part::Begin => {
+                    if dual {
+                        let (b, _, _) = pulse_ipc::attach_v2::decode_begin(body).unwrap();
+                        assert_eq!(b.source_bytes, captured.boundary.parsed_bytes);
+                        assert_eq!(b.utf8_bytes, captured.boundary.utf8_bytes);
+                    } else {
+                        let (b, _, _) = pulse_ipc::attach::decode_begin(body).unwrap();
+                        assert_eq!(b.parsed_bytes, captured.boundary.parsed_bytes);
+                    }
+                }
+                Part::Restore => restore.extend_from_slice(body),
+                Part::Commit => {}
+                _ => panic!("unexpected bootstrap part"),
+            };
+            registry
+                .acknowledge(owner, id, binding.generation, frame.sequence)
+                .unwrap();
+            if part == Part::Commit {
+                break;
+            }
+        }
+        let mut replay = TerminalProbe::new(captured.boundary.size, 64);
+        replay.feed(&restore);
+        assert_eq!(replay.screen_digest(), captured.digest);
+        assert_eq!(
+            registry
+                .compare_visible(
+                    owner,
+                    id,
+                    binding.generation,
+                    RenderedScreen {
+                        boundary: captured.boundary,
+                        digest: replay.screen_digest()
+                    }
+                )
+                .await
+                .unwrap(),
+            VisibleComparison::Stale
+        );
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(1), binding.wire.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let frame = pulse_ipc::decode(&bytes).unwrap();
+        let (part, offset, body) = if dual {
+            let p = pulse_ipc::attach_v2::decode_fragment(frame.payload).unwrap();
+            (p.part, p.offset, p.body)
+        } else {
+            let p = pulse_ipc::attach::decode_fragment(frame.payload).unwrap();
+            (p.part, p.offset, p.body)
+        };
+        assert_eq!(part, Part::Data);
+        assert_eq!(offset, 1);
+        assert_eq!(body, b"b");
+        replay.feed(body);
+        registry
+            .acknowledge(owner, id, binding.generation, frame.sequence)
+            .unwrap();
+        assert_eq!(replay.screen_digest(), latest.digest);
+        tokio::time::sleep(MIN_INTERVAL).await;
+        assert_eq!(
+            registry
+                .compare_visible(
+                    owner,
+                    id,
+                    binding.generation,
+                    RenderedScreen {
+                        boundary: latest.boundary,
+                        digest: replay.screen_digest()
+                    }
+                )
+                .await
+                .unwrap(),
+            VisibleComparison::Equal
+        );
+        registry.close_session(owner, id).unwrap();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), task.join())
+                .await
+                .unwrap()
+                .unwrap()
+                .lifecycle,
+            Lifecycle::Closed
+        );
+        drop((binding, d));
+    }
+}

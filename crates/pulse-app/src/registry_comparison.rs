@@ -113,6 +113,53 @@ impl SessionRegistry {
         admitted.map_err(|_| RegistryError::Busy)??;
         Ok(())
     }
+    /// Confirm the captured bootstrap, not the actor's latest screen. This does not
+    /// clear risk hints or prove queued/live Data has been rendered. Shares the
+    /// per-session comparison quota, including transfer and cancellation.
+    pub fn compare_bootstrap(
+        &self,
+        owner: WindowToken,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<VisibleComparison, RegistryError> {
+        let state = self.lock()?;
+        let entry = Self::entry(&state, owner, id)?;
+        let binding = state
+            .bindings
+            .get(&id)
+            .filter(|b| b.generation == generation)
+            .ok_or(RegistryError::Stale)?;
+        if rendered.digest.len() != 16
+            || !rendered
+                .digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(SessionError::InvalidDigest.into());
+        }
+        let mut last = entry
+            .comparison
+            .try_lock()
+            .map_err(|_| RegistryError::Busy)?;
+        let now = Instant::now();
+        if last.is_some_and(|at| now.duration_since(at) < MIN_INTERVAL) {
+            return Err(RegistryError::Busy);
+        }
+        *last = Some(now);
+        let Some((boundary, digest)) = binding.handle.bootstrap_projection() else {
+            return Ok(VisibleComparison::Stale);
+        };
+        if boundary != &rendered.boundary {
+            return Ok(VisibleComparison::Stale);
+        }
+        Ok(if digest == rendered.digest {
+            VisibleComparison::Equal
+        } else {
+            VisibleComparison::Mismatch
+        })
+    }
+
     /// At most one comparison per session and one admission per 500ms, including
     /// cancelled/failed calls and binding replacements. Foreign/stale requests
     /// cannot consume this allowance. No terminal or registry metadata mutex crosses
@@ -166,6 +213,9 @@ impl SessionRegistry {
         })
     }
 }
+#[cfg(test)]
+#[path = "registry_bootstrap_tests.rs"]
+mod bootstrap_tests;
 #[cfg(test)]
 #[path = "registry_comparison_tests.rs"]
 mod tests;

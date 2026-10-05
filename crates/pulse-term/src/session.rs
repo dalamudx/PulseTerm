@@ -60,6 +60,9 @@ pub const MAX_HISTORY_BYTES: usize = 4 * 1024 * 1024;
 pub struct SessionBootstrap {
     /// Exact actor serialization boundary for both history and screen.
     pub boundary: SessionState,
+    /// Visible checksum computed on this SAME actor turn, not the latest state.
+    /// Diagnostic confirmation only; does not clear divergence hints.
+    pub digest: String,
     /// Recent PRIMARY history suffix, ready for a fresh renderer.
     pub history: crate::HistoryReplay,
     /// Screen-only restore preserving that history; no partial/approximate frame.

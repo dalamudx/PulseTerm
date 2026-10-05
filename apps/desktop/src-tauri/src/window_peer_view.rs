@@ -62,43 +62,61 @@ pub(crate) async fn probe_peer_view(
 ) -> Result<()> {
     let state = state.inner().clone();
     let (owner, id, pages) = owned(&state, &window, &nonce, &page_nonce)?;
-    let initial = pages.claim_view(&page_nonce)?;
+    let initial = pages.is_initial_document();
     if !initial {
         pages.wait_navigation_joined().await?;
         pages.wait_refresh_capture().await?;
         owned(&state, &window, &nonce, &page_nonce)?;
     }
     {
-        let _slot = state
-            .0
-            .peer_view_slot
-            .clone()
-            .try_acquire_owned()
-            .map_err(error)?;
-        if pages.view_finished() {
-            return Err("session.peer_view_already_finished".into());
+        let (initial_claim, _slot, lane) = admit_view(&state, &pages, &page_nonce)?;
+        if initial_claim != initial {
+            return Err("session.peer_page_changed".into());
         }
-        if initial {
-            let result =
-                transfer_view::render_live(&state, owner, id, &channel, &pages, &page_nonce).await;
-            eprintln!(
-                "session.peer_live.supervisor_returned ok={}",
-                result.is_ok()
-            );
-            result?;
-        } else {
-            transfer_view::render(&state, owner, id, 0, &channel).await?;
-            owned(&state, &window, &nonce, &page_nonce)?;
-            pages.mark_captured(&page_nonce)?;
-        }
+        let result =
+            transfer_view::render_live(&state, owner, id, &channel, &pages, &page_nonce, lane)
+                .await;
+        eprintln!(
+            "session.peer_live.supervisor_returned initial={initial} ok={}",
+            result.is_ok()
+        );
+        result?;
     }
     if initial {
         eprintln!("session.peer_live.peer_permit_released");
         pages.mark_navigation_joined()?;
         eprintln!("session.peer_live.navigation_joined");
+    } else {
+        owned(&state, &window, &nonce, &page_nonce)?;
+        pages.mark_refreshed_joined(&page_nonce)?;
+        eprintln!("session.peer_fresh_live.joined");
     }
     Ok(())
 }
+fn admit_view(
+    state: &WindowSessions,
+    pages: &reload::PageTracker,
+    page_nonce: &str,
+) -> Result<(
+    bool,
+    tokio::sync::OwnedSemaphorePermit,
+    tokio::sync::OwnedSemaphorePermit,
+)> {
+    pages.authorize_view(page_nonce)?;
+    let peer = state
+        .0
+        .peer_view_slot
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "session.peer_view_busy".to_string())?;
+    let lane = transfer_view::reserve_lane(state)?;
+    if pages.view_finished() {
+        return Err("session.peer_view_already_finished".into());
+    }
+    let initial = pages.claim_view(page_nonce)?;
+    Ok((initial, peer, lane))
+}
+
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn probe_peer_done(
@@ -137,6 +155,58 @@ pub(crate) fn probe_peer_hold_ready(
 mod tests {
     use super::*;
     use pulse_term::session::{ChannelTransport, spawn_session};
+    use tauri::webview::PageLoadEvent;
+    #[test]
+    fn rejected_lane_or_nonce_does_not_spend_initial_or_refreshed_capture_claim() {
+        for refreshed in [false, true] {
+            let state = WindowSessions::default();
+            let pages = reload::PageTracker::new();
+            pages.record(PageLoadEvent::Started);
+            pages.record(PageLoadEvent::Finished);
+            let first = pages.injection().unwrap_or_default().0;
+            assert!(pages.confirm_nonce(&first).is_ok());
+            let nonce = if refreshed {
+                assert!(pages.claim_view(&first).is_ok());
+                assert!(pages.mark_captured(&first).is_ok());
+                assert!(pages.mark_rendered(&first).is_ok());
+                pages.record(PageLoadEvent::Started);
+                pages.navigation_retired(Ok(1));
+                assert!(pages.mark_navigation_joined().is_ok());
+                pages.record(PageLoadEvent::Finished);
+                let fresh = pages.injection().unwrap_or_default().0;
+                assert!(pages.confirm_nonce(&first).is_err());
+                assert!(pages.confirm_nonce(&fresh).is_ok());
+                fresh
+            } else {
+                first
+            };
+            let wrong = uuid::Uuid::nil().to_string();
+            assert!(admit_view(&state, &pages, &wrong).is_err());
+            assert_eq!(state.0.peer_view_slot.available_permits(), 1);
+            assert_eq!(state.0.transfer_view_slot.available_permits(), 1);
+            let busy_peer = state
+                .0
+                .peer_view_slot
+                .clone()
+                .try_acquire_owned()
+                .unwrap_or_else(|_| panic!("peer"));
+            assert!(admit_view(&state, &pages, &nonce).is_err());
+            drop(busy_peer);
+            let busy_lane = transfer_view::reserve_lane(&state).unwrap_or_else(|_| panic!("lane"));
+            assert!(admit_view(&state, &pages, &nonce).is_err());
+            assert_eq!(state.0.peer_view_slot.available_permits(), 1);
+            drop(busy_lane);
+            let (initial, peer, lane) =
+                admit_view(&state, &pages, &nonce).unwrap_or_else(|_| panic!("admission"));
+            assert_eq!(initial, !refreshed);
+            assert!(admit_view(&state, &pages, &nonce).is_err());
+            drop((peer, lane));
+            assert!(admit_view(&state, &pages, &nonce).is_err());
+            assert_eq!(state.0.peer_view_slot.available_permits(), 1);
+            assert_eq!(state.0.transfer_view_slot.available_permits(), 1);
+        }
+    }
+
     #[tokio::test]
     async fn trusted_started_retirement_ignores_old_run_and_recreated_window_but_keeps_peer_actor_alive()
      {

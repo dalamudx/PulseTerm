@@ -137,6 +137,7 @@ pub(super) async fn probe(routed: bool) -> Result<serde_json::Value> {
     let registry = SessionRegistry::new();
     let owner = registry.open_window()?;
     let id = registry.register(owner, handle.clone())?;
+    let bootstrap_projection = handle.diagnostic_digest().await?;
     let mut binding = registry
         .attach_v2(
             owner,
@@ -149,19 +150,6 @@ pub(super) async fn probe(routed: bool) -> Result<serde_json::Value> {
             },
         )
         .await?;
-    loop {
-        let wire = binding
-            .wire
-            .recv()
-            .await
-            .ok_or_else(|| anyhow::anyhow!("capture lost"))?;
-        let f = decode(&wire)?;
-        let commit = decode_fragment(f.payload)?.part == Part::Commit;
-        registry.acknowledge(owner, id, binding.generation, f.sequence)?;
-        if commit {
-            break;
-        }
-    }
     let sent = endpoint.metrics.clone();
     let read = Arc::new(AtomicUsize::new(0));
     primary.exec(true, EXEC).await?;
@@ -184,6 +172,52 @@ pub(super) async fn probe(routed: bool) -> Result<serde_json::Value> {
         result
     });
     let _jobs = Jobs(vec![reader.abort_handle()]);
+    // Hold bootstrap credit while the REAL SSH producer starts, not a local
+    // echo queue. The capture remains empty while normalized output advances.
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    let bootstrap_paused = (
+        handle.state.borrow().parsed_bytes,
+        read.load(Ordering::SeqCst),
+        sent.produced.load(Ordering::SeqCst),
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    ensure!(
+        bootstrap_paused
+            == (
+                handle.state.borrow().parsed_bytes,
+                read.load(Ordering::SeqCst),
+                sent.produced.load(Ordering::SeqCst)
+            )
+            && bootstrap_paused.0 > bootstrap_projection.boundary.parsed_bytes
+            && bootstrap_paused.2 < TOTAL,
+        "bootstrap credit did not stop actor/reader/remote producer"
+    );
+    ensure!(
+        registry.compare_bootstrap(
+            owner,
+            id,
+            binding.generation,
+            pulse_app::registry::RenderedScreen {
+                boundary: bootstrap_projection.boundary,
+                digest: bootstrap_projection.digest
+            }
+        )? == pulse_app::registry::VisibleComparison::Equal,
+        "snapshot confirmation required remote output to stay idle"
+    );
+    loop {
+        let wire = binding
+            .wire
+            .recv()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("capture lost"))?;
+        let f = decode(&wire)?;
+        let commit = decode_fragment(f.payload)?.part == Part::Commit;
+        registry.acknowledge(owner, id, binding.generation, f.sequence)?;
+        if commit {
+            break;
+        }
+    }
+
     let first = binding
         .wire
         .recv()
@@ -312,7 +346,7 @@ pub(super) async fn probe(routed: bool) -> Result<serde_json::Value> {
     let detached = cancel::run(false, routed).await?;
     let timed_out = cancel::run(true, routed).await?;
     Ok(
-        json!({"schemaVersion":1,"proxyOrder":proxy_order(routed),"proxyRelaysJoined":true,"detached":detached,"timedOut":timed_out,"actorControlResponsive":true,"sourceBytes":source,"utf8Bytes":utf8,"pausedActorSource":paused.0,"pausedBridgeRead":paused.1,"pausedRemoteProduced":paused.2,"pausedRemoteControlReceived":paused.3,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":receipt.peak_credit_bytes,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"limits":["Controlled loopback russh, not network-device or all SSH-server acceptance","Shared SSH connection control is blocked by a full per-channel queue: production multiplexing gate remains","No production SSH transport/route reuse or binary/Zmodem classification"]}),
+        json!({"schemaVersion":1,"proxyOrder":proxy_order(routed),"proxyRelaysJoined":true,"detached":detached,"timedOut":timed_out,"actorControlResponsive":true,"bootstrapWhileRemotePausedChecked":true,"bootstrapPausedActorSource":bootstrap_paused.0,"bootstrapPausedBridgeRead":bootstrap_paused.1,"bootstrapPausedRemoteProduced":bootstrap_paused.2,"sourceBytes":source,"utf8Bytes":utf8,"pausedActorSource":paused.0,"pausedBridgeRead":paused.1,"pausedRemoteProduced":paused.2,"pausedRemoteControlReceived":paused.3,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":receipt.peak_credit_bytes,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"limits":["Controlled loopback russh, not network-device or all SSH-server acceptance","Shared SSH connection control is blocked by a full per-channel queue: production multiplexing gate remains","No production SSH transport/route reuse or binary/Zmodem classification"]}),
     )
 }
 pub(super) fn validate(r: &serde_json::Value, routed: bool) -> Result<()> {
@@ -332,7 +366,20 @@ pub(super) fn validate(r: &serde_json::Value, routed: bool) -> Result<()> {
                 .is_some_and(|n| (1..=8220).contains(&n)),
         "SSH pressure coordinates/bounds"
     );
+    ensure!(
+        r["bootstrapPausedActorSource"]
+            .as_u64()
+            .is_some_and(|n| n > 0 && n < TOTAL as u64)
+            && r["bootstrapPausedBridgeRead"]
+                .as_u64()
+                .is_some_and(|n| n > 0 && n <= 1024 * 1024)
+            && r["bootstrapPausedRemoteProduced"]
+                .as_u64()
+                .is_some_and(|n| n > 0 && n < TOTAL as u64),
+        "bootstrap pause coordinates missing or out of bounds"
+    );
     for key in [
+        "bootstrapWhileRemotePausedChecked",
         "actorControlResponsive",
         "rawAndNormalizedBytesExact",
         "actorAndReaderAndRemoteProducerStopped",

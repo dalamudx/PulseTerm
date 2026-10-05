@@ -37,6 +37,11 @@ async fn case(history: bool) -> Result<serde_json::Value> {
             .ok_or_else(|| anyhow::anyhow!("source prefix record absent"))?;
     }
     let capture = handle.state.borrow().clone();
+    let capture_digest = handle.diagnostic_digest().await?;
+    ensure!(
+        capture_digest.boundary == capture,
+        "capture digest boundary drift"
+    );
     ensure!(
         capture.parsed_bytes == prefix.len() as u64
             && capture.utf8_bytes == prefix.len() as u64 - 1,
@@ -115,6 +120,34 @@ async fn case(history: bool) -> Result<serde_json::Value> {
         ),
         "stale ACK reached new driver"
     );
+    let mut wrong_capture = capture.clone();
+    wrong_capture.utf8_bytes += 1;
+    ensure!(
+        registry.compare_bootstrap(
+            owner,
+            id,
+            generation,
+            pulse_app::registry::RenderedScreen {
+                boundary: wrong_capture,
+                digest: capture_digest.digest.clone()
+            }
+        )? == pulse_app::registry::VisibleComparison::Stale,
+        "bootstrap raw-only boundary accepted"
+    );
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    ensure!(
+        registry.compare_bootstrap(
+            owner,
+            id,
+            generation,
+            pulse_app::registry::RenderedScreen {
+                boundary: capture.clone(),
+                digest: capture_digest.digest
+            }
+        )? == pulse_app::registry::VisibleComparison::Equal,
+        "GBK bootstrap oracle rejected exact dual boundary"
+    );
+    tokio::time::sleep(Duration::from_millis(500)).await;
     let mut wrong = registry.state(owner, id)?;
     wrong.utf8_bytes += 1;
     ensure!(
@@ -173,7 +206,7 @@ async fn case(history: bool) -> Result<serde_json::Value> {
         "source versus display final counters"
     );
     Ok(
-        json!({"name":if history{"gbk-history-pending-reattach"}else{"gbk-pending-reattach"},"generation":generation.to_string(),"frames":frames,"expected":expected,"sourceBytes":final_state.parsed_bytes.to_string(),"utf8Bytes":final_state.utf8_bytes.to_string(),"sourceOnlyPrefix":true,"v1RefusalPreservedOldLease":true,"v2AtomicReplacement":true,"orderedEofAcked":true,"registryOwnerAndAckAuthorized":true,"boundInputReverseEncoded":true,"singleCoordinateMismatchRefused":true,"peakCreditBytes":receipt.peak_credit_bytes}),
+        json!({"name":if history{"gbk-history-pending-reattach"}else{"gbk-pending-reattach"},"generation":generation.to_string(),"frames":frames,"expected":expected,"sourceBytes":final_state.parsed_bytes.to_string(),"utf8Bytes":final_state.utf8_bytes.to_string(),"sourceOnlyPrefix":true,"v1RefusalPreservedOldLease":true,"v2AtomicReplacement":true,"orderedEofAcked":true,"registryOwnerAndAckAuthorized":true,"boundInputReverseEncoded":true,"singleCoordinateMismatchRefused":true,"bootstrapOracleChecked":true,"peakCreditBytes":receipt.peak_credit_bytes}),
     )
 }
 pub fn run() -> Result<()> {

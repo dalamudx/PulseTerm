@@ -238,6 +238,96 @@ it("old rendered Data ACK remains pending until pagehide and retirement rejects 
   close();
   await Promise.resolve();
 });
+it("refreshed readonly surface stays live after its own Done and disallows initial ACK hold", async () => {
+  const s = await setup();
+  let admit!: () => void, complete!: () => void;
+  const admitted = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((r) => {
+      complete = r;
+    });
+  });
+  const run = s.verifyPeerView("run", "page", "previous", true);
+  await admitted;
+  const options = mock.options as Options;
+  expect(options.live).toBeDefined();
+  await options.live?.ready();
+  expect(mock.done).toHaveBeenCalledWith("run", "page");
+  expect(mock.dispose).not.toHaveBeenCalled();
+  await expect(
+    (
+      s.win as unknown as {
+        __PULSE_PEER_HOLD_ACK__: (
+          r: string,
+          p: string,
+          g: string,
+        ) => Promise<void>;
+      }
+    ).__PULSE_PEER_HOLD_ACK__("run", "page", "17"),
+  ).rejects.toThrow("peer.ack_hold_forbidden");
+  expect(mock.holdReady).not.toHaveBeenCalled();
+  await options.ack("17", 1);
+  expect(mock.ack).toHaveBeenCalledWith("run", "previous", "17", 1);
+  expect(mock.ack).toHaveBeenLastCalledWith("run", "page", "17", 1);
+  complete();
+  await run;
+  expect(mock.finish).not.toHaveBeenCalled();
+  expect(mock.dispose).toHaveBeenCalledOnce();
+});
+it("fresh live pagehide cleans its own surface while native awaits and rejects a late failure", async () => {
+  const s = await setup();
+  let admit!: () => void, rejectNative!: (e: Error) => void;
+  const admitted = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((_r, reject) => {
+      rejectNative = reject;
+    });
+  });
+  const run = s.verifyPeerView("run", "page", "previous", true);
+  await admitted;
+  const options = mock.options as Options;
+  await options.live?.ready();
+  s.win.dispatchEvent(new Event("pagehide"));
+  await run;
+  expect(mock.dispose).toHaveBeenCalledOnce();
+  rejectNative(new Error("native.old_failed"));
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(mock.dispose).toHaveBeenCalledOnce();
+  expect(mock.done).toHaveBeenCalledOnce();
+  expect(s.root.hidden).toBe(false);
+});
+it("fresh live Marker failure stays a failure, not successful native retirement", async () => {
+  const s = await setup();
+  let admit!: () => void, complete!: () => void;
+  const admitted = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((r) => {
+      complete = r;
+    });
+  });
+  const run = s.verifyPeerView("run", "page", "previous", true);
+  const failed = expect(run).rejects.toThrow("peer.fresh_marker_failed");
+  await admitted;
+  const options = mock.options as Options;
+  await options.live?.ready();
+  options.failed(new Error("peer.fresh_marker_failed"));
+  await failed;
+  complete();
+  await Promise.resolve();
+  expect(mock.dispose).toHaveBeenCalledOnce();
+  expect(mock.done).toHaveBeenCalledOnce();
+  expect(mock.finish).not.toHaveBeenCalled();
+});
 it("native live closure before bootstrap is not a successful display or Done", async () => {
   const s = await setup();
   await expect(

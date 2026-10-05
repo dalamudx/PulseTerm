@@ -16,12 +16,16 @@ struct Pages {
     captured: bool,
     navigation_retired: bool,
     initial_display: bool,
+    bootstrap_advanced: bool,
     claimed: bool,
     live_display: bool,
     navigation_joined: bool,
     hold_ready: bool,
     pending_ack: bool,
     refresh_allowed: bool,
+    refreshed_live_display: bool,
+    refreshed_bootstrap_advanced: bool,
+    refreshed_joined: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -157,9 +161,15 @@ impl PageTracker {
         require(nonce.current == Some(parsed))?;
         let mut accepted = false;
         self.events.send_modify(|p| {
-            if p.ready(1) && p.rendered && p.captured && !p.live_display {
-                p.live_display = true;
-                accepted = true;
+            if p.rendered && p.captured {
+                if p.ready(1) && !p.live_display {
+                    p.live_display = true;
+                    accepted = true;
+                } else if p.ready(2) && p.refreshed_bootstrap_advanced && !p.refreshed_live_display
+                {
+                    p.refreshed_live_display = true;
+                    accepted = true;
+                }
             }
         });
         require(accepted)
@@ -202,6 +212,72 @@ impl PageTracker {
             }
         });
         require(accepted)
+    }
+    pub(super) fn mark_bootstrap_advanced(&self, value: &str) -> Result<()> {
+        self.authorize_view(value)?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(1) && p.claimed && !p.captured && !p.rendered && !p.bootstrap_advanced {
+                p.bootstrap_advanced = true;
+                accepted = true;
+            } else if p.ready(2)
+                && p.claimed
+                && !p.captured
+                && !p.rendered
+                && !p.refreshed_bootstrap_advanced
+            {
+                p.refreshed_bootstrap_advanced = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) fn is_initial_document(&self) -> bool {
+        self.snapshot().ready(1)
+    }
+    pub(super) fn mark_refreshed_joined(&self, value: &str) -> Result<()> {
+        self.authorize_view(value)?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(2)
+                && p.captured
+                && p.rendered
+                && p.refreshed_live_display
+                && !p.refreshed_joined
+            {
+                p.refreshed_joined = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) async fn wait_refreshed_joined(&self) -> Result<()> {
+        let mut events = self.events.subscribe();
+        tokio::time::timeout(Duration::from_millis(500), async {
+            loop {
+                let p = *events.borrow();
+                require(p.ready(2))?;
+                if p.refreshed_joined {
+                    return Ok::<(), String>(());
+                }
+                events.changed().await.map_err(error)?;
+            }
+        })
+        .await
+        .map_err(|_| "session.peer_fresh_view_join_deadline".to_string())?
+    }
+
+    pub(super) async fn wait_initial_display(&self, value: &str) -> Result<()> {
+        let mut events = self.events.subscribe();
+        loop {
+            self.authorize_view(value)?;
+            let p = *events.borrow();
+            require(p.readonly_ready())?;
+            if p.captured && p.rendered {
+                return Ok(());
+            }
+            events.changed().await.map_err(error)?;
+        }
     }
     pub(super) async fn wait_refresh_capture(&self) -> Result<()> {
         let mut events = self.events.subscribe();
@@ -354,7 +430,7 @@ pub(super) async fn verify(
         loop {
             let p = *first_page.borrow();
             require(!p.invalid)?;
-            if p.ready(1) && p.rendered && p.initial_display {
+            if p.ready(1) && p.rendered && p.initial_display && p.bootstrap_advanced {
                 return Ok::<(), String>(());
             }
             first_page.changed().await.map_err(error)?;
@@ -365,18 +441,9 @@ pub(super) async fn verify(
     // Initial and reloaded page compare the same actor. Keep the existing quota.
     tokio::time::sleep(Duration::from_millis(500)).await;
     let old_generation = transfer_view::live_generation(state, owner, id)?;
-    let at = state
-        .0
-        .registry
-        .state(owner, id)
-        .map_err(error)?
-        .parsed_bytes;
-    state
-        .0
-        .registry
-        .input_bound(owner, id, old_generation, b"hidden\n".to_vec())
-        .await
-        .map_err(error)?;
+    // First hidden output was parsed before Begin reached the DOM. It now
+    // needs to arrive as ordered Data and ACK after the captured Commit.
+    require(pages.snapshot().bootstrap_advanced)?;
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let projected = handle.inspect().await.map_err(error)?;
@@ -387,8 +454,7 @@ pub(super) async fn verify(
                 .flatten()
                 .map(|c| c.text.as_str())
                 .collect::<String>();
-            if current.parsed_bytes > at
-                && text.contains("HIDDEN_SEED 中文🌍")
+            if text.contains("HIDDEN_SEED 中文🌍")
                 && transfer_view::live_data_acked(state, owner, id, old_generation)?
                     .is_some_and(|end| end >= current.parsed_bytes)
             {
@@ -467,30 +533,9 @@ pub(super) async fn verify(
     let mut changed = pages.events.subscribe();
     eprintln!("session.peer_reload.requested");
     window.reload().map_err(error)?;
-    // New page capture is intentionally gated until this SMALL finite output has
-    // drained without the old view. This is not continuous-network bootstrap proof.
+    // Old relay must retire; live output need not settle before new capture.
     pages.wait_navigation_joined().await?;
-    let expected = tokio::time::timeout(Duration::from_millis(1500), async {
-        let mut stable = None;
-        loop {
-            let projected = handle.inspect().await.map_err(error)?;
-            let text = projected
-                .cells
-                .iter()
-                .flatten()
-                .map(|c| c.text.as_str())
-                .collect::<String>();
-            let current = state.0.registry.state(owner, id).map_err(error)?;
-            if text.matches("HIDDEN_SEED 中文🌍").count() >= 2 && stable.as_ref() == Some(&current)
-            {
-                return Ok::<_, String>(current);
-            }
-            stable = Some(current);
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .map_err(|_| "session.peer_finite_output_drain_deadline".to_string())??;
+    let expected = state.0.registry.state(owner, id).map_err(error)?;
     require(expected.parsed_bytes >= before_pending_drain.parsed_bytes)?;
     pages.allow_refresh_capture()?;
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -514,7 +559,13 @@ pub(super) async fn verify(
     .map_err(|_| "session.peer_reload_page_deadline".to_string())??;
     require(
         state.caller(window)? == owner
-            && state.0.registry.state(owner, id).map_err(error)? == expected
+            && state
+                .0
+                .registry
+                .state(owner, id)
+                .map_err(error)?
+                .parsed_bytes
+                >= expected.parsed_bytes
             && handle.state.borrow().lifecycle == Lifecycle::Running
             && window
                 .app_handle()
@@ -535,6 +586,77 @@ pub(super) async fn verify(
                 .is_err(),
     )?;
     require(pages.confirm_nonce(&old_nonce).is_err() && pages.injection()?.0 != old_nonce)?;
+    let refreshed_generation = transfer_view::live_generation(state, owner, id)?;
+    require(refreshed_generation > old_generation)?;
+    let seed_count = handle
+        .inspect()
+        .await
+        .map_err(error)?
+        .cells
+        .iter()
+        .flatten()
+        .map(|c| c.text.as_str())
+        .collect::<String>()
+        .matches("HIDDEN_SEED 中文🌍")
+        .count();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    state
+        .0
+        .registry
+        .input_bound(owner, id, refreshed_generation, b"hidden\n".to_vec())
+        .await
+        .map_err(error)?;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let projected = handle.inspect().await.map_err(error)?;
+            let current = state.0.registry.state(owner, id).map_err(error)?;
+            let count = projected
+                .cells
+                .iter()
+                .flatten()
+                .map(|c| c.text.as_str())
+                .collect::<String>()
+                .matches("HIDDEN_SEED 中文🌍")
+                .count();
+            if current.parsed_bytes > expected.parsed_bytes
+                && count > seed_count
+                && transfer_view::live_data_acked(state, owner, id, refreshed_generation)?
+                    .is_some_and(|end| end >= current.parsed_bytes)
+            {
+                return Ok::<(), String>(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_fresh_live_data_ack_deadline".to_string())??;
+    state
+        .0
+        .registry
+        .request_marker(owner, id, refreshed_generation)
+        .await
+        .map_err(error)?;
+    let mut events = pages.events.subscribe();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let p = *events.borrow();
+            require(p.ready(2))?;
+            if p.refreshed_live_display {
+                return Ok::<(), String>(());
+            }
+            events.changed().await.map_err(error)?;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_fresh_live_marker_deadline".to_string())??;
+    state
+        .0
+        .registry
+        .detach(owner, id, refreshed_generation)
+        .map_err(error)?;
+    pages.wait_refreshed_joined().await?;
+    require(state.0.registry.state(owner, id).map_err(error)?.lifecycle == Lifecycle::Running)?;
+
     let fresh = transfer::capture(state, owner, id, handle).await?;
     require(fresh.generation > old_generation)?;
     require(pages.snapshot().navigation_joined)?;
@@ -562,6 +684,51 @@ pub(super) async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn refreshed_display_and_join_require_its_own_done_and_marker_not_first_page_receipts() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert!(p.claim_view(&old).is_ok());
+        assert!(p.mark_captured(&old).is_ok());
+        assert!(p.mark_rendered(&old).is_ok());
+        assert!(p.mark_live_display(&old).is_ok());
+        assert!(p.mark_refreshed_joined(&old).is_err());
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(1));
+        assert!(p.mark_navigation_joined().is_ok());
+        p.record(PageLoadEvent::Finished);
+        let current = p.injection().unwrap_or_default().0;
+        assert!(p.confirm_nonce(&old).is_err());
+        assert!(p.confirm_nonce(&current).is_ok());
+        assert_eq!(p.claim_view(&current), Ok(false));
+        assert!(!p.is_initial_document());
+        assert!(p.mark_live_display(&current).is_err());
+        assert!(p.mark_bootstrap_advanced(&old).is_err());
+        assert!(p.mark_bootstrap_advanced(&current).is_ok());
+        assert!(p.mark_bootstrap_advanced(&current).is_err());
+        assert!(p.mark_captured(&current).is_ok());
+        let waiter_pages = p.clone();
+        let waiter_nonce = current.clone();
+        let wait =
+            tokio::spawn(async move { waiter_pages.wait_initial_display(&waiter_nonce).await });
+        tokio::task::yield_now().await;
+        assert!(!wait.is_finished());
+        assert!(p.mark_rendered(&current).is_ok());
+        assert!(matches!(wait.await, Ok(Ok(()))));
+        assert!(p.mark_refreshed_joined(&current).is_err());
+        assert!(!p.snapshot().refreshed_live_display);
+        assert!(p.mark_live_display(&old).is_err());
+        assert!(p.mark_live_display(&current).is_ok());
+        assert!(p.mark_live_display(&current).is_err());
+        assert!(p.mark_refreshed_joined(&old).is_err());
+        assert!(p.mark_refreshed_joined(&current).is_ok());
+        assert!(p.mark_refreshed_joined(&current).is_err());
+        assert!(p.wait_refreshed_joined().await.is_ok());
+    }
+
     #[test]
     fn pending_ack_retirement_requires_live_hold_and_oldjoin_before_allowing_new_capture() {
         let p = PageTracker::new();
@@ -587,6 +754,30 @@ mod tests {
         assert!(p.allow_refresh_capture().is_ok());
         assert!(p.allow_refresh_capture().is_err());
         assert!(p.snapshot().refresh_allowed);
+    }
+
+    #[tokio::test]
+    async fn initial_display_barrier_does_not_release_on_capture_alone_or_reauthorize_after_navigation()
+     {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let nonce = p.injection().unwrap_or_default().0;
+        assert!(p.confirm_nonce(&nonce).is_ok());
+        assert!(p.mark_captured(&nonce).is_ok());
+        let waiting_pages = p.clone();
+        let waiting_nonce = nonce.clone();
+        let waiting =
+            tokio::spawn(async move { waiting_pages.wait_initial_display(&waiting_nonce).await });
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+        assert!(p.mark_rendered(&nonce).is_ok());
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(1), waiting).await,
+            Ok(Ok(Ok(())))
+        ));
+        p.record(PageLoadEvent::Started);
+        assert!(p.wait_initial_display(&nonce).await.is_err());
     }
 
     #[test]
@@ -796,12 +987,16 @@ mod tests {
                 captured: false,
                 navigation_retired: false,
                 initial_display: false,
+                bootstrap_advanced: false,
                 claimed: false,
                 live_display: false,
                 navigation_joined: false,
                 hold_ready: false,
                 pending_ack: false,
                 refresh_allowed: false,
+                refreshed_live_display: false,
+                refreshed_bootstrap_advanced: false,
+                refreshed_joined: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -819,12 +1014,16 @@ mod tests {
                 captured: false,
                 navigation_retired: false,
                 initial_display: false,
+                bootstrap_advanced: false,
                 claimed: false,
                 live_display: false,
                 navigation_joined: false,
                 hold_ready: false,
                 pending_ack: false,
                 refresh_allowed: false,
+                refreshed_live_display: false,
+                refreshed_bootstrap_advanced: false,
+                refreshed_joined: false,
             }
         );
         p.record(PageLoadEvent::Started);

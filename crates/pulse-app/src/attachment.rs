@@ -106,8 +106,23 @@ pub struct AttachmentHandle {
     lease_id: u64,
     ack: mpsc::Sender<(u64, u32)>,
     cancel: watch::Sender<bool>,
+    bootstrap_boundary: SessionState,
+    bootstrap_digest: String,
+    status: watch::Receiver<pulse_term::session::StreamStatus>,
 }
 impl AttachmentHandle {
+    pub(crate) fn bootstrap_projection(&self) -> Option<(&SessionState, &str)> {
+        use pulse_term::session::StreamEnd;
+        if *self.cancel.borrow()
+            || !matches!(
+                self.status.borrow().end,
+                StreamEnd::Open | StreamEnd::Session(Lifecycle::Ended)
+            )
+        {
+            return None;
+        }
+        Some((&self.bootstrap_boundary, &self.bootstrap_digest))
+    }
     /// Admission only: the driver validates generation and outstanding sequence.
     pub fn acknowledge(&self, generation: u64, sequence: u32) -> Result<(), AttachmentError> {
         self.ack
@@ -234,6 +249,9 @@ async fn attach_inner(
         .await?;
     let lease_id = stream.lease_id;
     let captured = stream.bootstrap.boundary.clone();
+    let bootstrap_boundary = captured.clone();
+    let bootstrap_digest = stream.bootstrap.digest.clone();
+    let status = stream.status.clone();
     let sender = Sender::new(
         v2,
         generation,
@@ -268,6 +286,9 @@ async fn attach_inner(
         AttachmentHandle {
             session: session.clone(),
             lease_id,
+            bootstrap_boundary,
+            bootstrap_digest,
+            status,
             ack,
             cancel: cancel.clone(),
         },

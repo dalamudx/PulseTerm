@@ -226,9 +226,11 @@ fn transfer_receipts_match(report: &Value) -> bool {
             && report[key]["peerDisplayChecked"].as_bool() == Some(true)
             && report[key]["peerReloadChecked"].as_bool() == Some(true)
             && report[key]["peerReloadDisplayChecked"].as_bool() == Some(true)
+            && report[key]["peerReloadLiveChecked"].as_bool() == Some(true)
             && report[key]["peerNavigationRetired"].as_bool() == Some(true)
             && report[key]["peerInitialDisplayChecked"].as_bool() == Some(true)
             && report[key]["peerLiveDisplayChecked"].as_bool() == Some(true)
+            && report[key]["peerBootstrapAdvanceChecked"].as_bool() == Some(true)
             && report[key]["peerPendingAckRetired"].as_bool() == Some(true)
     })
 }
@@ -377,7 +379,7 @@ mod tests {
 
     #[test]
     fn transfer_evidence_requires_both_runtime_receipts_not_truthy_values() {
-        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerPendingAckRetired":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerPendingAckRetired":true}});
+        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerReloadLiveChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerBootstrapAdvanceChecked":true,"peerPendingAckRetired":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerReloadLiveChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerBootstrapAdvanceChecked":true,"peerPendingAckRetired":true}});
         assert!(transfer_receipts_match(&r));
         for key in ["session", "domSession"] {
             for invalid in [
@@ -399,6 +401,9 @@ mod tests {
                 wrong[key]["peerReloadDisplayChecked"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
+                wrong[key]["peerReloadLiveChecked"] = invalid.clone();
+                assert!(!transfer_receipts_match(&wrong));
+                let mut wrong = r.clone();
                 wrong[key]["peerNavigationRetired"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
@@ -406,6 +411,9 @@ mod tests {
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
                 wrong[key]["peerLiveDisplayChecked"] = invalid.clone();
+                assert!(!transfer_receipts_match(&wrong));
+                let mut wrong = r.clone();
+                wrong[key]["peerBootstrapAdvanceChecked"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
                 wrong[key]["peerPendingAckRetired"] = invalid;

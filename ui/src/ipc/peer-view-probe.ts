@@ -10,7 +10,7 @@ export async function verifyPeerView(
   nonce: string,
   pageNonce: string,
   previousPageNonce?: string,
-  initialLive = false,
+  keepLive = false,
 ): Promise<void> {
   if (started) throw new Error("peer.view_duplicate");
   started = true;
@@ -46,7 +46,8 @@ export async function verifyPeerView(
   };
   const pauseAck = async (run: string, page: string, generation: string) => {
     if (
-      !initialLive ||
+      !keepLive ||
+      previousPageNonce !== undefined ||
       !booted ||
       life.signal.aborted ||
       run !== nonce ||
@@ -56,7 +57,7 @@ export async function verifyPeerView(
     heldAck.arm();
     await commands.probePeerHoldReady(nonce, pageNonce, generation);
   };
-  if (initialLive) peerWindow.__PULSE_PEER_HOLD_ACK__ = pauseAck;
+  if (keepLive) peerWindow.__PULSE_PEER_HOLD_ACK__ = pauseAck;
   let bootReady!: () => void;
   const bootstrap = new Promise<void>((resolve) => {
     bootReady = resolve;
@@ -135,7 +136,7 @@ export async function verifyPeerView(
           commands.probePeerConfirm(nonce, pageNonce, generation, rendered),
         );
       },
-      live: initialLive
+      live: keepLive
         ? {
             ready: async () => {
               await commands.probePeerDone(nonce, pageNonce);
@@ -155,7 +156,7 @@ export async function verifyPeerView(
         : undefined,
       digest,
       failed: (error) => {
-        if (initialLive && retiring && life.signal.aborted) return;
+        if (keepLive && retiring && life.signal.aborted) return;
         failure ??= error;
         life.abort();
       },
@@ -174,7 +175,7 @@ export async function verifyPeerView(
       );
     });
     const native = commands.probePeerView(nonce, pageNonce, channel);
-    if (initialLive) {
+    if (keepLive) {
       let navigation!: () => void;
       const retired = new Promise<void>((resolve) => {
         navigation = resolve;

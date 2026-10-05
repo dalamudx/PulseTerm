@@ -134,15 +134,14 @@ pub(super) async fn compare_for(
     if current(state, owner, generation)? != id {
         return Err("session.transfer_stale".into());
     }
-    {
+    let marker = {
         let slot = state.0.transfer_view.lock().map_err(error)?;
-        if !slot
+        let current = slot
             .as_ref()
-            .is_some_and(|c| c.can_confirm(owner, id, generation))
-        {
-            return Err("session.transfer_commit_not_acknowledged".into());
-        }
-    }
+            .filter(|c| c.can_confirm(owner, id, generation))
+            .ok_or("session.transfer_commit_not_acknowledged")?;
+        current.marker
+    };
     let rendered = RenderedScreen {
         boundary: SessionState {
             lifecycle: Lifecycle::Running,
@@ -154,16 +153,22 @@ pub(super) async fn compare_for(
         },
         digest: rendered.digest,
     };
-    if state
-        .0
-        .registry
-        .compare_visible(owner, id, generation, rendered)
-        .await
-        .map_err(|e| match e {
-            pulse_app::registry::RegistryError::Busy => "session.transfer_compare_busy".to_string(),
-            _ => "session.transfer_compare_rejected".to_string(),
-        })?
-        != VisibleComparison::Equal
+    let comparison = if marker {
+        state
+            .0
+            .registry
+            .compare_visible(owner, id, generation, rendered)
+            .await
+    } else {
+        state
+            .0
+            .registry
+            .compare_bootstrap(owner, id, generation, rendered)
+    };
+    if comparison.map_err(|e| match e {
+        pulse_app::registry::RegistryError::Busy => "session.transfer_compare_busy".to_string(),
+        _ => "session.transfer_compare_rejected".to_string(),
+    })? != VisibleComparison::Equal
     {
         return Err("session.transfer_screen_mismatch".into());
     }
@@ -249,7 +254,7 @@ pub(super) async fn render(
     previous: u64,
     channel: &Channel<RawFrame>,
 ) -> Result<()> {
-    render_inner(state, owner, id, previous, channel, None).await
+    render_inner(state, owner, id, previous, channel, None, None).await
 }
 pub(super) async fn render_live(
     state: &WindowSessions,
@@ -258,19 +263,21 @@ pub(super) async fn render_live(
     channel: &Channel<RawFrame>,
     pages: &reload::PageTracker,
     page_nonce: &str,
+    lane: tokio::sync::OwnedSemaphorePermit,
 ) -> Result<()> {
-    render_inner(state, owner, id, 0, channel, Some((pages, page_nonce))).await
+    render_inner(
+        state,
+        owner,
+        id,
+        0,
+        channel,
+        Some((pages, page_nonce, pages.is_initial_document())),
+        Some(lane),
+    )
+    .await
 }
-async fn render_inner(
-    state: &WindowSessions,
-    owner: WindowToken,
-    id: SessionId,
-    previous: u64,
-    channel: &Channel<RawFrame>,
-    live: Option<(&reload::PageTracker, &str)>,
-) -> Result<()> {
-    // Reserve the shared sender lane BEFORE capture can replace a live lease.
-    let _permit = state
+pub(super) fn reserve_lane(state: &WindowSessions) -> Result<tokio::sync::OwnedSemaphorePermit> {
+    let lane = state
         .0
         .transfer_view_slot
         .clone()
@@ -279,6 +286,22 @@ async fn render_inner(
     if state.0.transfer_view.lock().map_err(error)?.is_some() {
         return Err("session.transfer_busy".into());
     }
+    Ok(lane)
+}
+async fn render_inner(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    previous: u64,
+    channel: &Channel<RawFrame>,
+    live: Option<(&reload::PageTracker, &str, bool)>,
+    lane: Option<tokio::sync::OwnedSemaphorePermit>,
+) -> Result<()> {
+    // Reserve the shared sender lane BEFORE capture can replace a live lease.
+    let _permit = match lane {
+        Some(lane) => lane,
+        None => reserve_lane(state)?,
+    };
     let mut view = state
         .0
         .attach_codec(
@@ -333,6 +356,47 @@ async fn render_inner(
                     .map_err(error)?
                     .part
             };
+            if part == pulse_ipc::attach::Part::Begin
+                && let Some((pages, page_nonce, _initial)) = live
+            {
+                let parsed = if state.0.dual {
+                    let p = pulse_ipc::attach_v2::decode_fragment(frame.payload).map_err(error)?;
+                    pulse_ipc::attach_v2::decode_begin(p.body)
+                        .map_err(error)?
+                        .0
+                        .source_bytes
+                } else {
+                    let p = pulse_ipc::attach::decode_fragment(frame.payload).map_err(error)?;
+                    pulse_ipc::attach::decode_begin(p.body)
+                        .map_err(error)?
+                        .0
+                        .parsed_bytes
+                };
+                state
+                    .0
+                    .registry
+                    .input_bound(owner, id, view.generation, b"hidden\n".to_vec())
+                    .await
+                    .map_err(error)?;
+                tokio::time::timeout(Duration::from_secs(1), async {
+                    loop {
+                        if state
+                            .0
+                            .registry
+                            .state(owner, id)
+                            .map_err(error)?
+                            .parsed_bytes
+                            > parsed
+                        {
+                            return Ok::<(), String>(());
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                })
+                .await
+                .map_err(|_| "session.peer_bootstrap_advance_deadline".to_string())??;
+                pages.mark_bootstrap_advanced(page_nonce)?;
+            }
             if part == pulse_ipc::attach::Part::Commit {
                 let mut slot = state.0.transfer_view.lock().map_err(error)?;
                 let current = slot
@@ -347,6 +411,9 @@ async fn render_inner(
             }
         }
         rx.await.map_err(error)?;
+        if let Some((pages, page_nonce, _initial)) = live {
+            pages.wait_initial_display(page_nonce).await?;
+        }
         Ok::<(), String>(())
     })
     .await
@@ -356,12 +423,13 @@ async fn render_inner(
         .registry
         .check_binding(owner, id, view.generation)
         .map_err(error)?;
-    if let Some((pages, page_nonce)) = live {
+    if let Some((pages, page_nonce, _initial)) = live {
         eprintln!("session.peer_live.await_navigation");
         tokio::time::timeout(Duration::from_secs(5),async{
-            let navigation=pages.navigation_started();tokio::pin!(navigation);
+            let initial=_initial;
+            let navigation=async{if initial{pages.navigation_started().await}else{std::future::pending::<Result<()>>().await}};tokio::pin!(navigation);
             loop{let wire=tokio::select!{biased;result=&mut navigation=>{result?;break;},wire=view.wire.recv()=>wire};
-                let Some(wire)=wire else{if pages.has_navigation_started(){pages.navigation_started().await?;break;}return Err("session.peer_live_wire_closed".to_string());};
+                let Some(wire)=wire else{if !initial{pages.authorize_view(page_nonce)?;break;}else if pages.has_navigation_started(){pages.navigation_started().await?;break;}return Err("session.peer_live_wire_closed".to_string());};
                 if pages.authorize_view(page_nonce).is_err(){if pages.has_navigation_started(){pages.navigation_started().await?;break;}return Err("session.peer_live_scope_revoked".to_string());}
                 let frame=pulse_ipc::decode(&wire).map_err(error)?;
                 let(part,offset,length)=if state.0.dual{let p=pulse_ipc::attach_v2::decode_fragment(frame.payload).map_err(error)?;(p.part,p.offset,p.body.len())}else{let p=pulse_ipc::attach::decode_fragment(frame.payload).map_err(error)?;(p.part,p.offset,p.body.len())};
@@ -404,6 +472,101 @@ async fn render_inner(
 mod tests {
     use super::*;
     use pulse_term::session::{self, ChannelTransport};
+    #[tokio::test]
+    async fn bootstrap_confirmation_accepts_captured_screen_after_output_advance_but_marker_stays_latest()
+     {
+        for dual in [false, true] {
+            let state = WindowSessions::new(false, None, dual, false);
+            let owner = state.0.registry.open_window().unwrap();
+            let (transport, driver) = ChannelTransport::bounded_driver();
+            let (handle, task) =
+                session::spawn_session(TermSize::new(40, 12).unwrap(), 128, transport);
+            let id = state.0.registry.register(owner, handle.clone()).unwrap();
+            let mut observed = handle.state.clone();
+            driver.output.send(b"a".to_vec()).await.unwrap();
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while observed.borrow().parsed_bytes < 1 {
+                    observed.changed().await.unwrap();
+                }
+            })
+            .await
+            .unwrap();
+            let captured = handle.diagnostic_digest().await.unwrap();
+            let binding = state
+                .0
+                .attach_codec(
+                    owner,
+                    id,
+                    AttachmentConfig {
+                        fragment: 64,
+                        frames: 1,
+                        bytes: 128,
+                        ack_timeout: Duration::from_secs(3),
+                    },
+                )
+                .await
+                .unwrap();
+            driver.output.send(b"b".to_vec()).await.unwrap();
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while observed.borrow().parsed_bytes < 2 {
+                    observed.changed().await.unwrap();
+                }
+            })
+            .await
+            .unwrap();
+            let (tx, _rx) = oneshot::channel();
+            *state.0.transfer_view.lock().unwrap() = Some(Current {
+                owner,
+                id,
+                generation: binding.generation,
+                confirm: Some(tx),
+                commit_sequence: Some(2),
+                commit_acknowledged: true,
+                live: true,
+                marker: false,
+                data_end: None,
+            });
+            let projection = || RenderedProjection {
+                columns: 40,
+                rows: 12,
+                revision: captured.boundary.revision.to_string(),
+                parsed_bytes: captured.boundary.parsed_bytes.to_string(),
+                digest: captured.digest.clone(),
+            };
+            assert!(
+                compare_for(&state, owner, id, binding.generation, projection())
+                    .await
+                    .is_ok()
+            );
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            state
+                .0
+                .transfer_view
+                .lock()
+                .unwrap()
+                .as_mut()
+                .unwrap()
+                .marker = true;
+            assert_eq!(
+                compare_for(&state, owner, id, binding.generation, projection())
+                    .await
+                    .unwrap_err(),
+                "session.transfer_screen_mismatch"
+            );
+            state.0.transfer_view.lock().unwrap().take();
+            state.0.registry.close_session(owner, id).unwrap();
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(1), task.join())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .lifecycle,
+                Lifecycle::Closed
+            );
+            drop((binding, driver));
+        }
+    }
+
     #[tokio::test]
     async fn failed_capture_order_detaches_its_lease_and_releases_sender_credit_without_closing_actor()
      {

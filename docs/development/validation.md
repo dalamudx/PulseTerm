@@ -609,10 +609,37 @@ mise run probe-pty
 - 多次整组失败（旧join、main relay/可见性查询）保持风险记录。期间工具ENOSPC：数据盘31GiB空闲，但共享/tmp 16GiB tmpfs已满，主要为其他项目；未删除其他项目文件，仅cargo clean核实的PulseTerm临时upstream target缓存约319MiB，保留src/tests/manifests/licenses与测量报告。后续使用0700项目target/probe-tmp.*运行时TMPDIR避共享压力，Sandbox/CSP不改。不能由空间恢复与复验成功推断所有先前失败根因已修复。
 - 最新Openbox实际最小化整组及默认v1/v2整组各完成2headless+2DOM、pending/live/retired独立收据true，oldrelay→Detached→释放→join阶段齐全。default/encoding-probe各57native、strictclippy/fullcheck/fulltests52app/93term/33IPC/12route/13xtask/235TS/typeddrift通过，MCP reload模块无error。随后pending版本GBK与外部WM实际兼容均完整通过，独立pending/live/retired收据true，绑定漂移保持；所有原1srender/query、500msoldjoin、helper/ACK期限及deps/lock/audit门禁不变，S11整体仍未验收。
 
+## S11捕获摘要与最新状态校验分离（受控输出推进）
+
+- 最小双codec回归证明：Begin/Commit未ACK时actor从a推进为ab，captured VT仍精确还原a；原compare_visible必须Stale，而不是图像损坏。按offset1续流b后才匹配latest。不能靠冻结无限网络流或放宽latest检查解决bootstrap确认。
+- SessionBootstrap新增digest，由session_stream::prepare在同一actor turn计算；AttachmentHandle仅保存boundary/digest和失效status的只读sidecar，不进v1/v2帧、JSON或source/display信用。SessionRegistry::compare_bootstrap在当前owner/gen/status下确认captured projection，格式与共享500ms/session额度保持（foreign/错gen/坏格式不耗额度）。Equal不代表queued Data已绘制，不清任何risk；latest compare/repair保持原语义。4新增app oracle回归覆盖授权/格式/限频共享/篡改/撤销、capture后已出现非零LINES/REP风险保持、换绑/移窗缓存不可跨代复活，以及恢复加载期间连续输出有界。
+- 桌面固定端点仅在本Commit seq ACK与can_confirm通过后选择captured比较；Marker选择latest比较。新增双codec native分派回归证明capture后actor已推进时Commit可Equal，同旧边界Marker必拒。native bootstrap总3s内再等本页Done/initial_display，才转发queued Data：避免confirm RPC已在后端唤醒sender，而前端仍comitting时收到Data。新native屏障回归capture本身不能放行、Done后放行、导航旧nonce不能复活。
+- 实测把原第一条hidden输出移到已捕获但Begin尚未发送时，等source parsed cursor确实超过captured边界后才发送Begin；不增加种子数量。firstdoc实际DOM还原旧图像并确认cached digest，本页Done后消费queued Data，随后Marker校验最新状态；原latest-only bootstrap实现会拒。新增peerBootstrapAdvanceChecked贯穿nativeDTO/generated TS/report严格bool检查，不用initial/live标志冒充。
+- v2与默认v1/显式GBK/外部WM四种实际组合均完成2headless+2DOM，独立advanced/pending收据true，查询屏蔽、旧nonce/ACK、未ACK退役、fresh/targetDOM、EOF及运输测量保持。59native两feature/strictclippy、54app及原binary headless/GBK恢复、fullcheck/tests93term/33IPC/12route/13xtask/235TS/typeddrift已过；随后仅新增风险保持测试，最终app57与check/API隔离补验。MCP comparison/stream模块无error诊断。
+- 新双codec慢bootstrap压力回归：真实有界Channel producer发送64×4096字节（共256KiB，中文/emoji）。Begin未ACK时parsed暂停且少于总量、producer未完成；在backend已推进时captured确认仍Equal。恢复ACK后每Data offset连续、256KiB逐字节一致，最终模型digest与actor相同。不算GUI/SSH洪流性能验收。
+- 显式GBK headless探针追加缓存oracle：源计数/UTF8计数不同且半字符待解码时exactcaptured可Equal；source相同而UTF8游标错误必须Stale，共享500ms比较额度保持。bootstrapOracleChecked在TS报告消费者要求严格true，两份真实actor→v2→headless恢复仍通过。普通pulse-app与desktop未添加GBK生产feature或新依赖。
+- 真实SSH压力追加“bootstrap未ACK且远端已经生产”阶段：先启动受SSH发送窗口约束的4,193,280字节GBK producer与读桥，不先完成bootstrap；700ms后采样再等待300ms，actor/source、bridge read和remote produced三计数必须完全不动且未达总量。此时cache Empty捕获确认仍Equal，随后bootstrap ACK及原Data暂停/恢复、逐字节UTF8、EOF、detach/timeout清理继续执行。
+- 直连与HTTP CONNECT→SOCKS5→SSH实际报告均完成：bootstrap paused actor 57,330、bridge 106,478、remote 155,610字节，最终source4,193,280、credit≤8220；独立bootstrapWhileRemotePausedChecked与3个bounded counter为mandatory，缺值/false/truthy/0/总量负向拒绝。38项ssh-probe单测/strictclippy、两实际pressure probe、fullcheck/fullcore235TS通过。一次错误test filter得到0tests未计通过，已完整38项补验。
+- 该网络结果仍是隔离回环/测试CA凭据/固定producer，不是任意网络设备或GUI持续洪流；同connection控制通道HOL仍必现，独立连接响应、各条route/relay/EOF/清理门保持。未添加依赖/allowlist豁免，未ACK导航检查点已独立签名提交 `e39c5fa`，捕获摘要/网络验证保留独立提交边界，未擅自无签名提交。
+- 当前only fixed UTF8 peer开始前有限一条输出推进，不是连续洪流/跨平台生产验收；oracle为FNV可见投影而非安全认证或history/hidden/fullstate校验。上游5行getter、所有wire版本/信用/超时/CSP/依赖与发布审计门禁均未改。未ACK导航检查点已签名提交 `e39c5fa`；本节新代码/记录与它分开提交，签名要求不绕过。
+
+## S11刷新后的只读页面持续输出与迁移交接
+
+- fixed peer第二个document不再只用snapshot render；同readonly nonce/owner/fixed session权限下render_live保留renderer、UTF8流和查询屏蔽，等待本页Commit绘制/ACK/捕获摘要与single-use Done后才转发Data。前端keepLive同时支持初始/刷新页，刷新页不能调用仅用于initial场景的ACK hold。
+- 固定Root在refresh后输入额外hidden，必须parsedBytes推进、seed count增加且本seq Data ACK达到当前边界，才请求pure Marker。fresh自己的Marker ACK/latest摘要才设置refreshed_live_display，旧initial live_display不能替代；随后Root显式detach，native确认同binding Detached、释放shared sender及peer额度后才mark_refreshed_joined，新capture/移窗必须等待此收据。
+- 初始document仍由真实Started驱动退役；fresh不能因为started已为2误用旧navigation事件而立即退出。live监督器进入时固定document role，fresh在wire关闭时重新检验当前nonce，再要求真实Detached receipt；会话一直Running。等待Done/3s bootstrap、5s live、500ms freshjoin以及1s渲染/Marker/数据检查截止不变。
+- peerReloadLiveChecked为独立mandatory bool贯穿RustDTO/generated TS/总报告/xtask两runtime检查，missing/false/truthy拒。新的native负向门证明fresh必须自己captured/Done/Marker才join，oldnonce与重复Marker/join拒；3项TS回归包含fresh保留DOM、旧nonce ACK拒绝/initial hold阻断、pagehide与迟到失败隔离、Marker失败不能冒充native退休成功。
+- v2/default v1/显式GBK/外部WM真实组合均完成两headless+两DOM，fresh/pending/advanced独立收据true；60native两feature/strictlint、57app、238TS、fullcheck/fulltests/drift已通过，MCP reload模块无error。依然固定有限输出，并非任意第三次导航、洪流GUI、跨平台或生产ViewHost验收。
+- 后续准入审查发现page claim早于peer/shared lane额度，Busy请求可能消耗恢复机会。已调整为等待oldjoin/refresh许可后，先授权nonce、取得两个额度，再消费single-use claim；lane贯穿捕获/发送/退役，不再次竞争。native回归覆盖initial与fresh坏nonce、peerbusy、sharedbusy后合法claim仍成功且permit全部释放，已获claim仍不允许重复。最新61encoding native/strictlint/check已过，最新双版本实际endpoint组合已通过两headless/两DOM与61default native/strictlint/drift；没有以此前GUI通过替代最新源码验收。
+- 最新移除了fresh捕获前的“第二条输出排空且20ms状态稳定”等待：只等old relay Detached/join与页面授权，记录source下界不要求latest停住；fresh也在已捕获但Begin未发送时启动固定hidden输出，必须parsed游标推进后才标refreshed_bootstrap_advanced。fresh Marker成功还要求该独立内部收据，不能用initial bootstrap_advanced替代；nonce/claim/重复推进拒绝已纳入native回归。新页旧图像可见投影摘要确认后queued Data继续，再额外输入后以latest Marker确认并detach/join。
+- 最新无稳态源码v2/default v1/显式GBK/外部WM四种实际组合均完成两headless+两DOM和fresh/pending独立收据；61native两feature、strictclippy、57app、238TS、fullcheck/fulltests/drift通过。仍固定有限输出与最多两页，不能称为无间断网络/GUI洪流或任意重复刷新验收；1srender/Marker、3sbootstrap/ACK、5slive及500msjoin截止未增加。
+
+- 未ACK导航检查点已签名提交 `e39c5fa`；后续已验收变更保留独立签名提交边界。没有新增shell入口/输入权限、wire opcode、依赖或审计豁免。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各57项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：235 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

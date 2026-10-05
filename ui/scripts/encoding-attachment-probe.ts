@@ -18,6 +18,7 @@ interface Case {
   registryOwnerAndAckAuthorized: boolean;
   boundInputReverseEncoded: boolean;
   singleCoordinateMismatchRefused: boolean;
+  bootstrapOracleChecked: boolean;
   v1RefusalPreservedOldLease: boolean;
   v2AtomicReplacement: boolean;
   orderedEofAcked: boolean;
@@ -37,6 +38,7 @@ for (const entry of report.cases) {
       entry.registryOwnerAndAckAuthorized &&
       entry.boundInputReverseEncoded &&
       entry.singleCoordinateMismatchRefused &&
+      entry.bootstrapOracleChecked === true &&
       entry.v1RefusalPreservedOldLease &&
       entry.v2AtomicReplacement &&
       entry.orderedEofAcked,

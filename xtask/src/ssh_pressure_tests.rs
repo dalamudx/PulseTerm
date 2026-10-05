@@ -4,8 +4,32 @@ fn release(timeout: bool) -> serde_json::Value {
     json!({"proxyOrder":[],"proxyRelaysJoined":true,"kind":if timeout{"ack-timeout"}else{"detach"},"sourceBytes":TOTAL,"utf8Bytes":TOTAL/6*7,"actorControlResponsive":true,"viewRevokedOnly":true,"sharedControlRecovered":true,"remoteResumed":true,"actorEndedNormally":true,"fullActorScreenExact":true,"connectionsListenerAndProducerJoined":true})
 }
 fn report() -> serde_json::Value {
-    json!({"schemaVersion":1,"proxyOrder":[],"proxyRelaysJoined":true,"sourceBytes":TOTAL,"utf8Bytes":TOTAL/6*7,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":8220,"pausedActorSource":57338,"pausedBridgeRead":114660,"pausedRemoteProduced":155610,"actorControlResponsive":true,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"detached":release(false),"timedOut":release(true),"limits":["known HOL is not release approval"]})
+    json!({"schemaVersion":1,"bootstrapWhileRemotePausedChecked":true,"bootstrapPausedActorSource":57338,"bootstrapPausedBridgeRead":114660,"bootstrapPausedRemoteProduced":155610,"proxyOrder":[],"proxyRelaysJoined":true,"sourceBytes":TOTAL,"utf8Bytes":TOTAL/6*7,"receiveWindow":32768,"receiveBufferMessages":2,"maxPacket":8192,"peakCreditBytes":8220,"pausedActorSource":57338,"pausedBridgeRead":114660,"pausedRemoteProduced":155610,"actorControlResponsive":true,"rawAndNormalizedBytesExact":true,"actorAndReaderAndRemoteProducerStopped":true,"oldConnectionControlBlocked":true,"separateConnectionResponsive":true,"sameConnectionControlRecoveredAfterAck":true,"actorScreenExact":true,"realSshEofAndClose":true,"orderedEofAcked":true,"allConnectionsAndListenerJoined":true,"detached":release(false),"timedOut":release(true),"limits":["known HOL is not release approval"]})
 }
+#[test]
+fn bootstrap_pause_receipt_requires_real_bounded_remote_and_actor_observations() {
+    let valid = report();
+    assert!(validate(&valid, false).is_ok());
+    for key in [
+        "bootstrapWhileRemotePausedChecked",
+        "bootstrapPausedActorSource",
+        "bootstrapPausedBridgeRead",
+        "bootstrapPausedRemoteProduced",
+    ] {
+        for bad in [
+            serde_json::Value::Null,
+            json!(false),
+            json!("true"),
+            json!(0),
+            json!(TOTAL),
+        ] {
+            let mut r = valid.clone();
+            r[key] = bad;
+            assert!(validate(&r, false).is_err(), "{key}");
+        }
+    }
+}
+
 #[test]
 fn pause_must_stop_actual_remote_producer_not_just_actor() {
     let mut r = report();
@@ -20,6 +44,7 @@ fn pause_must_stop_actual_remote_producer_not_just_actor() {
 #[test]
 fn hol_limitation_and_all_eof_release_observations_are_required() {
     for key in [
+        "bootstrapWhileRemotePausedChecked",
         "actorControlResponsive",
         "rawAndNormalizedBytesExact",
         "actorAndReaderAndRemoteProducerStopped",

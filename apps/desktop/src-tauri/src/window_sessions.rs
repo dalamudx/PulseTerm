@@ -404,9 +404,11 @@ pub(crate) struct SessionEvidence {
     pub peer_display_checked: bool,
     pub peer_reload_checked: bool,
     pub peer_reload_display_checked: bool,
+    pub peer_reload_live_checked: bool,
     pub peer_navigation_retired: bool,
     pub peer_initial_display_checked: bool,
     pub peer_live_display_checked: bool,
+    pub peer_bootstrap_advance_checked: bool,
     pub peer_pending_ack_retired: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
@@ -455,9 +457,11 @@ impl SessionEvidence {
             || !self.peer_display_checked
             || !self.peer_reload_checked
             || !self.peer_reload_display_checked
+            || !self.peer_reload_live_checked
             || !self.peer_navigation_retired
             || !self.peer_initial_display_checked
             || !self.peer_live_display_checked
+            || !self.peer_bootstrap_advance_checked
             || !self.peer_pending_ack_retired
             || !self.window_revoked
             || !self.session_survived
@@ -1109,7 +1113,7 @@ pub(crate) async fn probe_session(
                 let refreshed=previous.is_some();
                 let old_page=previous.as_ref().map(|n|format!("'{n}'")).unwrap_or_else(||"undefined".to_string());
                 let denied=previous.map(|old|format!("let denied=false;try{{await call({{nonce:'{nonce}',pageNonce:'{old}'}})}}catch{{denied=true}}if(!denied)throw new Error('session.peer_old_page_nonce_admitted');")).unwrap_or_default();
-                let script=format!("void(async()=>{{{}const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}});if({refreshed})await window.__PULSE_PEER_VIEW__('{nonce}','{current}',{old_page})}})().catch(console.error)",reload::WAIT_BOOTSTRAP);
+                let script=format!("void(async()=>{{{}const call=p=>window.__TAURI_INTERNALS__.invoke('probe_session_peer',p);{denied}await call({{nonce:'{nonce}',pageNonce:'{current}'}});if({refreshed})await window.__PULSE_PEER_VIEW__('{nonce}','{current}',{old_page},true)}})().catch(console.error)",reload::WAIT_BOOTSTRAP);
                 if peer.eval(&script).is_err(){eprintln!("session.peer_eval_failed");}
             }else{eprintln!("session.peer_page_not_ready");}
         }
@@ -1319,9 +1323,11 @@ pub(crate) async fn probe_session(
         peer_display_checked: true,
         peer_reload_checked: true,
         peer_reload_display_checked: true,
+        peer_reload_live_checked: true,
         peer_navigation_retired: true,
         peer_initial_display_checked: true,
         peer_live_display_checked: true,
+        peer_bootstrap_advance_checked: true,
         peer_pending_ack_retired: true,
         window_revoked: true,
         session_survived,
@@ -1467,9 +1473,11 @@ mod tests {
             peer_display_checked: true,
             peer_reload_checked: true,
             peer_reload_display_checked: true,
+            peer_reload_live_checked: true,
             peer_navigation_retired: true,
             peer_initial_display_checked: true,
             peer_live_display_checked: true,
+            peer_bootstrap_advance_checked: true,
             peer_pending_ack_retired: true,
             window_revoked: true,
             session_survived: true,
@@ -1541,6 +1549,9 @@ mod tests {
         e.peer_reload_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_reload_display_checked = true;
+        e.peer_reload_live_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_reload_live_checked = true;
         e.peer_navigation_retired = false;
         assert!(e.validate().is_err());
         e.peer_navigation_retired = true;
@@ -1550,6 +1561,9 @@ mod tests {
         e.peer_live_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_live_display_checked = true;
+        e.peer_bootstrap_advance_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_bootstrap_advance_checked = true;
         e.peer_pending_ack_retired = false;
         assert!(e.validate().is_err());
         e.peer_pending_ack_retired = true;
