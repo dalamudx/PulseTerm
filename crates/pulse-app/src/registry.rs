@@ -75,6 +75,7 @@ impl Entry {
 struct Binding {
     generation: u64,
     handle: AttachmentHandle,
+    settings: Option<crate::settings_context::SettingsContextOwner>,
 }
 struct State {
     windows: HashSet<WindowToken>,
@@ -445,6 +446,7 @@ impl SessionRegistry {
                     Binding {
                         generation,
                         handle: handle.clone(),
+                        settings: None,
                     },
                 ) {
                     old.handle.detach();
@@ -599,9 +601,15 @@ mod comparison;
 #[cfg(test)]
 #[path = "registry_reap_tests.rs"]
 mod reap_tests;
+#[path = "registry_settings.rs"]
+mod settings;
 #[path = "registry_shell.rs"]
 mod shell;
 pub use comparison::{RenderedScreen, VisibleComparison};
+pub use settings::{
+    RegisteredSettingsCandidate, RegisteredSettingsCapture, RegisteredSettingsSnapshot,
+    RegistrySettingsError,
+};
 #[cfg(test)]
 #[path = "registry_retire_tests.rs"]
 mod retire_tests;

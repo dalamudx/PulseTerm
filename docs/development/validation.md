@@ -844,6 +844,14 @@ mise run probe-pty
 - Fullcheck/test/schema、45SSH特性、scope/Profile五进程、2MiB session、绑定漂移与native strictlint/63tests均通过；76app/2docfail、110store/2ignored/9docfail、43PTY/107term/242TS。manifest/lock仅增加已锁tempfile/uuid dev引用，无包版本/许可/productionfeature/帧/前端变化，未重跑旧DOM/audit，不放宽六license/twoadvisory或CC0待决门禁。
 - is_current只表示当前owner状态瞬时相符，不能代替external GUI apply的授权事务；DB变化需trusted explicit invalidate，未声称自动最新/跨file与DB一致。native WindowToken/page nonce/generation授权、自动事件调度和DOM应用留待后续接入，不计完整VAULT-07。
 
+## 绑定实际注册视图的配置授权
+
+- `registry_settings`导出opaque capture/candidate/snapshot与静态错误，Binding独占context owner，registry/window/session/generation逐次授权；无frontend target、明文密码、路径、命令、VT或ACK操作。configure/invalidate仅可信后端；context与Host存在性/权限仍需适配器先判断。
+- 12个真实SQLite/actor-binding回归覆盖wrong owner/generation/invalid patch不清槽，switch、detach、rebind、navigation、transfer、destroy/recreate、last-good/current、同窗口跨session及跨registry伪造私有元数据。Binding消失同步drop owner，weak候选不能使视图或窗口复活，actor/store仍存活；registry mutex不跨await，短锁确认原子授权。strictlint与MCP Exact无诊断通过。
+- 五进程probe升级schema3，强制registryWindowAuthorizationChecked/registryRefreshChecked/registryTransferChecked与原context收据，missing/truthy拒绝。Reader真实attach/授权、host→group切换Busy/迟到拒绝、移窗后source/group revision3、退休页捕获拒绝；无view时actor精确解析10bytes BACKGROUND再恢复binding，旧generation不能current，最终显式关闭并join actor与store。每child5秒及PID/mode要求不变。报告nativeWindowsCreated=false、renderer=rust-diagnostic，不计系统窗口/DOM验收。
+- Fullcheck/test、schema/45SSH、scope及Profile五进程、2MiB PTY→actor、binding漂移、native strictlint/63tests、真实v2 WebView二headless/二DOM及七测量均通过；88app、110store/2ignored/9docfail、242TS。真实窗口仅兼容回归，未配置或调用新设置功能，不计设置GUI。无依赖、许可证、feature或frame变化；本轮不重复audit，原六license/twoadvisory及未批准CC0门禁保持。
+- 已有page retirement/Destroyed回调会通过Binding销毁撤销context，但native设置端点/page nonce桥、主机实体权限、自动invalidate/notify、DOM应用和系统设置页尚未实现；current是瞬时判定，不是GUI原子应用或永久最新证明。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
