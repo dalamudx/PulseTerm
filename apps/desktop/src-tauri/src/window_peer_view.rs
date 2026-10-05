@@ -1,6 +1,6 @@
 //! Fixed refreshed peer page reads its own actor through a nonce-scoped binary Channel.
 use super::*;
-fn owned(
+pub(super) fn owned(
     state: &WindowSessions,
     window: &WebviewWindow,
     nonce: &str,
@@ -126,6 +126,7 @@ pub(crate) fn probe_peer_done(
     page_nonce: String,
 ) -> Result<()> {
     let (_, _, pages) = owned(&state, &window, &nonce, &page_nonce)?;
+    pages.require_shell_hints(&page_nonce)?;
     pages.mark_rendered(&page_nonce)
 }
 #[tauri::command]

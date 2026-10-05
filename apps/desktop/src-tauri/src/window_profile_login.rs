@@ -33,7 +33,7 @@ pub(super) fn prepare(original: PtyCommand) -> super::Result<PtyCommand> {
             .find(|p| p.kind() == ShellKind::Bash)
             .ok_or("session.profile_bash_missing")?;
         // No dynamic shell source; the executable and helper argument are literal $@.
-        const SCRIPT: &str = "builtin shopt -q login_shell || exit 93; builtin test \"$TERM_PROGRAM\" = PulseTerm || exit 94; export PULSE_PROFILE_LOGIN_CHECKED=1; exec \"$@\"";
+        const SCRIPT: &str = r#"builtin shopt -q login_shell || exit 93; builtin test "$TERM_PROGRAM" = PulseTerm || exit 94; export PULSE_PROFILE_LOGIN_CHECKED=1; builtin printf '\033]133;A\007\033]133;B\007\033]133;C\007'; exec "$@""#;
         let mut command = PtyCommand::new(bash.executable());
         command.args = vec![
             "--noprofile".into(),

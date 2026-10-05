@@ -26,6 +26,8 @@ struct Pages {
     refreshed_live_display: bool,
     refreshed_bootstrap_advanced: bool,
     refreshed_joined: bool,
+    shell_hints_checked: bool,
+    initial_shell_hints_checked: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -78,6 +80,7 @@ impl PageTracker {
                         p.captured = false;
                         p.rendered = false;
                         p.claimed = false;
+                        p.shell_hints_checked = false;
                     }
                 }
                 PageLoadEvent::Finished => {
@@ -353,6 +356,48 @@ impl PageTracker {
         });
         require(accepted)
     }
+    pub(super) fn initial_page(&self, value: &str) -> Result<bool> {
+        self.authorize_view(value)?;
+        Ok(self.snapshot().finished == 1)
+    }
+    pub(super) fn shell_hints_checked(&self) -> bool {
+        let p = self.snapshot();
+        !p.invalid && p.initial_shell_hints_checked && p.shell_hints_checked && p.finished == 2
+    }
+    pub(super) fn require_shell_hints(&self, value: &str) -> Result<()> {
+        self.authorize_view(value)?;
+        require(self.snapshot().shell_hints_checked)
+    }
+    pub(super) fn authorize_shell_hints(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        let p = self.snapshot();
+        require(
+            nonce.current == Some(parsed)
+                && parsed.to_string() == value
+                && p.readonly_ready()
+                && p.captured
+                && !p.rendered
+                && !p.shell_hints_checked,
+        )
+    }
+    pub(super) fn mark_shell_hints(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        require(nonce.current == Some(parsed) && parsed.to_string() == value)?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.readonly_ready() && p.captured && !p.shell_hints_checked && !p.rendered {
+                p.shell_hints_checked = true;
+                if p.finished == 1 {
+                    p.initial_shell_hints_checked = true;
+                }
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+
     pub(super) fn mark_rendered(&self, value: &str) -> Result<()> {
         let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
         require(parsed.to_string() == value)?;
@@ -997,6 +1042,8 @@ mod tests {
                 refreshed_live_display: false,
                 refreshed_bootstrap_advanced: false,
                 refreshed_joined: false,
+                shell_hints_checked: false,
+                initial_shell_hints_checked: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -1024,6 +1071,8 @@ mod tests {
                 refreshed_live_display: false,
                 refreshed_bootstrap_advanced: false,
                 refreshed_joined: false,
+                shell_hints_checked: false,
+                initial_shell_hints_checked: false,
             }
         );
         p.record(PageLoadEvent::Started);

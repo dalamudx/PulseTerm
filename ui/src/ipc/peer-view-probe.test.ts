@@ -7,6 +7,8 @@ const mock = vi.hoisted(() => ({
   confirm: vi.fn(),
   done: vi.fn(),
   holdReady: vi.fn(),
+  hints: vi.fn(),
+  initialPage: true,
   options: undefined as unknown,
   channel: undefined as unknown,
   finish: vi.fn(),
@@ -28,6 +30,7 @@ vi.mock("./gen/commands", () => ({
     probePeerConfirm: mock.confirm,
     probePeerDone: mock.done,
     probePeerHoldReady: mock.holdReady,
+    probePeerShellHints: mock.hints,
   },
 }));
 vi.mock("./session-probe", () => ({ digest: () => "a".repeat(16) }));
@@ -65,6 +68,21 @@ async function setup() {
   mock.finish.mockResolvedValue(undefined);
   mock.done.mockResolvedValue(undefined);
   mock.holdReady.mockResolvedValue(undefined);
+  mock.initialPage = true;
+  mock.hints.mockImplementation(
+    async (_run: string, page: string, generation: string) => {
+      if (page !== "page" || generation !== "17") throw new Error("denied");
+      return {
+        sampledRevision: "3",
+        sampledSourceBytes: "76",
+        sampledDisplayBytes: "75",
+        dropped: "0",
+        markers: [],
+        loginFixture: false,
+        initialPage: mock.initialPage,
+      };
+    },
+  );
   mock.ack.mockImplementation(
     async (_run: string, page: string, generation: string) => {
       if (page !== "page" || generation !== "17") throw new Error("denied");
@@ -136,6 +154,7 @@ it("new document rejects its formerly authorized page nonce on its own ACK and c
       "a".repeat(16),
     );
   });
+  mock.initialPage = false;
   await s.verifyPeerView("run", "page", "old-page");
   expect(mock.ack).toHaveBeenCalledWith("run", "old-page", "17", 2);
   expect(mock.confirm).toHaveBeenCalledWith(
@@ -250,6 +269,7 @@ it("refreshed readonly surface stays live after its own Done and disallows initi
       complete = r;
     });
   });
+  mock.initialPage = false;
   const run = s.verifyPeerView("run", "page", "previous", true);
   await admitted;
   const options = mock.options as Options;
@@ -289,6 +309,7 @@ it("fresh live pagehide cleans its own surface while native awaits and rejects a
       rejectNative = reject;
     });
   });
+  mock.initialPage = false;
   const run = s.verifyPeerView("run", "page", "previous", true);
   await admitted;
   const options = mock.options as Options;
@@ -315,6 +336,7 @@ it("fresh live Marker failure stays a failure, not successful native retirement"
       complete = r;
     });
   });
+  mock.initialPage = false;
   const run = s.verifyPeerView("run", "page", "previous", true);
   const failed = expect(run).rejects.toThrow("peer.fresh_marker_failed");
   await admitted;

@@ -728,10 +728,19 @@ mise run probe-pty
 - 2项新增actor回归验证EOF剩余D、不完整C、live读取Closed、显式close剩余128/9drop与不造D；关闭测试保持driver活着直到join，避免关闭和真实EOF同时投递造成错误测试断言。真实Bash profile样例改为等待固定helper后发送刻意D7再保留实际helper退出码0：schema3强制首批3、终批1、提示状态7与原生0分开；普通直接helper始终0提示。两条原2MiB背压、精确字节、EOF ACK与native join通过，不扩大生产Shell入口。
 - 完整check/test/probe、107term/60app/43PTY/20xtask/238TS、五份v1与两份GBK v2恢复、真实Bash低层、v2 DOM窗口/绑定漂移、默认61native/strictlint通过。MCP对应用监督模块Exact无诊断。二进制协议和依赖门禁不变，尚未提供持久命令日志、每提示坐标或IPC/DOM消费。
 
+## 固定页面Shell提示的只读IPC
+
+- 新增`probe_peer_shell_hints`与生成`ShellHintReceipt`：限定localcaller、当前run、精确peer WindowToken、当前页面nonce、当前binding generation；页面必须已完成捕获确认且尚未Done。重复/旧页面在registry采样前拒绝，返回后重新检查owner/generation/nonce并单次标记提示回执，不新增输入/resize/close或任意会话选择权限。
+- DTO最多128枚举提示及drop数；revision/sourceBytes/utf8Bytes为保留64位精度的十进制字符串，sampled-at不代表逐提示坐标或已经绘制的边界。固定登录bootstrap输出A/B/C，首次页必须收到三提示；普通模式与刷新页必须空。page Done必须已有提示回执；`peerShellHintsChecked`取实际首次及刷新页状态并贯穿native验证、JS、xtask严格bool门，不以root单次完成flag代替。
+- 2项native页面/DTO回归及4项TS负向回归覆盖跨导航撤销、重复、未确认页、无内容枚举、状态/坐标非法和模式错配；实际IPC另外检查旧nonce、错误generation与重复采样拒绝。二进制帧、ACK、风险清理、比较额度、原生退出码语义不变。
+- 完整check/test通过：107term/60app/43PTY/20xtask/242TS；default与encoding-probe各63native、login-probe66native及strictlint/绑定漂移通过。五种真实Linux模式(login/defaultv1/UTF8v2/GBK/externalWM)各2headless+2DOM及7测量完成，实际JSON提示回执均为true，只有login模式的profileLoginChecked为true。MCP对新端点Exact无诊断。
+- 外部mode首次窗口匹配不唯一并超时：当时未保存XID集合，具体根因未证实。控制器现收紧为自有子进程PID+固定main标题，跨两个操作周期保持同一XID；拒绝歧义/缺窗/外PID/替换，不选第一匹配，不放宽2s操作截止。新增`mise run probe-window-controller`的5项确定性隔离fixture及Linux CI，不能当真实WM验收。
+- 后续复验出现既有helper exit2（源码明确40s watchdog），耗时原因尚未定位；补无内容peer完成/EOF阶段计时，保留40s截止和exit0断言。再隔离复验完整通过、进程清理正常，但不宣称该截止风险已修复。生产脚本注入、持续命令日志、命令坐标DOM渲染、真实用户配置及跨平台仍未完成；依赖审计门禁未变。
+
 ## 检查结果
 
-- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 60项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 60项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：242 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

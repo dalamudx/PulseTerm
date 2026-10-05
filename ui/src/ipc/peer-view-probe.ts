@@ -3,6 +3,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { commands } from "./gen/commands";
 import { PeerAckHold } from "./peer-ack-hold";
 import { digest } from "./session-probe";
+import { assertShellHintReceipt } from "./shell-hint-receipt";
 import { TransferViewProbe } from "./transfer-view-probe";
 
 let started = false;
@@ -134,6 +135,24 @@ export async function verifyPeerView(
         });
         await rejected(
           commands.probePeerConfirm(nonce, pageNonce, generation, rendered),
+        );
+        await rejected(
+          commands.probePeerShellHints(nonce, wrongPage, generation),
+        );
+        await rejected(
+          commands.probePeerShellHints(
+            nonce,
+            pageNonce,
+            (BigInt(generation) + 1n).toString(),
+          ),
+        );
+        if (previousPageNonce)
+          await rejected(
+            commands.probePeerShellHints(nonce, previousPageNonce, generation),
+          );
+        assertShellHintReceipt(
+          await commands.probePeerShellHints(nonce, pageNonce, generation),
+          previousPageNonce === undefined,
         );
       },
       live: keepLive

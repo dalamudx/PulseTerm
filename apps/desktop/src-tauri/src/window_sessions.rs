@@ -8,6 +8,8 @@ pub(crate) mod peer_view;
 mod profile_login;
 #[path = "window_reload_probe.rs"]
 mod reload;
+#[path = "window_shell_hints.rs"]
+pub(crate) mod shell_hints;
 #[path = "window_transfer_probe.rs"]
 mod transfer;
 #[path = "window_transfer_view.rs"]
@@ -412,6 +414,7 @@ pub(crate) struct SessionEvidence {
     pub peer_display_checked: bool,
     pub peer_reload_checked: bool,
     pub peer_reload_display_checked: bool,
+    pub peer_shell_hints_checked: bool,
     pub peer_reload_live_checked: bool,
     pub peer_navigation_retired: bool,
     pub peer_initial_display_checked: bool,
@@ -466,6 +469,7 @@ impl SessionEvidence {
             || !self.peer_display_checked
             || !self.peer_reload_checked
             || !self.peer_reload_display_checked
+            || !self.peer_shell_hints_checked
             || !self.peer_reload_live_checked
             || !self.peer_navigation_retired
             || !self.peer_initial_display_checked
@@ -1072,6 +1076,7 @@ pub(crate) async fn probe_session(
     let owner = state.caller(&window)?;
     let _slot = state.0.slot.clone().try_acquire_owned().map_err(error)?;
     let (handle, task) = native().await?;
+    let fixed_main_started = std::time::Instant::now();
     let id = state
         .0
         .registry
@@ -1208,6 +1213,10 @@ pub(crate) async fn probe_session(
         .map_err(|_| "session.peer_join_failed".to_string())?;
     state.0.registry.reap_closed(peer_id).map_err(error)?;
     peer_guard.id = None;
+    eprintln!(
+        "session.fixed_main.peer_finished elapsed_ms={}",
+        fixed_main_started.elapsed().as_millis()
+    );
     let config = AttachmentConfig {
         fragment: 8192,
         frames: 1,
@@ -1296,6 +1305,10 @@ pub(crate) async fn probe_session(
             .await
             .map_err(error)?
             .map_err(error)?;
+    eprintln!(
+        "session.fixed_main.eof elapsed_ms={}",
+        fixed_main_started.elapsed().as_millis()
+    );
     if native.exit_code != 0 {
         eprintln!(
             "session.native_exit_receipt code={} cancelled={} resizes={}",
@@ -1329,6 +1342,7 @@ pub(crate) async fn probe_session(
         native_exit: native.exit_code,
         profile_login_checked: cfg!(feature = "login-probe"),
         peer_denied,
+        peer_shell_hints_checked: pages.shell_hints_checked(),
         peer_transfer_checked: true,
         peer_display_checked: true,
         peer_reload_checked: true,
@@ -1480,6 +1494,7 @@ mod tests {
             native_exit: 0,
             profile_login_checked: cfg!(feature = "login-probe"),
             peer_denied: true,
+            peer_shell_hints_checked: true,
             peer_transfer_checked: true,
             peer_display_checked: true,
             peer_reload_checked: true,
@@ -1563,6 +1578,9 @@ mod tests {
         e.peer_reload_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_reload_display_checked = true;
+        e.peer_shell_hints_checked = false;
+        assert!(e.validate().is_err());
+        e.peer_shell_hints_checked = true;
         e.peer_reload_live_checked = false;
         assert!(e.validate().is_err());
         e.peer_reload_live_checked = true;

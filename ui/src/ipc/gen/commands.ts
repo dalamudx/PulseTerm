@@ -22,6 +22,7 @@ export const commands = {
 	probePeerConfirm: (nonce: string, pageNonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<null>("probe_peer_confirm", { nonce, pageNonce, generation, rendered }),
 	probePeerDone: (nonce: string, pageNonce: string) => __TAURI_INVOKE<null>("probe_peer_done", { nonce, pageNonce }),
 	probePeerHoldReady: (nonce: string, pageNonce: string, generation: string) => __TAURI_INVOKE<null>("probe_peer_hold_ready", { nonce, pageNonce, generation }),
+	probePeerShellHints: (nonce: string, pageNonce: string, generation: string) => __TAURI_INVOKE<ShellHints>("probe_peer_shell_hints", { nonce, pageNonce, generation }),
 	probeEncoding: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<EncodingEvidence>("probe_encoding", { nonce, channel }),
 	probeEncodingMode: () => __TAURI_INVOKE<boolean>("probe_encoding_mode"),
 	probeEncodingInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_encoding_input", { nonce, generation, text }),
@@ -180,6 +181,7 @@ export type SessionEvidence = {
 	peerDisplayChecked: boolean,
 	peerReloadChecked: boolean,
 	peerReloadDisplayChecked: boolean,
+	peerShellHintsChecked: boolean,
 	peerReloadLiveChecked: boolean,
 	peerNavigationRetired: boolean,
 	peerInitialDisplayChecked: boolean,
@@ -200,6 +202,18 @@ export type SessionEvidence = {
 	externalWmChecked: boolean,
 	columns: number,
 	rows: number,
+};
+
+export type ShellHint = { kind: "promptStart" } | { kind: "promptEnd" } | { kind: "commandStart" } | { kind: "commandEnd"; exitStatus: number | null };
+
+export type ShellHints = {
+	sampledRevision: string,
+	sampledSourceBytes: string,
+	sampledDisplayBytes: string,
+	dropped: string,
+	markers: ShellHint[],
+	loginFixture: boolean,
+	initialPage: boolean,
 };
 
 export type SocketTicket = {
