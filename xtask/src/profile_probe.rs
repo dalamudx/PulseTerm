@@ -105,8 +105,12 @@ pub fn worker() -> Result<()> {
                 socket: SOCKET.into(),
             }),
         };
-        let command =
-            pulse_pty::launch::prepare_local_command(command, &context, Some(ShellKind::Sh))?;
+        let command = pulse_pty::launch::prepare_local_profile_command(
+            command,
+            &context,
+            Some(ShellKind::Sh),
+            pulse_pty::launch::LocalShellMode::PlatformDefault,
+        )?;
         let mut session = PtySession::spawn(&command, pulse_core::TermSize::new(80, 24)?)
             .map_err(|_| anyhow::anyhow!("profile.pty_spawn"))?;
         let mut reader = session.take_reader()?;

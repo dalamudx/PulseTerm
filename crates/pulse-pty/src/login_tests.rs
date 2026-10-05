@@ -92,6 +92,72 @@ fn non_utf8_login_arguments_remain_literal() {
     assert_eq!(&prepared.args[1..], &command.args);
 }
 #[test]
+fn profile_default_is_platform_specific_and_never_infers_unknown_login() {
+    for shell in [
+        None,
+        Some(ShellKind::Sh),
+        Some(ShellKind::Pwsh),
+        Some(ShellKind::Bash),
+        Some(ShellKind::Zsh),
+        Some(ShellKind::Fish),
+    ] {
+        let expected = cfg!(target_os = "macos")
+            && matches!(
+                shell,
+                Some(ShellKind::Bash | ShellKind::Zsh | ShellKind::Fish)
+            );
+        assert_eq!(LocalShellMode::default().requests_login(shell), expected);
+        assert!(!LocalShellMode::Plain.requests_login(shell));
+        assert!(LocalShellMode::Login.requests_login(shell));
+    }
+}
+#[test]
+fn profile_plain_and_unknown_default_preserve_explicit_user_flags() {
+    for mode in [LocalShellMode::Plain, LocalShellMode::PlatformDefault] {
+        let mut command = PtyCommand::new("literal-unknown-program");
+        command.args = vec!["-l".into(), "-c".into(), "literal script".into()];
+        let prepared =
+            prepare_local_profile_command(command.clone(), &context(), None, mode).unwrap();
+        assert_eq!(prepared.program, command.program);
+        assert_eq!(prepared.args, command.args);
+    }
+    assert!(matches!(
+        prepare_local_profile_command(
+            PtyCommand::new("sh"),
+            &context(),
+            Some(ShellKind::Sh),
+            LocalShellMode::Login
+        ),
+        Err(LocalLaunchError::UnsupportedLoginShell)
+    ));
+}
+#[cfg(unix)]
+#[test]
+fn every_profile_mode_shares_final_budget_and_identity_authority() {
+    for mode in [
+        LocalShellMode::Plain,
+        LocalShellMode::Login,
+        LocalShellMode::PlatformDefault,
+    ] {
+        let mut command = PtyCommand::new("bash");
+        command.env_remove.push("pulse_pane_id".into());
+        assert!(matches!(
+            prepare_local_profile_command(command, &context(), Some(ShellKind::Bash), mode),
+            Err(LocalLaunchError::ReservedEnvironment)
+        ));
+        let command = PtyCommand::new("bash");
+        let prepared =
+            prepare_local_profile_command(command.clone(), &context(), Some(ShellKind::Bash), mode)
+                .unwrap();
+        assert_eq!(prepared.program, command.program);
+        assert_eq!(
+            prepared.args.len(),
+            usize::from(mode.requests_login(Some(ShellKind::Bash)))
+        );
+    }
+}
+
+#[test]
 fn invalid_command_is_rejected_before_login_classification() {
     let mut command = PtyCommand::new("x");
     command.args.push("invalid\0argument".into());

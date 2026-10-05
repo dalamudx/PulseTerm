@@ -676,9 +676,15 @@ mise run probe-pty
 - 新 `mise run probe-login-arguments` 及 Unix CI 独立登记，报告 `login-arguments.json` 不得以原 argv0 实验代替。在0700 owned目录，实际 Bash 两次原生PTY分别断言普通非登录/参数登录状态、TTY、script `$0` 和中文/emoji/标点字面参数、终端环境、exit7、输出EOF、reader join、直接子进程回收；missing 显式程序真实spawn失败，未执行其他 shell。Bash 使用 `--noprofile --norc`，清除 BASH_ENV/ENV/SHELLOPTS/BASHOPTS 继承键，不读取用户启动文件；4096输出预算、worker12秒监督。此证据不等于系统/用户登录文件正确加载。
 - 六项新纯回归覆盖三种known shell构造、leading选项复用、未知/非Unix拒绝、预算与身份防伪、非UTF8参数保留、坏命令先拒；报告负向回归拒绝 truthy/缺原生收据/argv0方法替代/错误模式和计数。Linux真实 Bash 已过，Zsh/Fish仅有纯构造证据；macOS、Windows及生产Profile默认选择/持久存储/UI尚未验收。`$0` 不保证 `-` 前缀，与 Terminal.app/iTerm2 不声称完全等价。完整 check/test、35PTY/57app/238TS/17xtask、严格clippy及原ProfileProbe、公开argv0实验、2MiB actor授权恢复兼容通过；MCP launch模块 Exact 无error。依赖/锁文件/审计规则未变。
 
+## LOCAL-02 Profile平台默认与显式模式
+
+- 新公开 `LocalShellMode::{PlatformDefault,Plain,Login}` 和 `prepare_local_profile_command`，平台默认仅在macOS为可信Bash/Zsh/Fish请求参数登录，其余分类和平台保持普通启动，不猜未知命令的能力。显式Login复用unsupported拒绝；Plain不添加登录参数，也不剥离用户已有flags。三种模式共用runtime身份与最终预算，不变化选定程序、cwd或字面参数，不创建会话授权或默认profile持久化。
+- 原真实Sh ProfileProbe已改用统一profile入口。参数登录探针schema2要求三个原生launch（Plain/PlatformDefault/Login）、platformDefaultChecked严格true、platformDefaultLogin与当前OS一致；Linux实际参数计数6/6/7，Bash的非登录/默认非登录/显式登录状态、literal argv/终端环境/EOF/回收通过。旧schema1/两launch、缺default收据和truthy值拒绝，仍保持12秒监督与4096输出预算。
+- 首次新增default负向测试暴露其收据未强制校验，已补strictbool和缺失/truthy/旧版本拒绝，不放宽测试。新增三项纯模式回归及完整38PTY/57app/17xtask/238TS、check/test、strictclippy、实际ProfileProbe/三launch/2MiB actor兼容通过；MCP launch模块Exact无error。macOS默认只取得policy纯构造/CI注册证据，不声称本机跨平台实测；Zsh/Fish实际启动、系统/用户启动文件与生产Profile/UI/存储尚待完成。依赖与发布审计规则不变。
+
 ## 检查结果
 
-- Rust：35项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认17项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：38项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认17项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

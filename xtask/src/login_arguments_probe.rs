@@ -7,7 +7,10 @@ const OUTPUT: &[u8] = "LOGIN_ARGUMENTS_OK 中文🌍\r\n".as_bytes();
 pub fn worker() -> Result<()> {
     use pulse_pty::{
         PtySession,
-        launch::{LocalSessionEnvironment, prepare_local_command, prepare_local_login_command},
+        launch::{
+            LocalSessionEnvironment, LocalShellMode, prepare_local_login_command,
+            prepare_local_profile_command,
+        },
         profiles::{ShellKind, discover_unix_shells},
     };
     use std::io::Read;
@@ -32,7 +35,16 @@ pub fn worker() -> Result<()> {
         application_version: env!("CARGO_PKG_VERSION").into(),
         pane: None,
     };
-    for login in [false, true] {
+    for mode in [
+        LocalShellMode::Plain,
+        LocalShellMode::PlatformDefault,
+        LocalShellMode::Login,
+    ] {
+        let login = match mode {
+            LocalShellMode::Plain => false,
+            LocalShellMode::Login => true,
+            LocalShellMode::PlatformDefault => cfg!(target_os = "macos"),
+        };
         let condition = if login {
             "builtin shopt -q login_shell || exit 31"
         } else {
@@ -56,11 +68,8 @@ pub fn worker() -> Result<()> {
             .map(Into::into)
             .collect();
         let original = command.clone();
-        let command = if login {
-            prepare_local_login_command(command, &context, Some(ShellKind::Bash))?
-        } else {
-            prepare_local_command(command, &context, Some(ShellKind::Bash))?
-        };
+        let command =
+            prepare_local_profile_command(command, &context, Some(ShellKind::Bash), mode)?;
         ensure!(
             command.program == original.program
                 && command.cwd == original.cwd
@@ -128,7 +137,7 @@ pub fn worker() -> Result<()> {
 }
 #[cfg(any(unix, test))]
 fn receipt() -> Value {
-    json!({"schemaVersion":1,"method":"arguments","platform":std::env::consts::OS,"shell":"bash","launchCount":2,"argumentCounts":[6,7],"ordinaryNonLogin":true,"parameterLogin":true,"selectedProgramPreserved":true,"literalArgumentsPreserved":true,"scriptArgv0Preserved":true,"nativeTerminal":true,"startupFilesDisabled":true,"missingProgramRejected":true,"outputEof":true,"readerJoined":true,"directChildrenReaped":true,"exitCode":7,"outputBytesPerLaunch":OUTPUT.len(),"loginArgv0Rewritten":false})
+    json!({"schemaVersion":2,"method":"arguments","platform":std::env::consts::OS,"shell":"bash","launchCount":3,"argumentCounts":[6,if cfg!(target_os = "macos") {7} else {6},7],"platformDefaultChecked":true,"platformDefaultLogin":cfg!(target_os = "macos"),"ordinaryNonLogin":true,"parameterLogin":true,"selectedProgramPreserved":true,"literalArgumentsPreserved":true,"scriptArgv0Preserved":true,"nativeTerminal":true,"startupFilesDisabled":true,"missingProgramRejected":true,"outputEof":true,"readerJoined":true,"directChildrenReaped":true,"exitCode":7,"outputBytesPerLaunch":OUTPUT.len(),"loginArgv0Rewritten":false})
 }
 pub fn run() -> Result<()> {
     ensure!(cfg!(unix), "login_arguments.requires_unix");
@@ -163,6 +172,7 @@ pub fn run() -> Result<()> {
 }
 fn validate(r: &Value) -> Result<()> {
     for key in [
+        "platformDefaultChecked",
         "ordinaryNonLogin",
         "parameterLogin",
         "selectedProgramPreserved",
@@ -182,12 +192,13 @@ fn validate(r: &Value) -> Result<()> {
     }
     ensure!(
         cfg!(unix)
-            && r["schemaVersion"] == 1
+            && r["schemaVersion"] == 2
             && r["method"] == "arguments"
             && r["platform"] == std::env::consts::OS
             && r["shell"] == "bash"
-            && r["launchCount"] == 2
-            && r["argumentCounts"] == json!([6, 7])
+            && r["launchCount"] == 3
+            && r["argumentCounts"] == json!([6, if cfg!(target_os = "macos") { 7 } else { 6 }, 7])
+            && r["platformDefaultLogin"].as_bool() == Some(cfg!(target_os = "macos"))
             && r["exitCode"] == 7
             && r["outputBytesPerLaunch"] == OUTPUT.len()
             && r["loginArgv0Rewritten"].as_bool() == Some(false),
@@ -203,6 +214,7 @@ mod tests {
         let report = receipt();
         assert_eq!(validate(&report).is_ok(), cfg!(unix));
         for key in [
+            "platformDefaultChecked",
             "ordinaryNonLogin",
             "parameterLogin",
             "selectedProgramPreserved",
@@ -225,8 +237,13 @@ mod tests {
             ("method", json!("argv0")),
             ("loginArgv0Rewritten", json!(true)),
             ("launchCount", json!(1)),
+            ("launchCount", json!(2)),
+            ("platformDefaultLogin", json!("true")),
+            ("platformDefaultLogin", Value::Null),
             ("argumentCounts", json!([6, 6])),
-            ("schemaVersion", json!(2)),
+            ("schemaVersion", json!(1)),
+            ("platformDefaultLogin", json!(!cfg!(target_os = "macos"))),
+            ("platformDefaultChecked", json!(false)),
             ("platform", json!("wrong")),
             ("shell", json!("zsh")),
             ("exitCode", json!(0)),

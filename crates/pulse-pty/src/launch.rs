@@ -9,6 +9,34 @@ pub struct PaneEnvironment {
     /// Backend-selected local CLI endpoint; no credentials or network route.
     pub socket: OsString,
 }
+/// Profile intent; it selects preparation policy, never a fallback executable.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LocalShellMode {
+    /// macOS requests login for trusted bash/zsh/fish only; all other cases stay plain.
+    #[default]
+    PlatformDefault,
+    /// Add no login option; literal user arguments (including login flags) remain intact.
+    Plain,
+    /// Request login explicitly; unsupported shell/platform combinations are rejected.
+    Login,
+}
+impl LocalShellMode {
+    /// Resolve profile intent, not a guarantee about arbitrary user option semantics.
+    pub const fn requests_login(self, shell: Option<ShellKind>) -> bool {
+        match self {
+            Self::PlatformDefault => {
+                cfg!(target_os = "macos")
+                    && matches!(
+                        shell,
+                        Some(ShellKind::Bash | ShellKind::Zsh | ShellKind::Fish)
+                    )
+            }
+            Self::Plain => false,
+            Self::Login => true,
+        }
+    }
+}
+
 /// Metadata supplied by the trusted local-session adapter on every new launch.
 #[derive(Clone)]
 pub struct LocalSessionEnvironment {
@@ -126,6 +154,22 @@ pub fn prepare_local_command(
     }
     command.validate()?;
     Ok(command)
+}
+
+/// Prepare a profile using its platform default or explicit mode override.
+/// Trusted shell classification and backend identity policy are shared across modes.
+/// Plain mode never removes user flags, and login mode never changes the executable.
+pub fn prepare_local_profile_command(
+    command: PtyCommand,
+    context: &LocalSessionEnvironment,
+    shell: Option<ShellKind>,
+    mode: LocalShellMode,
+) -> Result<PtyCommand, LocalLaunchError> {
+    if mode.requests_login(shell) {
+        prepare_local_login_command(command, context, shell)
+    } else {
+        prepare_local_command(command, context, shell)
+    }
 }
 
 /// Request parameter-based login for a trusted Unix bash/zsh/fish classification.
