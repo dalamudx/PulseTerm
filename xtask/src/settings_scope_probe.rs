@@ -1,4 +1,7 @@
 use anyhow::{Context, Result, bail};
+use pulse_app::settings_context::{
+    SettingsContextError, SettingsContextOwner, SettingsContextTarget,
+};
 use pulse_store::{
     StateStore, StoreError,
     settings::{SettingsPatch, SettingsSource},
@@ -55,7 +58,14 @@ pub(super) fn helper() -> Result<()> {
                 let layers=store.load_settings_layers(Some(id()),Some(id())).await?;let g=layers.group().context("missing group")?;let h=layers.host().context("missing host")?;
                 if g.revision()!=3||g.patch().terminal.font_size!=Some(20)||g.patch().terminal.cursor_blink!=Some(false)||h.revision()!=1||h.patch().terminal.font_size!=Some(22){bail!("scoped atomic edit evidence missing");}
                 let resolved=layers.resolve(Some(cache.user_patch()))?;if resolved.font_size.value!=22||resolved.font_size.source!=SettingsSource::Host||resolved.font_family.value!="Fira Code"||resolved.font_family.source!=SettingsSource::User||resolved.cursor_blink.value||resolved.cursor_blink.source!=SettingsSource::Group{bail!("layer source evidence mismatch");}
-                json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"groupRevision":g.revision(),"hostRevision":h.revision()})
+                let owner=SettingsContextOwner::new(SettingsContextTarget::new(Some(group()),Some(host()))?,cache.user_patch().clone())?;
+                let handle=owner.handle();let old=handle.begin()?.read(&store).await?;
+                owner.select(SettingsContextTarget::new(Some(group()),None)?,cache.user_patch().clone())?;
+                if !matches!(handle.begin(),Err(SettingsContextError::Busy))||!matches!(handle.confirm(old),Err(SettingsContextError::Stale)){bail!("late context capture enabled or slot released early");}
+                let current=handle.confirm(handle.begin()?.read(&store).await?)?;
+                if !handle.is_current(&current)||current.settings().font_size.value!=20||current.settings().font_size.source!=SettingsSource::Group||current.database_revisions()!=(Some(3),None){bail!("new context failed publication");}
+                owner.close()?;if handle.is_current(&current)||!matches!(handle.begin(),Err(SettingsContextError::Closed))||store.load_scoped_settings(host()).await?.revision()!=1{bail!("owner close did not revoke or closed shared store");}
+                json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"groupRevision":g.revision(),"hostRevision":h.revision()})
             },
             "aba"=>{let old=store.load_scoped_settings(group()).await?;store.edit_scoped_settings(group(),size(24)).await?;store.edit_scoped_settings(group(),size(20)).await?;if !matches!(store.replace_scoped_settings(old,SettingsPatch::default()).await,Err(StoreError::SettingsConflict)){bail!("old snapshot revived");}let current=store.load_scoped_settings(group()).await?;if current.revision()!=5||current.patch().terminal.cursor_blink!=Some(false)||store.load_scoped_settings(host()).await?.patch().terminal.font_size!=Some(22){bail!("ABA rejected but row not preserved");}json!({"abaRejected":true,"rowPreserved":true})},
             _=>bail!("unsupported helper mode")
@@ -106,6 +116,9 @@ fn verify(receipts: &[Value; 5]) -> Result<()> {
         (3, "concurrentEditsPreserved"),
         (3, "userFileChecked"),
         (3, "perFieldSourcesChecked"),
+        (3, "contextSwitchChecked"),
+        (3, "lateCandidateRejected"),
+        (3, "contextOwnerCloseChecked"),
         (4, "abaRejected"),
         (4, "rowPreserved"),
     ] {
@@ -151,7 +164,7 @@ pub(super) fn run() -> Result<()> {
     std::fs::write(
         "target/probes/settings-scope.json",
         serde_json::to_vec_pretty(
-            &json!({"schemaVersion":1,"independentProcesses":5,"concurrentEditors":2,"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"abaRejected":true,"rowPreserved":true,"workerJoined":true,"userHomeRead":false,"hostAuthorityGranted":false,"crossFileDatabaseTransaction":false}),
+            &json!({"schemaVersion":2,"independentProcesses":5,"concurrentEditors":2,"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"abaRejected":true,"rowPreserved":true,"workerJoined":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"userHomeRead":false,"hostAuthorityGranted":false,"crossFileDatabaseTransaction":false}),
         )?,
     )?;
     println!(

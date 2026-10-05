@@ -5,6 +5,8 @@ mod native_control;
 /// Validated local app-state preferences to automatic profile catalog composition.
 pub mod profile_state;
 pub mod registry;
+/// Backend-only generation-scoped settings capture and publication; not window authority.
+pub mod settings_context;
 use pulse_core::TermSize;
 use pulse_pty::{PtyCommand, PtySession};
 use pulse_term::session::{

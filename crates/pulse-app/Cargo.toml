@@ -14,5 +14,9 @@ pulse-term.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+uuid.workspace = true
+
 [lints]
 workspace = true

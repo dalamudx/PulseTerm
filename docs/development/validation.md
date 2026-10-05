@@ -836,6 +836,14 @@ mise run probe-pty
 - 11存储回归、3严格receipt否定通过；`probe-settings-scope`/usage/CI注册，Linux五真实独立进程验证两编辑者并发、同UUID namespace隔离、fixed private settings.toml→last-good cache→typed DB pair的逐字段来源、ABA拒绝/row保持及worker joined。模式/PID须distinct、布尔不可truthy/缺失、版本不可string或旧值；每child5秒截止未延长。只操作temp fixture，不读取用户home，macCI待实测，Windows该组合probe明确unsupported而非zero-tests成功。
 - MCP Exact无诊断，fullcheck/test/schema/probe、5进程scope与Profile、12文件case/实际kill、2MiB session、绑定漂移、native strictlint/63tests通过；110普通store/2ignored/9compile_fail，62app/43PTY/107term/242TS通过。没有包/特性/协议/前端改变，不重复DOM或既有审计；六项许可证/两维护公告release gate与未获授权CC0依赖保持原状。
 
+## 后端配置上下文的候选与发布交接
+
+- `pulse-app::settings_context`已导出owner/weak handle/owned capture/candidate/published snapshot；不接受原始JSON、路径或命令，不实现window/host权限、主机存在性或自动文件监视。target在state mutation前检查group/host namespace与nil，user sparse patch先完整校验。owner close/Drop同步阻止confirm，weak句柄与候选不使owner复活，共享Store/PTy仍存活。
+- 每context只一个capture槽，进入Store前取得；select/invalidate不提前让新capture覆盖旧槽。old context epoch与独立capture token共同约束read前后/confirm/Drop，sameepoch新publication也令old snapshot非current，A→B→A仍stale。候选确认前不publish；错owner/old/closed/exhaustion不能启用，计数不回绕。未来drop会discard响应，不取消已开始的SQLite操作，仍有原Store全局16queue/单worker界限。No auto retry；same-target失败保留last-good但不能作为current重新应用，different-target清除旧host值。
+- 14真实SQLite app生命周期回归、2compile_fail与MCP Exact/strictlint通过。五进程scope probe升级schema2，fixed reader从真实用户file cache→DB pair→Context进入old host候选，切换至group-only时Busy/old确认拒绝，随后Group20/source/revision3显式确认，close令snapshot非current而sharedDB host1仍可读。新增contextSwitchChecked/lateCandidateRejected/contextOwnerCloseChecked严格布尔收据与否定用例，不允许旧报告/missing/truthy替代；每child5秒未变，mode/PIDdistinct/workerjoined要求不变。
+- Fullcheck/test/schema、45SSH特性、scope/Profile五进程、2MiB session、绑定漂移与native strictlint/63tests均通过；76app/2docfail、110store/2ignored/9docfail、43PTY/107term/242TS。manifest/lock仅增加已锁tempfile/uuid dev引用，无包版本/许可/productionfeature/帧/前端变化，未重跑旧DOM/audit，不放宽六license/twoadvisory或CC0待决门禁。
+- is_current只表示当前owner状态瞬时相符，不能代替external GUI apply的授权事务；DB变化需trusted explicit invalidate，未声称自动最新/跨file与DB一致。native WindowToken/page nonce/generation授权、自动事件调度和DOM应用留待后续接入，不计完整VAULT-07。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
