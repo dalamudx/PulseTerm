@@ -90,6 +90,8 @@ jobs:
       - name: Exercise isolated Linux Bash startup and prompt-hook compatibility
         if: runner.os == 'Linux'
         run: mise run probe-shell-startup
+      - name: Exercise typed SQLite preferences across process restarts
+        run: mise run probe-profile-store
       - name: Exercise Unix shell discovery and profile reconciliation
         if: runner.os != 'Windows'
         run: mise run probe-profiles

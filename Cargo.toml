@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 exclude = ["vendor/alacritty_terminal"]
-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "apps/desktop/src-tauri", "xtask"]
-default-members = ["crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "xtask"]
+members = ["crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-app", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,9 @@ rust-version = "1.95"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "backup"] }
+rusqlite_migration = "=2.6.0"
+pulse-store = { path = "crates/pulse-store", version = "0.1.0" }
 alacritty_terminal = "=0.26.0"
 portable-pty = "=0.9.0"
 unicode-width = "=0.2.2"

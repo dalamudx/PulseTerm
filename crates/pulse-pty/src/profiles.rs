@@ -92,6 +92,9 @@ pub enum ProfileError {
     /// No automatic profile currently has this identity.
     #[error("profile.not_found")]
     NotFound,
+    /// A persisted identity cannot be both hidden and deleted or duplicated.
+    #[error("profile.conflicting_preferences")]
+    ConflictingPreferences,
     /// An installed shell disappeared from the latest snapshot.
     #[error("profile.unavailable")]
     Unavailable,
@@ -137,6 +140,7 @@ impl AutoProfile {
 pub struct AutoProfileCatalog {
     profiles: BTreeMap<ShellKind, AutoProfile>,
     deleted: BTreeSet<ShellKind>,
+    hidden: BTreeSet<ShellKind>,
 }
 impl AutoProfileCatalog {
     /// Restore deletion tombstones from trusted persisted settings.
@@ -144,7 +148,33 @@ impl AutoProfileCatalog {
         Self {
             profiles: BTreeMap::new(),
             deleted: deleted.into_iter().collect(),
+            hidden: BTreeSet::new(),
         }
+    }
+    /// Restore validated visibility and tombstones without needing current discovery.
+    /// Hidden preferences survive an initially missing executable; conflict is rejected.
+    pub fn from_preferences(
+        hidden: impl IntoIterator<Item = ShellKind>,
+        deleted: impl IntoIterator<Item = ShellKind>,
+    ) -> Result<Self, ProfileError> {
+        let hidden: Vec<_> = hidden.into_iter().take(MAX_SHELLS + 1).collect();
+        let deleted: Vec<_> = deleted.into_iter().take(MAX_SHELLS + 1).collect();
+        if hidden.len() > MAX_SHELLS || deleted.len() > MAX_SHELLS {
+            return Err(ProfileError::DiscoveryLimit);
+        }
+        let hidden_set: BTreeSet<_> = hidden.iter().copied().collect();
+        let deleted_set: BTreeSet<_> = deleted.iter().copied().collect();
+        if hidden.len() != hidden_set.len()
+            || deleted.len() != deleted_set.len()
+            || !hidden_set.is_disjoint(&deleted_set)
+        {
+            return Err(ProfileError::ConflictingPreferences);
+        }
+        Ok(Self {
+            profiles: BTreeMap::new(),
+            hidden: hidden_set,
+            deleted: deleted_set,
+        })
     }
     /// Atomic snapshot reconciliation. Failed admission leaves all metadata unchanged.
     /// Available programs may change; hidden state and deletion tombstones do not.
@@ -165,6 +195,7 @@ impl AutoProfileCatalog {
             if self.deleted.contains(&candidate.kind) {
                 continue;
             }
+            let hidden = self.hidden.contains(&candidate.kind);
             self.profiles
                 .entry(candidate.kind)
                 .and_modify(|profile| {
@@ -173,7 +204,7 @@ impl AutoProfileCatalog {
                 })
                 .or_insert_with(|| AutoProfile {
                     candidate: candidate.clone(),
-                    hidden: false,
+                    hidden,
                     available: true,
                 });
         }
@@ -193,13 +224,23 @@ impl AutoProfileCatalog {
             .get_mut(&kind)
             .ok_or(ProfileError::NotFound)?
             .hidden = hidden;
+        if hidden {
+            self.hidden.insert(kind);
+        } else {
+            self.hidden.remove(&kind);
+        }
         Ok(())
     }
     /// Remove an existing profile and retain its tombstone across later discoveries.
     pub fn remove(&mut self, kind: ShellKind) -> Result<(), ProfileError> {
         self.profiles.remove(&kind).ok_or(ProfileError::NotFound)?;
         self.deleted.insert(kind);
+        self.hidden.remove(&kind);
         Ok(())
+    }
+    /// Hidden identities, including profiles not yet discovered after a restart.
+    pub fn hidden(&self) -> impl Iterator<Item = ShellKind> + '_ {
+        self.hidden.iter().copied()
     }
     /// Snapshot tombstones for a trusted store; reinstallation/PATH moves do not reset them.
     pub fn deleted(&self) -> impl Iterator<Item = ShellKind> + '_ {

@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+pulse-store.workspace = true
 pulse-core.workspace = true
 pulse-ipc.workspace = true
 pulse-pty.workspace = true

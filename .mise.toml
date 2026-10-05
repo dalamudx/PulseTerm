@@ -56,6 +56,10 @@ run = "cargo xtask probe-shell-startup"
 description = "Validate Unix public login builder argv0 and fallback limitations"
 run = "cargo xtask probe-login"
 
+[tasks.probe-profile-store]
+description = "Verify SQLite profile preferences across independent process restarts"
+run = "cargo run -p xtask --features cli-probe --locked -- probe-profile-store"
+
 [tasks.probe-profiles]
 description = "Exercise Unix shell discovery, profile reconciliation and literal native launch"
 run = "cargo xtask probe-profiles"

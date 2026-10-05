@@ -92,6 +92,12 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 
 完整--all-features --locked cargo-deny检查仍原license6拒绝/maintenance2（paste/proc-macro-error），sources/bans通过；没有新增拒绝/公告、不加allow或ignore。该库按WHATWG GBK行为，测试中的Chinese/ANSI/分块已验证不等于所有设备GBK/GB18030私有扩展；actor/logging/Zmodem及原始字节语义仍须独立实现。SDK debug不得记录actual credential/终端内容；样例没有用户内容。
 
+## 初始typed app_state存储依赖
+
+- workspace新增精确`rusqlite 0.40.2`（MIT）与`rusqlite_migration 2.6.0`（Apache-2.0，最低Rust1.95），native仅bundled/backup，关闭rusqlite默认Wasm特性；同锁新增libsqlite3-sys0.38.2、fallible-iterator0.3.0、fallible-streaming-iterator0.1.9、vcpkg0.2.15，无第三方源码修改、SQLCipher/OpenSSL或系统包安装。
+- 已读取libsqlite3-sys实际LICENSE：Rust wrapper为MIT，要求保留copyright/license；所捆绑`sqlite3/sqlite3.c`为SQLite3.53.2，主头部含作者copyright免责声明及祝辞。必须分别纳入第三方说明与分发源码审查；不能把wrapper的crate MIT元数据等同全部C源码许可审查，也没有启用sqlcipher目录的独立许可证。
+- 新锁图全特性cargo-deny实际仍原6项license拒绝与paste/proc-macro-error两项maintenance，sources/bans通过（重复版本warnings）；没有新增拒绝/公告，没有allow/ignore变更，不构成包装发布许可。初始store只写5个shell身份的隐藏/删除非秘密元数据，不提供明文凭据字段；Vault仍未实现。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

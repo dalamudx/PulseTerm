@@ -737,9 +737,18 @@ mise run probe-pty
 - 外部mode首次窗口匹配不唯一并超时：当时未保存XID集合，具体根因未证实。控制器现收紧为自有子进程PID+固定main标题，跨两个操作周期保持同一XID；拒绝歧义/缺窗/外PID/替换，不选第一匹配，不放宽2s操作截止。新增`mise run probe-window-controller`的5项确定性隔离fixture及Linux CI，不能当真实WM验收。
 - 后续复验出现既有helper exit2（源码明确40s watchdog），耗时原因尚未定位；补无内容peer完成/EOF阶段计时，保留40s截止和exit0断言。再隔离复验完整通过、进程清理正常，但不宣称该截止风险已修复。生产脚本注入、持续命令日志、命令坐标DOM渲染、真实用户配置及跨平台仍未完成；依赖审计门禁未变。
 
+## 自动Profile的typed SQLite app_state
+
+- 新建`pulse-store`，按既定rusqlite/rusqlite_migration方案固定0.40.2/2.6.0，native bundled/backup、关闭默认Wasm特性；worker独占Connection，16待处理请求try_send准入，不在UI/async执行SQLite。WAL/FK/FULL实际验证；当前读写均串行，读池、Vault、密钥和应用目录平台适配仍未实现。
+- 非秘密`AutomaticShell`偏好仅Bash/Zsh/Fish/Sh/Pwsh的hidden/deleted；严格版本1、4096字节行预算、未知字段/身份、重复和冲突拒绝，读坏记录不回退默认，保存事务不覆盖坏行。SQL固定且parameterized，无任意SQL、路径、程序、命令、环境或凭据载荷接口。
+- 10项store测试覆盖真实文件重开、worker clone/drop/join、16额度/Closed、取消执行前不写、坏/过大行、未来schema/无版本既有表保持原数据、私有权限/symlink、迁移前SQLite Backup保存未checkpoint WAL、existing backup不覆盖、失败迁移rollback并保留原schema及backup。升级测试为内部版本1→2fixture，不等于生产已有schema2；当前production schema仍1。此前tempdir默认权限导致Location失败，已只修fixture到0700，不降低门禁。
+- app增加2项固定枚举映射/目录恢复回归；PTY保存独立hidden身份集合，重启初次缺shell而后再发现仍hidden。`mise run probe-profile-store`在两个独立子进程真实保存/重开，5s每child截止、无重试，最终join关闭worker，确认hidden保留/deleted不复活；metadata candidate不执行，不计作Shell或真实用户配置验收。task/usage/跨平台CI注册，跨平台CI尚无执行证据。
+- 最终check/test/probe、实际Unix发现与PTY启动、2MiB登录Profile→actor ACK/EOF、bindings-check、63native tests/strictlint及实际v2两headless/twoDOM/7测量通过：10store/62app/43PTY/107term/242TS。MCP store诊断Exact无错误。
+- Unix当前只验证模式与末级regular/symlink，不宣称完整所有权/ACL/TOCTOU安全；WindowsACL/备份恢复UI/持久化Profile权限IPC/读池性能/Vault仍待实施。新6个库未新增cargo-deny拒绝或公告，原license6/maintenance2仍失败，不加白名单/ignore，详见dependency-review。
+
 ## 检查结果
 
-- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 60项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：242 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

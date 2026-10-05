@@ -16,6 +16,8 @@ mod login_probe;
 mod portable_pty_probe;
 mod profile_probe;
 mod profile_session_probe;
+#[cfg(feature = "cli-probe")]
+mod profile_store_probe;
 mod pty_probe;
 mod query_probe;
 mod route_probe;
@@ -58,6 +60,10 @@ fn main() -> Result<()> {
     }
     if std::env::args().nth(1).as_deref() == Some("profile-probe-helper") {
         return profile_probe::helper();
+    }
+    #[cfg(feature = "cli-probe")]
+    if std::env::args().nth(1).as_deref() == Some("profile-store-helper") {
+        return profile_store_probe::helper();
     }
     #[cfg(all(feature = "cli-probe", unix))]
     if std::env::args().nth(1).as_deref() == Some("cli-probe-helper") {
@@ -116,6 +122,12 @@ fn main() -> Result<()> {
         Some("probe-window-external") => channel_probe::run_window_external()?,
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-profiles") => profile_probe::run()?,
+        Some("probe-profile-store") => {
+            #[cfg(feature = "cli-probe")]
+            profile_store_probe::run()?;
+            #[cfg(not(feature = "cli-probe"))]
+            bail!("probe-profile-store requires --features cli-probe");
+        }
         Some("probe-login") => login_probe::run()?,
         Some("probe-shell-startup") => shell_startup_probe::run()?,
         Some("probe-shell-startup-worker") => shell_startup_probe::worker()?,
@@ -202,7 +214,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
         ),
     }
     Ok(())
@@ -248,7 +260,14 @@ fn check_deps() -> Result<()> {
                 "pulse-term" => &["pulse-core", "pulse-ipc"],
                 "pulse-pty" => &["pulse-core"],
                 "pulse-route" => &[],
-                "pulse-app" => &["pulse-core", "pulse-pty", "pulse-term", "pulse-ipc"],
+                "pulse-store" => &["pulse-core"],
+                "pulse-app" => &[
+                    "pulse-core",
+                    "pulse-pty",
+                    "pulse-term",
+                    "pulse-ipc",
+                    "pulse-store",
+                ],
                 _ => continue,
             };
             if dep.starts_with("pulse-") && !allowed.contains(&dep) {

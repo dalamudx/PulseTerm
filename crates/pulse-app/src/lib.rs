@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 pub mod attachment;
 mod native_control;
+/// Validated local app-state preferences to automatic profile catalog composition.
+pub mod profile_state;
 pub mod registry;
 use pulse_core::TermSize;
 use pulse_pty::{PtyCommand, PtySession};
