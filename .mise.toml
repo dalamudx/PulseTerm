@@ -48,6 +48,10 @@ run = "cargo xtask probe-local-profile-session"
 description = "Validate explicit Unix login arguments, literal profile argv and no program fallback"
 run = "cargo xtask probe-login-arguments"
 
+[tasks.probe-shell-startup]
+description = "Validate isolated Bash startup config, scalar/array hooks and OSC prompt boundaries"
+run = "cargo xtask probe-shell-startup"
+
 [tasks.probe-login]
 description = "Validate Unix public login builder argv0 and fallback limitations"
 run = "cargo xtask probe-login"

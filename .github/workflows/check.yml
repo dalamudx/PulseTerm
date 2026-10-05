@@ -84,6 +84,9 @@ jobs:
       - name: Exercise Unix explicit login arguments and missing-program rejection
         if: runner.os != 'Windows'
         run: mise run probe-login-arguments
+      - name: Exercise isolated Linux Bash startup and prompt-hook compatibility
+        if: runner.os == 'Linux'
+        run: mise run probe-shell-startup
       - name: Exercise Unix shell discovery and profile reconciliation
         if: runner.os != 'Windows'
         run: mise run probe-profiles
