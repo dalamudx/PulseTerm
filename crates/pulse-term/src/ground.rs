@@ -1,7 +1,7 @@
-//! Coarse model of the vte 0.15 escape-sequence state machine. It only answers
-//! "is the parser between sequences?" and keeps the (bounded) bytes of an
-//! unfinished sequence so a restore can replay them. Differentially tested
-//! against vte itself; it never feeds or alters the real parser.
+//! Coarse model of the vte 0.15 escape-sequence state machine. Tracks parser
+//! boundaries and bounded unfinished bytes for restoration, and lets advisory
+//! OSC observers reuse those bytes. Differentially tested against vte itself;
+//! it never feeds or alters the real parser.
 
 /// Longest unfinished sequence kept for replay. Longer ones (e.g. huge OSC 52)
 /// make a restore wait until the parser returns to ground.
@@ -38,8 +38,22 @@ impl Default for GroundScanner {
 }
 
 impl GroundScanner {
+    #[cfg(test)]
     pub fn feed(&mut self, bytes: &[u8]) {
+        self.feed_with_osc(bytes, |_, _| {});
+    }
+
+    /// Observe existing bounded OSC payload before its terminator clears it.
+    /// ESC ends OSC in vte; an observer can require the following ST backslash.
+    pub fn feed_with_osc(&mut self, bytes: &[u8], mut observe: impl FnMut(u8, Option<&[u8]>)) {
         for &byte in bytes {
+            let body = if self.state == State::Osc && matches!(byte, 0x07 | 0x1b) && !self.overflow
+            {
+                self.pending.get(2..)
+            } else {
+                None
+            };
+            observe(byte, body);
             self.step(byte);
         }
     }
@@ -74,9 +88,10 @@ impl GroundScanner {
             }
             // C0 controls inside a sequence are executed immediately by vte (or
             // ignored in strings); they are already applied and must not be
-            // replayed. DEL is ignored. Neither changes the sequence itself.
-            let executed =
-                matches!(byte, 0x00..=0x17 | 0x19 | 0x1c..=0x1f | 0x7f) && next == self.state;
+            // replayed. DEL is ignored except in OSC payload, where vte retains it.
+            let executed = (matches!(byte, 0x00..=0x17 | 0x19 | 0x1c..=0x1f)
+                || (byte == 0x7f && self.state != Osc))
+                && next == self.state;
             if executed {
             } else if self.pending.len() < MAX_PENDING {
                 self.pending.push(byte);

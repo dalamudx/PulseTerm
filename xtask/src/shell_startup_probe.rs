@@ -24,6 +24,7 @@ fn prompts(bytes: &[u8]) -> usize {
 fn until(
     rx: &std::sync::mpsc::Receiver<std::io::Result<Vec<u8>>>,
     bytes: &mut Vec<u8>,
+    terminal: &mut pulse_term::TerminalProbe,
     prompt: Option<usize>,
 ) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(3);
@@ -37,12 +38,14 @@ fn until(
             .map_err(|_| anyhow::anyhow!("shell_startup.read_deadline"))??;
         if chunk.is_empty() {
             ensure!(prompt.is_none(), "shell_startup.early_eof");
+            terminal.finish_input();
             return Ok(());
         }
         ensure!(
             bytes.len() + chunk.len() <= 16384,
             "shell_startup.output_budget"
         );
+        terminal.feed(&chunk);
         bytes.extend(chunk);
     }
 }
@@ -144,20 +147,22 @@ pub fn worker() -> Result<()> {
         });
         let result = (|| -> Result<()> {
             let mut bytes = Vec::new();
-            until(&rx, &mut bytes, Some(1))?;
+            let mut terminal =
+                pulse_term::TerminalProbe::new(pulse_core::TermSize::new(80, 24)?, 0);
+            until(&rx, &mut bytes, &mut terminal, Some(1))?;
             ensure!(
                 contains(&bytes, b"\x1b]133;A\x07USER_PROMPT> "),
                 "shell_startup.user_prompt"
             );
             session.write_input(b"false\n")?;
-            until(&rx, &mut bytes, Some(2))?;
+            until(&rx, &mut bytes, &mut terminal, Some(2))?;
             ensure!(
                 contains(&bytes, b"\x1b]133;C\x07USER_PRE>")
                     && contains(&bytes, b"\x1b]133;D;1\x07USER_HOOK:1"),
                 "shell_startup.status_and_precommand"
             );
             session.write_input(b"true\n")?;
-            until(&rx, &mut bytes, Some(3))?;
+            until(&rx, &mut bytes, &mut terminal, Some(3))?;
             ensure!(
                 contains(&bytes, b"\x1b]133;D;0\x07USER_HOOK:0"),
                 "shell_startup.success_status"
@@ -167,7 +172,35 @@ pub fn worker() -> Result<()> {
                 "[[ $PULSE_USER_LOADS == 1 && $PROFILE_ENV == 'literal 中文 value' && ${{#PROMPT_COMMAND[@]}} == {count} && $- == *i* ]] && exit 7; exit 81\n"
             );
             session.write_input(exit.as_bytes())?;
-            until(&rx, &mut bytes, None)?;
+            until(&rx, &mut bytes, &mut terminal, None)?;
+            use pulse_term::shell_markers::ShellMarker;
+            let hints = terminal.take_shell_markers();
+            ensure!(
+                hints.dropped == 0
+                    && hints
+                        .markers
+                        .iter()
+                        .filter(|marker| **marker == ShellMarker::PromptStart)
+                        .count()
+                        >= 3
+                    && hints
+                        .markers
+                        .iter()
+                        .filter(|marker| **marker == ShellMarker::PromptEnd)
+                        .count()
+                        >= 3
+                    && hints.markers.contains(&ShellMarker::CommandStart)
+                    && hints.markers.contains(&ShellMarker::CommandEnd {
+                        exit_status: Some(1)
+                    })
+                    && hints.markers.contains(&ShellMarker::CommandEnd {
+                        exit_status: Some(0)
+                    })
+                    && !hints.markers.contains(&ShellMarker::CommandEnd {
+                        exit_status: Some(7)
+                    }),
+                "shell_startup.backend_hints"
+            );
             let deadline = Instant::now() + Duration::from_secs(1);
             loop {
                 if let Some(status) = session.try_wait()? {
@@ -202,7 +235,7 @@ pub fn worker() -> Result<()> {
 }
 #[cfg(any(target_os = "linux", test))]
 fn receipt() -> Value {
-    json!({"schemaVersion":1,"platform":std::env::consts::OS,"shell":"bash5","launchCount":2,"method":"private-home-rcfile","userConfigPreserved":true,"scalarHookPreserved":true,"arrayHookPreserved":true,"statusPreserved":true,"injectionIdempotent":true,"oscBoundariesChecked":true,"nativeTerminal":true,"eofAndReap":true,"realUserConfigRead":false,"loginShell":false,"productionIntegration":false,"exitCode":7})
+    json!({"schemaVersion":2,"platform":std::env::consts::OS,"shell":"bash5","launchCount":2,"method":"private-home-rcfile","userConfigPreserved":true,"scalarHookPreserved":true,"arrayHookPreserved":true,"statusPreserved":true,"injectionIdempotent":true,"oscBoundariesChecked":true,"nativeTerminal":true,"backendHintsChecked":true,"eofAndReap":true,"realUserConfigRead":false,"loginShell":false,"productionIntegration":false,"exitCode":7})
 }
 fn validate(r: &Value) -> Result<()> {
     for key in [
@@ -214,6 +247,7 @@ fn validate(r: &Value) -> Result<()> {
         "oscBoundariesChecked",
         "nativeTerminal",
         "eofAndReap",
+        "backendHintsChecked",
     ] {
         ensure!(
             r[key].as_bool() == Some(true),
@@ -228,7 +262,7 @@ fn validate(r: &Value) -> Result<()> {
     }
     ensure!(
         cfg!(target_os = "linux")
-            && r["schemaVersion"] == 1
+            && r["schemaVersion"] == 2
             && r["platform"] == std::env::consts::OS
             && r["shell"] == "bash5"
             && r["launchCount"] == 2
@@ -288,6 +322,7 @@ mod tests {
             "oscBoundariesChecked",
             "nativeTerminal",
             "eofAndReap",
+            "backendHintsChecked",
         ] {
             for value in [Value::Null, json!(false), json!("true"), json!(1)] {
                 let mut bad = report.clone();
@@ -301,7 +336,7 @@ mod tests {
             assert!(validate(&bad).is_err());
         }
         for (key, value) in [
-            ("schemaVersion", json!(2)),
+            ("schemaVersion", json!(1)),
             ("method", json!("arguments")),
             ("launchCount", json!(1)),
             ("exitCode", json!(0)),

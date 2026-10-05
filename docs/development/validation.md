@@ -706,11 +706,18 @@ mise run probe-pty
 
 - 新增`mise run probe-shell-startup`/Linux CI注册及固定xtask脚本fixture，不注入普通Profile。两次真实交互Bash5通过当前目录统一准备，以临时0700 HOME、--noprofile和--rcfile加载自有用户配置后加载集成，源码路径走环境字面值，不拼接用户路径为shell代码。系统bashrc可能仍由平台Bash加载，不能据此声称系统配置隔离或真实用户配置兼容；非Linux命令明确拒绝，纯收据tests保持可编译。
 - 用户配置提供字面中文env/PS1/PS0，以及标量和数组PROMPT_COMMAND；fixture在最前捕获退出码并返回原值，原hook仍执行；PS1围绕原prompt输出OSC133 A/B，PS0保留原precommand并输出C，下一prompt输出D与状态。wrapper重复source集成仍只有一个前钩子，用户配置只加载一次。实际输入false/true产生精确D;1/D;0，原hook看到同状态，最终交互标志、env、hook数量及native exit7均验证。输出≤16KiB、stage读3秒/退出1秒/worker25秒，EOF、reader join、直接child回收通过；日志/JSON不包含输出或env值。
-- 首次编译不支持所用Result便利方法，已换为现有is_ok_and，不升级工具链。新增严格报告否定：缺失/数字/字符串/false、模式/平台/单次launch/错误exit，以及realUserConfigRead/loginShell/productionIntegration三项scope必须精确false。完整check/test/probe、43PTY/57app/20xtask/238TS和原2MiB目录登录Actor通过，strictlint/MCP Exact无诊断通过。固定script不是生产hook实现，Bash<5、login rc顺序/实际用户脚本/readonly hooks、多shell、后端OSC事件和DOM标记还未验收；任何远端OSC均不可信，不授予控制权限。依赖与发布门禁未改。
+- 首次编译不支持所用Result便利方法，已换为现有is_ok_and，不升级工具链。新增严格报告否定：缺失/数字/字符串/false、模式/平台/单次launch/错误exit，以及realUserConfigRead/loginShell/productionIntegration三项scope必须精确false。完整check/test/probe、43PTY/57app/20xtask/238TS和原2MiB目录登录Actor通过，strictlint/MCP Exact无诊断通过。固定script不是生产hook实现，Bash<5、login rc顺序/实际用户脚本/readonly hooks、多shell、actor/IPC Shell事件和DOM标记还未验收；任何远端OSC均不可信，不授予控制权限。依赖与发布门禁未改。
+
+## SHELL-03 有界 OSC 133 后端提示（低层）
+
+- 新增`pulse_term::shell_markers::{ShellMarker, ShellMarkerBatch, MAX_SHELL_MARKERS}`与`TerminalProbe::take_shell_markers`。已有ground scanner开放只读callback复用64KiB unfinished OSC，不增加std vte Parser的无界Vec，Alacritty仍解析原字节。修正scanner在OSC内保留DEL以匹配vte（此前粗边界扫描忽略DEL）；其他C0仍按既有语义处理。只识别exact133;A/B/C/D以及D;0..255，允许缺省未知状态；只认BEL/完整ESC-backslash，CAN/SUB、单ESC及其他结束形式保守拒绝提示。无命令文本、cwd、权限字段或内容执行。
+- 队列最多128条，超额丢弃新提示并累积饱和u32 dropped，drain不丢跨片段ST候选。6项新增回归覆盖每个chunk切分/BEL/ST/可选状态、取消/其他OSC/畸形或secret字段、C0/DEL、64KiB超长与队列上限、屏幕/DSR回复/nonzero风险不变，以及对real vte Perform回调的随机组合差分。首次测试错误符号与collapsible-if lint均修正，未增加allow。提示仅是输入流side-channel，无行坐标/parsed边界/完整command log，不随snapshot恢复，不清除risk；同步刷新时可早于grid应用。actor/注册层/IPC/DOM消费还未接入，不将prompt当可信证明。
+- `probe-shell-startup`升级schema2，actual每个read片段增量送入TerminalProbe，两次真实交互Bash得到A/B/C/D;1/D;0且dropped=0；EOF不伪造native exit7的D标记，exit7单独验收。backendHintsChecked必须exacttrue；原schema1/raw-only报告拒绝。
+- 完整check/test、99term/43PTY/57app/20xtask/238TS、realBash/2MiB目录Profile、五份v1实际actor恢复和两份GBK v2恢复、source drift与真实v2窗口/漂移均通过。标准snapshot600随机流条件matrix311/311；token matrix仍10类初始差异/18个base案例、11可修与7显式不可表示，输出含非法序列的xterm诊断，不视为无条件全部匹配。额外`PULSE_RESTORE_CASES=30000 cargo test -p pulse-term --features validation --locked restore_roundtrip_and_continuation_property -- --nocapture`通过，延期/近似类别不放宽。新模块strictlint/MCP Exact无诊断通过；上游parser补丁、二进制协议、授权、依赖和audit豁免均未改。
 
 ## 检查结果
 
-- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；99 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

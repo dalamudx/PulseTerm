@@ -6,6 +6,8 @@
 mod ground;
 /// Bounded recent-history VT replay for attachment transactions.
 pub mod history;
+/// Bounded, untrusted OSC 133 hints; never session authorization or command execution.
+pub mod shell_markers;
 pub use history::{HistoryReplay, MAX_RECENT_ROWS};
 mod palette;
 pub mod reconciliation;
@@ -110,6 +112,7 @@ pub struct TerminalProbe {
     utf8_tail: Vec<u8>,
     side: tracked::MirroredState,
     ground: ground::GroundScanner,
+    shell_markers: shell_markers::MarkerQueue,
 }
 
 impl TerminalProbe {
@@ -127,6 +130,7 @@ impl TerminalProbe {
                 usize::from(size.rows()),
             ),
             ground: ground::GroundScanner::default(),
+            shell_markers: shell_markers::MarkerQueue::default(),
             term: Term::new(config, &Size(size), ReplyListener(sender)),
             parser: Processor::new(),
             events: replies,
@@ -202,6 +206,12 @@ impl TerminalProbe {
     /// Drain authoritative protocol replies; a transport would write these upstream.
     pub fn take_replies(&mut self) -> Vec<String> {
         std::mem::take(&mut self.replies)
+    }
+
+    /// Drain untrusted shell hints with an explicit count of discarded excess markers.
+    /// No coordinates, complete command log, snapshot state, or capabilities are implied.
+    pub fn take_shell_markers(&mut self) -> shell_markers::ShellMarkerBatch {
+        self.shell_markers.take()
     }
 
     /// Update the fallback palette from the current UI theme; OSC overrides win
@@ -369,7 +379,9 @@ impl TerminalProbe {
             side: &mut self.side,
         };
         self.parser.advance(&mut handler, bytes);
-        self.ground.feed(bytes);
+        let markers = &mut self.shell_markers;
+        self.ground
+            .feed_with_osc(bytes, |byte, body| markers.observe(byte, body));
     }
 
     fn feed_complete_prefix(&mut self, bytes: &[u8]) {
