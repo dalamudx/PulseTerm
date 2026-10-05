@@ -57,6 +57,13 @@ impl MarkerQueue {
             self.dropped = self.dropped.saturating_add(1);
         }
     }
+    /// Restore a failed actor delivery before any further feed can interleave.
+    pub(crate) fn restore(&mut self, batch: ShellMarkerBatch) {
+        for marker in batch.markers {
+            self.push(marker);
+        }
+        self.dropped = self.dropped.saturating_add(batch.dropped);
+    }
     pub fn take(&mut self) -> ShellMarkerBatch {
         ShellMarkerBatch {
             markers: self.queue.drain(..).collect(),

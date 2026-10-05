@@ -16,6 +16,9 @@ mod encoding_tests;
 #[path = "session_stream.rs"]
 mod stream;
 pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
+#[path = "session_shell.rs"]
+mod shell;
+pub use shell::SessionShellMarkers;
 #[cfg(test)]
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
@@ -206,6 +209,11 @@ enum Command {
         reply: oneshot::Sender<Result<RepairAdmission, SessionRestoreError>>,
     },
     Marker(u64, oneshot::Sender<Result<(), SessionError>>),
+    ShellMarkers {
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        reply: oneshot::Sender<Result<SessionShellMarkers, SessionError>>,
+    },
     Subscribe {
         history_rows: usize,
         history_budget: usize,
@@ -874,6 +882,17 @@ fn spawn_inner(
                                 }
                             };
                             let _ = reply.send(result);
+                        }
+                    }
+                    Some(Command::ShellMarkers { lease_id, cancelled, reply }) => {
+                        if !reply.is_closed() {
+                            let result = if *cancelled.borrow()
+                                || lease.as_ref().is_none_or(|l| l.id != lease_id || l.output.is_closed()) {
+                                Err(SessionError::StaleLease)
+                            } else {
+                                Ok(SessionShellMarkers { sampled_at: current.clone(), hints: terminal.take_shell_markers() })
+                            };
+                            shell::deliver(&mut terminal, reply, result);
                         }
                     }
                     Some(Command::Digest(reply)) => {

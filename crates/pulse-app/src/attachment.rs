@@ -173,6 +173,18 @@ impl AttachmentHandle {
             .map_err(|e| AttachmentError::Capture(e.into()))
     }
 
+    /// Lossy advisory hints, not proof of rendering or an ordered stream checkpoint.
+    pub async fn take_shell_markers(
+        &self,
+    ) -> Result<pulse_term::session::SessionShellMarkers, AttachmentError> {
+        if *self.cancel.borrow() {
+            return Err(AttachmentError::Detached);
+        }
+        self.session
+            .diagnostic_shell_markers(self.lease_id, self.cancel.subscribe())
+            .await
+            .map_err(|e| AttachmentError::Capture(e.into()))
+    }
     /// Actor admission only; Marker delivery and rendering still require wire ACK.
     pub async fn request_marker(&self) -> Result<(), AttachmentError> {
         if *self.cancel.borrow() {

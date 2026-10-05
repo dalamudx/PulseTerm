@@ -57,6 +57,7 @@ struct Entry {
     comparison: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
     marker: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
     repair: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
+    shell_markers: Arc<AsyncMutex<Option<tokio::time::Instant>>>,
 }
 impl Entry {
     fn with_owner(&self, owner: WindowToken) -> Arc<Self> {
@@ -67,6 +68,7 @@ impl Entry {
             comparison: self.comparison.clone(),
             marker: self.marker.clone(),
             repair: self.repair.clone(),
+            shell_markers: self.shell_markers.clone(),
         })
     }
 }
@@ -208,6 +210,7 @@ impl SessionRegistry {
                 comparison: Arc::new(AsyncMutex::new(None)),
                 marker: Arc::new(AsyncMutex::new(None)),
                 repair: Arc::new(AsyncMutex::new(None)),
+                shell_markers: Arc::new(AsyncMutex::new(None)),
             }),
         );
         Ok(id)
@@ -596,6 +599,8 @@ mod comparison;
 #[cfg(test)]
 #[path = "registry_reap_tests.rs"]
 mod reap_tests;
+#[path = "registry_shell.rs"]
+mod shell;
 pub use comparison::{RenderedScreen, VisibleComparison};
 #[cfg(test)]
 #[path = "registry_retire_tests.rs"]

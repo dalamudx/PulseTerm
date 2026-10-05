@@ -217,10 +217,11 @@ async fn detached_session() -> Result<serde_json::Value> {
 }
 
 async fn wire_streaming() -> Result<serde_json::Value> {
-    wire_streaming_command(command("portable-pty-helper-stream")?).await
+    wire_streaming_command(command("portable-pty-helper-stream")?, false).await
 }
 pub(crate) async fn wire_streaming_command(
     native_command: PtyCommand,
+    expect_shell_hints: bool,
 ) -> Result<serde_json::Value> {
     use pulse_app::{attachment::AttachmentConfig, registry::SessionRegistry};
     use pulse_ipc::attach::{Part, decode_fragment};
@@ -243,6 +244,7 @@ pub(crate) async fn wire_streaming_command(
     let mut offset = None;
     let mut pause = None;
     let mut burst_bytes = 0usize;
+    let mut shell_hint_count = None;
     let mut end = false;
     tokio::time::timeout(Duration::from_secs(12), async {
         while let Some(bytes) = wire.recv().await {
@@ -259,6 +261,23 @@ pub(crate) async fn wire_streaming_command(
                     replay.take_replies();
                 }
                 Part::Commit => {
+                    let sampled = registry
+                        .take_shell_markers(window, id, binding.generation)
+                        .await?;
+                    let expected = if expect_shell_hints {
+                        vec![
+                            pulse_term::shell_markers::ShellMarker::PromptStart,
+                            pulse_term::shell_markers::ShellMarker::PromptEnd,
+                            pulse_term::shell_markers::ShellMarker::CommandStart,
+                        ]
+                    } else {
+                        Vec::new()
+                    };
+                    ensure!(
+                        sampled.hints.markers == expected && sampled.hints.dropped == 0,
+                        "wire shell hint loss/invention"
+                    );
+                    shell_hint_count = Some(sampled.hints.markers.len());
                     registry
                         .input(window, id, "literal ; $(input) 中\n".as_bytes().to_vec())
                         .await?;
@@ -327,7 +346,7 @@ pub(crate) async fn wire_streaming_command(
         "wire final screen"
     );
     Ok(
-        json!({"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"burstBytes":burst_bytes,"burstExactChecked":cfg!(unix),"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
+        json!({"shellHintsChecked":shell_hint_count.is_some(),"shellHintCount":shell_hint_count,"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"burstBytes":burst_bytes,"burstExactChecked":cfg!(unix),"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
     )
 }
 async fn streaming() -> Result<serde_json::Value> {
