@@ -56,6 +56,14 @@ S21 受控接入新增 `specta 2.0.0-rc.25 → paste 1.0.15`，`cargo deny --all
 
 新增 `portable-pty 0.9.0`（MIT）及原生 I/O 传递依赖，版本通过 Cargo workspace / lockfile 管理。全特性联网审计的来源和 bans 通过；未新增拒绝项，仍是原有 6 个许可证拒绝和 `paste` / `proc-macro-error` 的维护公告。没有替换 GTK 宏、添加 vendor、放宽白名单或添加 ignore。
 
+### Windows环境刷新与trace隐私边界
+
+核对锁定 `portable-pty 0.9.0/src/cmdbuilder.rs` 的 `get_base_env`：每次CommandBuilder构造先读取进程环境，Windows再覆盖HKLM/HKCU环境、合并system/user PATH，`REG_EXPAND_SZ`使用ExpandEnvironmentStringsW；profile显式env最后应用。因此不能笼统声称库没有注册表刷新，也不能在Linux仅凭源码确认新安装PATH与变量展开已经实测通过。
+
+该路径有 `log::trace!("adding SYS env: ...", name, value)` 和 `adding USER env`，会将原始环境键值传给已安装的log logger。当前desktop/xtask未安装log logger或tracing subscriber，尚无实际泄露证据；`RUST_LOG`环境变量本身不会自动创建logger。后续SEC-06日志适配、tauri log插件或tracing-log桥不得无条件转发此目标；在启用前必须有不可被环境日志级别覆盖的目标过滤或等价防泄露策略，使用合成secret负向日志回归，并在Windows验证路径。现有`PtyCommand` Debug脱敏不覆盖第三方日志，也不能当作该风险已解决。
+
+本轮没有安装logger、修改第三方源码、升级依赖或调整cargo-deny豁免；所有许可证/维护公告与发布门禁保持原状。
+
 ## 已批准的终端只读补丁
 
 用户批准 alacritty_terminal 0.26.0 的一个只读 inactive_grid getter，当前通过 workspace `[patch.crates-io]` 引入。本轮例外不适用于 GTK 宏链，也不允许修改终端解析行为。保留发布包 Apache许可证、VCS来源、SHA-256文件基线及最小diff，详见 `vendor/README.md`。版本不升级；product Cargo.lock 仅移除该包的registry source/checksum，发布包摘要另有明确记录。
