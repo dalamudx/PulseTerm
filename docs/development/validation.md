@@ -665,13 +665,20 @@ mise run probe-pty
 
 - 锁定portable-pty0.9的public default builder通过自身env SHELL选择程序，Unix as_command设置`-basename` argv0。新`mise run probe-login`在0700的owned project目录hardlink自有xtask finite binary，显式SHELL指向该文件，真实slave执行后helper断言精确`-pulseterm-login-probe`且argc1/TTY，exit7/EOF/readerjoin/direct-child reap全过。helper3秒自退、worker12秒监督、输出≤4096；不读取用户或系统shell rc，也不把该实验当startupfile/macOS/交互Shell验收。
 - public args默认builder会panic，新增expectedpanic回归验证确实不能附带profile参数。missing-SHELL仅调用公开get_shell，观察选出的程序不同于requested path，不执行回退shell；report必须missingProgramFallbackObserved=true和customArgumentsSupported=false，避免success代表完整login。两项报告/公开API负向测试拒missing/truthy/wrong平台/非零argc/假定支持customargs。
-- 先前“没有独立argv0覆盖API”的限制仍适用于完整显式program+args，但不能据此否认公开builder的无参数SHELL选择可行。生产完整选项：最小Unix argv0设置API补丁（保留显式program原路径/fail-closed，独立参数）、已知Shell登录参数（改变$0语义，generic POSIX shell需要单独支持矩阵），或暂缓完整登录。尚未决定/引入补丁，不以无参数例外降低LOCAL-02范围。
+- 先前“没有独立argv0覆盖API”的限制仍适用于完整显式program+args，但不能据此否认公开builder的无参数SHELL选择可行。生产完整选项：最小Unix argv0设置API补丁（保留显式program原路径/fail-closed，独立参数）、已知Shell登录参数（改变$0语义，generic POSIX shell需要单独支持矩阵），或暂缓完整登录。后续用户已选择 ADR-030 登录参数方案，不引入补丁；此段保留公开 API 实验背景，不以无参数例外降低 LOCAL-02 范围。
 - 新xtask→已锁定portable-pty内部依赖边，Cargo.lock只多一dependency字符串，没有新包/版本。任务/CLI帮助/Unix CI已注册，Linux实际login.json selectedProgram/loginArgv0/exit/EOF/join收据齐全；完整check/test29PTY/57app/238TS、严格clippy、原ProfileProbe均过。最新两项xtask回归全量16项补验；MCP新模块诊断请求60秒超时，未计通过；未安装或重启语言服务器。全featuresaudit仍原6license/两维护公告失败，无新豁免。
 - 本地环境prepare提交后actualv2 WebView也已通过两headless/两DOM、fresh恢复/输入resize/旧ACK/EOF与bindings漂移兼容；它不是生产ProfileGUI验收，Windows/macOS未实测。
 
+## LOCAL-02 显式登录参数（ADR-030）
+
+- 用户明确选择登录参数方案，不 patch portable-pty。公开 `pulse-pty::launch::prepare_local_login_command` 只为可信 Unix Bash/Zsh/Fish 分类请求登录；Bash 前置 `--login`，Zsh/Fish 前置 `-l`。已有 leading `-l`/`--login` 不重复，后续参数可能是脚本数据，不扫描、改写或拆分。选定程序/cwd 保留，复用 defaults、CLI 身份防伪和最终参数/环境/字节预算。generic sh、pwsh、未知类型和非 Unix 自动登录请求稳定拒绝。没有使用默认 builder 或程序选择回退。
+- 首次35项PTY回归通过，但真实参数登录探针失败；复现 `bash -l --noprofile --norc` 的长选项顺序错误，改用 `--login` 后真实探针通过，输出断言、时限和启动文件隔离均未放宽。用户显式提供的无效选项顺序不自动重排；用户选项还可能改变登录状态，纯构造不作任意 profile 登录成功保证。
+- 新 `mise run probe-login-arguments` 及 Unix CI 独立登记，报告 `login-arguments.json` 不得以原 argv0 实验代替。在0700 owned目录，实际 Bash 两次原生PTY分别断言普通非登录/参数登录状态、TTY、script `$0` 和中文/emoji/标点字面参数、终端环境、exit7、输出EOF、reader join、直接子进程回收；missing 显式程序真实spawn失败，未执行其他 shell。Bash 使用 `--noprofile --norc`，清除 BASH_ENV/ENV/SHELLOPTS/BASHOPTS 继承键，不读取用户启动文件；4096输出预算、worker12秒监督。此证据不等于系统/用户登录文件正确加载。
+- 六项新纯回归覆盖三种known shell构造、leading选项复用、未知/非Unix拒绝、预算与身份防伪、非UTF8参数保留、坏命令先拒；报告负向回归拒绝 truthy/缺原生收据/argv0方法替代/错误模式和计数。Linux真实 Bash 已过，Zsh/Fish仅有纯构造证据；macOS、Windows及生产Profile默认选择/持久存储/UI尚未验收。`$0` 不保证 `-` 前缀，与 Terminal.app/iTerm2 不声称完全等价。完整 check/test、35PTY/57app/238TS/17xtask、严格clippy及原ProfileProbe、公开argv0实验、2MiB actor授权恢复兼容通过；MCP launch模块 Exact 无error。依赖/锁文件/审计规则未变。
+
 ## 检查结果
 
-- Rust：29项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认16项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：35项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认17项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

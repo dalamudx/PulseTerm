@@ -11,6 +11,7 @@ mod encoding_attachment_probe;
 #[cfg(feature = "ssh-probe")]
 mod gbk_probe;
 mod local_session_probe;
+mod login_arguments_probe;
 mod login_probe;
 mod portable_pty_probe;
 mod profile_probe;
@@ -113,6 +114,8 @@ fn main() -> Result<()> {
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-profiles") => profile_probe::run()?,
         Some("probe-login") => login_probe::run()?,
+        Some("probe-login-arguments") => login_arguments_probe::run()?,
+        Some("probe-login-arguments-worker") => login_arguments_probe::worker()?,
         Some("probe-login-worker") => login_probe::worker()?,
         Some("probe-profiles-worker") => profile_probe::worker()?,
         Some("probe-pty-portable") => portable_pty_probe::run()?,
@@ -193,7 +196,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-login>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-login|probe-login-arguments>"
         ),
     }
     Ok(())

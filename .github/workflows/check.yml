@@ -78,6 +78,9 @@ jobs:
       - name: Exercise Unix login builder selection and argv0
         if: runner.os != 'Windows'
         run: mise run probe-login
+      - name: Exercise Unix explicit login arguments and missing-program rejection
+        if: runner.os != 'Windows'
+        run: mise run probe-login-arguments
       - name: Exercise Unix shell discovery and profile reconciliation
         if: runner.os != 'Windows'
         run: mise run probe-profiles

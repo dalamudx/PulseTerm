@@ -41,6 +41,9 @@ pub enum LocalLaunchError {
     /// Trusted adapter metadata is malformed, empty, or exceeds its own bound.
     #[error("local.invalid_environment_context")]
     InvalidContext,
+    /// Login arguments are supported only for explicitly classified Unix bash/zsh/fish.
+    #[error("local.unsupported_login_shell")]
+    UnsupportedLoginShell,
 }
 const RESERVED: [&str; 4] = [
     "TERM_PROGRAM",
@@ -125,6 +128,41 @@ pub fn prepare_local_command(
     Ok(command)
 }
 
+/// Request parameter-based login for a trusted Unix bash/zsh/fish classification.
+/// Bash uses --login so following long options remain valid; zsh/fish use -l.
+/// Never rewrites argv0, picks a default executable, or splits user arguments.
+/// Only an existing leading `-l`/`--login` avoids insertion; later arguments can
+/// be script data and are not scanned. User options may still override login mode.
+/// Unknown/POSIX sh/pwsh classifications and non-Unix platforms fail explicitly.
+/// Application/CLI environment policy and final command budgets remain enforced.
+pub fn prepare_local_login_command(
+    mut command: PtyCommand,
+    context: &LocalSessionEnvironment,
+    shell: Option<ShellKind>,
+) -> Result<PtyCommand, LocalLaunchError> {
+    command.validate()?;
+    if !cfg!(unix) {
+        return Err(LocalLaunchError::UnsupportedLoginShell);
+    }
+    let flag = match shell {
+        Some(ShellKind::Bash) => "--login",
+        Some(ShellKind::Zsh | ShellKind::Fish) => "-l",
+        _ => return Err(LocalLaunchError::UnsupportedLoginShell),
+    };
+    if !command
+        .args
+        .first()
+        .is_some_and(|arg| arg == "-l" || arg == "--login")
+    {
+        command.args.insert(0, flag.into());
+    }
+    prepare_local_command(command, context, shell)
+}
+
 #[cfg(test)]
 #[path = "launch_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "login_tests.rs"]
+mod login_tests;

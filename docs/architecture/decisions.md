@@ -37,6 +37,8 @@
 
 | ADR-029 | 非 UTF-8 会话采用版本化双坐标：保留原始 source 字节边界，另设 UTF-8 显示游标；ACK 按实际帧额度，不与任一累计计数混用 | Accepted（用户确认双坐标） | GBK 固定样例 source33/UTF843 不等；方案与后果见 [编码边界评估](./terminal-encoding-boundaries.md)，v2 显式准入、v1 拒转码，生产 binary preclassifier 和窗口适配仍待完成 |
 
+| ADR-030 | 已知 Unix shell 的登录启动采用显式登录参数，而非改写 argv0；保留选定程序与字面用户参数，不 patch portable-pty，不使用默认程序回退 | Accepted（用户选择登录参数） | bash 前置 `--login`，zsh/fish 前置 `-l`；generic sh、pwsh 和未知程序不自动推断支持。`$0` 不保证具有 `-` 前缀，不承诺与 Terminal.app/iTerm2 启动语义完全一致。macOS 默认登录、Linux 默认普通启动仍是目标配置，系统启动文件与跨平台兼容待实测。 |
+
 ## 待决事项
 
 | 事项 | 影响 | 计划 |
