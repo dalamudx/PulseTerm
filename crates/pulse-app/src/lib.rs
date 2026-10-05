@@ -33,7 +33,16 @@ pub struct NativeExit {
     /// Completed native resize operations.
     pub resize_count: u64,
 }
-/// Combined actor/native receipt. Dropping it requests close, never aborts native
+/// Native completion and actor metadata are separate: a remote D status is not exit_code.
+#[derive(Debug)]
+pub struct LocalSessionReceipt {
+    /// Final actor state, projection and undrained untrusted hints.
+    pub actor: pulse_term::session::SessionReceipt,
+    /// Actual native child status, after reader/writer/controller join.
+    pub native: NativeExit,
+}
+
+/// Combined actor/native task. Dropping it requests close, never aborts native
 /// workers. Descendant process trees and OS-hung syscalls are not yet guaranteed.
 pub struct LocalSessionTask {
     handle: SessionHandle,
@@ -55,14 +64,20 @@ impl LocalSessionTask {
     /// Diagnostic visible screen at the final actor boundary, including EOF decoding.
     /// Not a complete snapshot. Native workers are joined under the caller's deadline.
     pub async fn join_with_screen(
-        mut self,
+        self,
     ) -> Result<(SessionState, pulse_term::ObservedScreen, NativeExit), LocalSessionError> {
+        let receipt = self.join_with_receipt().await?;
+        Ok((receipt.actor.state, receipt.actor.screen, receipt.native))
+    }
+    /// Preserve final bounded hints after true EOF or explicit stop; no synthetic D.
+    /// Native workers still join, and native exit remains independent of untrusted hints.
+    pub async fn join_with_receipt(mut self) -> Result<LocalSessionReceipt, LocalSessionError> {
         let actor = self
             .actor
             .take()
             .ok_or_else(|| LocalSessionError("actor receipt consumed".into()))?;
-        let (state, screen) = actor
-            .join_with_screen()
+        let actor = actor
+            .join_with_receipt()
             .await
             .map_err(|e| LocalSessionError(e.to_string()))?;
         let native = self
@@ -71,7 +86,7 @@ impl LocalSessionTask {
             .ok_or_else(|| LocalSessionError("native receipt consumed".into()))?
             .await
             .map_err(|e| LocalSessionError(e.to_string()))??;
-        Ok((state, screen, native))
+        Ok(LocalSessionReceipt { actor, native })
     }
 }
 /// Spawn/setup runs on a blocking pool; ongoing I/O uses three supervised native

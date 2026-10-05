@@ -17,7 +17,7 @@ fn command() -> Result<pulse_pty::PtyCommand> {
         mode: LocalShellMode::Login,
         ..Default::default()
     };
-    command.args = vec!["--noprofile".into(), "--norc".into(), "-c".into(), "builtin shopt -q login_shell || exit 90\n[ \"$TERM_PROGRAM\" = PulseTerm ] && [ \"$TERM\" = xterm-256color ] && [ \"$COLORTERM\" = truecolor ] || exit 91\n[ \"$TERM_PROGRAM_VERSION\" = \"$PULSE_PROFILE_TEST_VERSION\" ] || exit 92\n[ \"${PULSE_PANE_ID+x}\" != x ] && [ \"${PULSE_SOCKET+x}\" != x ] || exit 93\nbuiltin printf '\\033]133;A\\007\\033]133;B\\007\\033]133;C\\007'\nexec \"$@\"".into(), "pulseterm-profile-bootstrap".into(), original.program];
+    command.args = vec!["--noprofile".into(), "--norc".into(), "-c".into(), "builtin shopt -q login_shell || exit 90\n[ \"$TERM_PROGRAM\" = PulseTerm ] && [ \"$TERM\" = xterm-256color ] && [ \"$COLORTERM\" = truecolor ] || exit 91\n[ \"$TERM_PROGRAM_VERSION\" = \"$PULSE_PROFILE_TEST_VERSION\" ] || exit 92\n[ \"${PULSE_PANE_ID+x}\" != x ] && [ \"${PULSE_SOCKET+x}\" != x ] || exit 93\nbuiltin printf '\\033]133;A\\007\\033]133;B\\007\\033]133;C\\007'\n\"$@\"\npulse_status=$?\nbuiltin printf '\\033]133;D;7\\007'\nexit \"$pulse_status\"".into(), "pulseterm-profile-bootstrap".into(), original.program];
     command.args.extend(original.args);
     command.cwd = original.cwd;
     command.env = original.env;
@@ -60,6 +60,7 @@ fn validate(report: &Value) -> Result<()> {
         "orderedEofAck",
         "burstExactChecked",
         "shellHintsChecked",
+        "finalShellHintsChecked",
     ] {
         ensure!(
             wire[key].as_bool() == Some(true),
@@ -68,13 +69,16 @@ fn validate(report: &Value) -> Result<()> {
     }
     ensure!(
         cfg!(unix)
-            && report["schemaVersion"] == 2
+            && report["schemaVersion"] == 3
             && report["platform"] == std::env::consts::OS
             && report["shell"] == "bash"
             && report["mode"] == "login"
             && wire["platform"] == std::env::consts::OS
             && wire["burstBytes"] == 2 * 1024 * 1024
             && wire["shellHintCount"] == 3
+            && wire["finalShellHintCount"] == 1
+            && wire["advisoryExitStatus"] == 7
+            && wire["nativeExitCode"] == 0
             && wire["creditLimitBytes"] == 9000
             && wire["creditPeakBytes"]
                 .as_u64()
@@ -114,7 +118,7 @@ pub fn run() -> Result<()> {
             .await
             .context("profile_session.deadline")?
         })?;
-        let report = json!({"schemaVersion":2,"platform":std::env::consts::OS,"shell":"bash","mode":"login","parameterLoginVerified":true,"terminalDefaultsVerified":true,"startupFilesDisabled":true,"literalHelperArguments":true,"noProgramFallback":true,"orderedEofAndReap":true,"wire":wire});
+        let report = json!({"schemaVersion":3,"platform":std::env::consts::OS,"shell":"bash","mode":"login","parameterLoginVerified":true,"terminalDefaultsVerified":true,"startupFilesDisabled":true,"literalHelperArguments":true,"noProgramFallback":true,"orderedEofAndReap":true,"wire":wire});
         validate(&report)?;
         std::fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
         println!(
@@ -128,7 +132,7 @@ mod tests {
     use super::*;
     #[test]
     fn profile_receipt_requires_native_pressure_and_exact_burst() {
-        let report = json!({"schemaVersion":2,"platform":std::env::consts::OS,"shell":"bash","mode":"login","parameterLoginVerified":true,"terminalDefaultsVerified":true,"startupFilesDisabled":true,"literalHelperArguments":true,"noProgramFallback":true,"orderedEofAndReap":true,"wire":{"platform":std::env::consts::OS,"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"orderedEofAck":true,"burstExactChecked":true,"shellHintsChecked":true,"shellHintCount":3,"burstBytes":2*1024*1024,"creditLimitBytes":9000,"creditPeakBytes":8212,"wireFrames":500,"pausedParsedBytes":8192,"finalParsedBytes":2*1024*1024+64,"renderer":"Rust validator; not frontend callbacks"}});
+        let report = json!({"schemaVersion":3,"platform":std::env::consts::OS,"shell":"bash","mode":"login","parameterLoginVerified":true,"terminalDefaultsVerified":true,"startupFilesDisabled":true,"literalHelperArguments":true,"noProgramFallback":true,"orderedEofAndReap":true,"wire":{"platform":std::env::consts::OS,"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"orderedEofAck":true,"burstExactChecked":true,"shellHintsChecked":true,"shellHintCount":3,"finalShellHintsChecked":true,"finalShellHintCount":1,"advisoryExitStatus":7,"nativeExitCode":0,"burstBytes":2*1024*1024,"creditLimitBytes":9000,"creditPeakBytes":8212,"wireFrames":500,"pausedParsedBytes":8192,"finalParsedBytes":2*1024*1024+64,"renderer":"Rust validator; not frontend callbacks"}});
         assert_eq!(validate(&report).is_ok(), cfg!(unix));
         for key in [
             "parameterLoginVerified",
@@ -161,6 +165,12 @@ mod tests {
             ("shellHintsChecked", json!("true")),
             ("shellHintCount", json!(0)),
             ("shellHintCount", json!(4)),
+            ("finalShellHintsChecked", json!(false)),
+            ("finalShellHintsChecked", json!("true")),
+            ("finalShellHintCount", json!(0)),
+            ("finalShellHintCount", json!(2)),
+            ("advisoryExitStatus", json!(0)),
+            ("nativeExitCode", json!(7)),
         ] {
             let mut wrong = report.clone();
             wrong["wire"][key] = bad;

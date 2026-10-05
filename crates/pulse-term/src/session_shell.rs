@@ -8,6 +8,17 @@ pub struct SessionShellMarkers {
     /// Stream-order hints; may precede synchronized rendering and are not restored.
     pub hints: crate::shell_markers::ShellMarkerBatch,
 }
+/// Actor supervision receipt. Hints are leftover lossy metadata, not trusted exit evidence.
+#[derive(Debug)]
+pub struct SessionReceipt {
+    /// Final actor boundary and declared lifecycle, independent of process status.
+    pub state: SessionState,
+    /// Diagnostic final projection, not full historical/restoration state.
+    pub screen: ObservedScreen,
+    /// At most 128 undrained hints; explicit dropped count, no command strings.
+    pub shell_markers: crate::shell_markers::ShellMarkerBatch,
+}
+
 impl SessionHandle {
     /// Drain advisory hints only for this active lease and noncancelled view.
     /// Queue admission is bounded; callers must impose their own response deadline.
@@ -40,6 +51,9 @@ pub(super) fn deliver(
     }
 }
 
+#[cfg(test)]
+#[path = "session_shell_eof_tests.rs"]
+mod eof_tests;
 #[cfg(test)]
 #[path = "session_shell_tests.rs"]
 mod tests;

@@ -319,7 +319,23 @@ pub(crate) async fn wire_streaming_command(
     .await
     .context("native wire deadline")??;
     let receipt = binding.completion.await??;
-    let (state, exit) = tokio::time::timeout(Duration::from_secs(3), task.join()).await??;
+    let supervised =
+        tokio::time::timeout(Duration::from_secs(3), task.join_with_receipt()).await??;
+    let final_hints = supervised.actor.shell_markers;
+    let expected_final = if expect_shell_hints {
+        vec![pulse_term::shell_markers::ShellMarker::CommandEnd {
+            exit_status: Some(7),
+        }]
+    } else {
+        Vec::new()
+    };
+    ensure!(
+        final_hints.markers == expected_final && final_hints.dropped == 0,
+        "wire final hints lost/invented"
+    );
+    let advisory_exit_status = if expect_shell_hints { Some(7u8) } else { None };
+    let state = supervised.actor.state;
+    let exit = supervised.native;
     ensure!(
         end && state.lifecycle == Lifecycle::Ended && exit.exit_code == 0,
         "wire final native status"
@@ -346,7 +362,7 @@ pub(crate) async fn wire_streaming_command(
         "wire final screen"
     );
     Ok(
-        json!({"shellHintsChecked":shell_hint_count.is_some(),"shellHintCount":shell_hint_count,"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"burstBytes":burst_bytes,"burstExactChecked":cfg!(unix),"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
+        json!({"shellHintsChecked":shell_hint_count.is_some(),"shellHintCount":shell_hint_count,"finalShellHintsChecked":true,"finalShellHintCount":final_hints.markers.len(),"advisoryExitStatus":advisory_exit_status,"nativeExitCode":exit.exit_code,"registryOwnerGenerationAuthorization":true,"ackToNativeBackpressure":true,"pausedParsedBytes":pause,"wireFrames":receipt.frames,"creditPeakBytes":receipt.peak_credit_bytes,"creditLimitBytes":config.bytes,"orderedEofAck":true,"finalParsedBytes":offset,"burstBytes":burst_bytes,"burstExactChecked":cfg!(unix),"renderer":"Rust validator; not frontend callbacks","platform":std::env::consts::OS}),
     )
 }
 async fn streaming() -> Result<serde_json::Value> {

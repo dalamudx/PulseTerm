@@ -18,7 +18,7 @@ mod stream;
 pub use stream::{SessionStream, StreamEnd, StreamRecord, StreamStatus};
 #[path = "session_shell.rs"]
 mod shell;
-pub use shell::SessionShellMarkers;
+pub use shell::{SessionReceipt, SessionShellMarkers};
 #[cfg(test)]
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
@@ -615,17 +615,22 @@ impl SessionHandle {
 }
 /// Supervision receipt; do not abort it to close a session. Use SessionHandle::close.
 /// Join completion means the synthetic transport driver was also joined.
-pub struct SessionTask(JoinHandle<(SessionState, ObservedScreen)>);
+pub struct SessionTask(JoinHandle<SessionReceipt>);
 impl SessionTask {
     /// Wait for the actor and driver to exit. Apply an application-owned deadline.
     pub async fn join(self) -> Result<SessionState, tokio::task::JoinError> {
-        self.0.await.map(|(state, _screen)| state)
+        self.0.await.map(|receipt| receipt.state)
     }
     /// Diagnostic final visible screen, including EOF replacement characters.
     /// This does not contain full restore modes or historical state.
     pub async fn join_with_screen(
         self,
     ) -> Result<(SessionState, ObservedScreen), tokio::task::JoinError> {
+        self.0.await.map(|receipt| (receipt.state, receipt.screen))
+    }
+    /// Join with remaining bounded untrusted hints, even after live requests close.
+    /// Already drained hints are omitted; no marker is inferred from EOF or cancellation.
+    pub async fn join_with_receipt(self) -> Result<SessionReceipt, tokio::task::JoinError> {
         self.0.await
     }
 }
@@ -925,7 +930,11 @@ fn spawn_inner(
             StreamEnd::Session(current.lifecycle),
             &current,
         );
-        (current, terminal.screen())
+        SessionReceipt {
+            state: current,
+            screen: terminal.screen(),
+            shell_markers: terminal.take_shell_markers(),
+        }
     });
     (handle, SessionTask(task))
 }
