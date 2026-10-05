@@ -134,6 +134,9 @@ impl VaultKeyLifecycle {
             })),
         })
     }
+    pub(crate) fn expected_id(&self) -> Result<Uuid, LifecycleError> {
+        Ok(guard(&self.shared)?.id)
+    }
     /// Observe only availability, never key material.
     pub fn status(&self) -> Result<KeyStatus, LifecycleError> {
         let state = guard(&self.shared)?;
@@ -297,6 +300,14 @@ impl Drop for UnlockCandidate {
     }
 }
 impl UnlockWorker {
+    pub(crate) fn ensure_current(&self) -> Result<(), LifecycleError> {
+        let shared = self.owner.upgrade().ok_or(LifecycleError::Closed)?;
+        if guard(&shared)?.current(&self.token) {
+            Ok(())
+        } else {
+            Err(LifecycleError::Stale)
+        }
+    }
     /// Return a candidate only after DEK authentication. Stale owned keys drop/zeroize.
     pub fn finish(self, key: AuthenticatedDek) -> Result<UnlockCandidate, LifecycleError> {
         let shared = self.owner.upgrade().ok_or(LifecycleError::Closed)?;

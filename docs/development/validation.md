@@ -798,6 +798,14 @@ mise run probe-pty
 - 5 compile_fail通过（新增证明不能Debug、permit不能Clone）；全check/test/CLI严格lint/五进程/default63native通过，60普通store/1Rootignored/2崩溃回归，62app/43PTY/107term/242TS保持。MCP新模块诊断Exact无错误；改返回类型的引用工具带stale警告未算精确通过，实际workspace编译确认无漏改调用。无依赖版本/成本/帧变更，不重复已过DOM/SSH/审计；audit仍保持之前实际exit5。
 - 尚无spawn_blocking/有界入队、CPU取消配额与result投递、窗口/页面授权整合、生产应用锁或idle锁、持久信封/钥匙串/用户凭据。控制器只能清自身持有的key，不能保证清除工作线程尚未投递的临时结果、早先合法transport副本、swap/core dump；后续监督层仍需处理它们。
 
+## 有界后台主密码任务与取消交接
+
+- `vault_unlock::begin_validation_unlock`只接受后端Rust scope、拥有密码和固定验证加密元数据。新PasswordInput 1..4096bytes、Zeroizing且禁止Debug/Clone/serde；借用副本仍归原调用者。KDF私有AtomicBool RAII令牌在CPU排队前取得，裸KDF与后台任务共用单quota，不能直接构造或复制令牌；没有新依赖/成本参数、前端命令或数据库schema。
+- 一个spawn_blocking闭包持有密码与CPU令牌直至实际退出。未启动即接收方关闭/epoch失效跳过计算；运行中取消或ready未来timeout只撤销scope，CPU额度不提前释放。消费ready等待投递和join再给出无key回执，仍需当前permit确认；外来确认借用回执不消耗机会。显式cancel返回只可join、不能abort/清quota的观察收据。panic/认证失败/丢失或迟到结果不会自动重试、换DEK或启用key。
+- 10项回归通过：joined仍Pending、foreign确认拒绝后合法确认；running取消/timeout仍Busy直到真实Drop；queued取消跳过compute；lock后的迟到线程不触碰新epoch；已投递未观察receiptDrop清key；worker panic释放额度且scope Locked；无Runtime/坏输入/错误ID不取得许可；Busy不消费任何scope的机会。额度实际退出采用cfg(test) oneshot见证，不轮询或凭sleep推断。真实64MiB KDF在阻塞线程完成、tag认证后当前epoch确认读取同一旧credential，错误密码拒绝。
+- store严格lint及MCP Exact无诊断；完整check/test/schema漂移/五进程/2MiB会话/绑定漂移/默认原生严格lint与63tests通过。70普通store/1Root-only ignored/2真实进程崩溃/6 compile_fail，62app/43PTY/107term/242TS保持。改动不影响协议、Native工厂或算法/包features，未重复已过DOM/SSH/原有audit exit5。
+- 仍是验证profile和内存scope，不是生产解锁/窗口授权/idle应用锁、系统钥匙串或持久信封；不能撤回已发给授权transport的secret副本、保证swap/core dump擦除或中断运行中的Argon2。生产参数及Win/mac解锁性能、窗口权限与应用退出时scope关闭须单独接入验收。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

@@ -1,9 +1,11 @@
 //! Fixed validation profile, not a persisted format, strength policy or OS unlock.
-//! CPU work is non-cancellable; a future service must schedule off the GUI thread
-//! and reject late results against its own authorization/unlock epoch.
+//! CPU work is non-cancellable. `vault_unlock` reserves the same quota before
+//! blocking dispatch; a trusted adapter must still enforce authorization/epochs.
 use crate::vault_crypto::VaultCipher;
 use argon2::{Algorithm, Argon2, Block, Params, Version};
+#[cfg(test)]
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use zeroize::Zeroizing;
 /// Password input bound; intentionally not a production strength policy.
 pub const PASSWORD_BYTES_LIMIT: usize = 4096;
@@ -11,7 +13,32 @@ pub const PASSWORD_BYTES_LIMIT: usize = 4096;
 pub const VALIDATION_MEMORY_KIB: u32 = 65536;
 const ALGORITHM: Algorithm = Algorithm::Argon2id;
 const VERSION: Version = Version::V0x13;
-static JOB: Mutex<()> = Mutex::new(());
+static JOB: AtomicBool = AtomicBool::new(false);
+/// Sendable private RAII quota, reserved before spawning or queueing CPU work.
+pub(crate) struct KdfJob {
+    _private: (),
+    #[cfg(test)]
+    pub(crate) released: Option<tokio::sync::oneshot::Sender<()>>,
+}
+pub(crate) fn admit_validation_job() -> Result<KdfJob, KdfError> {
+    JOB.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map_err(|_| KdfError::Busy)?;
+    Ok(KdfJob {
+        _private: (),
+        #[cfg(test)]
+        released: None,
+    })
+}
+impl Drop for KdfJob {
+    fn drop(&mut self) {
+        JOB.store(false, Ordering::Release);
+        #[cfg(test)]
+        if let Some(released) = self.released.take() {
+            let _result = released.send(());
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) static TEST_SCENARIOS: Mutex<()> = Mutex::new(());
 /// Static errors contain neither password nor derived material.
@@ -20,7 +47,7 @@ pub enum KdfError {
     /// Empty or oversized input is refused before admission.
     #[error("vault.kdf_invalid_input")]
     Input,
-    /// Only one in-process job; poisoned admission also fails closed.
+    /// Only one in-process job; no waiting queue or early release.
     #[error("vault.kdf_busy")]
     Busy,
     /// Explicit allocation failed before expensive computation.
@@ -47,10 +74,23 @@ pub fn fresh_salt() -> Result<[u8; 16], KdfError> {
 /// Borrowed password lifetime/zeroization belongs to the authorized Rust caller.
 /// Returned cipher is not an authorization grant or a successful vault unlock.
 pub fn derive_validation_kek(password: &[u8], salt: &[u8; 16]) -> Result<VaultCipher, KdfError> {
+    validate_password(password)?;
+    let job = admit_validation_job()?;
+    derive_admitted(password, salt, &job)
+}
+pub(crate) fn validate_password(password: &[u8]) -> Result<(), KdfError> {
     if password.is_empty() || password.len() > PASSWORD_BYTES_LIMIT {
-        return Err(KdfError::Input);
+        Err(KdfError::Input)
+    } else {
+        Ok(())
     }
-    let _job = JOB.try_lock().map_err(|_| KdfError::Busy)?;
+}
+pub(crate) fn derive_admitted(
+    password: &[u8],
+    salt: &[u8; 16],
+    _job: &KdfJob,
+) -> Result<VaultCipher, KdfError> {
+    validate_password(password)?;
     let params =
         Params::new(VALIDATION_MEMORY_KIB, 3, 1, Some(32)).map_err(|_| KdfError::Derivation)?;
     let count = params.block_count();

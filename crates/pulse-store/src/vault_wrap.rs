@@ -1,6 +1,9 @@
 //! Validate KEK->DEK authentication in memory. No disk format or unlock service.
 use crate::vault_crypto::{CryptoError, SealedSecret, SecretContext, VaultCipher};
-use crate::vault_kdf::{KdfError, derive_validation_kek, fresh_salt};
+use crate::vault_kdf::{
+    KdfError, KdfJob, admit_validation_job, derive_admitted, derive_validation_kek, fresh_salt,
+    validate_password,
+};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 const KIND: &str = "wrapped_dek";
@@ -87,13 +90,42 @@ pub fn recover_validation_dek(
     expected_vault_id: Uuid,
     envelope: &ValidationWrappedDek,
 ) -> Result<AuthenticatedDek, WrapError> {
-    if envelope.vault_id != expected_vault_id
-        || envelope.sealed.ciphertext.len() != SEALED_KEY_LENGTH
-    {
-        return Err(WrapError::Envelope);
+    envelope.validate_for(expected_vault_id)?;
+    validate_password(password)?;
+    let job = admit_validation_job()?;
+    recover_admitted(password, expected_vault_id, envelope, &job)
+}
+impl ValidationWrappedDek {
+    #[cfg(test)]
+    pub(crate) fn malformed_fixture(id: Uuid) -> Self {
+        Self {
+            vault_id: id,
+            salt: [0; 16],
+            sealed: SealedSecret {
+                nonce: [0; 24],
+                ciphertext: vec![0; SEALED_KEY_LENGTH],
+            },
+        }
     }
+    pub(crate) fn validate_for(&self, expected: Uuid) -> Result<(), WrapError> {
+        if self.vault_id != expected
+            || self.sealed.ciphertext.len() != SEALED_KEY_LENGTH
+            || expected.is_nil()
+        {
+            return Err(WrapError::Envelope);
+        }
+        Ok(())
+    }
+}
+pub(crate) fn recover_admitted(
+    password: &[u8],
+    expected_vault_id: Uuid,
+    envelope: &ValidationWrappedDek,
+    job: &KdfJob,
+) -> Result<AuthenticatedDek, WrapError> {
+    envelope.validate_for(expected_vault_id)?;
     let context = SecretContext::new(expected_vault_id, KIND)?;
-    let kek = derive_validation_kek(password, &envelope.salt)?;
+    let kek = derive_admitted(password, &envelope.salt, job)?;
     let plaintext = kek.open(&context, &envelope.sealed)?;
     if plaintext.expose().len() != 32 {
         return Err(WrapError::Envelope);

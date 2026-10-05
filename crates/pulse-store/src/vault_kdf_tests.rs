@@ -46,7 +46,7 @@ fn fixed_profile_repeats_key_and_binds_password_salt_and_busy_admission()
         other.open(&context, &sealed),
         Err(CryptoError::Authentication)
     ));
-    let _held = JOB.try_lock().map_err(|_| KdfError::Busy)?;
+    let _held = admit_validation_job()?;
     assert!(matches!(
         derive_validation_kek(b"valid", &salt),
         Err(KdfError::Busy)

@@ -11,6 +11,8 @@ pub mod vault_crypto;
 pub mod vault_kdf;
 /// Backend-only two-phase memory key availability; not frontend authorization.
 pub mod vault_lifecycle;
+/// Bounded blocking validation unlock jobs; no frontend/password IPC.
+pub mod vault_unlock;
 /// Memory-only validation DEK wrapping; no persisted envelope or authorization grant.
 pub mod vault_wrap;
 use profiles::{AutoProfileEdit, AutoProfilePreferences};
