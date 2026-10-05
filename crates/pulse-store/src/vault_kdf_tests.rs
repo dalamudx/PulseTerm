@@ -27,6 +27,7 @@ fn rfc9106_argon2id_known_answer_uses_same_algorithm_and_version()
 #[test]
 fn fixed_profile_repeats_key_and_binds_password_salt_and_busy_admission()
 -> Result<(), Box<dyn std::error::Error>> {
+    let _scenario = TEST_SCENARIOS.lock().map_err(|_| KdfError::Busy)?;
     let salt = fresh_salt()?;
     assert_ne!(salt, fresh_salt()?);
     let context = SecretContext::new(uuid::Uuid::from_bytes([1; 16]), "wrapped_dek")?;

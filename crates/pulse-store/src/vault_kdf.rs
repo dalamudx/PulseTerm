@@ -12,6 +12,8 @@ pub const VALIDATION_MEMORY_KIB: u32 = 65536;
 const ALGORITHM: Algorithm = Algorithm::Argon2id;
 const VERSION: Version = Version::V0x13;
 static JOB: Mutex<()> = Mutex::new(());
+#[cfg(test)]
+pub(crate) static TEST_SCENARIOS: Mutex<()> = Mutex::new(());
 /// Static errors contain neither password nor derived material.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum KdfError {

@@ -783,6 +783,13 @@ mise run probe-pty
 - 4次固定64MiB debug派生合计约16.6s，仅测试观察，不是production或跨平台基准、生产参数批准。49项普通store/1额外Root用例ignored、2真实崩溃、3compile_fail及完整check/test/45SSH/CLI严格lint/五独立进程/default63native均通过，62app/43PTY/107term/242TS保持，MCP Exact无诊断。无Native/帧协议改变，未重复已过DOM。此次audit实际core_exit0/audit_exit5：原六项license和两項maintenance保持失败。
 - 仍无KEK包装DEK、版本化持久信封、秘密落库、OS钥匙串、主密码UI或完整应用锁，不读取用户密码/凭据。
 
+## 内存KEK包装DEK与认证恢复
+
+- `ValidationWrappedDek`只含private加密metadata，无持久serde/文件读取/任意成本。新建测试Vault随机生成独立32-byte DEK，KEK以Vault UUID+固定wrapped_dek kind的AAD加密；恢复严格48byte密文和可信预期ID，认证后检查32byte明文并通过Zeroizing源导入opaque cipher，未返回raw DEK、未生成替代key。
+- 2回归通过：原DEK lock后正确密码恢复同一已有credential，错密码/tag篡改/连metadata一起换ID均认证失败；错目标ID、截断、nil ID在昂贵派生之前拒绝，原加密blob不变。对公开输入零化责任仍属调用者，派生后的key、工作区和解密DEK均有零化所有权。
+- 增加cfg(test)串行场景锁仅协调两个真实高成本密码学夹具，生产1job try_lock及Busy语义不变；完整check/test、CLI严格lint、五独立进程通过，51普通store/1Rootignored/2真实崩溃/3compile_fail，62app/43PTY/107term/242TS保持；MCP Exact无诊断。无新依赖/参数/Native/帧变化，不重复上一阶段已过SSH/DOM/审计。
+- 仍无持久信封格式、真实凭据/钥匙串、异步epoch与迟到key发布、应用锁或UI；这不是成功解锁/用户授权，后续控制层只能在当前授权与epoch确认后启用key。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
