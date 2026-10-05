@@ -652,9 +652,18 @@ mise run probe-pty
 - `command`只将`--distribution`和完整名字作为两份OsString参数，不拼接shellsource、执行程序或加入其它选项，复用通用PtyCommand预算；Debug脱敏名字。option-like名字的纯argv回归并不证明wsl.exe的实际参数解析行为，这一点仍需Windows实测。
 - 6项新回归覆盖BOM/Unicode/各发行版、损坏编码、全snapshot拒绝、字面选项/标点与Debug、边界及2000个seeded随机UTF16 snapshot。22项PTY、57app、238TS与完整check/test、LinuxProfileProbe、严格clippy通过；MCP模块Exact无error，未新增依赖/锁/审计豁免。没有运行Windows/WSL，CI只是原有三平台unit登记；native discovery必须先验证owned wsl process的成功退出、stdout预算与时限，纯解析不能认证数据来源。
 
+## LOCAL-02 本地启动环境defaults与CLI路由元数据隔离
+
+- 新公开`pulse-pty::launch::{prepare_local_command,LocalSessionEnvironment,PaneEnvironment,LocalLaunchError}`纯准备层；字面args/cwd保留，提供TERM/COLORTERM/TERM_PROGRAM/版本defaults，普通profile env及TERM/COLORTERM显式值优先。runtime身份4键的所有ASCII case别名覆盖/删除拒；backend version/id/socket限制格式/长度/NUL，错误与Debug不暴露值。context不是authorization token，不创建CLI服务或会话窗口绑定。
+- PtyCommand新增env_remove，在继承环境/defaultTERM之后、显式env之前应用；清旧PULSE_PANE_ID/PULSE_SOCKET，只有backend当前pair才重新设置，不设置空字符串冒充删除。显式env覆盖/删除键合计最多128项、encoded byte均计128KiB。原通用PtyCommand不强制runtime政策；只有调用prepare的local-profile adapter走此行为，不能把它当生产IPC已受保护。
+- Pwsh按trusted ShellKind前置-NoLogo（已有leading大小写同flag不重复）并默认更新检查Off，不解析/拆分script参数，profile普通env仍可明确改更新检查。此为纯argv/env回归，不是pwsh/PSReadLine/Windowsnative验收，更未实现自定义login argv0。
+- 7项新环境回归覆盖defaults/字面argv/cwd/profile覆盖、无CLI字段、backendpair与Debug脱敏、reservedcasealias阻断、坏context、pwsh与预算、继承删除键校验/先删后设；29PTY/57app/238TS与完整check/test、strictclippy/真实ProfileProbe和actor2MiB授权/恢复兼容通过，MCP launch模块Exact无error。
+- ProfileProbe schema2要求launchCount2、terminalDefaults/staleCliCleared/backendCliPair等独立strictbool收据；父worker通过process.env注入固定旧pair，不修改进程global环境，两个真实sh→finite Rust child分别断言旧pair不存在或被backendpair替换、全部终端字段与literal env/cwd/argv一致，exit7/EOF/readjoin/directreap均通过。字段值不入报告。新schema负向测试首次仍用schema2作为错误值失败，已修为旧schema1与单launch明确拒绝，没有放宽校验。
+- 前一版本profile/WSL已补actualv2两headless+两DOM与61native/bindings/strictclippy兼容，不能当本轮env_remove的新GUI实测。最新本轮native编译/61tests/strictclippy已通过；无新依赖/锁/底层补丁或audit豁免。runtime metadata继承政策尚未接生产Profile服务/GUI/持久存储，Windows/macOS与一般进程树仍未验。
+
 ## 检查结果
 
-- Rust：22项pulse-pty测试通过（profile目录、启动字段与WSL UTF16解析）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认14项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- Rust：29项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 57项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各61项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认14项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
 - TS：238 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。

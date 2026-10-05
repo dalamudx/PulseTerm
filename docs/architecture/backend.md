@@ -154,11 +154,12 @@ reader ─► 有界队列(64 块 × 最大 64KB) ─► actor:
 - **Shell 自动探测**：扫描 PATH 和常见安装目录，用 `wsl.exe --list --quiet` 获取 WSL 发行版列表（输出是 UTF-16LE，需要解码）。探测结果作为动态 profile，已生成过的 profile 记录在应用状态中，用户删除后不会再自动出现。
 - **已实现基础**：`pulse-pty::profiles`提供Unix只读元数据发现（bash/zsh/fish/sh/pwsh）、每kind一个稳定自动profile、隐藏状态刷新保留与可导出/恢复的删除tombstone。程序沿用发现路径，不将`sh`替换成symlink目标。PATH最多64个组件/64KiB、程序路径最多4KiB，忽略相对/空组件及无执行位文件。此处只判元数据候选，不保证当前用户ACL/挂载exec策略或程序内容合法，native launch仍可失败；需在阻塞worker上执行。设置持久化、用户自定义profile/默认选择、Windows/WSL发现与macOS登录启动尚未接入。
 - **WSL列表解析基础**：`pulse-pty::wsl::decode_wsl_list`仅对成功原生命令的UTF-16LE stdout做有界严格解码，64KiB/64发行版/256UTF16单元名称，保留大小写、空格和顺序；非法surrogate/BOM/控制字符/重复记录拒整个snapshot。`WslDistribution::command`仅构造字面`--distribution`参数并走通用启动校验，不执行wsl.exe。原生命令定位、成功回执/超时、WSL argv解析互通与基于registry GUID的稳定profile持久化仍未接入，不把名字当GUID。
-- **启动字段边界**：`PtyCommand::validate`在任何native PTY分配前拒绝NUL、非法env键/空cwd及128参数/128环境覆盖/128KiB显式字段预算；空参数和最后env覆盖保持字面语义，Debug只显示数量/是否设置，不显示程序、argv、cwd、环境键值。继承环境与OS-specific argv限制未计入该预算；这不是启动授权或完整敏感数据存储。
+- **启动字段边界**：`PtyCommand::validate`在任何native PTY分配前拒绝NUL、非法env键/空cwd及128参数/128环境覆盖与删除键合计/128KiB显式字段预算；空参数和最后env覆盖保持字面语义，Debug只显示数量/是否设置，不显示程序、argv、cwd、环境键值。继承环境与OS-specific argv限制未计入该预算；这不是启动授权或完整敏感数据存储。
 - **启动时的环境变量**：
   - `TERM=xterm-256color`、`COLORTERM=truecolor`、`TERM_PROGRAM=PulseTerm`、`TERM_PROGRAM_VERSION`；
   - `PULSE_PANE_ID`、`PULSE_SOCKET`（供 CLI 定位当前窗格）；
   - pwsh 加上 `-NoLogo`，并设置 `POWERSHELL_UPDATECHECK=Off`。
+- **本地启动环境准备基础**：`pulse-pty::launch::prepare_local_command`纯构造defaults+profile overrides，profile可以改TERM/COLORTERM及普通env；TERM_PROGRAM/TERM_PROGRAM_VERSION/PULSE_PANE_ID/PULSE_SOCKET的任何ASCII大小写别名覆盖或删除均拒。`PtyCommand::env_remove`通过公开builder API在显式override前删除继承键，清掉父进程旧PULSE pair，无CLI绑定则保持不存在；当前pair仅由backend context注入。它不创建CLI endpoint或授予binding权限。Pwsh按可信分类默认前置-NoLogo/POWERSHELL_UPDATECHECK=Off，profile仍可覆盖更新检查；macOSlogin、Windows环境行为实测与production Profile入口未接入。
 - **登录 shell**：macOS 默认以登录 shell 方式启动（argv[0] 加 `-` 前缀），和 Terminal.app、iTerm2 的行为一致，保证 `/etc/paths` 和 `~/.zprofile` 生效。Linux 默认不使用登录 shell，可在 profile 中修改。
 - **Windows 环境变量刷新**：新会话启动前，从注册表重新读取用户和系统的环境变量，再合并 profile 中的设置，使得安装新软件后不用重启 PulseTerm 就能用上新的 PATH。
 - **Shell 集成脚本注入**（SHELL-03）：bash 用 `--rcfile`；zsh 用临时 `ZDOTDIR`；fish 使用 `XDG_DATA_DIRS` 下的 vendor_conf.d；pwsh 使用 `-NoExit -Command`。每种方式都要确保用户原有的配置文件仍然会被加载。

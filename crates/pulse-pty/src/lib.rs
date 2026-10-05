@@ -3,13 +3,15 @@
 #![forbid(unsafe_code)]
 pub use portable_pty::ExitStatus;
 mod command_validation;
+/// Pure terminal defaults and backend-owned pane environment preparation.
+pub mod launch;
 /// Bounded local shell discovery and automatic profile reconciliation.
 pub mod profiles;
 /// Strict decoding and literal launch construction for Windows WSL discovery output.
 pub mod wsl;
 /// Maximum literal arguments accepted before allocating a PTY.
 pub const MAX_COMMAND_ARGS: usize = 128;
-/// Maximum explicit environment overrides accepted before allocating a PTY.
+/// Maximum combined explicit environment overrides/removals before allocating a PTY.
 pub const MAX_COMMAND_ENV: usize = 128;
 /// Maximum encoded bytes across explicit launch fields; inherited environment excluded.
 pub const MAX_COMMAND_BYTES: usize = 128 * 1024;
@@ -30,6 +32,8 @@ pub struct PtyCommand {
     pub cwd: Option<PathBuf>,
     /// Overrides; remaining environment is inherited when building the command.
     pub env: Vec<(OsString, OsString)>,
+    /// Inherited keys to remove before applying explicit overrides.
+    pub env_remove: Vec<OsString>,
 }
 impl std::fmt::Debug for PtyCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -38,6 +42,7 @@ impl std::fmt::Debug for PtyCommand {
             .field("argument_count", &self.args.len())
             .field("working_directory_set", &self.cwd.is_some())
             .field("environment_override_count", &self.env.len())
+            .field("environment_removal_count", &self.env_remove.len())
             .finish_non_exhaustive()
     }
 }
@@ -49,6 +54,7 @@ impl PtyCommand {
             args: vec![],
             cwd: None,
             env: vec![],
+            env_remove: vec![],
         }
     }
     /// Validate explicit launch fields before native allocation. Inherited environment
@@ -64,6 +70,9 @@ impl PtyCommand {
             command.cwd(cwd);
         }
         command.env("TERM", "xterm-256color");
+        for key in &self.env_remove {
+            command.env_remove(key);
+        }
         for (key, value) in &self.env {
             command.env(key, value);
         }

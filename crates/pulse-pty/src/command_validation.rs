@@ -4,7 +4,9 @@ pub(super) fn validate(command: &PtyCommand) -> Result<(), PtyError> {
     if command.program.is_empty() {
         return Err(PtyError::EmptyProgram);
     }
-    if command.args.len() > MAX_COMMAND_ARGS || command.env.len() > MAX_COMMAND_ENV {
+    if command.args.len() > MAX_COMMAND_ARGS
+        || command.env.len().saturating_add(command.env_remove.len()) > MAX_COMMAND_ENV
+    {
         return Err(PtyError::CommandLimit);
     }
     let mut total = 0usize;
@@ -31,6 +33,12 @@ pub(super) fn validate(command: &PtyCommand) -> Result<(), PtyError> {
             return Err(PtyError::InvalidCommand);
         }
         admit(cwd.as_os_str())?;
+    }
+    for key in &command.env_remove {
+        if key.is_empty() || key.as_encoded_bytes().contains(&b'=') {
+            return Err(PtyError::InvalidCommand);
+        }
+        admit(key)?;
     }
     for (key, value) in &command.env {
         if key.is_empty() || key.as_encoded_bytes().contains(&b'=') {
