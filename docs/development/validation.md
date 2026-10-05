@@ -822,6 +822,13 @@ mise run probe-pty
 - `probe-settings-file`和CI注册严格12例receipt（3真实进程边界、9文件/锁回归），3脚本否定覆盖不支持平台/0tests/缺例/不完整summary/signal/timeout；mac候选实现与CI未运行不能称通过，Windows/其他平台拒绝。fullcheck/test/probe/schema、SQLite crash/五进程、native strictlint/63tests通过，91普通store/2ignored（Root及fixed-child）、242TS；MCP Exact无诊断。Rustix既有锁定版本仅将fs feature用于production backend，无版本/帧/UI变化，原有audit门禁未豁免。
 - 仍不保证非合作同UID编辑器在最后compare之后的原子CAS、全部祖先链/TOCTOU或Windows ACL；尚无生产配置目录/UI授权/自动监视。计划notify8.2.0元数据许可为CC0-1.0，当前许可策略未允许，问卷未返回授权；未采用依赖或修改deny规则。
 
+## 最后有效设置缓存与合并失效信号
+
+- `settings_reload::SettingsReloadCache`拿走已准入SettingsFile作为固定source；只有同步`&mut self`单读取者，无GUI调用或后台调度。bootstrap为空user layer而非伪造成功file snapshot；dirty bool将1000次失效合并为一次读取，消费后无隐式polling/timeout重试。坏/未来/权限/Busy错误只返回静态分类，原文件、last-good overlay、保存snapshot与revision保持；后续可信事件或manual refresh需要显式invalidate。
+- 验证后比较稀疏patch而非formatter输出。comment-only/同值但新inode更新成功source基线、不递增model revision或包含用户comment的事件；改变只返回revision与3个changed-field bool。显式false是user来源变化，即使等于编译default仍Applied；文件移除变成空overlay，真实Resolver回到下层来源。closed不再读/发布；u64耗尽保留旧状态并关闭，不允许回绕复活。
+- 8真实私有文件回归通过：bad initial不重置/不生成snapshot、last-good坏文拒绝后新signal恢复、1000失效合并与bad source不隐式重读、comments保留到实际typed save、删除来源恢复与显式false、Busy保持且不自动retry、关闭拒绝、revisionmax保持。MCP Exact无诊断，strict all-target lint、fullcheck/test/schema/绑定漂移、strict12设置文件/五独立进程probe通过：99普通store/2ignored/6compile_fail，62app/43PTY/107term/242TS。无包/特性/帧/前端/原生入口变化，未重复上一阶段已过63native或既有audit；现有release gate不变。
+- 此模块不是notify服务、异步读取额度、文件事件generation协议或settings.changed IPC；单读取者只保证同步调用不重入，不声称读取期间的后台新事件已自动采样。当前未选择用户生产目录，也没有修改用户设置。notify CC0许可问卷超时未获授权，未添加依赖或改deny规则，自动文件监视仍待决定。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

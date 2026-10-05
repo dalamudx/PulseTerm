@@ -7,6 +7,8 @@ pub mod settings;
 pub mod settings_edit;
 /// Fixed-name private settings snapshots and synchronous atomic saves.
 pub mod settings_file;
+/// Single-reader last-good settings cache; not a filesystem watcher or UI authority.
+pub mod settings_reload;
 /// Pure removal of supported overrides, retaining non-target bytes.
 pub mod settings_remove;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
