@@ -24,6 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 subtle = "=2.6.1"
 zeroize = "=1.9.0"
+argon2 = { version = "=0.6.0", default-features = false, features = ["zeroize"] }
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 getrandom = "=0.4.3"
 regex = "=1.13.1"

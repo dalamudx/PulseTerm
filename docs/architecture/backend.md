@@ -308,7 +308,7 @@ DEK（随机 256 位，用来加密所有凭据）
 - Linux 上如果没有 Secret Service（例如没有桌面会话），强制使用主密码模式。
 - 主密码模式下的应用锁（SEC-02）：锁定时从内存中清除 DEK，已经建立的会话不受影响。解锁之前不能发起需要凭据的新连接。
 
-- **当前实现边界**：`pulse-store::vault_crypto`仅实现内存AEAD原语，不是完整Vault或授权服务。稳定`chacha20poly1305 0.11.0`仅开启alloc/zeroize；使用既有getrandom的可失败OS熵源生成32-byte DEK和每次独立24-byte nonce，AAD是预期UUID的16个原始字节拼接受限ASCII kind。单值最大64KiB；密文/nonce/元数据错误不会返回明文。密钥与明文没有Debug/Serialize，明文包装零化Drop及显式zeroize早清，lock丢弃cipher后拒绝操作。此处不承诺交换区、寄存器或core dump完全擦除。尚无系统钥匙串、Argon2id/KEK、持久加密信封/秘密表或前端明文读取IPC；原语不授予访问权限。
+- **当前实现边界**：`pulse-store::vault_crypto`仅实现内存AEAD原语，不是完整Vault或授权服务。稳定`chacha20poly1305 0.11.0`仅开启alloc/zeroize；使用既有getrandom的可失败OS熵源生成32-byte DEK和每次独立24-byte nonce，AAD是预期UUID的16个原始字节拼接受限ASCII kind。单值最大64KiB；密文/nonce/元数据错误不会返回明文。密钥与明文没有Debug/Serialize，明文包装零化Drop及显式zeroize早清，lock丢弃cipher后拒绝操作。此处不承诺交换区、寄存器或core dump完全擦除。另有`vault_kdf::derive_validation_kek`固定验证原语：Argon2id v1.3/64MiB/t3/p1/32-byte、128-bit随机salt、密码1..4096bytes。单进程try_lock只容纳1个CPUjob，try_reserve工作区和输出皆Zeroizing，不接受未认证header成本。它是同步且不可取消的验证profile，调用者必须离开GUI线程调度、清理借用密码、检查迟到结果的授权epoch；派生成功不表示密码正确，不等于解锁。尚无系统钥匙串、KEK包装/认证、持久加密信封/秘密表或前端明文读取IPC；原语不授予访问权限。
 ### 10.3 设置
 
 - 分三层：编译进程序的 `defaults.toml` → 用户的 `settings.toml`（只保存改过的项）→ 分组和主机各自的覆盖配置（存在数据库中）。`SettingsResolver` 计算最终生效的值，并记录每一项来自哪一层（VAULT-07 在界面上展示）。

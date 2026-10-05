@@ -102,6 +102,8 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 
 - 设置基础直接引用已锁定toml/schemars/regex，新增派生依赖schemars_derive与serde_derive_internals，无既有包版本升级。Vault原语新增稳定`chacha20poly1305 0.11.0`（实际manifest：Apache-2.0 OR MIT；正常Cargo注册表checksum校验），只alloc/zeroize，不开启reduced-round或库默认getrandom；熵源直接使用已锁定getrandom 0.4.3，零化使用已锁定zeroize 1.9.0。原语无真实凭据、钥匙串或前端读取入口。此次全特性审计仍仅原6个license拒绝/2个maintenance公告，bans/sources通过；不是完整审计通过，没有扩白名单或公告豁免。
 
+- KEK验证原语直接引用既锁`argon2 0.6.0`（MIT OR Apache-2.0），仅开启zeroize，未新增版本或默认Rayon/密码PHC接口；现有调用者的feature合并仍保留原依赖。新增功能的audit实际exit5仍原6license/2maintenance，未新增拒绝或豁免。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

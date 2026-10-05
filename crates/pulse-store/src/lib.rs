@@ -7,6 +7,8 @@ pub mod settings;
 pub mod settings_edit;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
 pub mod vault_crypto;
+/// Fixed-cost memory-only master-password validation primitive, not unlock IPC.
+pub mod vault_kdf;
 use profiles::{AutoProfileEdit, AutoProfilePreferences};
 use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};

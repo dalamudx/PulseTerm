@@ -776,6 +776,13 @@ mise run probe-pty
 - 8回归通过，覆盖完整原文注释/排序、inline/dotted键、Unicode/转义token、显式false、新值稀疏、非法值/未知/未来schema及输入/结果预算。首轮发现toml_edit整体串行化会统一重复dotted parent的空格，改用不可变Document的真实值span只替换目标token，保留原失败断言；dotted新增值追加根级赋值保留旧字节。
 - 直接引用已锁定toml_edit 0.25.15（parse/display），未升级版本；本轮46项普通store、2实际崩溃、3compile_fail及完整check/test、CLI strictlint、五独立进程验证通过，62app/43PTY/107term/242TS保持，MCP编辑器Exact无诊断。无Native/帧协议变更，未重复上一检查点已过的真实WebView。删除覆盖、原子落盘、外部并发编辑冲突、notify/设置UI仍未验收。
 
+## 固定成本的主密码KEK验证原语
+
+- 3项回归通过：RFC9106 §5.3 Argon2id v1.3已知答案（32KiB/p4/secret/AAD仅用于规范测试）；实际固定64MiB/t3/p1路径中，同密码/salt可恢复固定32-byte密文，换密码或salt认证失败，随机salt独立；忙时不排队、不开始第二次分配，空/超4096byte输入在准入前拒绝。生产入口不接受任意成本/版本/secret/AAD参数。
+- 显式try_reserve工作区，Zeroizing<Vec<Block>>及32-byte key包裹所有正常/错误离开路径；单进程Mutex try_lock最多1job。密码是借用输入，由调用者负责寿命和清理；CPU工作不可取消，尚无异步调度、授权epoch提交、取消/迟到结果、限速/错误次数应用策略。派生成功不是密码认证成功或Vault解锁。
+- 4次固定64MiB debug派生合计约16.6s，仅测试观察，不是production或跨平台基准、生产参数批准。49项普通store/1额外Root用例ignored、2真实崩溃、3compile_fail及完整check/test/45SSH/CLI严格lint/五独立进程/default63native均通过，62app/43PTY/107term/242TS保持，MCP Exact无诊断。无Native/帧协议改变，未重复已过DOM。此次audit实际core_exit0/audit_exit5：原六项license和两項maintenance保持失败。
+- 仍无KEK包装DEK、版本化持久信封、秘密落库、OS钥匙串、主密码UI或完整应用锁，不读取用户密码/凭据。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
