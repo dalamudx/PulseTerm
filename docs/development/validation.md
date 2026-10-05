@@ -790,6 +790,14 @@ mise run probe-pty
 - 增加cfg(test)串行场景锁仅协调两个真实高成本密码学夹具，生产1job try_lock及Busy语义不变；完整check/test、CLI严格lint、五独立进程通过，51普通store/1Rootignored/2真实崩溃/3compile_fail，62app/43PTY/107term/242TS保持；MCP Exact无诊断。无新依赖/参数/Native/帧变化，不重复上一阶段已过SSH/DOM/审计。
 - 仍无持久信封格式、真实凭据/钥匙串、异步epoch与迟到key发布、应用锁或UI；这不是成功解锁/用户授权，后续控制层只能在当前授权与epoch确认后启用key。
 
+## 后台内存解锁epoch与两阶段key确认
+
+- `VaultKeyLifecycle`仅模型化backend key可用性，不等同用户/窗口授权。`AuthenticatedDek`由成功的wrapped_dek认证构造并带可信预期VaultID，普通KEK/随机cipher不能当证明。RAII permit→单次worker→candidate receipt→显式confirm；owner是不可串行化Weak pointer+不回绕epoch，没有caller字符串generation。scope clone共享状态、pending handle不保活owner。
+- 初稿将候选key放在结果对象里，review发现lock只能撤权而不能同步清掉外部候选；已改为scope持有candidate key、结果是无key回执。lock/close/permitDrop/receiptDrop同步drop对应key，已锁或失败结果不会替换新scope。confirm借用回执，foreign拒绝不消耗当前合法确认机会。Mutex poison和epoch耗尽清key并fail closed。
+- 9生命周期回归通过：候选未确认不可用、单worker/单pending、旧worker和已有candidate经过lock拒绝、取消后重绑、外来scope/同ID重建、owner销毁/错误VaultID、真实线程延后结果、重复confirm、耗尽时清active key、poison及lock/receiptDrop即时清candidate。真实64MiB KDF/tag认证成功结果接入当前permit确认并读取同一旧credential，未改断言或生产KDF Busy。
+- 5 compile_fail通过（新增证明不能Debug、permit不能Clone）；全check/test/CLI严格lint/五进程/default63native通过，60普通store/1Rootignored/2崩溃回归，62app/43PTY/107term/242TS保持。MCP新模块诊断Exact无错误；改返回类型的引用工具带stale警告未算精确通过，实际workspace编译确认无漏改调用。无依赖版本/成本/帧变更，不重复已过DOM/SSH/审计；audit仍保持之前实际exit5。
+- 尚无spawn_blocking/有界入队、CPU取消配额与result投递、窗口/页面授权整合、生产应用锁或idle锁、持久信封/钥匙串/用户凭据。控制器只能清自身持有的key，不能保证清除工作线程尚未投递的临时结果、早先合法transport副本、swap/core dump；后续监督层仍需处理它们。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

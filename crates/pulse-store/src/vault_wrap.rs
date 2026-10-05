@@ -13,6 +13,33 @@ pub struct ValidationWrappedDek {
     salt: [u8; 16],
     sealed: SealedSecret,
 }
+/// An authenticated, identity-bound DEK, not a KEK or random key.
+/// Fields are private; only successful tag verification constructs this result.
+/// No Clone/Debug/serde. This remains an internal Rust adapter boundary.
+/// ```compile_fail
+/// fn expose(key: pulse_store::vault_wrap::AuthenticatedDek) { println!("{key:?}"); }
+/// ```
+pub struct AuthenticatedDek {
+    vault_id: Uuid,
+    cipher: VaultCipher,
+}
+impl AuthenticatedDek {
+    /// Trusted backend import identity, never an authorization grant.
+    pub(crate) fn vault_id(&self) -> Uuid {
+        self.vault_id
+    }
+    /// Consume for a trusted adapter; app publication still needs its epoch gate.
+    pub fn into_cipher(self) -> VaultCipher {
+        self.cipher
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture(id: Uuid) -> Result<Self, CryptoError> {
+        Ok(Self {
+            vault_id: id,
+            cipher: VaultCipher::generate()?,
+        })
+    }
+}
 /// Static errors never contain a password, key, ciphertext or source metadata.
 #[derive(Debug, thiserror::Error)]
 pub enum WrapError {
@@ -59,7 +86,7 @@ pub fn recover_validation_dek(
     password: &[u8],
     expected_vault_id: Uuid,
     envelope: &ValidationWrappedDek,
-) -> Result<VaultCipher, WrapError> {
+) -> Result<AuthenticatedDek, WrapError> {
     if envelope.vault_id != expected_vault_id
         || envelope.sealed.ciphertext.len() != SEALED_KEY_LENGTH
     {
@@ -73,7 +100,10 @@ pub fn recover_validation_dek(
     }
     let mut material = Zeroizing::new([0; 32]);
     material.copy_from_slice(plaintext.expose());
-    Ok(VaultCipher::from_key_material(material)?)
+    Ok(AuthenticatedDek {
+        vault_id: expected_vault_id,
+        cipher: VaultCipher::from_key_material(material)?,
+    })
 }
 #[cfg(test)]
 #[path = "vault_wrap_tests.rs"]

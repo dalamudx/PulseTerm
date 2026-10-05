@@ -16,8 +16,16 @@ fn only_authenticated_key_recovers_credential_and_wrong_password_or_tamper_fails
         Err(CryptoError::Locked)
     ));
     let recovered = recover_validation_dek(b"validation only", vault_id, &envelope)?;
+    let lifecycle = crate::vault_lifecycle::VaultKeyLifecycle::new(vault_id)?;
+    let mut permit = lifecycle.begin()?;
+    let mut candidate = permit.worker()?.finish(recovered)?;
     assert_eq!(
-        recovered.open(&context, &credential)?.expose(),
+        lifecycle.status()?,
+        crate::vault_lifecycle::KeyStatus::Pending
+    );
+    lifecycle.confirm(&mut permit, &mut candidate)?;
+    assert_eq!(
+        lifecycle.open_for_adapter(&context, &credential)?.expose(),
         b"fixed fixture credential"
     );
     assert!(matches!(

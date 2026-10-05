@@ -9,6 +9,8 @@ pub mod settings_edit;
 pub mod vault_crypto;
 /// Fixed-cost memory-only master-password validation primitive, not unlock IPC.
 pub mod vault_kdf;
+/// Backend-only two-phase memory key availability; not frontend authorization.
+pub mod vault_lifecycle;
 /// Memory-only validation DEK wrapping; no persisted envelope or authorization grant.
 pub mod vault_wrap;
 use profiles::{AutoProfileEdit, AutoProfilePreferences};
