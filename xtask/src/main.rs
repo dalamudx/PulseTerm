@@ -110,6 +110,7 @@ fn main() -> Result<()> {
         Some("probe-channel") => channel_probe::run()?,
         Some("probe-channel-v2") => channel_probe::run_v2()?,
         Some("probe-encoding-window") => channel_probe::run_encoding()?,
+        Some("probe-login-window") => channel_probe::run_profile_login()?,
         Some("probe-window") => channel_probe::run_window()?,
         Some("probe-window-external") => channel_probe::run_window_external()?,
         Some("probe-pty") => pty_probe::run()?,

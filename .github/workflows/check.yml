@@ -105,6 +105,11 @@ jobs:
       - name: Validate explicit v2 bindings in the Linux WebView
         if: runner.os == 'Linux'
         run: mise run probe-channel-v2
+      - name: Validate isolated parameter-login profiles in the Linux WebView
+        if: runner.os == 'Linux'
+        run: |
+          mise run probe-login-window
+          mise exec -- cargo test -p pulseterm-desktop --features login-probe --locked
       - name: Validate native minimized-window recovery under Openbox
         if: runner.os == 'Linux'
         run: mise run probe-window

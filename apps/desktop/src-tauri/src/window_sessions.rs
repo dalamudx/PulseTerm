@@ -3,6 +3,9 @@
 pub(crate) mod encoding_probe;
 #[path = "window_peer_view.rs"]
 pub(crate) mod peer_view;
+#[cfg(feature = "login-probe")]
+#[path = "window_profile_login.rs"]
+mod profile_login;
 #[path = "window_reload_probe.rs"]
 mod reload;
 #[path = "window_transfer_probe.rs"]
@@ -283,6 +286,8 @@ impl WindowSessions {
 // Finite static helper, not arbitrary code execution. Native PTY output is Unicode
 // and intentionally ends inside a scalar to exercise genuine EOF decoder flushing.
 pub(crate) fn child() -> std::io::Result<()> {
+    #[cfg(feature = "login-probe")]
+    profile_login::check_child()?;
     std::thread::spawn(|| {
         std::thread::sleep(Duration::from_secs(40));
         std::process::exit(2);
@@ -327,6 +332,8 @@ pub(crate) fn child() -> std::io::Result<()> {
 async fn native() -> Result<(SessionHandle, pulse_app::LocalSessionTask)> {
     let mut command = PtyCommand::new(std::env::current_exe().map_err(error)?);
     command.args.push("--session-probe-child".into());
+    #[cfg(feature = "login-probe")]
+    let command = profile_login::prepare(command)?;
     let (handle, task) = spawn_local(command, TermSize::new(40, 12).map_err(error)?, 128)
         .await
         .map_err(error)?;
@@ -399,6 +406,7 @@ pub(crate) struct SessionEvidence {
     pub frames: u32,
     pub peak_credit_bytes: u32,
     pub native_exit: u32,
+    pub profile_login_checked: bool,
     pub peer_denied: bool,
     pub peer_transfer_checked: bool,
     pub peer_display_checked: bool,
@@ -452,6 +460,7 @@ impl SessionEvidence {
             || !(1..=8192 + if self.attachment_version == 2 { 28 } else { 20 })
                 .contains(&self.peak_credit_bytes)
             || self.native_exit != 0
+            || self.profile_login_checked != cfg!(feature = "login-probe")
             || !self.peer_denied
             || !self.peer_transfer_checked
             || !self.peer_display_checked
@@ -1318,6 +1327,7 @@ pub(crate) async fn probe_session(
         frames: u32::try_from(receipt.frames).map_err(error)?,
         peak_credit_bytes: u32::try_from(receipt.peak_credit_bytes).map_err(error)?,
         native_exit: native.exit_code,
+        profile_login_checked: cfg!(feature = "login-probe"),
         peer_denied,
         peer_transfer_checked: true,
         peer_display_checked: true,
@@ -1468,6 +1478,7 @@ mod tests {
             frames: 780,
             peak_credit_bytes: 6092,
             native_exit: 0,
+            profile_login_checked: cfg!(feature = "login-probe"),
             peer_denied: true,
             peer_transfer_checked: true,
             peer_display_checked: true,
@@ -1495,6 +1506,9 @@ mod tests {
             rows: 12,
         };
         assert!(e.validate().is_ok());
+        e.profile_login_checked = !cfg!(feature = "login-probe");
+        assert!(e.validate().is_err());
+        e.profile_login_checked = cfg!(feature = "login-probe");
         e.native_window_checked = true;
         assert!(e.validate().is_err());
         e.pause_count = 1;

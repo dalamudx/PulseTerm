@@ -163,6 +163,15 @@ description = "Validate GBK dual-coordinate recovery through actual Channel and 
 depends = ["desktop-encoding-build"]
 run = "cargo xtask probe-encoding-window"
 
+[tasks.desktop-login-build]
+description = "Build finite-helper Unix login validation app, not the default desktop"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features login-probe --locked"]
+
+[tasks.probe-login-window]
+description = "Validate fixed login profile through actual PTY, Channel and DOM callbacks"
+depends = ["desktop-login-build"]
+run = "cargo xtask probe-login-window"
+
 [tasks.desktop-check]
 description = "Check desktop adapter and frontend assets"
 run = ["pnpm --filter ui build", "cargo clippy -p pulseterm-desktop --features desktop --all-targets --locked -- -D warnings"]

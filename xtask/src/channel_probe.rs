@@ -6,29 +6,37 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
-    run_mode(false, false, false, false)
+    run_mode(false, false, false, false, false)
 }
 pub fn run_window() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("probe-window currently requires isolated Linux X11/Openbox");
     }
-    run_mode(true, false, false, false)
+    run_mode(true, false, false, false, false)
 }
 pub fn run_window_external() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("external window probe requires isolated X11/Openbox");
     }
-    run_mode(true, true, false, false)
+    run_mode(true, true, false, false, false)
 }
 pub fn run_v2() -> Result<()> {
-    run_mode(false, false, true, false)
+    run_mode(false, false, true, false, false)
 }
 pub fn run_encoding() -> Result<()> {
-    run_mode(false, false, true, true)
+    run_mode(false, false, true, true, false)
 }
-fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool) -> Result<()> {
+pub fn run_profile_login() -> Result<()> {
+    if !cfg!(unix) {
+        bail!("login window probe requires a known Unix Bash");
+    }
+    run_mode(false, false, true, false, true)
+}
+fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool, login: bool) -> Result<()> {
     let root = super::root()?;
-    let report = root.join(if encoding {
+    let report = root.join(if login {
+        "target/probes/login-window.json"
+    } else if encoding {
         "target/probes/encoding-window.json"
     } else if dual {
         "target/probes/channel-v2.json"
@@ -123,6 +131,9 @@ fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool) -> Resul
     validate(&report, minimize, external, dual)
         .with_context(|| format!("native probe exited with {status}"))?;
     let actual: Value = serde_json::from_slice(&std::fs::read(&report)?)?;
+    if !profile_mode_matches(&actual, login) {
+        bail!("profile login receipt does not match requested build mode");
+    }
     if encoding {
         validate_encoding(&actual)?;
     } else if actual["encodingRuns"] != 0 || !actual["encoding"].is_null() {
@@ -213,6 +224,11 @@ fn validate_encoding(report: &Value) -> Result<()> {
 fn window_mode_matches(report: &Value, minimize: bool) -> bool {
     report["domSession"]["nativeMinimizeChecked"].as_bool() == Some(minimize)
         && report["session"]["nativeMinimizeChecked"].as_bool() == Some(false)
+}
+fn profile_mode_matches(report: &Value, login: bool) -> bool {
+    ["session", "domSession"]
+        .iter()
+        .all(|key| report[key]["profileLoginChecked"].as_bool() == Some(login))
 }
 fn attachment_mode_matches(report: &Value, dual: bool) -> bool {
     let version = if dual { 2 } else { 1 };
@@ -362,6 +378,26 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn login_mode_rejects_ordinary_missing_truthy_and_mixed_receipts() {
+        let mut r = serde_json::json!({"session":{"profileLoginChecked":true},"domSession":{"profileLoginChecked":true}});
+        assert!(profile_mode_matches(&r, true));
+        assert!(!profile_mode_matches(&r, false));
+        for bad in [
+            serde_json::Value::Null,
+            serde_json::json!("true"),
+            serde_json::json!(1),
+            serde_json::json!(false),
+        ] {
+            r["domSession"]["profileLoginChecked"] = bad;
+            assert!(!profile_mode_matches(&r, true));
+        }
+        r["session"]["profileLoginChecked"] = serde_json::json!(false);
+        assert!(profile_mode_matches(&r, false));
+        assert!(!profile_mode_matches(&r, true));
+        r["session"] = serde_json::json!({});
+        assert!(!profile_mode_matches(&r, false));
+    }
     #[test]
     fn encoding_receipt_rejects_utf8_only_missing_render_or_unbounded_credit() {
         let mut r = serde_json::json!({"encodingRuns":2,"encoding":{"sourceBytes":"89","utf8Bytes":"91","generation":"2","revision":"20","digest":"9e1323ca657a4985","replacements":1,"frames":100,"peakCreditBytes":64,"domRowsChecked":12,"reverseInputChecked":true,"sourceOnlyMarker":true,"historyChecked":true,"callbackAckChecked":true}});
