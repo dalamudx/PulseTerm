@@ -4,6 +4,7 @@ mod database;
 pub mod profiles;
 /// Pure bounded terminal setting overlays; no file I/O or permissions.
 pub mod settings;
+pub mod settings_edit;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
 pub mod vault_crypto;
 use profiles::{AutoProfileEdit, AutoProfilePreferences};

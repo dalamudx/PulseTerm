@@ -314,7 +314,7 @@ DEK（随机 256 位，用来加密所有凭据）
 - 分三层：编译进程序的 `defaults.toml` → 用户的 `settings.toml`（只保存改过的项）→ 分组和主机各自的覆盖配置（存在数据库中）。`SettingsResolver` 计算最终生效的值，并记录每一项来自哪一层（VAULT-07 在界面上展示）。
 - 设置类型用 `schemars` 生成 JSON Schema，写入文件注释，编辑器可以据此补全；前端的设置页也由同一份 schema 生成。
 - 用 `notify` 监听文件变化，热加载时发出 `settings.changed` 事件。保存文件时用 `toml_edit`，**保留用户原有的注释和顺序**。
-- **当前实现边界**：`pulse-store::settings::SettingsResolver`纯函数处理编译defaults、用户、分组、主机覆盖，逐字段保留来源，显式false或等于默认值仍算当前来源。初始只含终端font_size（6–72）、font_family（最多128 Unicode字符、禁止CSS语法）、cursor_blink，沿用固定DOM样例的14/monospace/false。每层先校验，拒绝未知字段、重复键、未来schema和超64KiB文档；错误不回显原文。`settings-schema`生成`assets/schemas/settings.schema.json`，`settings-schema-check`只读检查漂移并纳入CI；defaults含本地schema注释。尚未读取真实用户配置、数据库group/host记录、保留注释写入、热加载或生成设置页，不能计完整VAULT-07。
+- **当前实现边界**：`pulse-store::settings::SettingsResolver`纯函数处理编译defaults、用户、分组、主机覆盖，逐字段保留来源，显式false或等于默认值仍算当前来源。初始只含终端font_size（6–72）、font_family（最多128 Unicode字符、禁止CSS语法）、cursor_blink，沿用固定DOM样例的14/monospace/false。每层先校验，拒绝未知字段、重复键、未来schema和超64KiB文档；错误不回显原文。`settings-schema`生成`assets/schemas/settings.schema.json`，`settings-schema-check`只读检查漂移并纳入CI；defaults含本地schema注释。`settings_edit::set_terminal_setting`只在内存编辑已知scalar；既有值依据不可变解析器token span替换，保留旁侧注释、顺序和空格，新增值保持稀疏且返回前校验完整模型与64KiB预算。尚未读取或原子写入真实用户配置、删除覆盖项、数据库group/host记录、热加载或生成设置页，不能计完整VAULT-07。
 - **主题**（UI-01 / UI-07，格式见 frontend.md §10）：内置主题从 `assets/themes/` 编译进程序，用户主题放在 `themes/*.toml`，同样支持热加载。各种外部格式的导入器（VS Code JSON、Windows Terminal JSON、`.itermcolors`、Alacritty TOML、base16/base24 YAML、Ghostty）放在 `pulse-store::theme`，统一转换成 PulseTerm 主题格式后写入 `themes/`；原文件只读取，不保留。导入时计算前景与背景的 WCAG 对比度，低于 4.5:1 时附带警告信息返回给前端。导入器都是纯函数（输入文本、输出主题），每种格式配有测试样例。
 
 ## 11. Capability 层（pulse-cap）
