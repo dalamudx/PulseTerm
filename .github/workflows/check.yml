@@ -92,6 +92,8 @@ jobs:
         run: mise run probe-shell-startup
       - name: Exercise atomic SQLite edits and strict process restart receipts
         run: mise run probe-profile-store
+      - name: Exercise SQLite abrupt process termination and WAL recovery
+        run: mise run probe-store-crash
       - name: Exercise Unix shell discovery and profile reconciliation
         if: runner.os != 'Windows'
         run: mise run probe-profiles

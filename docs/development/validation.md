@@ -746,6 +746,14 @@ mise run probe-pty
 - 初始检查点最终check/test/probe、实际Unix发现与PTY启动、2MiB登录Profile→actor ACK/EOF、bindings-check、63native tests/strictlint及实际v2两headless/twoDOM/7测量通过：10store/62app/43PTY/107term/242TS。本轮19store/strictlint、真实5process及2strictreceipt回归、完整check/test/probe、2MiB登录Profile→actor、bindings-check、63native strictlint/tests及v2 twoheadless/twoDOM/7测量均通过；62app/43PTY/107term/242TS保持通过。MCP store诊断Exact无错误，引用查询出现stale未当精确影响结论；实际调用者经有界读取/全编译检查核验。tokio-util沿用已锁定0.7.19，只新增直接引用与rt feature，没有升级包。
 - Unix当前只验证模式与末级regular/symlink，不宣称完整所有权/ACL/TOCTOU安全；WindowsACL/备份恢复UI/持久化Profile权限IPC/读池性能/Vault仍待实施。新6个库未新增cargo-deny拒绝或公告，原license6/maintenance2仍失败，不加白名单/ignore，详见dependency-review。
 
+## SQLite进程强制终止与WAL恢复
+
+- `mise run probe-store-crash`新增2个父用例，每个只执行自有integration-test子进程，在私有临时库、固定typed偏好上操作。直接SQL仅存在测试fixture，不扩大store或生产IPC权限。ignored子用例是被父用例明确调用并终止的helper，不是跳过的产品验收；正常workspace test也会执行两个父用例。
+- 固定phase+实际child PID的完整行收据，5s就绪截止、32行/每行1024字节读取预算；已COMMIT用例还要求live WAL文件>32字节。父进程实际kill/wait：Linux SIGKILL=9；Windows代码路径要求Child::kill的退出码1，尚无Windows/macOS实测证据。12s helper watchdog退出不能冒充强制终止，RAII在失败时也kill/wait并join读取线程。
+- 未COMMIT时终止后，重开保留此前Bash hidden和Zsh deleted；已COMMIT且两条Connection仍存活时终止后，重开恢复WAL中的Fish hidden，保留完整logical状态。首次超时来自libtest的同行名称前缀，改helper独立换行分帧后两个精确握手通过，不放宽字符串匹配或截止。
+- 2个父用例、19项store unit、完整check/test、strictlint和5process偏好回归通过，MCP测试文件诊断Exact无错误。上个检查点原生v2DOM/63native回归已通过，本次仅新增测试/任务/文档与Unix限定import，未重复未变的原生测量。
+- 不模拟物理断电、损坏磁盘/SQLite、用户已有库或备份恢复UI。schema仍1、frame协议不变。tokio-util rt直接引用后重跑all-feature audit仍仅原6项license拒绝与2项维护公告，bans/sources通过；audit不是通过，未新增ignore或放宽许可。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

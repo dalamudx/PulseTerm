@@ -1,11 +1,11 @@
 use super::*;
 use profiles::{AutoProfileEdit as Edit, AutoProfilePreferences as Prefs, AutomaticShell as Shell};
-use std::{fs, path::Path};
+use std::path::Path;
 fn private_dir() -> std::io::Result<tempfile::TempDir> {
     let dir = tempfile::tempdir()?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::{fs, os::unix::fs::PermissionsExt};
         fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700))?;
     }
     Ok(dir)

@@ -271,7 +271,7 @@ pub trait Vfs: Send + Sync {
 - 初始实现：`pulse-store::StateStore`单blocking worker串行typed app_state读写，16个待处理请求，250ms SQLite锁等待，WAL/foreign_keys/FULL；当前只持久化自动Unix Profile的5类hidden/deleted非秘密偏好，不提供任意SQL或凭据字段。暂不实现读连接池、Vault或应用数据目录的平台选择。
 - `AutoProfilePreferences` schema1严格校验未知字段/身份、重复、冲突、未来版本与4096字节行预算；写入使用IMMEDIATE事务先验证旧行，坏行不会被默认值或autosave覆盖。普通修改用typed `AutoProfileEdit`基于数据库当前状态原子修改；整行`save_auto_profiles(expected,value)`做逻辑状态CAS，不匹配返回Conflict，不允许无条件旧快照覆盖。响应只是该操作的提交快照，不保证之后没有新操作，不授予目录或启动权限。当前数据库user_version1；未来schema/无版本既有表拒绝，升级前使用SQLite Backup API保存未checkpoint WAL状态，existing backup不覆盖，失败迁移事务回滚且保留backup。
 - caller必须提供可信私有目录；Unix检查parent mode0700、DB mode0600、regular file/末级symlink与SQLITE_OPEN_NOFOLLOW，但不等于完整目录链所有权/ACL/TOCTOU验收；Windows目录与ACL由未来可信平台适配器负责。取消未执行请求不写，已经执行的提交不能撤回，不自动重试；drop全部handle后join收据确认关闭；可信`StateStoreTask`可cancel/shutdown，drop owner也唤醒worker，满队列不用预留额度。仍持有handle的客户端立即失去准入，未执行请求关闭；已开始的原生事务仍可能提交，shutdown不充当回滚。
-- `pulse-app::profile_state`在store与PTY之间映射固定5类身份；PTY不依赖store。隐藏状态可在本次尚未发现shell时保留，删除抑制不会因PATH/程序重装复活。`mise run probe-profile-store`用5个独立进程验证保存、两个并发editor、旧快照Conflict与行保持、重开和延迟发现；candidate仅固定元数据fixture，不执行用户shell；生产Profile持久化IPC尚未开放。
+- `pulse-app::profile_state`在store与PTY之间映射固定5类身份；PTY不依赖store。隐藏状态可在本次尚未发现shell时保留，删除抑制不会因PATH/程序重装复活。`mise run probe-profile-store`用5个独立进程验证保存、两个并发editor、旧快照Conflict与行保持、重开和延迟发现；candidate仅固定元数据fixture，不执行用户shell；生产Profile持久化IPC尚未开放。`mise run probe-store-crash`用独立固定子进程验证未COMMIT/已COMMIT未checkpoint的真实强制退出恢复，仅测试fixture使用固定SQL，不新增运行时SQL接口；不等于断电或文件系统损坏验收。
 
 - **需要参与同步的表都包含以下字段**（即使同步在 P2 才做）：
 
