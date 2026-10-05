@@ -13,7 +13,7 @@ pub enum TerminalSettingEdit {
 }
 /// Set only one known scalar, retaining key/value decor and all other entries.
 /// Every original field and the new field validate; malformed input is not reset.
-/// Removing overrides needs a separate comment-preserving design and is not supported.
+/// See `settings_remove` for separate comment-preserving override deletion.
 pub fn set_terminal_setting(
     text: &str,
     edit: TerminalSettingEdit,

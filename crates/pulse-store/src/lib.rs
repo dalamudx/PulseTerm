@@ -5,6 +5,8 @@ pub mod profiles;
 /// Pure bounded terminal setting overlays; no file I/O or permissions.
 pub mod settings;
 pub mod settings_edit;
+/// Pure removal of supported overrides, retaining non-target bytes.
+pub mod settings_remove;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
 pub mod vault_crypto;
 /// Fixed-cost memory-only master-password validation primitive, not unlock IPC.

@@ -806,6 +806,13 @@ mise run probe-pty
 - store严格lint及MCP Exact无诊断；完整check/test/schema漂移/五进程/2MiB会话/绑定漂移/默认原生严格lint与63tests通过。70普通store/1Root-only ignored/2真实进程崩溃/6 compile_fail，62app/43PTY/107term/242TS保持。改动不影响协议、Native工厂或算法/包features，未重复已过DOM/SSH/原有audit exit5。
 - 仍是验证profile和内存scope，不是生产解锁/窗口授权/idle应用锁、系统钥匙串或持久信封；不能撤回已发给授权transport的secret副本、保证swap/core dump擦除或中断运行中的Argon2。生产参数及Win/mac解锁性能、窗口权限与应用退出时scope关闭须单独接入验收。
 
+## 稀疏覆盖删除与下层来源恢复
+
+- `settings_remove::remove_terminal_setting`只允许TerminalSettingKey的3已知显示scalar；输入完整SettingsPatch校验先于编辑，缺项byte-identical。从不可变toml_edit key/value span定位，普通/点键删目标赋值，内联表另删一个必要delimiter；不调用mutable formatter。delimiter scanner只处理parser界定的whitespace/comment/comma区间，不重写TOML语法或用户字符串，comments中的逗号不参与选择。返回前再次校验并比较预期稀疏模型。
+- 9回归通过：普通/quoted-escaped/dotted assignment、inline first/middle/last/only与trailingcomma、comments中的逗号、multiline转义Unicode值、CRLF/无末换行、缺项幂等/空表保留、坏/重复/未来/超预算拒绝。真实resolver证明host删除只退回group，再删group退回user、再删user退回compiled defaults；显式false和其他字段来源不变。
+- 864次生成布局oracle通过（6排列×3布局×转义键/CRLF/尾换行/trailingcomma），每次还验证第二次删除byte-identical。期望删除区间在生成时记录，不由被测parser倒推；评论故意含同名赋值和逗号，避免全局替换假通过。strict all-target lint、MCP Exact无诊断；初始符号工具stale未计精确通过。
+- 完整check/test/schema漂移/probe/五进程通过，79普通store/1Root-only ignored/2真实崩溃/6 compile_fail，62app/43PTY/107term/242TS保持。无依赖/schema/前端/Native/帧变化，未重复上一阶段已过63native、2MiB、DOM或audit；发布仍由原有license/advisory阻断。此处无用户文件读写、原子保存或watcher，不能计完整VAULT-07。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
