@@ -666,7 +666,7 @@ mise run probe-pty
 - 锁定portable-pty0.9的public default builder通过自身env SHELL选择程序，Unix as_command设置`-basename` argv0。新`mise run probe-login`在0700的owned project目录hardlink自有xtask finite binary，显式SHELL指向该文件，真实slave执行后helper断言精确`-pulseterm-login-probe`且argc1/TTY，exit7/EOF/readerjoin/direct-child reap全过。helper3秒自退、worker12秒监督、输出≤4096；不读取用户或系统shell rc，也不把该实验当startupfile/macOS/交互Shell验收。
 - public args默认builder会panic，新增expectedpanic回归验证确实不能附带profile参数。missing-SHELL仅调用公开get_shell，观察选出的程序不同于requested path，不执行回退shell；report必须missingProgramFallbackObserved=true和customArgumentsSupported=false，避免success代表完整login。两项报告/公开API负向测试拒missing/truthy/wrong平台/非零argc/假定支持customargs。
 - 先前“没有独立argv0覆盖API”的限制仍适用于完整显式program+args，但不能据此否认公开builder的无参数SHELL选择可行。生产完整选项：最小Unix argv0设置API补丁（保留显式program原路径/fail-closed，独立参数）、已知Shell登录参数（改变$0语义，generic POSIX shell需要单独支持矩阵），或暂缓完整登录。尚未决定/引入补丁，不以无参数例外降低LOCAL-02范围。
-- 新xtask→已锁定portable-pty内部依赖边，Cargo.lock只多一dependency字符串，没有新包/版本。任务/CLI帮助/Unix CI已注册，Linux实际login.json selectedProgram/loginArgv0/exit/EOF/join收据齐全；完整check/test29PTY/57app/238TS、严格clippy、原ProfileProbe均过。最新两项xtask回归全量16项补验；MCP新模块诊断待补。全featuresaudit仍原6license/两维护公告失败，无新豁免。
+- 新xtask→已锁定portable-pty内部依赖边，Cargo.lock只多一dependency字符串，没有新包/版本。任务/CLI帮助/Unix CI已注册，Linux实际login.json selectedProgram/loginArgv0/exit/EOF/join收据齐全；完整check/test29PTY/57app/238TS、严格clippy、原ProfileProbe均过。最新两项xtask回归全量16项补验；MCP新模块诊断请求60秒超时，未计通过；未安装或重启语言服务器。全featuresaudit仍原6license/两维护公告失败，无新豁免。
 - 本地环境prepare提交后actualv2 WebView也已通过两headless/两DOM、fresh恢复/输入resize/旧ACK/EOF与bindings漂移兼容；它不是生产ProfileGUI验收，Windows/macOS未实测。
 
 ## 检查结果
