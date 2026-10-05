@@ -132,6 +132,18 @@ impl SettingsResolver {
         group: Option<&str>,
         host: Option<&str>,
     ) -> Result<ResolvedSettings, SettingsError> {
+        let user = user.map(SettingsPatch::parse).transpose()?;
+        let group = group.map(SettingsPatch::parse).transpose()?;
+        let host = host.map(SettingsPatch::parse).transpose()?;
+        Self::resolve_patches(user.as_ref(), group.as_ref(), host.as_ref())
+    }
+    /// Resolve validated sparse backend models with the same precedence as text layers.
+    /// Every supplied layer is revalidated; this grants no host/window authority.
+    pub fn resolve_patches(
+        user: Option<&SettingsPatch>,
+        group: Option<&SettingsPatch>,
+        host: Option<&SettingsPatch>,
+    ) -> Result<ResolvedSettings, SettingsError> {
         let defaults = SettingsPatch::parse(DEFAULTS_TOML)?;
         let mut result = ResolvedSettings {
             font_size: Setting {
@@ -153,13 +165,14 @@ impl SettingsResolver {
                 source: SettingsSource::Default,
             },
         };
-        for (text, source) in [
+        for (patch, source) in [
             (user, SettingsSource::User),
             (group, SettingsSource::Group),
             (host, SettingsSource::Host),
         ] {
-            if let Some(text) = text {
-                result.apply(SettingsPatch::parse(text)?, source);
+            if let Some(patch) = patch {
+                patch.validate()?;
+                result.apply(patch.clone(), source);
             }
         }
         Ok(result)

@@ -76,6 +76,10 @@ run = "node --test scripts/probe-settings-file.test.mjs"
 description = "Verify SQLite transaction and uncheckpointed WAL recovery after actual process termination"
 run = "cargo test -p pulse-store --locked --test crash_recovery"
 
+[tasks.probe-settings-scope]
+description = "Verify scoped SQLite edits and actual private user file resolution across five processes"
+run = ["cargo test -p xtask --features cli-probe --locked settings_scope_probe", "cargo run -p xtask --features cli-probe --locked -- probe-settings-scope"]
+
 [tasks.probe-profile-store]
 description = "Verify concurrent SQLite edits, stale snapshot refusal and independent process restarts"
 run = ["cargo test -p xtask --features cli-probe --locked profile_store", "cargo run -p xtask --features cli-probe --locked -- probe-profile-store"]

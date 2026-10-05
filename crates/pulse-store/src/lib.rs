@@ -4,6 +4,7 @@ mod database;
 pub mod profiles;
 /// Pure bounded terminal setting overlays; no file I/O or permissions.
 pub mod settings;
+mod settings_database;
 pub mod settings_edit;
 /// Fixed-name private settings snapshots and synchronous atomic saves.
 pub mod settings_file;
@@ -11,6 +12,9 @@ pub mod settings_file;
 pub mod settings_reload;
 /// Pure removal of supported overrides, retaining non-target bytes.
 pub mod settings_remove;
+/// Non-secret group/host sparse settings; scope IDs are not permission tokens.
+pub mod settings_scope;
+mod settings_store;
 /// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
 pub mod vault_crypto;
 /// Fixed-cost memory-only master-password validation primitive, not unlock IPC.
@@ -48,6 +52,15 @@ pub enum StoreError {
     /// The current preferences differ from the snapshot expected by a replacement.
     #[error("store.profile_preferences_conflict")]
     Conflict,
+    /// Scoped settings record, identity, budget or value validation failed.
+    #[error("store.invalid_scoped_settings")]
+    SettingsRecord,
+    /// Expected scope/revision no longer matches current durable state.
+    #[error("store.scoped_settings_conflict")]
+    SettingsConflict,
+    /// Scoped revision must not wrap or reset after deleting the last field.
+    #[error("store.scoped_settings_revision_exhausted")]
+    SettingsRevision,
     /// No new request was admitted to the bounded worker queue.
     #[error("store.busy")]
     Busy,
@@ -57,6 +70,25 @@ pub enum StoreError {
 }
 type Result<T> = std::result::Result<T, StoreError>;
 enum Request {
+    SettingsLoad(
+        settings_scope::SettingsScope,
+        oneshot::Sender<Result<settings_scope::ScopedSettingsSnapshot>>,
+    ),
+    SettingsEdit(
+        settings_scope::SettingsScope,
+        settings_scope::ScopedSettingsEdit,
+        oneshot::Sender<Result<settings_scope::ScopedSettingsSnapshot>>,
+    ),
+    SettingsReplace(
+        settings_scope::ScopedSettingsSnapshot,
+        settings::SettingsPatch,
+        oneshot::Sender<Result<settings_scope::ScopedSettingsSnapshot>>,
+    ),
+    SettingsLayers(
+        Option<uuid::Uuid>,
+        Option<uuid::Uuid>,
+        oneshot::Sender<Result<settings_scope::SettingsLayers>>,
+    ),
     Load(oneshot::Sender<Result<AutoProfilePreferences>>),
     Save(
         AutoProfilePreferences,
@@ -214,6 +246,18 @@ fn serve(
 
 fn dispatch(connection: &rusqlite::Connection, request: Request) {
     match request {
+        Request::SettingsLoad(scope, reply) if !reply.is_closed() => {
+            let _ = reply.send(settings_database::load(connection, scope));
+        }
+        Request::SettingsEdit(scope, edit, reply) if !reply.is_closed() => {
+            let _ = reply.send(settings_database::edit(connection, scope, edit));
+        }
+        Request::SettingsReplace(expected, value, reply) if !reply.is_closed() => {
+            let _ = reply.send(settings_database::replace(connection, &expected, value));
+        }
+        Request::SettingsLayers(group, host, reply) if !reply.is_closed() => {
+            let _ = reply.send(settings_database::layers(connection, group, host));
+        }
         Request::Load(reply) if !reply.is_closed() => {
             let _ = reply.send(database::load(connection));
         }
@@ -232,5 +276,7 @@ mod cancellation_tests;
 mod edit_tests;
 #[cfg(all(test, unix))]
 mod privacy_tests;
+#[cfg(test)]
+mod settings_scope_tests;
 #[cfg(test)]
 mod tests;

@@ -829,6 +829,13 @@ mise run probe-pty
 - 8真实私有文件回归通过：bad initial不重置/不生成snapshot、last-good坏文拒绝后新signal恢复、1000失效合并与bad source不隐式重读、comments保留到实际typed save、删除来源恢复与显式false、Busy保持且不自动retry、关闭拒绝、revisionmax保持。MCP Exact无诊断，strict all-target lint、fullcheck/test/schema/绑定漂移、strict12设置文件/五独立进程probe通过：99普通store/2ignored/6compile_fail，62app/43PTY/107term/242TS。无包/特性/帧/前端/原生入口变化，未重复上一阶段已过63native或既有audit；现有release gate不变。
 - 此模块不是notify服务、异步读取额度、文件事件generation协议或settings.changed IPC；单读取者只保证同步调用不重入，不声称读取期间的后台新事件已自动采样。当前未选择用户生产目录，也没有修改用户设置。notify CC0许可问卷超时未获授权，未添加依赖或改deny规则，自动文件监视仍待决定。
 
+## 组/主机稀疏覆盖与真实跨进程解析
+
+- `settings_scope`/`settings_database`/`settings_store`已接同一bounded StateStore worker，app_state schema1直接复用，固定kind/UUID/v1 keys。8192byte有界原始读取，strict private doc校验kind/id/schema/revision与稀疏模型；无命令/凭据/任意SQL或原文保存。immutable snapshots不可序列化、改revision或转scope，新增3个compile_fail实际通过。
+- IMMEDIATE typed edit/CAS保持另一字段与作用域；revision禁止ABA/回绕，最后override删除保留tombstone、missing/no-op不生成记录。nil/invalid/malformed/duplicate/future/misbound/oversized数据拒绝，坏记录不会被edit修成empty。DEFERRED成对读取实际验证另一Connection在group读取后提交host更新，不可混用旧group与新host。用户文件不参与SQLite事务，也未授予host存在性/成员关系/窗口权限。
+- 11存储回归、3严格receipt否定通过；`probe-settings-scope`/usage/CI注册，Linux五真实独立进程验证两编辑者并发、同UUID namespace隔离、fixed private settings.toml→last-good cache→typed DB pair的逐字段来源、ABA拒绝/row保持及worker joined。模式/PID须distinct、布尔不可truthy/缺失、版本不可string或旧值；每child5秒截止未延长。只操作temp fixture，不读取用户home，macCI待实测，Windows该组合probe明确unsupported而非zero-tests成功。
+- MCP Exact无诊断，fullcheck/test/schema/probe、5进程scope与Profile、12文件case/实际kill、2MiB session、绑定漂移、native strictlint/63tests通过；110普通store/2ignored/9compile_fail，62app/43PTY/107term/242TS通过。没有包/特性/协议/前端改变，不重复DOM或既有审计；六项许可证/两维护公告release gate与未获授权CC0依赖保持原状。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

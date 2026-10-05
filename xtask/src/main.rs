@@ -23,6 +23,8 @@ mod query_probe;
 mod route_probe;
 #[cfg(feature = "cli-probe")]
 mod settings_schema;
+#[cfg(feature = "cli-probe")]
+mod settings_scope_probe;
 mod shell_startup_probe;
 mod snapshot_probe;
 mod software_probe;
@@ -62,6 +64,10 @@ fn main() -> Result<()> {
     }
     if std::env::args().nth(1).as_deref() == Some("profile-probe-helper") {
         return profile_probe::helper();
+    }
+    #[cfg(feature = "cli-probe")]
+    if std::env::args().nth(1).as_deref() == Some("settings-scope-helper") {
+        return settings_scope_probe::helper();
     }
     #[cfg(feature = "cli-probe")]
     if std::env::args().nth(1).as_deref() == Some("profile-store-helper") {
@@ -124,6 +130,12 @@ fn main() -> Result<()> {
         Some("probe-window-external") => channel_probe::run_window_external()?,
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-profiles") => profile_probe::run()?,
+        Some("probe-settings-scope") => {
+            #[cfg(feature = "cli-probe")]
+            settings_scope_probe::run()?;
+            #[cfg(not(feature = "cli-probe"))]
+            bail!("probe-settings-scope requires --features cli-probe");
+        }
         Some("probe-profile-store") => {
             #[cfg(feature = "cli-probe")]
             profile_store_probe::run()?;
@@ -220,7 +232,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|settings-schema|settings-schema-check|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|probe-settings-scope|settings-schema|settings-schema-check|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
         ),
     }
     Ok(())
