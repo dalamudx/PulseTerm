@@ -13,6 +13,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "backup"] }
 rusqlite_migration = "=2.6.0"
+rustix = { version = "=1.1.5", features = ["process"] }
 pulse-store = { path = "crates/pulse-store", version = "0.1.0" }
 alacritty_terminal = "=0.26.0"
 portable-pty = "=0.9.0"

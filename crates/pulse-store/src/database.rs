@@ -20,8 +20,9 @@ fn private_file(path: &Path) -> Result<()> {
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.mode() & 0o777 != 0o700 || metadata.uid() != rustix::process::geteuid().as_raw()
+        {
             return Err(StoreError::Location);
         }
     }
@@ -34,20 +35,35 @@ fn private_file(path: &Path) -> Result<()> {
     }
     match options.open(path) {
         Ok(_) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            let m = fs::symlink_metadata(path).map_err(|_| StoreError::Location)?;
-            if !m.is_file() {
-                return Err(StoreError::Location);
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if m.permissions().mode() & 0o077 != 0 {
-                    return Err(StoreError::Location);
-                }
-            }
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(_) => return Err(StoreError::Location),
+    }
+    private_regular(&fs::symlink_metadata(path).map_err(|_| StoreError::Location)?)?;
+    // SQLite may touch sidecars during open; reject pre-existing aliases/foreign files first.
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(suffix);
+        match fs::symlink_metadata(Path::new(&name)) {
+            Ok(metadata) => private_regular(&metadata)?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(StoreError::Location),
+        }
+    }
+    Ok(())
+}
+fn private_regular(metadata: &fs::Metadata) -> Result<()> {
+    if !metadata.is_file() {
+        return Err(StoreError::Location);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.mode() & 0o777 != 0o600
+            || metadata.uid() != rustix::process::geteuid().as_raw()
+            || metadata.nlink() != 1
+        {
+            return Err(StoreError::Location);
+        }
     }
     Ok(())
 }

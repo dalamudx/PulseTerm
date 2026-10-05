@@ -211,5 +211,7 @@ fn dispatch(connection: &rusqlite::Connection, request: Request) {
 mod cancellation_tests;
 #[cfg(test)]
 mod edit_tests;
+#[cfg(all(test, unix))]
+mod privacy_tests;
 #[cfg(test)]
 mod tests;

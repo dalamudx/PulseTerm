@@ -98,6 +98,8 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 - 已读取libsqlite3-sys实际LICENSE：Rust wrapper为MIT，要求保留copyright/license；所捆绑`sqlite3/sqlite3.c`为SQLite3.53.2，主头部含作者copyright免责声明及祝辞。必须分别纳入第三方说明与分发源码审查；不能把wrapper的crate MIT元数据等同全部C源码许可审查，也没有启用sqlcipher目录的独立许可证。
 - 新锁图全特性cargo-deny实际仍原6项license拒绝与paste/proc-macro-error两项maintenance，sources/bans通过（重复版本warnings）；没有新增拒绝/公告，没有allow/ignore变更，不构成包装发布许可。初始store只写5个shell身份的隐藏/删除非秘密元数据，不提供明文凭据字段；Vault仍未实现。
 
+- Unix存储身份检查沿用已锁定`rustix 1.1.5`，只新增直接target引用（process，fs仅测试）而不升级包。使用safe geteuid，生产不使用unsafe/chown；全特性审计再次只有原6项license及2項维护公告失败，bans/sources通过，无豁免。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

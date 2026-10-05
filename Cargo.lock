@@ -3463,6 +3463,7 @@ version = "0.1.0"
 dependencies = [
  "rusqlite",
  "rusqlite_migration",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",

@@ -56,6 +56,14 @@ run = "cargo xtask probe-shell-startup"
 description = "Validate Unix public login builder argv0 and fallback limitations"
 run = "cargo xtask probe-login"
 
+[tasks.probe-store-owner]
+description = "Exercise foreign-owner refusal using disposable fixtures; requires existing effective UID 0, never elevates"
+run = ["node --test scripts/probe-store-owner.test.mjs", "node scripts/probe-store-owner.mjs"]
+
+[tasks.check-store-owner-probe]
+description = "Verify owner probe admission and refusal of zero or mismatched test receipts; no privileges required"
+run = "node --test scripts/probe-store-owner.test.mjs"
+
 [tasks.probe-store-crash]
 description = "Verify SQLite transaction and uncheckpointed WAL recovery after actual process termination"
 run = "cargo test -p pulse-store --locked --test crash_recovery"

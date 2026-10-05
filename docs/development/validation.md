@@ -744,7 +744,7 @@ mise run probe-pty
 - 原10项store测试覆盖真实文件重开、worker clone/drop/join、16额度/Closed、取消执行前不写、坏/过大行、未来schema/无版本既有表保持原数据、私有权限/symlink、迁移前SQLite Backup保存未checkpoint WAL、existing backup不覆盖、失败迁移rollback并保留原schema及backup。新增9项通过：同worker及独立worker原子编辑合并、CAS旧快照拒绝/新快照写入、显式恢复deleted、坏行/trigger失败保持原值、真实SQLite锁竞争不改行、idle/fullqueue cancellation/drop owner、保留client后关闭、已提交写入lost reply不回滚；合计19项。升级测试为内部版本1→2fixture，不等于生产已有schema2；当前production schema仍1。此前tempdir默认权限导致Location失败，已只修fixture到0700，不降低门禁。
 - app增加2项固定枚举映射/目录恢复回归；PTY保存独立hidden身份集合，重启初次缺shell而后再发现仍hidden。`mise run probe-profile-store`新版schema2报告在5个独立子进程真实保存、并发2editor、旧快照Conflict和重开，5s每child截止、无重试，最终join关闭worker，确认3个hidden与1个deleted全部保留；新增2项严格PID/模式/worker join/字面true负向回归并纳入同一mise task/CI，旧两进程报告不能替代；metadata candidate不执行，不计作Shell或真实用户配置验收。task/usage/跨平台CI注册，跨平台CI尚无执行证据。
 - 初始检查点最终check/test/probe、实际Unix发现与PTY启动、2MiB登录Profile→actor ACK/EOF、bindings-check、63native tests/strictlint及实际v2两headless/twoDOM/7测量通过：10store/62app/43PTY/107term/242TS。本轮19store/strictlint、真实5process及2strictreceipt回归、完整check/test/probe、2MiB登录Profile→actor、bindings-check、63native strictlint/tests及v2 twoheadless/twoDOM/7测量均通过；62app/43PTY/107term/242TS保持通过。MCP store诊断Exact无错误，引用查询出现stale未当精确影响结论；实际调用者经有界读取/全编译检查核验。tokio-util沿用已锁定0.7.19，只新增直接引用与rt feature，没有升级包。
-- Unix当前只验证模式与末级regular/symlink，不宣称完整所有权/ACL/TOCTOU安全；WindowsACL/备份恢复UI/持久化Profile权限IPC/读池性能/Vault仍待实施。新6个库未新增cargo-deny拒绝或公告，原license6/maintenance2仍失败，不加白名单/ignore，详见dependency-review。
+- Unix后续补齐有效UID、精确模式、单链接及预存侧文件检查（见下）；仍不宣称完整目录链/ACL/TOCTOU安全；WindowsACL/备份恢复UI/持久化Profile权限IPC/读池性能/Vault仍待实施。新6个库未新增cargo-deny拒绝或公告，原license6/maintenance2仍失败，不加白名单/ignore，详见dependency-review。
 
 ## SQLite进程强制终止与WAL恢复
 
@@ -753,6 +753,14 @@ mise run probe-pty
 - 未COMMIT时终止后，重开保留此前Bash hidden和Zsh deleted；已COMMIT且两条Connection仍存活时终止后，重开恢复WAL中的Fish hidden，保留完整logical状态。首次超时来自libtest的同行名称前缀，改helper独立换行分帧后两个精确握手通过，不放宽字符串匹配或截止。
 - 2个父用例、19项store unit、完整check/test、strictlint和5process偏好回归通过，MCP测试文件诊断Exact无错误。上个检查点原生v2DOM/63native回归已通过，本次仅新增测试/任务/文档与Unix限定import，未重复未变的原生测量。
 - 不模拟物理断电、损坏磁盘/SQLite、用户已有库或备份恢复UI。schema仍1、frame协议不变。tokio-util rt直接引用后重跑all-feature audit仍仅原6项license拒绝与2项维护公告，bans/sources通过；audit不是通过，未新增ignore或放宽许可。
+
+## Unix私有存储身份与侧文件边界
+
+- DB打开前校验叶级parent的有效UID与权限700；主DB及预存-wal/-shm/-journal要求权限600、同有效UID、regular且nlink1，拒绝hardlink/symlink/目录、宽权限及外来owner。Owner只经safe Rustix geteuid读取，无unsafe或权限提升。caller仍必须提供可信目录，不验证或锚定完整祖先链，metadata检查与SQLite open之间TOCTOU尚未消除；WindowsACL/所有权/硬链接保证仍未验收。
+- 22项普通store unit通过，新增硬链接保留两名原数据、12种sidecar别名/类型/权限组合不修改主DB或目标、只读父目录500/000及文件400保持权限与内容，Root也不得绕过只读意图。fixture-only模式恢复用于非Root测试清理，production不chmod/chown。
+- `mise run probe-store-owner`在本机现有有效UID0显式执行1项真实chown负向测试，只改变专用临时目录/DB/3种侧文件的owner，证明拒绝且无自动修复；没有提权或触及用户文件。此用例在普通CI ignored并明确要求额外授权环境，不作为Windows/macOS实测证据。Node入口拒绝非Linux/macOS、非数值UID0与0tests假成功，必须有精确testname、1passed/0failed/0ignored、正常exit0收据；3项纯gate/收据否定测试纳入普通CI，不需Root。
+- 完整check/test/probe、22普通store+1专用Root、2真实进程终止、5独立进程并发/重开、2MiB PTY→actor、bindings-check、default63native strictlint/tests均通过；62app/43PTY/107term/242TS保持通过，MCP database诊断Exact无错误。Rustix沿用已锁定1.1.5，只增加target依赖与测试fs feature，无版本升级；audit仍原license6/maintenance2失败且无豁免。
+- 既有数据不会为满足这些条件自动修复；存储平台目录适配器、完整所有权链/ACL/TOCTOU保证、生产Profile IPC与Vault仍未实现，schema仍1。
 
 ## 检查结果
 
