@@ -4,6 +4,10 @@ use crate::PtyCommand;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+#[path = "profile_launch.rs"]
+mod launch;
+pub use launch::{AutoProfileLaunch, ProfileLaunchError};
+
 /// Maximum supported Unix shell kinds in one discovery snapshot.
 pub const MAX_SHELLS: usize = 5;
 /// Maximum PATH components considered by a Unix discovery pass.

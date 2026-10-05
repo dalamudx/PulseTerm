@@ -6,16 +6,17 @@ use serde_json::{Value, json};
 #[cfg(unix)]
 fn command() -> Result<pulse_pty::PtyCommand> {
     use pulse_pty::{
-        launch::{LocalSessionEnvironment, LocalShellMode, prepare_local_profile_command},
-        profiles::{ShellKind, discover_unix_shells},
+        launch::{LocalSessionEnvironment, LocalShellMode},
+        profiles::{AutoProfileCatalog, AutoProfileLaunch, ShellKind, discover_unix_shells},
     };
     let candidates = discover_unix_shells(std::ffi::OsStr::new("/bin:/usr/bin"), None)?;
-    let bash = candidates
-        .iter()
-        .find(|shell| shell.kind() == ShellKind::Bash)
-        .context("profile_session.bash_missing")?;
+    let mut catalog = AutoProfileCatalog::default();
+    catalog.reconcile(&candidates)?;
     let original = super::local_session_probe::command("portable-pty-helper-stream")?;
-    let mut command = pulse_pty::PtyCommand::new(bash.executable());
+    let mut command = AutoProfileLaunch {
+        mode: LocalShellMode::Login,
+        ..Default::default()
+    };
     command.args = vec!["--noprofile".into(), "--norc".into(), "-c".into(), "builtin shopt -q login_shell || exit 90\n[ \"$TERM_PROGRAM\" = PulseTerm ] && [ \"$TERM\" = xterm-256color ] && [ \"$COLORTERM\" = truecolor ] || exit 91\n[ \"$TERM_PROGRAM_VERSION\" = \"$PULSE_PROFILE_TEST_VERSION\" ] || exit 92\n[ \"${PULSE_PANE_ID+x}\" != x ] && [ \"${PULSE_SOCKET+x}\" != x ] || exit 93\nexec \"$@\"".into(), "pulseterm-profile-bootstrap".into(), original.program];
     command.args.extend(original.args);
     command.cwd = original.cwd;
@@ -28,14 +29,13 @@ fn command() -> Result<pulse_pty::PtyCommand> {
         .into_iter()
         .map(Into::into)
         .collect();
-    Ok(prepare_local_profile_command(
+    Ok(catalog.prepare_launch(
+        ShellKind::Bash,
         command,
         &LocalSessionEnvironment {
             application_version: env!("CARGO_PKG_VERSION").into(),
             pane: None,
         },
-        Some(ShellKind::Bash),
-        LocalShellMode::Login,
     )?)
 }
 #[cfg(any(unix, test))]
