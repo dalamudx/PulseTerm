@@ -19,6 +19,9 @@ struct Pages {
     claimed: bool,
     live_display: bool,
     navigation_joined: bool,
+    hold_ready: bool,
+    pending_ack: bool,
+    refresh_allowed: bool,
 }
 #[derive(Clone, Default)]
 struct Nonces {
@@ -161,6 +164,61 @@ impl PageTracker {
         });
         require(accepted)
     }
+    pub(super) fn mark_hold_ready(&self, value: &str) -> Result<()> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let n = self.nonce.lock().map_err(error)?;
+        require(n.current == Some(parsed))?;
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(1) && p.live_display && !p.hold_ready {
+                p.hold_ready = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    fn pending_ack_observed(&self) -> Result<()> {
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if p.ready(1) && p.hold_ready && p.live_display && !p.pending_ack {
+                p.pending_ack = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    fn allow_refresh_capture(&self) -> Result<()> {
+        let mut accepted = false;
+        self.events.send_modify(|p| {
+            if !p.invalid
+                && p.started == 2
+                && p.navigation_joined
+                && p.pending_ack
+                && !p.refresh_allowed
+            {
+                p.refresh_allowed = true;
+                accepted = true;
+            }
+        });
+        require(accepted)
+    }
+    pub(super) async fn wait_refresh_capture(&self) -> Result<()> {
+        let mut events = self.events.subscribe();
+        tokio::time::timeout(Duration::from_millis(1500), async {
+            loop {
+                let p = *events.borrow();
+                require(!p.invalid)?;
+                if p.refresh_allowed {
+                    return Ok::<(), String>(());
+                }
+                events.changed().await.map_err(error)?;
+            }
+        })
+        .await
+        .map_err(|_| "session.peer_refresh_drain_deadline".to_string())?
+    }
+
     pub(super) fn has_navigation_started(&self) -> bool {
         let p = self.snapshot();
         !p.invalid && p.started == 2
@@ -361,7 +419,43 @@ pub(super) async fn verify(
     .await
     .map_err(|_| "session.peer_live_marker_deadline".to_string())??;
     tokio::time::sleep(Duration::from_millis(500)).await;
-    let before = state.0.registry.state(owner, id).map_err(error)?;
+    let nonce_for_hold = pages.injection()?.0;
+    window.eval(format!("void window.__PULSE_PEER_HOLD_ACK__('{run_nonce}','{nonce_for_hold}','{old_generation}').catch(console.error)")).map_err(error)?;
+    let mut hold = pages.events.subscribe();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let p = *hold.borrow();
+            require(!p.invalid)?;
+            if p.hold_ready {
+                return Ok::<(), String>(());
+            }
+            hold.changed().await.map_err(error)?;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_ack_hold_setup_deadline".to_string())??;
+    state
+        .0
+        .registry
+        .input_bound(owner, id, old_generation, b"hidden\n".to_vec())
+        .await
+        .map_err(error)?;
+    let pending = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if let Some(pending) =
+                transfer_view::live_data_pending(state, owner, id, old_generation)?
+            {
+                return Ok::<_, String>(pending);
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_no_pending_data_ack".to_string())??;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    require(transfer_view::live_data_pending(state, owner, id, old_generation)? == Some(pending))?;
+    pages.pending_ack_observed()?;
+    let before_pending_drain = state.0.registry.state(owner, id).map_err(error)?;
     // No explicit teardown here: actual Started must revoke nonce and retire this
     // still-open subscription. Finished/newdoc DOM alone cannot prove teardown.
     let old_nonce = pages.injection()?.0;
@@ -373,6 +467,32 @@ pub(super) async fn verify(
     let mut changed = pages.events.subscribe();
     eprintln!("session.peer_reload.requested");
     window.reload().map_err(error)?;
+    // New page capture is intentionally gated until this SMALL finite output has
+    // drained without the old view. This is not continuous-network bootstrap proof.
+    pages.wait_navigation_joined().await?;
+    let expected = tokio::time::timeout(Duration::from_millis(1500), async {
+        let mut stable = None;
+        loop {
+            let projected = handle.inspect().await.map_err(error)?;
+            let text = projected
+                .cells
+                .iter()
+                .flatten()
+                .map(|c| c.text.as_str())
+                .collect::<String>();
+            let current = state.0.registry.state(owner, id).map_err(error)?;
+            if text.matches("HIDDEN_SEED 中文🌍").count() >= 2 && stable.as_ref() == Some(&current)
+            {
+                return Ok::<_, String>(current);
+            }
+            stable = Some(current);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .map_err(|_| "session.peer_finite_output_drain_deadline".to_string())??;
+    require(expected.parsed_bytes >= before_pending_drain.parsed_bytes)?;
+    pages.allow_refresh_capture()?;
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let p = *changed.borrow();
@@ -382,6 +502,8 @@ pub(super) async fn verify(
                 && p.navigation_retired
                 && p.navigation_joined
                 && p.live_display
+                && p.pending_ack
+                && p.refresh_allowed
             {
                 return Ok::<(), String>(());
             }
@@ -392,7 +514,7 @@ pub(super) async fn verify(
     .map_err(|_| "session.peer_reload_page_deadline".to_string())??;
     require(
         state.caller(window)? == owner
-            && state.0.registry.state(owner, id).map_err(error)? == before
+            && state.0.registry.state(owner, id).map_err(error)? == expected
             && handle.state.borrow().lifecycle == Lifecycle::Running
             && window
                 .app_handle()
@@ -440,6 +562,33 @@ pub(super) async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_ack_retirement_requires_live_hold_and_oldjoin_before_allowing_new_capture() {
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old = p.injection().unwrap_or_default().0;
+        assert!(p.confirm_nonce(&old).is_ok());
+        assert!(p.mark_hold_ready(&old).is_err());
+        assert!(p.pending_ack_observed().is_err());
+        assert!(p.mark_captured(&old).is_ok());
+        assert!(p.mark_rendered(&old).is_ok());
+        assert!(p.mark_live_display(&old).is_ok());
+        assert!(p.mark_hold_ready(&old).is_ok());
+        assert!(p.mark_hold_ready(&old).is_err());
+        assert!(p.pending_ack_observed().is_ok());
+        assert!(p.pending_ack_observed().is_err());
+        assert!(p.allow_refresh_capture().is_err());
+        p.record(PageLoadEvent::Started);
+        p.navigation_retired(Ok(1));
+        assert!(p.mark_hold_ready(&old).is_err());
+        assert!(p.allow_refresh_capture().is_err());
+        assert!(p.mark_navigation_joined().is_ok());
+        assert!(p.allow_refresh_capture().is_ok());
+        assert!(p.allow_refresh_capture().is_err());
+        assert!(p.snapshot().refresh_allowed);
+    }
+
     #[test]
     fn capture_claim_is_single_flight_per_authenticated_document_and_cannot_replay_after_started() {
         let p = PageTracker::new();
@@ -650,6 +799,9 @@ mod tests {
                 claimed: false,
                 live_display: false,
                 navigation_joined: false,
+                hold_ready: false,
+                pending_ack: false,
+                refresh_allowed: false,
             }
         );
         p.record(PageLoadEvent::Started);
@@ -670,6 +822,9 @@ mod tests {
                 claimed: false,
                 live_display: false,
                 navigation_joined: false,
+                hold_ready: false,
+                pending_ack: false,
+                refresh_allowed: false,
             }
         );
         p.record(PageLoadEvent::Started);

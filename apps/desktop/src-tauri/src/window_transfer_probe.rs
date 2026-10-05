@@ -204,6 +204,17 @@ pub(super) async fn after_source_destroyed(
 ) -> Result<()> {
     eprintln!("session.peer_transfer.source_destroyed");
     let before = state.0.registry.state(owner, id).map_err(error)?;
+    let seeds_before = handle
+        .inspect()
+        .await
+        .map_err(error)?
+        .cells
+        .iter()
+        .flatten()
+        .map(|c| c.text.as_str())
+        .collect::<String>()
+        .matches("HIDDEN_SEED 中文🌍")
+        .count();
     let binding = capture(state, owner, id, handle).await?;
     require(binding.generation > previous)?;
     state
@@ -234,16 +245,15 @@ pub(super) async fn after_source_destroyed(
                 .flatten()
                 .map(|c| c.text.as_str())
                 .collect::<String>();
-            if text.contains("HIDDEN_SEED 中文🌍") {
-                require(
-                    state
-                        .0
-                        .registry
-                        .state(owner, id)
-                        .map_err(error)?
-                        .parsed_bytes
-                        > before.parsed_bytes,
-                )?;
+            if text.matches("HIDDEN_SEED 中文🌍").count() > seeds_before
+                && state
+                    .0
+                    .registry
+                    .state(owner, id)
+                    .map_err(error)?
+                    .parsed_bytes
+                    > before.parsed_bytes
+            {
                 return Ok::<(), String>(());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

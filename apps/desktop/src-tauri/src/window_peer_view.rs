@@ -65,6 +65,7 @@ pub(crate) async fn probe_peer_view(
     let initial = pages.claim_view(&page_nonce)?;
     if !initial {
         pages.wait_navigation_joined().await?;
+        pages.wait_refresh_capture().await?;
         owned(&state, &window, &nonce, &page_nonce)?;
     }
     {
@@ -78,7 +79,13 @@ pub(crate) async fn probe_peer_view(
             return Err("session.peer_view_already_finished".into());
         }
         if initial {
-            transfer_view::render_live(&state, owner, id, &channel, &pages, &page_nonce).await?;
+            let result =
+                transfer_view::render_live(&state, owner, id, &channel, &pages, &page_nonce).await;
+            eprintln!(
+                "session.peer_live.supervisor_returned ok={}",
+                result.is_ok()
+            );
+            result?;
         } else {
             transfer_view::render(&state, owner, id, 0, &channel).await?;
             owned(&state, &window, &nonce, &page_nonce)?;
@@ -86,7 +93,9 @@ pub(crate) async fn probe_peer_view(
         }
     }
     if initial {
+        eprintln!("session.peer_live.peer_permit_released");
         pages.mark_navigation_joined()?;
+        eprintln!("session.peer_live.navigation_joined");
     }
     Ok(())
 }
@@ -101,6 +110,28 @@ pub(crate) fn probe_peer_done(
     let (_, _, pages) = owned(&state, &window, &nonce, &page_nonce)?;
     pages.mark_rendered(&page_nonce)
 }
+#[tauri::command]
+#[specta::specta]
+pub(crate) fn probe_peer_hold_ready(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    page_nonce: String,
+    generation: String,
+) -> Result<()> {
+    let (owner, id, pages) = owned(&state, &window, &nonce, &page_nonce)?;
+    let generation = parse_u64(&generation)?;
+    if transfer_view::live_generation(&state, owner, id)? != generation {
+        return Err("session.peer_wrong_hold_generation".into());
+    }
+    state
+        .0
+        .registry
+        .check_binding(owner, id, generation)
+        .map_err(error)?;
+    pages.mark_hold_ready(&page_nonce)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {

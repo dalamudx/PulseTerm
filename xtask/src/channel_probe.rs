@@ -229,6 +229,7 @@ fn transfer_receipts_match(report: &Value) -> bool {
             && report[key]["peerNavigationRetired"].as_bool() == Some(true)
             && report[key]["peerInitialDisplayChecked"].as_bool() == Some(true)
             && report[key]["peerLiveDisplayChecked"].as_bool() == Some(true)
+            && report[key]["peerPendingAckRetired"].as_bool() == Some(true)
     })
 }
 fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<()> {
@@ -376,7 +377,7 @@ mod tests {
 
     #[test]
     fn transfer_evidence_requires_both_runtime_receipts_not_truthy_values() {
-        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true}});
+        let r = serde_json::json!({"session":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerPendingAckRetired":true},"domSession":{"peerTransferChecked":true,"peerDisplayChecked":true,"peerReloadChecked":true,"peerReloadDisplayChecked":true,"peerNavigationRetired":true,"peerInitialDisplayChecked":true,"peerLiveDisplayChecked":true,"peerPendingAckRetired":true}});
         assert!(transfer_receipts_match(&r));
         for key in ["session", "domSession"] {
             for invalid in [
@@ -404,7 +405,10 @@ mod tests {
                 wrong[key]["peerInitialDisplayChecked"] = invalid.clone();
                 assert!(!transfer_receipts_match(&wrong));
                 let mut wrong = r.clone();
-                wrong[key]["peerLiveDisplayChecked"] = invalid;
+                wrong[key]["peerLiveDisplayChecked"] = invalid.clone();
+                assert!(!transfer_receipts_match(&wrong));
+                let mut wrong = r.clone();
+                wrong[key]["peerPendingAckRetired"] = invalid;
                 assert!(!transfer_receipts_match(&wrong));
             }
         }

@@ -652,6 +652,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::peer_view::probe_peer_ack,
             crate::window_sessions::peer_view::probe_peer_confirm,
             crate::window_sessions::peer_view::probe_peer_done,
+            crate::window_sessions::peer_view::probe_peer_hold_ready,
             crate::window_sessions::encoding_probe::probe_encoding,
             crate::window_sessions::encoding_probe::probe_encoding_mode,
             crate::window_sessions::encoding_probe::probe_encoding_input,

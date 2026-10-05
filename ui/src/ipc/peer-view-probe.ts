@@ -1,6 +1,7 @@
 // Fixed, readonly refreshed-peer surface. Backend chooses the session, never JS.
 import { Channel } from "@tauri-apps/api/core";
 import { commands } from "./gen/commands";
+import { PeerAckHold } from "./peer-ack-hold";
 import { digest } from "./session-probe";
 import { TransferViewProbe } from "./transfer-view-probe";
 
@@ -14,7 +15,11 @@ export async function verifyPeerView(
   if (started) throw new Error("peer.view_duplicate");
   started = true;
   const life = new AbortController();
-  const abort = () => life.abort();
+  let retiring = false;
+  const abort = () => {
+    retiring = true;
+    life.abort();
+  };
   window.addEventListener("pagehide", abort, { once: true });
   const host = document.createElement("div");
   host.setAttribute("aria-label", "只读页面恢复验证");
@@ -31,6 +36,27 @@ export async function verifyPeerView(
   let stop: () => void = () => {};
   let challenged = false;
   let booted = false;
+  const heldAck = new PeerAckHold(life.signal);
+  const peerWindow = window as Window & {
+    __PULSE_PEER_HOLD_ACK__?: (
+      run: string,
+      page: string,
+      generation: string,
+    ) => Promise<void>;
+  };
+  const pauseAck = async (run: string, page: string, generation: string) => {
+    if (
+      !initialLive ||
+      !booted ||
+      life.signal.aborted ||
+      run !== nonce ||
+      page !== pageNonce
+    )
+      throw new Error("peer.ack_hold_forbidden");
+    heldAck.arm();
+    await commands.probePeerHoldReady(nonce, pageNonce, generation);
+  };
+  if (initialLive) peerWindow.__PULSE_PEER_HOLD_ACK__ = pauseAck;
   let bootReady!: () => void;
   const bootstrap = new Promise<void>((resolve) => {
     bootReady = resolve;
@@ -75,6 +101,7 @@ export async function verifyPeerView(
             ),
           );
         }
+        await heldAck.wait();
         await commands.probePeerAck(nonce, pageNonce, generation, sequence);
       },
       confirm: async (generation, boundary, value) => {
@@ -128,6 +155,7 @@ export async function verifyPeerView(
         : undefined,
       digest,
       failed: (error) => {
+        if (initialLive && retiring && life.signal.aborted) return;
         failure ??= error;
         life.abort();
       },
@@ -157,6 +185,7 @@ export async function verifyPeerView(
         () => {
           if (!booted && !life.signal.aborted)
             failure ??= new Error("peer.live_closed_before_bootstrap");
+          if (booted) retiring = true;
           life.abort();
         },
         (error) => {
@@ -187,6 +216,8 @@ export async function verifyPeerView(
       await commands.probePeerDone(nonce, pageNonce);
     }
   } finally {
+    if (peerWindow.__PULSE_PEER_HOLD_ACK__ === pauseAck)
+      delete peerWindow.__PULSE_PEER_HOLD_ACK__;
     clearTimeout(deadline);
     stop();
     channel.onmessage = () => {};

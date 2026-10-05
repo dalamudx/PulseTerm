@@ -600,10 +600,19 @@ mise run probe-pty
 - 最新actualv1/v2各两headless+两DOM run（每codec4次oldDOM Data/Marker/Started/fresh/target），mandatory live/retired收据true、seven运输测量完整。default/encoding-probe各56native/strictclippy、fullcheck/fulltests52app/93term/33IPC/12route/13xtask/232TS、baseprobe/typeddrift通过，MCPshared native sender无error。随后actualGBK与外部WM此live版本均完整通过，独立live/retired/fresh收据true、typeddrift保持；next验证未ACK导航场景。
 - 这份controlled sample在Data全部ACK且Marker完成后发起reload，不证明未ACK洪流/持续网络输出期间的bootstrap摘要及重绑策略，live relay只支持Data和single Marker，不把缺少Checkpoint/End支持计完整。firstdoc/currentnonce只读权限仍非production ViewHost，生产/跨平台/IME与S11整体未完成；所有deps/lock/CSP/1srender/原helper deadline/audit门禁不改。
 
+## S11有限未ACK Data期间的真实导航与恢复
+
+- 旧页已确认一次live Marker后，只允许当前run/page nonce及live generation设置ACK hold；真实hold_ready端点先检查runtime owner、固定session和binding。第二条固定hidden输入产生Data，本seq/end连续100ms保持未ACK才记peerPendingAckRetired。PeerAckHold在pagehide仅reject，绝不靠假ACK释放credit；旧DOM的预期取消不误伤新页，setter清理按函数身份保护新代。
+- actualStarted撤旧lease，native严格Detached并释放sender/peer额度后join，新页不能抢占。后端无视图继续解析第二条有限输出；两条HIDDEN_SEED可见且SessionState连续20ms稳定后才允许freshcapture（1500ms固定上限）。必须比较排空后的expected而非误假定pending前状态不变。该排空门是有限样例监督，不解决连续网络输出时bootstrap/latest摘要策略，也不算洪流压力验收。
+- 新3TS回归：hold只拒绝退出、不返回credit，新旧代独立，真实wrapper挂起ACK及错误nonce拒/oldcancel清理。原snapshot参数fixture改在native调用进行期间测试，禁止清理后再发ACK。新native回归验证live→hold→pending→Started→oldjoin→refresh许可顺序；DTO、生成types、TS与xtask严格bool收据均强制。
+- 后续移窗样例原contains已有HIDDEN_SEED会提前判新输入完成；改为seed count增加且parsedBytes推进，不放宽成功条件。新增静态relay失败分类及old supervisor/driver receipt/permit/join阶段诊断，不记录nonce、终端或内部错误字符串。
+- 多次整组失败（旧join、main relay/可见性查询）保持风险记录。期间工具ENOSPC：数据盘31GiB空闲，但共享/tmp 16GiB tmpfs已满，主要为其他项目；未删除其他项目文件，仅cargo clean核实的PulseTerm临时upstream target缓存约319MiB，保留src/tests/manifests/licenses与测量报告。后续使用0700项目target/probe-tmp.*运行时TMPDIR避共享压力，Sandbox/CSP不改。不能由空间恢复与复验成功推断所有先前失败根因已修复。
+- 最新Openbox实际最小化整组及默认v1/v2整组各完成2headless+2DOM、pending/live/retired独立收据true，oldrelay→Detached→释放→join阶段齐全。default/encoding-probe各57native、strictclippy/fullcheck/fulltests52app/93term/33IPC/12route/13xtask/235TS/typeddrift通过，MCP reload模块无error。随后pending版本GBK与外部WM实际兼容均完整通过，独立pending/live/retired收据true，绑定漂移保持；所有原1srender/query、500msoldjoin、helper/ACK期限及deps/lock/audit门禁不变，S11整体仍未验收。
+
 ## 检查结果
 
-- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各56项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
-- TS：232 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
+- Rust：93 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 52项测试通过（含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各57项测试通过（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认13项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。
+- TS：235 项测试通过（新增4项只读新页wrapper nonce参数、pagehide/迟到任务、渲染失败、混版/截止清理回归）（新增5项目标迁移capture的真实headless中文渲染/ACK确认顺序/取消/混版/确认失败回归；原park/PaneVisibility回归保留）；tsc、Biome、Vite 构建通过；负向类型用例确认 ID、camelCase 配置和二进制 Channel 参数的错误会被 tsc 拒绝。
 - Rustfmt、clippy `-D warnings`、初始依赖分层检查通过。
 - 原来的默认特性 cargo-deny 通过不足以覆盖原生依赖。现已改为全特性审计：来源与 bans 通过，许可证及维护公告失败；没有放宽白名单或添加公告 ignore，详见 [待审查依赖门禁](./dependency-review.md)。
 - pnpm audit 无已知漏洞；初始化时发现 Vitest 4.1.0 的公告，已升级到 4.1.11。

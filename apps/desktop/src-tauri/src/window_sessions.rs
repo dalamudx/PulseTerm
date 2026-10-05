@@ -407,6 +407,7 @@ pub(crate) struct SessionEvidence {
     pub peer_navigation_retired: bool,
     pub peer_initial_display_checked: bool,
     pub peer_live_display_checked: bool,
+    pub peer_pending_ack_retired: bool,
     pub window_revoked: bool,
     pub session_survived: bool,
     pub idle_checked: bool,
@@ -457,6 +458,7 @@ impl SessionEvidence {
             || !self.peer_navigation_retired
             || !self.peer_initial_display_checked
             || !self.peer_live_display_checked
+            || !self.peer_pending_ack_retired
             || !self.window_revoked
             || !self.session_survived
             || !self.idle_checked
@@ -1247,7 +1249,28 @@ pub(crate) async fn probe_session(
                         .await
                         .map_err(|_| "session.resume_capture_failed".to_string())?;
                 }
-                Err(_) => return Err("session.relay_failed".to_string()),
+                Err(failure) => {
+                    use pulse_app::attachment::AttachmentError as E;
+                    use pulse_term::session::StreamEnd as End;
+                    let code = match failure {
+                        E::AckTimeout => "ack_deadline",
+                        E::Protocol(_) => "protocol",
+                        E::Busy => "ack_busy",
+                        E::Supervisor => "supervisor",
+                        E::Limits => "limits",
+                        E::Capture(_) => "capture",
+                        E::Detached => "unexpected_detach",
+                        E::Invalidated(End::Replaced) => "replaced",
+                        E::Invalidated(End::Reconfigured) => "extra_resize",
+                        E::Invalidated(End::Detached) => "stream_detached",
+                        E::Invalidated(End::Open) => "open_invalidated",
+                        E::Invalidated(End::Session(Lifecycle::Failed)) => "actor_failed",
+                        E::Invalidated(End::Session(Lifecycle::Ended)) => "unexpected_eof",
+                        E::Invalidated(End::Session(Lifecycle::Closed)) => "actor_closed",
+                        E::Invalidated(End::Session(Lifecycle::Running)) => "running_invalidated",
+                    };
+                    return Err(format!("session.relay_{code}"));
+                }
             }
         }
     };
@@ -1299,6 +1322,7 @@ pub(crate) async fn probe_session(
         peer_navigation_retired: true,
         peer_initial_display_checked: true,
         peer_live_display_checked: true,
+        peer_pending_ack_retired: true,
         window_revoked: true,
         session_survived,
         idle_checked: false,
@@ -1446,6 +1470,7 @@ mod tests {
             peer_navigation_retired: true,
             peer_initial_display_checked: true,
             peer_live_display_checked: true,
+            peer_pending_ack_retired: true,
             window_revoked: true,
             session_survived: true,
             idle_checked: true,
@@ -1525,6 +1550,9 @@ mod tests {
         e.peer_live_display_checked = false;
         assert!(e.validate().is_err());
         e.peer_live_display_checked = true;
+        e.peer_pending_ack_retired = false;
+        assert!(e.validate().is_err());
+        e.peer_pending_ack_retired = true;
         e.session_survived = false;
         assert!(e.validate().is_err());
     }

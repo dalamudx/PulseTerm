@@ -227,6 +227,21 @@ pub(super) fn live_data_acked(
         .map(|(_, end, _)| end))
 }
 
+pub(super) fn live_data_pending(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+) -> Result<Option<(u32, u64)>> {
+    let slot = state.0.transfer_view.lock().map_err(error)?;
+    let c = slot
+        .as_ref()
+        .filter(|c| c.owner == owner && c.id == id && c.generation == generation && c.live)
+        .ok_or("session.transfer_stale")?;
+    Ok(c.data_end
+        .filter(|(_, _, acked)| !*acked)
+        .map(|(seq, end, _)| (seq, end)))
+}
 pub(super) async fn render(
     state: &WindowSessions,
     owner: WindowToken,
@@ -342,6 +357,7 @@ async fn render_inner(
         .check_binding(owner, id, view.generation)
         .map_err(error)?;
     if let Some((pages, page_nonce)) = live {
+        eprintln!("session.peer_live.await_navigation");
         tokio::time::timeout(Duration::from_secs(5),async{
             let navigation=pages.navigation_started();tokio::pin!(navigation);
             loop{let wire=tokio::select!{biased;result=&mut navigation=>{result?;break;},wire=view.wire.recv()=>wire};
@@ -365,6 +381,9 @@ async fn render_inner(
             .detach(owner, id, view.generation)
             .map_err(error)?;
     }
+    if live.is_some() {
+        eprintln!("session.peer_live.await_driver_receipt");
+    }
     let receipt = tokio::time::timeout(Duration::from_secs(3), view.completion)
         .await
         .map_err(error)?
@@ -374,6 +393,9 @@ async fn render_inner(
         Err(pulse_app::attachment::AttachmentError::Detached)
     ) {
         return Err("session.transfer_unexpected_completion".into());
+    }
+    if live.is_some() {
+        eprintln!("session.peer_live.driver_detached");
     }
     Ok(())
 }

@@ -6,6 +6,7 @@ const mock = vi.hoisted(() => ({
   ack: vi.fn(),
   confirm: vi.fn(),
   done: vi.fn(),
+  holdReady: vi.fn(),
   options: undefined as unknown,
   channel: undefined as unknown,
   finish: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("./gen/commands", () => ({
     probePeerAck: mock.ack,
     probePeerConfirm: mock.confirm,
     probePeerDone: mock.done,
+    probePeerHoldReady: mock.holdReady,
   },
 }));
 vi.mock("./session-probe", () => ({ digest: () => "a".repeat(16) }));
@@ -62,6 +64,7 @@ async function setup() {
   mock.capture.mockResolvedValue(undefined);
   mock.finish.mockResolvedValue(undefined);
   mock.done.mockResolvedValue(undefined);
+  mock.holdReady.mockResolvedValue(undefined);
   mock.ack.mockImplementation(
     async (_run: string, page: string, generation: string) => {
       if (page !== "page" || generation !== "17") throw new Error("denied");
@@ -91,14 +94,17 @@ afterEach(() => {
 });
 it("readonly wrapper uses page-scoped ACK/confirmation and cleans its own surface once", async () => {
   const s = await setup();
+  mock.capture.mockImplementation(async () => {
+    const options = mock.options as Options;
+    await options.ack("17", 2);
+    await options.confirm(
+      "17",
+      { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
+      "a".repeat(16),
+    );
+  });
   await s.verifyPeerView("run", "page");
   const options = mock.options as Options;
-  await options.ack("17", 2);
-  await options.confirm(
-    "17",
-    { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
-    "a".repeat(16),
-  );
   expect(mock.ack).toHaveBeenCalledWith("run", "page", "17", 2);
   expect(mock.confirm).toHaveBeenCalledWith("run", "page", "17", {
     columns: 40,
@@ -121,14 +127,16 @@ it("readonly wrapper uses page-scoped ACK/confirmation and cleans its own surfac
 });
 it("new document rejects its formerly authorized page nonce on its own ACK and confirm endpoints", async () => {
   const s = await setup();
+  mock.capture.mockImplementation(async () => {
+    const options = mock.options as Options;
+    await options.ack("17", 2);
+    await options.confirm(
+      "17",
+      { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
+      "a".repeat(16),
+    );
+  });
   await s.verifyPeerView("run", "page", "old-page");
-  const options = mock.options as Options;
-  await options.ack("17", 2);
-  await options.confirm(
-    "17",
-    { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
-    "a".repeat(16),
-  );
   expect(mock.ack).toHaveBeenCalledWith("run", "old-page", "17", 2);
   expect(mock.confirm).toHaveBeenCalledWith(
     "run",
@@ -179,6 +187,56 @@ it("retained live wrapper confirms bootstrap and Marker while native subscriptio
   await Promise.resolve();
   expect(mock.capture).toHaveBeenCalledOnce();
   expect(s.root.hidden).toBe(false);
+});
+it("old rendered Data ACK remains pending until pagehide and retirement rejects rather than returning credit", async () => {
+  const s = await setup();
+  let admit!: () => void, close!: () => void;
+  const admitted = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(() => {
+    admit();
+    return new Promise<void>((r) => {
+      close = r;
+    });
+  });
+  const live = s.verifyPeerView("run", "page", undefined, true);
+  await admitted;
+  const options = mock.options as Options;
+  await options.live?.ready();
+  const hold = (
+    s.win as unknown as {
+      __PULSE_PEER_HOLD_ACK__: (
+        r: string,
+        p: string,
+        g: string,
+      ) => Promise<void>;
+    }
+  ).__PULSE_PEER_HOLD_ACK__;
+  await expect(hold("wrong", "page", "17")).rejects.toThrow(
+    "peer.ack_hold_forbidden",
+  );
+  expect(mock.holdReady).not.toHaveBeenCalled();
+  await options.ack("17", 3);
+  const acknowledged = mock.ack.mock.calls.length;
+  await hold("run", "page", "17");
+  expect(mock.holdReady).toHaveBeenCalledWith("run", "page", "17");
+  const pending = options.ack("17", 4);
+  const retired = expect(pending).rejects.toThrow("peer.ack_retired");
+  await Promise.resolve();
+  expect(mock.ack.mock.calls.length).toBe(acknowledged);
+  s.win.dispatchEvent(new Event("pagehide"));
+  await retired;
+  options.failed(new Error("transfer.cancelled"));
+  await live;
+  expect(mock.ack.mock.calls.length).toBe(acknowledged);
+  expect(
+    (s.win as unknown as { __PULSE_PEER_HOLD_ACK__?: unknown })
+      .__PULSE_PEER_HOLD_ACK__,
+  ).toBeUndefined();
+  expect(s.host.remove).toHaveBeenCalledOnce();
+  close();
+  await Promise.resolve();
 });
 it("native live closure before bootstrap is not a successful display or Done", async () => {
   const s = await setup();
