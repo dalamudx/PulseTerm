@@ -2,6 +2,10 @@
 mod database;
 /// Automatic Unix profile visibility and deletion preferences; no executable paths.
 pub mod profiles;
+/// Pure bounded terminal setting overlays; no file I/O or permissions.
+pub mod settings;
+/// Internal credential AEAD primitive, not a keyring, persistence or plaintext IPC.
+pub mod vault_crypto;
 use profiles::{AutoProfileEdit, AutoProfilePreferences};
 use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};

@@ -21,6 +21,8 @@ mod profile_store_probe;
 mod pty_probe;
 mod query_probe;
 mod route_probe;
+#[cfg(feature = "cli-probe")]
+mod settings_schema;
 mod shell_startup_probe;
 mod snapshot_probe;
 mod software_probe;
@@ -144,6 +146,10 @@ fn main() -> Result<()> {
         Some("probe-pty-worker") => pty_probe::worker()?,
         Some("unicode-table") => unicode_table::run(false)?,
         Some("unicode-table-check") => unicode_table::run(true)?,
+        #[cfg(feature = "cli-probe")]
+        Some("settings-schema") => settings_schema::run(false)?,
+        #[cfg(feature = "cli-probe")]
+        Some("settings-schema-check") => settings_schema::run(true)?,
         Some("probe-snapshot") => snapshot_probe::run()?,
         Some("probe-attachment") => attachment_probe::run()?,
         Some("probe-encoding-attachment") => encoding_attachment_probe::run()?,
@@ -214,7 +220,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|settings-schema|settings-schema-check|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
         ),
     }
     Ok(())

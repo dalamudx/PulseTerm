@@ -308,11 +308,13 @@ DEK（随机 256 位，用来加密所有凭据）
 - Linux 上如果没有 Secret Service（例如没有桌面会话），强制使用主密码模式。
 - 主密码模式下的应用锁（SEC-02）：锁定时从内存中清除 DEK，已经建立的会话不受影响。解锁之前不能发起需要凭据的新连接。
 
+- **当前实现边界**：`pulse-store::vault_crypto`仅实现内存AEAD原语，不是完整Vault或授权服务。稳定`chacha20poly1305 0.11.0`仅开启alloc/zeroize；使用既有getrandom的可失败OS熵源生成32-byte DEK和每次独立24-byte nonce，AAD是预期UUID的16个原始字节拼接受限ASCII kind。单值最大64KiB；密文/nonce/元数据错误不会返回明文。密钥与明文没有Debug/Serialize，明文包装零化Drop及显式zeroize早清，lock丢弃cipher后拒绝操作。此处不承诺交换区、寄存器或core dump完全擦除。尚无系统钥匙串、Argon2id/KEK、持久加密信封/秘密表或前端明文读取IPC；原语不授予访问权限。
 ### 10.3 设置
 
 - 分三层：编译进程序的 `defaults.toml` → 用户的 `settings.toml`（只保存改过的项）→ 分组和主机各自的覆盖配置（存在数据库中）。`SettingsResolver` 计算最终生效的值，并记录每一项来自哪一层（VAULT-07 在界面上展示）。
 - 设置类型用 `schemars` 生成 JSON Schema，写入文件注释，编辑器可以据此补全；前端的设置页也由同一份 schema 生成。
 - 用 `notify` 监听文件变化，热加载时发出 `settings.changed` 事件。保存文件时用 `toml_edit`，**保留用户原有的注释和顺序**。
+- **当前实现边界**：`pulse-store::settings::SettingsResolver`纯函数处理编译defaults、用户、分组、主机覆盖，逐字段保留来源，显式false或等于默认值仍算当前来源。初始只含终端font_size（6–72）、font_family（最多128 Unicode字符、禁止CSS语法）、cursor_blink，沿用固定DOM样例的14/monospace/false。每层先校验，拒绝未知字段、重复键、未来schema和超64KiB文档；错误不回显原文。`settings-schema`生成`assets/schemas/settings.schema.json`，`settings-schema-check`只读检查漂移并纳入CI；defaults含本地schema注释。尚未读取真实用户配置、数据库group/host记录、保留注释写入、热加载或生成设置页，不能计完整VAULT-07。
 - **主题**（UI-01 / UI-07，格式见 frontend.md §10）：内置主题从 `assets/themes/` 编译进程序，用户主题放在 `themes/*.toml`，同样支持热加载。各种外部格式的导入器（VS Code JSON、Windows Terminal JSON、`.itermcolors`、Alacritty TOML、base16/base24 YAML、Ghostty）放在 `pulse-store::theme`，统一转换成 PulseTerm 主题格式后写入 `themes/`；原文件只读取，不保留。导入时计算前景与背景的 WCAG 对比度，低于 4.5:1 时附带警告信息返回给前端。导入器都是纯函数（输入文本、输出主题），每种格式配有测试样例。
 
 ## 11. Capability 层（pulse-cap）

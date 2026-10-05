@@ -104,6 +104,8 @@ jobs:
         run: mise run probe-pty
       - name: Check native desktop adapter
         run: mise run desktop-check
+      - name: Check generated settings schema
+        run: mise run settings-schema-check
       - name: Check generated IPC bindings
         run: mise run bindings-check
       - name: Test native desktop adapter

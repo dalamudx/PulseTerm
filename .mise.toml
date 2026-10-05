@@ -229,6 +229,14 @@ run = "cargo xtask probe-window-external"
 description = "Generate typed IPC commands, events and DTOs from Rust"
 run = "cargo run -p pulseterm-desktop --features desktop --locked -- --export-bindings"
 
+[tasks.settings-schema]
+description = "Generate schema for implemented sparse terminal settings"
+run = "cargo run -p xtask --features cli-probe --locked -- settings-schema"
+
+[tasks.settings-schema-check]
+description = "Check committed settings schema without rewriting it"
+run = "cargo run -p xtask --features cli-probe --locked -- settings-schema-check"
+
 [tasks.bindings-check]
 description = "Check committed IPC bindings without overwriting them"
 run = "cargo run -p pulseterm-desktop --features desktop --locked -- --check-bindings"

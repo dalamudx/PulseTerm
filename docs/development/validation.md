@@ -762,6 +762,14 @@ mise run probe-pty
 - 完整check/test/probe、22普通store+1专用Root、2真实进程终止、5独立进程并发/重开、2MiB PTY→actor、bindings-check、default63native strictlint/tests均通过；62app/43PTY/107term/242TS保持通过，MCP database诊断Exact无错误。Rustix沿用已锁定1.1.5，只增加target依赖与测试fs feature，无版本升级；audit仍原license6/maintenance2失败且无豁免。
 - 既有数据不会为满足这些条件自动修复；存储平台目录适配器、完整所有权链/ACL/TOCTOU保证、生产Profile IPC与Vault仍未实现，schema仍1。
 
+## 设置分层与内存Vault密码学基础
+
+- SettingsResolver 8项回归通过：default→user→group→host逐字段优先级与来源、显式false/同默认值、不可信字体CSS语法/Unicode名字、未知/重复/未来schema、文档预算和错误不泄露输入。schema由实际Rust类型生成，任务与CI注册，缺失/字节漂移/范围篡改负向均拒绝；不读取或写入用户settings文件，不计热加载或设置UI。
+- AEAD 8项回归通过，含公开draft-irtf-cfrg-xchacha附录A.1已知ciphertext/tag答案、Unicode/NUL/空值、独立随机nonce、错误key/id/kind、密文/nonce/tag篡改与截断、64KiB双边预算、幂等lock与zeroize早清。固定key/nonce仅用于公开向量测试；正常seal只用可失败OS CSPRNG。额外3个compile_fail证明密钥/明文不能Debug、明文不能Serialize，严格lint与MCP两模块Exact无诊断。
+- 本轮store最小实测38常规unit/1额外Root用例ignored、2真实崩溃回归与3compile_fail通过；最终完整check/test、schema只读漂移、45项SSH feature、5独立进程、2MiB actor、bindings与default63native严格检查均通过，62app/43PTY/107term/242TS通过；实际v2二轮headless/DOM与七组测量报告通过。无实际钥匙串/密码读取、主密码、KEK包装、秘密落库、完整应用锁或前端凭据IPC；schema与binary帧格式不变。
+- 最终原生日志在EOF阶段后出现XIO fatal IO诊断，随后验证器接受完整报告且任务退出0；输出未标注来源PID，未定位、未宣称已修复，保留风险。不把该诊断本身作为通过证据。
+- 下载先出现Cargo/官方HTTPS超时，同一地址复验HTTP200后Cargo正常校验归档并成功构建；早期超时原因未定位，不以成功复验认定修复。全特性audit仍原6项许可证与2项维护公告失败，bans/sources通过，未添加ignore。
+
 ## 检查结果
 
 - Rust：43项pulse-pty测试通过（profile目录、启动字段、WSL UTF16解析与本地环境）；107 项 pulse-term 单元/属性测试通过（新增2项bound resize ACK/no-op/取消/失败保持grid回归与1项subscribe commit gate回归）；pulse-ipc 33项通过（新增有序Repair、NoCredit稳定性和大整数边界）；pulse-app 62项测试通过（新增2项存储偏好到目录恢复回归；含4项可信活窗口transfer与3項刷新前批量view退役/Entry身份/捕获限流保持回归）；额外178项原上游测试通过；原生适配器default/encoding-probe各63项、login-probe66项测试通过（fresh生命周期与双额度先准入再claim回归）（新增导航期间在途页面许可撤销与无peer默认scope隔离回归；保留只读page2/两阶段收据回归）；xtask默认20项负向测试通过（含真实PTY迁移2项报告、目标runtime/display收据和codec/外部WM/GBK模式错配）；本轮未修改parser补丁或上游源码。

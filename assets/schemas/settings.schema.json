@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SettingsPatch",
+  "description": "Sparse document; omitted fields inherit, false is an explicit override.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Omission means schema 1; future versions cannot silently be accepted.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint16",
+      "default": null,
+      "maximum": 1,
+      "minimum": 1
+    },
+    "terminal": {
+      "description": "Initial terminal display settings only; no credential or command fields.",
+      "$ref": "#/$defs/TerminalPatch",
+      "default": {
+        "cursor_blink": null,
+        "font_family": null,
+        "font_size": null
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "TerminalPatch": {
+      "description": "Every field is optional, independently resolved and independently validated.",
+      "type": "object",
+      "properties": {
+        "cursor_blink": {
+          "description": "Explicit false still replaces lower-priority true.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "font_family": {
+          "description": "A single font name, at most 128 Unicode scalars, using safe characters.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\p{L}\\p{N}_-](?:[\\p{L}\\p{N} _-]*[\\p{L}\\p{N}_-])?$"
+        },
+        "font_size": {
+          "description": "Initial supported font-size range, in CSS pixels, inclusive.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "default": null,
+          "maximum": 72,
+          "minimum": 6
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

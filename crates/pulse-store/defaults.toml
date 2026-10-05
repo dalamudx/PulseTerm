@@ -1,0 +1,7 @@
+#:schema ../../assets/schemas/settings.schema.json
+schema_version = 1
+
+[terminal]
+font_size = 14
+font_family = "monospace"
+cursor_blink = false
