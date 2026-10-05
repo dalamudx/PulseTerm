@@ -55,6 +55,7 @@ mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
 mise run probe-profiles           # Unix只读Shell发现、自动profile规则与字面PTY启动
+mise run probe-login              # 公开默认login builder真实argv0/程序选择及回退限制
 mise run probe-pty-portable       # 三平台finite Rust helper：规范输入/Unicode/native尺寸/EOF
 mise run probe-local-session      # 真实PTY→actor/registry/wire、授权ACK背压/End/重新捕获、resize/关闭join
 mise run probe-software           # Unix vim/less/htop/tmux真实输出及input/resize恢复；Linux CI执行

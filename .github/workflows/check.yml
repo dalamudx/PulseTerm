@@ -75,6 +75,9 @@ jobs:
         run: mise run probe-local-session
       - name: Exercise native PTY on all platforms
         run: mise run probe-pty-portable
+      - name: Exercise Unix login builder selection and argv0
+        if: runner.os != 'Windows'
+        run: mise run probe-login
       - name: Exercise Unix shell discovery and profile reconciliation
         if: runner.os != 'Windows'
         run: mise run probe-profiles

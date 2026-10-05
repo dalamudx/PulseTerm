@@ -161,6 +161,7 @@ reader ─► 有界队列(64 块 × 最大 64KB) ─► actor:
   - pwsh 加上 `-NoLogo`，并设置 `POWERSHELL_UPDATECHECK=Off`。
 - **本地启动环境准备基础**：`pulse-pty::launch::prepare_local_command`纯构造defaults+profile overrides，profile可以改TERM/COLORTERM及普通env；TERM_PROGRAM/TERM_PROGRAM_VERSION/PULSE_PANE_ID/PULSE_SOCKET的任何ASCII大小写别名覆盖或删除均拒。`PtyCommand::env_remove`通过公开builder API在显式override前删除继承键，清掉父进程旧PULSE pair，无CLI绑定则保持不存在；当前pair仅由backend context注入。它不创建CLI endpoint或授予binding权限。Pwsh按可信分类默认前置-NoLogo/POWERSHELL_UPDATECHECK=Off，profile仍可覆盖更新检查；macOSlogin、Windows环境行为实测与production Profile入口未接入。
 - **登录 shell**：macOS 默认以登录 shell 方式启动（argv[0] 加 `-` 前缀），和 Terminal.app、iTerm2 的行为一致，保证 `/etc/paths` 和 `~/.zprofile` 生效。Linux 默认不使用登录 shell，可在 profile 中修改。
+- **登录公开API实验**：`mise run probe-login`已在Linux真实PTY验证`CommandBuilder::new_default_prog()+env(SHELL,选定程序)`能保持选定可执行路径并使用`-basename` argv0；fixture是自有有限Rust binary，不是读取用户启动文件的shell。默认builder禁止追加参数，SHELL不存在/无效可回退到passwd shell；因此不能将其视为完整自定义profile登录或fail-closed程序选择。带参数且保留精确argv0/无fallback的方案仍需选择，不自动patch portable-pty或将`--login`等同于argv0语义。
 - **Windows 环境变量刷新**：新会话启动前，从注册表重新读取用户和系统的环境变量，再合并 profile 中的设置，使得安装新软件后不用重启 PulseTerm 就能用上新的 PATH。
 - **Shell 集成脚本注入**（SHELL-03）：bash 用 `--rcfile`；zsh 用临时 `ZDOTDIR`；fish 使用 `XDG_DATA_DIRS` 下的 vendor_conf.d；pwsh 使用 `-NoExit -Command`。每种方式都要确保用户原有的配置文件仍然会被加载。
 

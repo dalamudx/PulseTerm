@@ -6093,6 +6093,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "encoding_rs",
+ "portable-pty",
  "pulse-app",
  "pulse-core",
  "pulse-ipc",
