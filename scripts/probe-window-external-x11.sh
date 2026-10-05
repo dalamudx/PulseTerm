@@ -1,6 +1,6 @@
 #!/bin/sh
 # Test-only external WM controller inside the private Xvfb/Openbox process group.
-# Window selection is by this direct child's PID; never accept an arbitrary XID.
+# Match the direct child PID AND fixed main title; readonly peers are not targets.
 set -eu
 umask 077
 log=$1
@@ -31,9 +31,10 @@ while kill -0 "$app" 2>/dev/null; do
     case "$action" in
       minimize)
         [ "$generation" != "$cycle" ] || { echo 'probe.external_duplicate_cycle' >&2; exit 1; }
-        ids=$(xdotool search --onlyvisible --pid "$app" 2>/dev/null || true)
+        ids=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · IPC validation$' 2>/dev/null || true)
         count=$(printf '%s\n' "$ids" | awk 'NF {n++} END {print n+0}')
         [ "$count" -eq 1 ] || { echo 'probe.external_ambiguous_window' >&2; exit 1; }
+        [ -z "$xid" ] || [ "$xid" = "$ids" ] || { echo 'probe.external_replaced_window' >&2; exit 1; }
         xid=$ids
         [ "$(xdotool getwindowpid "$xid")" = "$app" ] || exit 1
         timeout 2s xdotool windowminimize "$xid"
