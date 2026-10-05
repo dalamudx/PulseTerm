@@ -1,4 +1,6 @@
 use super::*;
+#[path = "shutdown_tests.rs"]
+mod shutdown;
 #[test]
 fn cancellation_before_dispatch_never_writes() -> std::result::Result<(), Box<dyn std::error::Error>>
 {
@@ -13,7 +15,19 @@ fn cancellation_before_dispatch_never_writes() -> std::result::Result<(), Box<dy
     p.suppress(profiles::AutomaticShell::Bash);
     let (reply, result) = oneshot::channel();
     drop(result);
-    dispatch(&c, Request::Save(p, reply));
+    dispatch(
+        &c,
+        Request::Save(profiles::AutoProfilePreferences::default(), p, reply),
+    );
+    let (reply, result) = oneshot::channel();
+    drop(result);
+    dispatch(
+        &c,
+        Request::Edit(
+            profiles::AutoProfileEdit::Suppress(profiles::AutomaticShell::Zsh),
+            reply,
+        ),
+    );
     assert_eq!(
         database::load(&c)?,
         profiles::AutoProfilePreferences::default()

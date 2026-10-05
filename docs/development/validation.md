@@ -741,9 +741,9 @@ mise run probe-pty
 
 - 新建`pulse-store`，按既定rusqlite/rusqlite_migration方案固定0.40.2/2.6.0，native bundled/backup、关闭默认Wasm特性；worker独占Connection，16待处理请求try_send准入，不在UI/async执行SQLite。WAL/FK/FULL实际验证；当前读写均串行，读池、Vault、密钥和应用目录平台适配仍未实现。
 - 非秘密`AutomaticShell`偏好仅Bash/Zsh/Fish/Sh/Pwsh的hidden/deleted；严格版本1、4096字节行预算、未知字段/身份、重复和冲突拒绝，读坏记录不回退默认，保存事务不覆盖坏行。SQL固定且parameterized，无任意SQL、路径、程序、命令、环境或凭据载荷接口。
-- 10项store测试覆盖真实文件重开、worker clone/drop/join、16额度/Closed、取消执行前不写、坏/过大行、未来schema/无版本既有表保持原数据、私有权限/symlink、迁移前SQLite Backup保存未checkpoint WAL、existing backup不覆盖、失败迁移rollback并保留原schema及backup。升级测试为内部版本1→2fixture，不等于生产已有schema2；当前production schema仍1。此前tempdir默认权限导致Location失败，已只修fixture到0700，不降低门禁。
-- app增加2项固定枚举映射/目录恢复回归；PTY保存独立hidden身份集合，重启初次缺shell而后再发现仍hidden。`mise run probe-profile-store`在两个独立子进程真实保存/重开，5s每child截止、无重试，最终join关闭worker，确认hidden保留/deleted不复活；metadata candidate不执行，不计作Shell或真实用户配置验收。task/usage/跨平台CI注册，跨平台CI尚无执行证据。
-- 最终check/test/probe、实际Unix发现与PTY启动、2MiB登录Profile→actor ACK/EOF、bindings-check、63native tests/strictlint及实际v2两headless/twoDOM/7测量通过：10store/62app/43PTY/107term/242TS。MCP store诊断Exact无错误。
+- 原10项store测试覆盖真实文件重开、worker clone/drop/join、16额度/Closed、取消执行前不写、坏/过大行、未来schema/无版本既有表保持原数据、私有权限/symlink、迁移前SQLite Backup保存未checkpoint WAL、existing backup不覆盖、失败迁移rollback并保留原schema及backup。新增9项通过：同worker及独立worker原子编辑合并、CAS旧快照拒绝/新快照写入、显式恢复deleted、坏行/trigger失败保持原值、真实SQLite锁竞争不改行、idle/fullqueue cancellation/drop owner、保留client后关闭、已提交写入lost reply不回滚；合计19项。升级测试为内部版本1→2fixture，不等于生产已有schema2；当前production schema仍1。此前tempdir默认权限导致Location失败，已只修fixture到0700，不降低门禁。
+- app增加2项固定枚举映射/目录恢复回归；PTY保存独立hidden身份集合，重启初次缺shell而后再发现仍hidden。`mise run probe-profile-store`新版schema2报告在5个独立子进程真实保存、并发2editor、旧快照Conflict和重开，5s每child截止、无重试，最终join关闭worker，确认3个hidden与1个deleted全部保留；新增2项严格PID/模式/worker join/字面true负向回归并纳入同一mise task/CI，旧两进程报告不能替代；metadata candidate不执行，不计作Shell或真实用户配置验收。task/usage/跨平台CI注册，跨平台CI尚无执行证据。
+- 初始检查点最终check/test/probe、实际Unix发现与PTY启动、2MiB登录Profile→actor ACK/EOF、bindings-check、63native tests/strictlint及实际v2两headless/twoDOM/7测量通过：10store/62app/43PTY/107term/242TS。本轮19store/strictlint、真实5process及2strictreceipt回归、完整check/test/probe、2MiB登录Profile→actor、bindings-check、63native strictlint/tests及v2 twoheadless/twoDOM/7测量均通过；62app/43PTY/107term/242TS保持通过。MCP store诊断Exact无错误，引用查询出现stale未当精确影响结论；实际调用者经有界读取/全编译检查核验。tokio-util沿用已锁定0.7.19，只新增直接引用与rt feature，没有升级包。
 - Unix当前只验证模式与末级regular/symlink，不宣称完整所有权/ACL/TOCTOU安全；WindowsACL/备份恢复UI/持久化Profile权限IPC/读池性能/Vault仍待实施。新6个库未新增cargo-deny拒绝或公告，原license6/maintenance2仍失败，不加白名单/ignore，详见dependency-review。
 
 ## 检查结果

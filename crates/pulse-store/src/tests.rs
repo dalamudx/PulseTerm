@@ -52,7 +52,7 @@ async fn actual_file_reopens_preferences_and_closes_all_worker_handles()
     let path = dir.path().join("pulse.db");
     let (store, task) = StateStore::open(path.clone()).await?;
     assert_eq!(store.load_auto_profiles().await?, Prefs::default());
-    store.save_auto_profiles(value()?).await?;
+    store.save_auto_profiles(Prefs::default(), value()?).await?;
     let clone = store.clone();
     drop(store);
     assert_eq!(clone.load_auto_profiles().await?, value()?);
@@ -86,7 +86,10 @@ async fn actual_file_reopens_preferences_and_closes_all_worker_handles()
 #[test]
 fn bounded_queue_refuses_overload_closed_and_does_not_admit_failed_request() -> Result<()> {
     let (requests, mut receiver) = mpsc::channel(REQUEST_LIMIT);
-    let store = StateStore { requests };
+    let store = StateStore {
+        requests,
+        cancellation: CancellationToken::new(),
+    };
     let mut results = Vec::new();
     for _ in 0..REQUEST_LIMIT {
         let (reply, result) = oneshot::channel();
@@ -115,7 +118,10 @@ fn corrupt_record_is_not_silently_reset_or_overwritten()
     assert_eq!(database::load(&c), Err(StoreError::Record));
     let raw: String = c.query_row("SELECT value FROM app_state", [], |r| r.get(0))?;
     assert_eq!(raw, "{bad record");
-    assert_eq!(database::save(&c, &value()?), Err(StoreError::Record));
+    assert_eq!(
+        database::save(&c, &Prefs::default(), &value()?),
+        Err(StoreError::Record)
+    );
     let after: String = c.query_row("SELECT value FROM app_state", [], |r| r.get(0))?;
     assert_eq!(after, raw);
     c.execute("UPDATE app_state SET value=?1", [" ".repeat(4097)])?;
@@ -157,7 +163,7 @@ fn upgrade_copies_committed_wal_state_before_schema_change()
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
     let mut c = database::open(&path)?;
-    database::save(&c, &value()?)?;
+    database::save(&c, &Prefs::default(), &value()?)?;
     database::migrate(&mut c, &path, &upgrade(), 2)?;
     assert_eq!(version(&c)?, 2);
     let backup = Connection::open(path.with_file_name("pulse.db.bak-2"))?;
@@ -188,7 +194,7 @@ fn failed_upgrade_rolls_back_and_keeps_preupgrade_backup()
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
     let mut c = database::open(&path)?;
-    database::save(&c, &value()?)?;
+    database::save(&c, &Prefs::default(), &value()?)?;
     let steps = Migrations::new(vec![
         M::up("CREATE TABLE app_state(key TEXT PRIMARY KEY NOT NULL,value TEXT NOT NULL) STRICT;"),
         M::up("CREATE TABLE rolled_back(value INTEGER); INSERT INTO missing VALUES(1);"),

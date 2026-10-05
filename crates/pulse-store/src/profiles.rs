@@ -29,6 +29,35 @@ struct Document {
     hidden: Vec<AutomaticShell>,
     deleted: Vec<AutomaticShell>,
 }
+/// A backend-only mutation applied to current database state, not a view's cached copy.
+/// It has no executable, command, path, or launch authority; it is not an IPC payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutoProfileEdit {
+    /// Change visibility without reviving a deletion tombstone.
+    Visibility {
+        /// Stable automatic shell identity.
+        shell: AutomaticShell,
+        /// Whether this identity should be hidden after future discovery.
+        hidden: bool,
+    },
+    /// Delete the automatic profile and discard its visibility override.
+    Suppress(AutomaticShell),
+    /// Explicitly remove a deletion tombstone without launching or revealing a program.
+    RestoreDeleted(AutomaticShell),
+}
+impl AutoProfileEdit {
+    pub(crate) fn apply(self, preferences: &mut AutoProfilePreferences) -> Result<()> {
+        match self {
+            Self::Visibility { shell, hidden } => preferences.set_hidden(shell, hidden)?,
+            Self::Suppress(shell) => preferences.suppress(shell),
+            Self::RestoreDeleted(shell) => {
+                preferences.deleted.remove(&shell);
+            }
+        }
+        Ok(())
+    }
+}
+
 impl AutoProfilePreferences {
     /// Hidden identities, including currently undiscovered profiles.
     pub fn hidden(&self) -> impl Iterator<Item = AutomaticShell> + '_ {

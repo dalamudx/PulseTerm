@@ -1,9 +1,12 @@
 use anyhow::{Context, Result, bail};
+#[cfg(test)]
+#[path = "profile_store_tests.rs"]
+mod tests;
 use pulse_app::profile_state::{catalog_preferences, restore_catalog};
 use pulse_pty::profiles::{ShellCandidate, ShellKind};
 use pulse_store::{
     StateStore,
-    profiles::{AutoProfilePreferences, AutomaticShell},
+    profiles::{AutoProfileEdit, AutoProfilePreferences, AutomaticShell},
 };
 use serde_json::{Value, json};
 use std::{
@@ -18,7 +21,10 @@ pub(super) fn helper() -> Result<()> {
         bail!("extra helper argument");
     }
     let mode = mode.to_str().context("invalid mode")?;
-    if mode != "write" && mode != "read" {
+    if !matches!(
+        mode,
+        "write" | "read" | "edit-fish" | "edit-sh" | "conflict"
+    ) {
         bail!("invalid mode");
     }
     let r = tokio::runtime::Runtime::new()?;
@@ -28,10 +34,24 @@ pub(super) fn helper() -> Result<()> {
         expected.set_hidden(AutomaticShell::Bash, true)?;
         expected.suppress(AutomaticShell::Zsh);
         let receipt = if mode == "write" {
-            store.save_auto_profiles(expected).await?;
+            store
+                .save_auto_profiles(AutoProfilePreferences::default(), expected)
+                .await?;
             json!({"written":true})
+        } else if mode == "edit-fish" || mode == "edit-sh" {
+            let shell = if mode == "edit-fish" { AutomaticShell::Fish } else { AutomaticShell::Sh };
+            let committed = store.edit_auto_profiles(AutoProfileEdit::Visibility { shell, hidden:true }).await?;
+            if !committed.hidden().any(|s|s==shell) { bail!("committed edit missing"); }
+            json!({"edited":true})
+        } else if mode == "conflict" {
+            let before=store.load_auto_profiles().await?;
+            let mut replacement=AutoProfilePreferences::default();replacement.set_hidden(AutomaticShell::Pwsh,true)?;
+            if store.save_auto_profiles(AutoProfilePreferences::default(), replacement).await != Err(pulse_store::StoreError::Conflict) || store.load_auto_profiles().await? != before { bail!("stale snapshot was not rejected atomically"); }
+            json!({"staleSnapshotRejected":true,"rowPreserved":true})
         } else {
             let p = store.load_auto_profiles().await?;
+            expected.set_hidden(AutomaticShell::Fish, true)?;
+            expected.set_hidden(AutomaticShell::Sh, true)?;
             if p != expected {
                 bail!("preferences changed across process restart");
             }
@@ -54,7 +74,7 @@ pub(super) fn helper() -> Result<()> {
             {
                 bail!("restored catalog does not preserve preferences");
             }
-            json!({"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true})
+            json!({"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true,"atomicEditsPreserved":true})
         };
         drop(store);
         task.join().await?;
@@ -84,6 +104,44 @@ async fn child(mode: &str, path: &Path) -> Result<Value> {
     }
     Ok(v)
 }
+fn verify(
+    writer: &Value,
+    fish: &Value,
+    sh: &Value,
+    conflict: &Value,
+    reader: &Value,
+) -> Result<()> {
+    let mut pids = std::collections::BTreeSet::new();
+    for (v, mode) in [
+        (writer, "write"),
+        (fish, "edit-fish"),
+        (sh, "edit-sh"),
+        (conflict, "conflict"),
+        (reader, "read"),
+    ] {
+        let pid = v["pid"]
+            .as_u64()
+            .filter(|p| (1..=u64::from(u32::MAX)).contains(p))
+            .context("invalid process id")?;
+        if v["mode"] != mode || v["workerJoined"] != true || !pids.insert(pid) {
+            bail!("invalid independent process evidence");
+        }
+    }
+    if writer["receipt"]["written"] != true
+        || fish["receipt"]["edited"] != true
+        || sh["receipt"]["edited"] != true
+        || conflict["receipt"]["staleSnapshotRejected"] != true
+        || conflict["receipt"]["rowPreserved"] != true
+        || reader["receipt"]["hiddenRestored"] != true
+        || reader["receipt"]["deletedSuppressed"] != true
+        || reader["receipt"]["delayedDiscoveryRetained"] != true
+        || reader["receipt"]["atomicEditsPreserved"] != true
+    {
+        bail!("incomplete store edit evidence");
+    }
+    Ok(())
+}
+
 pub(super) fn run() -> Result<()> {
     let dir = tempfile::tempdir()?;
     #[cfg(unix)]
@@ -92,10 +150,15 @@ pub(super) fn run() -> Result<()> {
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))?;
     }
     let runtime = tokio::runtime::Runtime::new()?;
-    let receipt=runtime.block_on(async {
-        let path=dir.path().join("pulse.db");let writer=child("write",&path).await?;let reader=child("read",&path).await?;
-        if writer["pid"]==reader["pid"] || writer["receipt"]["written"]!=true || reader["receipt"]["hiddenRestored"]!=true || reader["receipt"]["deletedSuppressed"]!=true || reader["receipt"]["delayedDiscoveryRetained"]!=true {bail!("independent restart evidence missing");}
-        Ok::<_,anyhow::Error>(json!({"schemaVersion":1,"independentProcesses":2,"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true,"workerJoined":true,"candidateExecuted":false}))
+    let receipt = runtime.block_on(async {
+        let path=dir.path().join("pulse.db");
+        let writer=child("write",&path).await?;
+        let (fish,sh)=tokio::join!(child("edit-fish",&path),child("edit-sh",&path));
+        let fish=fish?;let sh=sh?;
+        let conflict=child("conflict",&path).await?;
+        let reader=child("read",&path).await?;
+        verify(&writer,&fish,&sh,&conflict,&reader)?;
+        Ok::<_,anyhow::Error>(json!({"schemaVersion":2,"independentProcesses":5,"concurrentEditors":2,"atomicEditsPreserved":true,"staleSnapshotRejected":true,"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true,"workerJoined":true,"candidateExecuted":false}))
     })?;
     std::fs::create_dir_all("target/probes")?;
     std::fs::write(
@@ -103,7 +166,7 @@ pub(super) fn run() -> Result<()> {
         serde_json::to_vec_pretty(&receipt)?,
     )?;
     println!(
-        "PASS profile-store: independent writer/reader, typed SQLite → restored catalog, joined workers"
+        "PASS profile-store: five independent processes, concurrent typed edits, stale snapshot refused, joined workers"
     );
     Ok(())
 }

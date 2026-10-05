@@ -168,11 +168,38 @@ pub(crate) fn load(connection: &Connection) -> Result<AutoProfilePreferences> {
         _ => Err(StoreError::Record),
     }
 }
-pub(crate) fn save(connection: &Connection, preferences: &AutoProfilePreferences) -> Result<()> {
-    let transaction = connection
-        .unchecked_transaction()
-        .map_err(|_| StoreError::Database)?;
-    let _current = load(&transaction)?;
+fn transaction(connection: &Connection) -> Result<rusqlite::Transaction<'_>> {
+    rusqlite::Transaction::new_unchecked(connection, rusqlite::TransactionBehavior::Immediate)
+        .map_err(|_| StoreError::Database)
+}
+fn write(
+    transaction: &rusqlite::Transaction<'_>,
+    preferences: &AutoProfilePreferences,
+) -> Result<()> {
     transaction.execute("INSERT INTO app_state(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", rusqlite::params![KEY, preferences.encode()?]).map_err(|_| StoreError::Database)?;
+    Ok(())
+}
+pub(crate) fn save(
+    connection: &Connection,
+    expected: &AutoProfilePreferences,
+    preferences: &AutoProfilePreferences,
+) -> Result<()> {
+    let transaction = transaction(connection)?;
+    let current = load(&transaction)?;
+    if &current != expected {
+        return Err(StoreError::Conflict);
+    }
+    write(&transaction, preferences)?;
     transaction.commit().map_err(|_| StoreError::Database)
+}
+pub(crate) fn edit(
+    connection: &Connection,
+    edit: crate::profiles::AutoProfileEdit,
+) -> Result<AutoProfilePreferences> {
+    let transaction = transaction(connection)?;
+    let mut current = load(&transaction)?;
+    edit.apply(&mut current)?;
+    write(&transaction, &current)?;
+    transaction.commit().map_err(|_| StoreError::Database)?;
+    Ok(current)
 }
