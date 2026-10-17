@@ -33,6 +33,67 @@ const sink = (): V2Sink => ({
   repair: vi.fn(async () => {}),
   finish: vi.fn(async () => {}),
 });
+it("reentrant ACK releases consumed wire capacity before the sender supplies its next frame", async () => {
+  let finish!: () => void, fail!: (e: unknown) => void;
+  const done = new Promise<void>((resolve, reject) => {
+    finish = resolve;
+    fail = reject;
+  });
+  let next = 1;
+  const jobs: Promise<unknown>[] = [];
+  const c = new AttachmentV2Consumer(
+    generation,
+    sink(),
+    () => {
+      if (next < wires.length) {
+        const p = c.enqueue(frame(next++));
+        jobs.push(p);
+        void p.catch(fail);
+      } else finish();
+    },
+    1,
+  );
+  jobs.push(c.enqueue(frame(0)));
+  void jobs[0]?.catch(fail);
+  await done;
+  await Promise.all(jobs);
+  expect(jobs).toHaveLength(wires.length);
+  expect(c.queuedFrames).toBe(0);
+  expect(c.queuedBytes).toBe(0);
+});
+
+it("ACK in flight releases only rendered wire and remains cancellable with bounded queued replacements", async () => {
+  let ackStarted!: () => void;
+  const start = new Promise<void>((r) => {
+    ackStarted = r;
+  });
+  const ackGate = new Promise<void>(() => {});
+  const c = new AttachmentV2Consumer(
+    generation,
+    sink(),
+    () => {
+      ackStarted();
+      return ackGate;
+    },
+    1,
+  );
+  const active = c.enqueue(frame(0));
+  const activeRejection = expect(active).rejects.toThrow("cancelled");
+  await start;
+  expect(c.queuedFrames).toBe(0);
+  expect(c.queuedBytes).toBe(0);
+  const nextWire = frame(1),
+    next = c.enqueue(nextWire);
+  const nextRejection = expect(next).rejects.toThrow("cancelled");
+  expect(c.queuedFrames).toBe(1);
+  expect(c.queuedBytes).toBe(nextWire.length);
+  c.cancel();
+  await Promise.all([activeRejection, nextRejection]);
+  await Promise.resolve();
+  expect(c.queuedFrames).toBe(0);
+  expect(c.queuedBytes).toBe(0);
+});
+
 it("preserves independent bigint source and display cursors including pending input", () => {
   const r = new AttachmentV2Receiver(generation);
   r.accept(frame(0));

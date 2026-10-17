@@ -1,7 +1,7 @@
 // Developer-only finite PTY validation with headless and DOM xterm surfaces.
 import { Channel } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { IBufferCell, Terminal as TerminalType } from "@xterm/headless";
+import type { Terminal as TerminalType } from "@xterm/headless";
 import type { DomRenderer } from "../features/probe/dom-renderer";
 import { IdleComparison } from "../features/terminal/idle-comparison";
 import { InputQueue } from "../features/terminal/input-queue";
@@ -10,7 +10,6 @@ import {
   NativeVisibilityFilter,
 } from "../features/terminal/native-visibility";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
-import { screenDigest } from "../features/terminal/screen-digest";
 import { SurfaceVisibility } from "../features/terminal/surface-visibility";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
@@ -19,6 +18,7 @@ import {
   GenerationViewHost,
   type ViewScope,
 } from "../features/terminal/view-host";
+import { visibleTerminalDigest } from "../features/terminal/visible-digest";
 import type { AttachBoundary } from "./attachment";
 import { decodeFrame } from "./frames";
 import {
@@ -34,6 +34,7 @@ import {
   probeAttachmentEnvelope,
 } from "./probe-attachment-codec";
 import { forCurrentSurface, SurfaceGeneration } from "./surface-generation";
+import { installTargetThemeBridge } from "./target-theme-probe";
 import { TransferViewProbe } from "./transfer-view-probe";
 
 type ProbeTerminal = Pick<
@@ -47,35 +48,8 @@ type ProbeTerminal = Pick<
   | "onData"
   | "dispose"
 >;
-function color(cell: IBufferCell, foreground: boolean): string {
-  if (foreground ? cell.isFgDefault() : cell.isBgDefault()) return "default";
-  const value = foreground ? cell.getFgColor() : cell.getBgColor();
-  return (foreground ? cell.isFgRGB() : cell.isBgRGB())
-    ? `rgb:${(value >>> 16) & 255},${(value >>> 8) & 255},${value & 255}`
-    : `idx:${value}`;
-}
 export function digest(terminal: ProbeTerminal): string {
-  const buffer = terminal.buffer.active;
-  return screenDigest({
-    cells: Array.from({ length: terminal.rows }, (_, row) =>
-      Array.from({ length: terminal.cols }, (_, col) => {
-        const cell = buffer.getLine(buffer.baseY + row)?.getCell(col);
-        if (!cell) throw new Error("session.cell_missing");
-        return {
-          text: cell.getWidth() === 0 ? "" : cell.getChars() || " ",
-          width: cell.getWidth(),
-          foreground: color(cell, true),
-          background: color(cell, false),
-          bold: cell.isBold() !== 0,
-          italic: cell.isItalic() !== 0,
-          underline: cell.isUnderline() !== 0,
-          inverse: cell.isInverse() !== 0,
-        };
-      }),
-    ),
-    cursor: [Math.min(buffer.cursorX, terminal.cols - 1), buffer.cursorY],
-    alternate: buffer.type === "alternate",
-  });
+  return visibleTerminalDigest(terminal);
 }
 let previous: { nonce: string; generation: string } | undefined;
 async function requireRejected(action: Promise<unknown>): Promise<void> {
@@ -101,6 +75,17 @@ export async function verifySessionChannel(dom?: {
   if (selected !== 1 && selected !== 2)
     throw new Error("session.unsupported_attachment_version");
   const protocol: ProbeAttachmentVersion = selected;
+  const nativeThemeFactory = await commands.probeTargetThemeMode();
+  const themeTargetHost = nativeThemeFactory
+    ? document.createElement("div")
+    : undefined;
+  if (themeTargetHost) {
+    themeTargetHost.className = "terminal-host";
+    themeTargetHost.setAttribute("aria-label", "移窗主题受控验证");
+    // This isolated validation host must be inside the viewport, not below the report.
+    document.body.prepend(themeTargetHost);
+  }
+  const targetHost = themeTargetHost ?? dom?.host;
   const nonce = crypto.randomUUID();
   let terminal: ProbeTerminal | undefined;
   let renderer: DomRenderer | undefined;
@@ -165,8 +150,14 @@ export async function verifySessionChannel(dom?: {
   };
   const transferChannel = new Channel<ArrayBuffer>();
   const transferView = new TransferViewProbe({
+    palette: nativeThemeFactory
+      ? (generation) => commands.probeTransferPalette(nonce, generation)
+      : undefined,
+    retainedReady: async (generation) => {
+      await commands.probeTargetThemeReady(nonce, generation);
+    },
     version: protocol,
-    host: dom?.host,
+    host: targetHost,
     signal: lifetime.signal,
     ack: async (generation, sequence) => {
       await commands.probeTransferAck(nonce, generation, sequence);
@@ -190,10 +181,15 @@ export async function verifySessionChannel(dom?: {
         ),
       );
       await requireRejected(commands.probeSessionAck(nonce, generation, 0));
-      await commands.probeTransferConfirm(nonce, generation, rendered);
+      const retainTheme = await commands.probeTransferConfirm(
+        nonce,
+        generation,
+        rendered,
+      );
       await requireRejected(
         commands.probeTransferConfirm(nonce, generation, rendered),
       );
+      return retainTheme && targetHost !== undefined;
     },
     digest,
     failed: (error) => {
@@ -202,6 +198,17 @@ export async function verifySessionChannel(dom?: {
     },
   });
   transferChannel.onmessage = (data) => transferView.receive(data);
+  const stopTargetTheme = targetHost
+    ? installTargetThemeBridge(
+        window,
+        nonce,
+        targetHost,
+        lifetime.signal,
+        transferView,
+        () => themeTargetHost?.remove(),
+      )
+    : () => {};
+  window.addEventListener("pagehide", cancel, { once: true });
 
   const channel = new Channel<ArrayBuffer>();
   let delayed = false;
@@ -350,6 +357,19 @@ export async function verifySessionChannel(dom?: {
                 if (!view.isCurrent()) throw new Error("session.view_retired");
                 renderer = created;
                 terminal = renderer.terminal;
+                const themeBefore = JSON.stringify(
+                  created.terminal.options.theme,
+                );
+                const { verifyUiThemeOverlay } = await import(
+                  "../features/probe/ui-theme-overlay"
+                );
+                await verifyUiThemeOverlay(view, dom.host);
+                if (
+                  !view.isCurrent() ||
+                  JSON.stringify(created.terminal.options.theme) !== themeBefore
+                )
+                  throw new Error("theme.overlay.terminal_changed");
+                created.markUiOverridesChecked();
                 if (priorRenderer) {
                   const root = dom.host.querySelector(".xterm");
                   priorRenderer.dispose();
@@ -1108,6 +1128,7 @@ export async function verifySessionChannel(dom?: {
     ]);
     await latest;
     await transferView.finish();
+    transferView.dispose();
     if (failed) throw failed;
     if (
       !terminal ||
@@ -1197,6 +1218,9 @@ export async function verifySessionChannel(dom?: {
     lifetime.abort();
     dom?.signal.removeEventListener("abort", cancel);
 
+    stopTargetTheme();
+    themeTargetHost?.remove();
+    window.removeEventListener("pagehide", cancel);
     transferView.dispose();
     transferChannel.onmessage = () => {};
     channel.onmessage = () => {};

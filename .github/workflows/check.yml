@@ -20,17 +20,41 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool openssh-client openssh-server vim less htop tmux
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick openssh-client openssh-server vim less htop tmux strace
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
         run: mise run check
+      - name: Verify static workspace translation coverage
+        run: mise run workspace-language-check
+      - name: Verify locked third-party inventory and original texts
+        run: mise run third-party-check
+      - name: Review candidate target dependency scopes on Linux resolver host
+        if: runner.os == 'Linux'
+        run: mise run distribution-review
+      - name: Check dependency audit failure handling
+        if: runner.os == 'Linux'
+        run: mise run audit-check
       - name: Verify approved terminal source patch
         run: mise run terminal-vendor-check
       - name: Test upstream terminal source
         run: mise run terminal-vendor-test
       - name: Test code
         run: mise run test
+      - name: Reproduce native local-session concurrency with original deadlines
+        if: runner.os == 'Linux'
+        env:
+          PULSE_NATIVE_PARALLEL_CYCLES: 2
+        run: |
+          sudo install -d -m 1777 /data/temp
+          mise run probe-native-parallel
+      - name: Validate bounded terminal palette conversion
+        run: mise run probe-theme
+      - name: Validate cross-language theme paint data
+        run: mise run probe-theme-paint
+      - name: Validate private theme persistence across processes
+        if: runner.os == 'Linux'
+        run: mise run probe-theme-file
       - name: Check shared Unicode table
         run: mise run unicode-table-check
       - name: Check production terminal API isolation
@@ -52,6 +76,21 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mise run probe-ssh
+          mise run probe-ssh-target
+          mise run probe-ssh-password-use
+          mise run probe-ssh-private-key-use
+          mise run probe-ssh-private-key-session
+          mise run probe-ssh-private-key-algorithms
+          mise exec -- cargo test -p xtask --features ssh-private-key-probe --locked private_key_decode
+          mise run test-ssh-authentication
+          mise run probe-ssh-owned-session
+          mise run probe-ssh-config
+          mise run probe-ssh-config-page
+          mise run probe-ssh-first-pin
+          mise exec -- cargo test -p pulse-store --features ssh-trust --locked
+          mise exec -- cargo test -p pulse-ssh --all-features --locked
+          mise exec -- cargo test -p pulse-app --features ssh-use --locked
+          mise exec -- cargo clippy -p xtask --features ssh-target-probe --all-targets --locked -- -D warnings
           sudo mkdir -p /run/sshd
           mise run probe-ssh-system
           mise run probe-ssh-jump
@@ -123,6 +162,275 @@ jobs:
         run: mise run bindings-check
       - name: Test native desktop adapter
         run: mise exec -- cargo test -p pulseterm-desktop --features desktop --locked
+      - name: Test native workspace source and nonce authorization
+        if: runner.os == 'Linux'
+        run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked
+      - name: Test original-page fingerprint approval tickets and native cancellation drain
+        if: runner.os == 'Linux'
+        run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked
+      - name: Verify actual OpenSSH fingerprint dialog cancel approve reload reopen and changed-key blocking
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-fingerprint
+      - name: Verify saved-ciphertext SSH into actual TermView across refresh resize confirmed close ended-page recovery cancelled handshake drain and command selection
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-session
+      - name: Verify production WebView MFA cancellation, two real SSH rounds, input, refresh and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-interactive
+      - name: Verify explicit CLI MFA cold and warm approval, cancellation, two rounds and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-interactive
+      - name: Verify mixed and three-hop MFA, exact peers, cancellation and complete native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-route-interactive
+      - name: Verify three-hop private key plus MFA, explicit methods, source revocation and complete drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-route-key-interactive
+      - name: Verify explicit selected Agent plus MFA, source revocation and complete native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-agent-interactive
+      - name: Verify temporary SSH MFA explicit selection, cancellation, separate saving and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-temporary-interactive
+      - name: Verify explicit private key plus MFA, partial success, failure, cancellation and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-key-interactive
+      - name: Verify CLI private key plus MFA, cold and warm consent, cancellation and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-key-interactive
+      - name: Verify saved encrypted Ed25519 SSH signatures in actual TermView across refresh resize EOF cancelled handshake and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-private-key-session
+      - name: Verify separate workspace document reload and nonce lifecycle
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-reload
+      - name: Verify product Profile terminal input, native auto-resize, and explicit cleanup
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-terminal
+      - name: Verify bounded keymap projection and private file process persistence
+        if: runner.os == 'Linux'
+        run: mise run probe-keymap
+      - name: Verify current-page command palette without terminal input leakage
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-commands
+      - name: Verify opt-in Linux pulse focus against real WebView page generations and native shutdown
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli
+      - name: Verify Linux single-instance primary PID, live PTY and endpoint isolation across secondary processes
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-single-instance
+      - name: Verify cold CLI original-document focus, private storage under umask 022, discovery, no PTY and actual GUI exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-focus
+      - name: Verify original-document cold Profile discovery, no terminal creation and actual GUI exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-profiles
+      - name: Verify cold CLI tab original-page consent, delayed approval, cancellation, refresh and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-new-tab
+      - name: Verify simultaneous cold focus/profiles clients preserve one primary, endpoint and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-concurrent
+      - name: Verify actual CLI endpoint and broker failures reject without fallback, repair or resource leak
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-failures
+      - name: Verify valid cold split and SSH requests cannot create a GUI or borrow later pane or Vault authority
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-unbound
+      - name: Verify CLI local-tab GUI consent, cancel, page revocation, live PTY recovery and root shutdown
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-new-tab
+      - name: Verify existing-root CLI tab selection, exact two-PTY input, retained split leases and shutdown
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-selection
+      - name: Verify CLI split GUI consent, original-pane isolation, both PTYs and root drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-split
+      - name: Verify fixed workspace CLI selector preserves current-page focus and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-window-selector
+      - name: Verify simultaneous cold creation intents and pending approval reject competing clients
+        if: runner.os == 'Linux'
+        run: PULSE_CLI_PENDING_PRESSURE=1 mise run probe-workspace-cold-sensitive
+      - name: Verify admitted CLI connection capacity and actual slot reclamation
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-capacity
+      - name: Verify local open and split-pane CLI aliases preserve original-page approval and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-aliases
+      - name: Verify saved-source SSH CLI original-epoch consent, cancellation, recovery and actual native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-ssh
+      - name: Verify saved private-key SSH CLI single-epoch consent, real signature, cancellation and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-ssh-private-key
+      - name: Verify saved Agent SSH CLI original-window consent, selected-key-only signing, cancellation and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-ssh-agent
+      - name: Verify CLI frozen mixed Agent jump route, per-peer consent, cancellation and parent native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-ssh-route
+      - name: Verify cold saved SSH unlock requires a distinct click and exact target approval, refresh and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-ssh
+      - name: Verify cold saved Agent second key and explicit unlock/target consent, zero cancellation signatures, refresh and drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-ssh-agent
+      - name: Verify cold password and selected Agent jump peers, zero-auth cancellation, exact pins and parent streams
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-ssh-route
+      - name: Verify cold split independent base and split consent, exact target, both PTYs, refresh and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cold-split
+      - name: Verify CLI chain preflight, separate consents, same-instance partial success, independent PTYs and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-chain
+      - name: Verify same-process windows, separate creation consent, exact routes, independent PTYs and last-window exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-multiwindow
+      - name: Verify window-local SSH approvals, independent Vault state, password, selected Agent and mixed three-hop cleanup
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-multiwindow-ssh
+      - name: Verify saved SSH aliases, cold and warm explicit approval, exact defaults, ambiguous rejection and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-saved-ssh-alias
+      - name: Verify current-page keymap GUI persistence, disable, restore and physical chord sequences
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-keymap
+      - name: Verify keymap GUI external-write conflicts and same-file application-process reopening
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-keymap-state
+      - name: Verify layout-only bootstrap resizing, event batches, and pending navigation
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-resize-lifecycle
+      - name: Verify real terminal clipboard copy, paste approval, interrupt and revocation
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-clipboard
+      - name: Verify Bash Readline paste, refresh and no pending execution on close
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-bracketed-paste
+      - name: Verify actual Vim paste, pending-buffer refresh, undo and saved bytes
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-vim
+      - name: Verify actual deep Unicode history copying before and after refresh
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-history-copy
+      - name: Verify authorized selection-copy preferences with actual system clipboard
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-selection-copy
+      - name: Verify trusted right-click clipboard and terminal mouse-mode priority
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-right-click-paste
+      - name: Verify Profile visibility edits, active PTY survival and database reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-profiles
+      - name: Verify default Profile persistence, unavailable identities and explicit startup
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-profile-default
+      - name: Verify Profile editor literal native options, immutable appearance and original-page cancellation
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-profile-editor
+      - name: Verify Profile tombstones, explicit restoration and surviving native terminal
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-profile-lifecycle
+      - name: Verify fixed settings edits, source provenance and same-PTY font geometry
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-settings
+      - name: Verify bundled font explicit save, local OFL notice, fallback and same-PTY reload
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-font
+      - name: Verify explicitly saved operator ligatures, bounded GPU draw receipts and same-PTY reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ligatures
+
+
+      - name: Verify page-authorized host metadata edits and private-database reopen without Shell start
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-hosts
+      - name: Verify atomic Host and Identity batch management, cancel/search zero writes and process reopening
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-catalogue-batch
+      - name: Verify organization trees, tags and favorites preserve endpoints and Vault across refresh and reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-organization
+      - name: Verify recent saved SSH targets record only successful registration and preserve approval on reselection
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-recent-hosts
+      - name: Verify quick target preview, cancel, saved reuse and one IPv6 save with original connection approval
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-quick-connect
+      - name: Verify fuzzy metadata search preserves saved-target approval and cancels without writes
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-fuzzy-search
+      - name: Verify explicit machine migration, independent SSH entrances, tombstones and metadata-only reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-host-endpoints
+      - name: Verify temporary SSH approval, optional saving, recent binding and normal process exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-temporary-ssh
+      - name: Verify independent SSH preferences, default identity preselection, source invariance and metadata-only reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-profiles
+      - name: Verify saved jump Profile reference, cancellation, original-source invariance, refresh/reopen and explicit detach without authentication
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-jump-config
+      - name: Verify real nested SSH route, per-hop original-page approval, first-use pins, cancellation and native cleanup
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-route
+      - name: Verify actual config preview, Include conflicts, visible completion/conflict, full-store invariance, refresh and process reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-config
+      - name: Verify config import source/SQL rollback, original-page cancellation and native credit lifetime
+        if: runner.os == 'Linux'
+        run: mise run probe-ssh-config-import
+      - name: Verify actual separate config import approval, source conflict, saved host and refresh/process reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-config-import
+      - name: Verify actual config source changes preserve displayed values and retire stale save authority
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-config-status
+      - name: Verify explicit Agent metadata saving, selected-key-only terminal, cancellation and independent reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-agent
+      - name: Verify per-peer approved Agent intermediate/leaf route, exact signatures and parent native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-agent-route
+      - name: Verify scoped SSH identity metadata, absent Vault and private-source reopen without credentials or connections
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-identities
+      - name: Verify scoped private-key identity metadata CRUD, paired reference persistence and tombstones without sessions
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-key-identities
+      - name: Verify receive-only encrypted Ed25519 import, atomic ciphertext persistence and exact-byte independent reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-key-import
+      - name: Verify current-page identity password locked rejection, sealed write, refresh and independent-process byte reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-identity-password
+      - name: Verify preview Vault master-password creation, lock and private-database reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-vault
+      - name: Verify admitted Vault auth close and navigation revoke late key publication
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-vault-revocation
+      - name: Verify window-local tab labels and colors survive refresh without PTY input
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-labels
+      - name: Verify two independent terminal panes, native sizes, focused input and close
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-split
+      - name: Verify nested layout, divider drag, maximum display and refresh on retained native PTYs
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-nested
+      - name: Verify original-page CLI split into a nested layout and zero-start denial
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-nested-cli
+      - name: Verify two Profile terminal tabs, keyboard selection, refresh and independent close
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-tabs
+      - name: Verify natural terminal EOF drawing, disabled input, and native exit status
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-eof
       - name: Validate Linux native sessions, windows and transports
         if: runner.os == 'Linux'
         run: mise run probe-channel
@@ -132,6 +440,9 @@ jobs:
       - name: Validate explicit v2 bindings in the Linux WebView
         if: runner.os == 'Linux'
         run: mise run probe-channel-v2
+      - name: Validate feature-isolated native settings and theme refresh and migration receipts
+        if: runner.os == 'Linux'
+        run: mise run probe-settings-window
       - name: Validate isolated parameter-login profiles in the Linux WebView
         if: runner.os == 'Linux'
         run: |
@@ -149,8 +460,11 @@ jobs:
           mise run probe-encoding-window
           mise exec -- cargo test -p pulseterm-desktop --features encoding-probe --locked
           mise exec -- cargo clippy -p pulseterm-desktop --features encoding-probe --all-targets --locked -- -D warnings
+      - name: Require complete original or verified supplemental attribution texts
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: mise run third-party-release-check
       - name: Audit dependencies
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: mise run audit
       - name: Upload probe evidence
         if: always()
@@ -159,6 +473,24 @@ jobs:
           name: terminal-probe-${{ matrix.os }}
           path: |
             target/probes/*.json
+            target/probes/dependency-audit/**
+
+            target/probes/distribution-review*.log
+            target/probes/distribution-review*.md
+            target/probes/distribution-review-graphs/**
+            target/probes/third-party-*.log
+            target/probes/workspace-*.log
+            target/probes/workspace-profiles-round-*.png
             target/probes/window-manager.log
             target/probes/window-external-actions.log
           if-no-files-found: ignore
+      - name: Upload third-party attribution materials
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: third-party-${{ matrix.os }}
+          path: |
+            NOTICE
+            THIRD_PARTY.md
+            third-party/**
+          if-no-files-found: error

@@ -18,7 +18,7 @@ use alacritty_terminal::term::{
 /// Hard cap on history rows included in one diagnostic reconnect.
 pub const MAX_RECENT_ROWS: usize = 2_000;
 /// A recent-history suffix; no partial payload is returned on unsupported content.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HistoryReplay {
     /// VT replay, ending in a blank viewport; feed before screen-only restore.
     pub bytes: Vec<u8>,

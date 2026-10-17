@@ -7,6 +7,9 @@ pub(super) struct Current {
     confirm: Option<oneshot::Sender<()>>,
     commit_sequence: Option<u32>,
     commit_acknowledged: bool,
+    draw_confirmed: bool,
+    target_ready: bool,
+    theme_ready: Option<oneshot::Sender<()>>,
     live: bool,
     marker: bool,
     data_end: Option<(u32, u64, bool)>,
@@ -57,6 +60,49 @@ impl Drop for Guard {
     }
 }
 
+pub(super) fn captured_palette(
+    state: &WindowSessions,
+    owner: WindowToken,
+    nonce: &str,
+    generation: u64,
+) -> Result<Option<String>> {
+    let active = state.0.active.lock().map_err(error)?;
+    let run = active.as_ref().ok_or("session.forbidden")?;
+    if run.owner != owner || run.nonce != nonce {
+        return Err("session.forbidden".into());
+    }
+    let id = current(state, owner, generation)?;
+    let captured = state
+        .0
+        .registry
+        .captured_query_palette(owner, id, generation)
+        .map_err(error)?;
+    if !cfg!(feature = "settings-probe") {
+        return Ok(None);
+    }
+    let json = serde_json::to_string(&serde_json::json!({"version":1,"palette":captured.palette}))
+        .map_err(error)?;
+    if json.len() > 1024 {
+        return Err("terminal.palette.invalid".into());
+    }
+    Ok(Some(json))
+}
+/// Fixed transfer capture base only. No session, theme path or update selection.
+#[tauri::command]
+#[specta::specta]
+pub(crate) fn probe_transfer_palette(
+    window: WebviewWindow,
+    state: State<'_, WindowSessions>,
+    nonce: String,
+    generation: String,
+) -> Result<Option<String>> {
+    captured_palette(
+        &state,
+        state.caller(&window)?,
+        &nonce,
+        parse_u64(&generation)?,
+    )
+}
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn probe_transfer_ack(
@@ -116,13 +162,14 @@ pub(crate) async fn probe_transfer_confirm(
     nonce: String,
     generation: String,
     rendered: RenderedProjection,
-) -> Result<()> {
+) -> Result<bool> {
     let (owner, _) = state.owned(&window, &nonce)?;
     let generation = parse_u64(&generation)?;
     let id = current(&state, owner, generation)?;
     compare_for(&state, owner, id, generation, rendered).await?;
     state.owned(&window, &nonce)?;
-    confirm_for(&state, owner, id, generation)
+    confirm_for(&state, owner, id, generation)?;
+    Ok(cfg!(feature = "settings-probe"))
 }
 pub(super) async fn compare_for(
     state: &WindowSessions,
@@ -181,14 +228,123 @@ pub(super) fn confirm_for(
     generation: u64,
 ) -> Result<()> {
     let mut slot = state.0.transfer_view.lock().map_err(error)?;
-    let confirm = slot
+    let current = slot
         .as_mut()
         .filter(|c| c.owner == owner && c.id == id && c.generation == generation)
-        .and_then(|c| c.confirm.take())
         .ok_or("session.transfer_stale")?;
-    confirm
+    current
+        .confirm
+        .take()
+        .ok_or("session.transfer_stale")?
         .send(())
-        .map_err(|_| "session.transfer_confirm_cancelled".to_string())
+        .map_err(|_| "session.transfer_confirm_cancelled".to_string())?;
+    current.draw_confirmed = true;
+    Ok(())
+}
+/// Keep the target capture identity locked across the synchronous theme metadata check.
+pub(super) fn ready_theme_for(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+) -> Result<()> {
+    let mut slot = state.0.transfer_view.lock().map_err(error)?;
+    let c = slot
+        .as_mut()
+        .filter(|c| {
+            c.owner == owner
+                && c.id == id
+                && c.generation == generation
+                && !c.live
+                && c.draw_confirmed
+                && c.commit_acknowledged
+                && c.commit_sequence.is_some()
+                && c.confirm.is_none()
+                && !c.target_ready
+        })
+        .ok_or("theme.target.not_drawn")?;
+    state
+        .0
+        .registry
+        .check_binding(owner, id, generation)
+        .map_err(error)?;
+    c.theme_ready
+        .take()
+        .ok_or("theme.target.not_drawn")?
+        .send(())
+        .map_err(|_| "theme.target.ready_cancelled".to_string())?;
+    c.target_ready = true;
+    Ok(())
+}
+pub(super) fn retire_theme_target(current: &mut Current) {
+    if !current.live {
+        current.theme_ready.take();
+        current.target_ready = false;
+    }
+}
+pub(super) fn with_theme_target<T>(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+    action: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    let slot = state.0.transfer_view.lock().map_err(error)?;
+    let current = slot
+        .as_ref()
+        .filter(|c| {
+            c.owner == owner
+                && c.id == id
+                && c.generation == generation
+                && !c.live
+                && c.draw_confirmed
+                && c.target_ready
+                && c.commit_acknowledged
+                && c.commit_sequence.is_some()
+                && c.confirm.is_none()
+        })
+        .ok_or("theme.target.not_drawn")?;
+    state
+        .0
+        .registry
+        .check_binding(owner, current.id, generation)
+        .map_err(error)?;
+    action()
+}
+#[cfg(all(test, feature = "settings-probe", unix))]
+pub(super) fn theme_test_capture(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    generation: u64,
+    acknowledged: bool,
+    live: bool,
+) -> Result<(oneshot::Receiver<()>, oneshot::Receiver<()>)> {
+    let (tx, rx) = oneshot::channel();
+    let (ready_tx, ready_rx) = oneshot::channel();
+    *state.0.transfer_view.lock().map_err(error)? = Some(Current {
+        owner,
+        id,
+        generation,
+        confirm: Some(tx),
+        commit_sequence: Some(2),
+        commit_acknowledged: acknowledged,
+        draw_confirmed: false,
+        target_ready: false,
+        theme_ready: None,
+        live,
+        marker: false,
+        data_end: None,
+    });
+    state
+        .0
+        .transfer_view
+        .lock()
+        .map_err(error)?
+        .as_mut()
+        .ok_or("test capture missing")?
+        .theme_ready = Some(ready_tx);
+    Ok((rx, ready_rx))
 }
 pub(super) fn confirmation_role(
     state: &WindowSessions,
@@ -247,6 +403,7 @@ pub(super) fn live_data_pending(
         .filter(|(_, _, acked)| !*acked)
         .map(|(seq, end, _)| (seq, end)))
 }
+#[cfg(any(test, not(feature = "settings-probe")))]
 pub(super) async fn render(
     state: &WindowSessions,
     owner: WindowToken,
@@ -254,7 +411,16 @@ pub(super) async fn render(
     previous: u64,
     channel: &Channel<RawFrame>,
 ) -> Result<()> {
-    render_inner(state, owner, id, previous, channel, None, None).await
+    render_inner(
+        state,
+        owner,
+        id,
+        previous,
+        channel,
+        None,
+        RenderOptions::default(),
+    )
+    .await
 }
 pub(super) async fn render_live(
     state: &WindowSessions,
@@ -272,7 +438,11 @@ pub(super) async fn render_live(
         0,
         channel,
         Some((pages, page_nonce, pages.is_initial_document())),
-        Some(lane),
+        RenderOptions {
+            lane: Some(lane),
+            #[cfg(feature = "settings-probe")]
+            settings: None,
+        },
     )
     .await
 }
@@ -288,6 +458,35 @@ pub(super) fn reserve_lane(state: &WindowSessions) -> Result<tokio::sync::OwnedS
     }
     Ok(lane)
 }
+#[derive(Default)]
+struct RenderOptions {
+    lane: Option<tokio::sync::OwnedSemaphorePermit>,
+    #[cfg(feature = "settings-probe")]
+    settings: Option<settings_probe::Fixture>,
+}
+#[cfg(feature = "settings-probe")]
+pub(super) async fn render_with_settings(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    previous: u64,
+    channel: &Channel<RawFrame>,
+    settings: settings_probe::Fixture,
+) -> Result<()> {
+    render_inner(
+        state,
+        owner,
+        id,
+        previous,
+        channel,
+        None,
+        RenderOptions {
+            lane: None,
+            settings: Some(settings),
+        },
+    )
+    .await
+}
 async fn render_inner(
     state: &WindowSessions,
     owner: WindowToken,
@@ -295,10 +494,10 @@ async fn render_inner(
     previous: u64,
     channel: &Channel<RawFrame>,
     live: Option<(&reload::PageTracker, &str, bool)>,
-    lane: Option<tokio::sync::OwnedSemaphorePermit>,
+    options: RenderOptions,
 ) -> Result<()> {
     // Reserve the shared sender lane BEFORE capture can replace a live lease.
-    let _permit = match lane {
+    let _permit = match options.lane {
         Some(lane) => lane,
         None => reserve_lane(state)?,
     };
@@ -326,6 +525,8 @@ async fn render_inner(
         return Err("session.transfer_generation".into());
     }
     let (tx, rx) = oneshot::channel();
+    #[cfg(feature = "settings-probe")]
+    let mut theme_ready_rx = None;
     {
         let mut slot = state.0.transfer_view.lock().map_err(error)?;
         if slot.is_some() {
@@ -338,10 +539,19 @@ async fn render_inner(
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            draw_confirmed: false,
+            target_ready: false,
+            theme_ready: None,
             live: live.is_some(),
             marker: false,
             data_end: None,
         });
+        #[cfg(feature = "settings-probe")]
+        if options.settings.is_some() && live.is_none() {
+            let (ready_tx, ready_rx) = oneshot::channel();
+            slot.as_mut().ok_or("theme.target.not_drawn")?.theme_ready = Some(ready_tx);
+            theme_ready_rx = Some(ready_rx);
+        }
     }
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
@@ -411,6 +621,12 @@ async fn render_inner(
             }
         }
         rx.await.map_err(error)?;
+        #[cfg(feature = "settings-probe")]
+        if let Some(theme_ready) = theme_ready_rx {
+            theme_ready
+                .await
+                .map_err(|_| "theme.target.ready_cancelled".to_string())?;
+        }
         if let Some((pages, page_nonce, _initial)) = live {
             pages.wait_initial_display(page_nonce).await?;
         }
@@ -423,6 +639,15 @@ async fn render_inner(
         .registry
         .check_binding(owner, id, view.generation)
         .map_err(error)?;
+    #[cfg(feature = "settings-probe")]
+    if let Some(settings) = options.settings {
+        if live.is_some() {
+            return Err("session.native_settings_wrong_stage".into());
+        }
+        settings
+            .transferred(state, owner, id, view.generation)
+            .await?;
+    }
     if let Some((pages, page_nonce, _initial)) = live {
         eprintln!("session.peer_live.await_navigation");
         tokio::time::timeout(Duration::from_secs(5),async{
@@ -522,6 +747,9 @@ mod tests {
                 confirm: Some(tx),
                 commit_sequence: Some(2),
                 commit_acknowledged: true,
+                draw_confirmed: false,
+                target_ready: false,
+                theme_ready: None,
                 live: true,
                 marker: false,
                 data_end: None,
@@ -716,6 +944,9 @@ mod tests {
             confirm: None,
             commit_sequence: Some(2),
             commit_acknowledged: true,
+            draw_confirmed: false,
+            target_ready: false,
+            theme_ready: None,
             live: true,
             marker: false,
             data_end: Some((3, 42, true)),
@@ -785,6 +1016,9 @@ mod tests {
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            draw_confirmed: false,
+            target_ready: false,
+            theme_ready: None,
             live: false,
             marker: false,
             data_end: None,
@@ -807,6 +1041,9 @@ mod tests {
             confirm: Some(tx),
             commit_sequence: None,
             commit_acknowledged: false,
+            draw_confirmed: false,
+            target_ready: false,
+            theme_ready: None,
             live: false,
             marker: false,
             data_end: None,

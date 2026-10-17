@@ -34,6 +34,24 @@ pub fn restore_catalog(
     catalog.reconcile(candidates)?;
     Ok(catalog)
 }
+/// Resolve an explicit saved default against a fresh, trusted discovery snapshot.
+/// Missing, hidden or deleted choices fail closed; no other shell is selected.
+/// The result is metadata only and still requires normal current-page launch admission.
+pub fn resolve_default_profile(
+    snapshot: &pulse_store::profile_default::DefaultProfileSnapshot,
+    candidates: &[ShellCandidate],
+) -> Result<Option<ShellKind>, ProfileError> {
+    let catalog = restore_catalog(snapshot.preferences(), candidates)?;
+    let Some(shell) = snapshot.shell() else {
+        return Ok(None);
+    };
+    let kind = to_kind(shell);
+    let profile = catalog.profile(kind).ok_or(ProfileError::Unavailable)?;
+    if profile.is_hidden() || !profile.is_available() {
+        return Err(ProfileError::Unavailable);
+    }
+    Ok(Some(kind))
+}
 /// Snapshot non-secret preferences for a typed store write. Persist successfully
 /// before replacing live state; no automatic write retry or UI mutation is implied.
 pub fn catalog_preferences(

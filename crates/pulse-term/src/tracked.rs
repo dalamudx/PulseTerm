@@ -87,6 +87,7 @@ impl MirroredState {
 pub(crate) struct Tracked<'a, L: EventListener> {
     pub term: &'a mut Term<L>,
     pub side: &'a mut MirroredState,
+    pub history: &'a mut crate::cold_history::ColdHistory,
 }
 
 macro_rules! forward {
@@ -94,7 +95,8 @@ macro_rules! forward {
         $(
             #[inline]
             fn $name(&mut self $(, $arg: $ty)*) {
-                <Term<L> as Handler>::$name(&mut *self.term $(, $arg)*)
+                <Term<L> as Handler>::$name(&mut *self.term $(, $arg)*);
+                self.history.collect(&mut *self.term);
             }
         )*
     };
@@ -170,55 +172,76 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
     fn put_tab(&mut self, count: u16) {
         self.side.risk |= crate::reconciliation::TAB;
         <Term<L> as Handler>::put_tab(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn move_backward_tabs(&mut self, count: u16) {
         self.side.risk |= crate::reconciliation::TAB;
         <Term<L> as Handler>::move_backward_tabs(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn move_forward_tabs(&mut self, count: u16) {
         self.side.risk |= crate::reconciliation::TAB;
         <Term<L> as Handler>::move_forward_tabs(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn insert_blank_lines(&mut self, count: usize) {
         self.side.risk |= crate::reconciliation::LINES;
         <Term<L> as Handler>::insert_blank_lines(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn delete_lines(&mut self, count: usize) {
         self.side.risk |= crate::reconciliation::LINES;
         <Term<L> as Handler>::delete_lines(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn insert_blank(&mut self, count: usize) {
         self.side.risk |= crate::reconciliation::CELLS;
         <Term<L> as Handler>::insert_blank(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn delete_chars(&mut self, count: usize) {
         self.side.risk |= crate::reconciliation::CELLS;
         <Term<L> as Handler>::delete_chars(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn erase_chars(&mut self, count: usize) {
         self.side.risk |= crate::reconciliation::CELLS;
         <Term<L> as Handler>::erase_chars(&mut *self.term, count);
+        self.history.collect(&mut *self.term);
     }
     fn clear_line(&mut self, mode: LineClearMode) {
         self.side.risk |= crate::reconciliation::CELLS;
         <Term<L> as Handler>::clear_line(&mut *self.term, mode);
+        self.history.collect(&mut *self.term);
     }
     fn clear_screen(&mut self, mode: ClearMode) {
         self.side.risk |= crate::reconciliation::CELLS;
+        if matches!(mode, ClearMode::Saved)
+            && !self
+                .term
+                .mode()
+                .contains(alacritty_terminal::term::TermMode::ALT_SCREEN)
+        {
+            self.history.clear();
+        }
         <Term<L> as Handler>::clear_screen(&mut *self.term, mode);
+        self.history.collect(&mut *self.term);
     }
     fn restore_cursor_position(&mut self) {
         self.side.risk |= crate::reconciliation::CURSOR;
         <Term<L> as Handler>::restore_cursor_position(&mut *self.term);
+        self.history.collect(&mut *self.term);
     }
     fn input(&mut self, c: char) {
         <Term<L> as Handler>::input(&mut *self.term, c);
+        self.history.collect(&mut *self.term);
         self.side.last_input = Some(c);
     }
 
     fn set_horizontal_tabstop(&mut self) {
         let column = self.term.grid().cursor.point.column.0;
         <Term<L> as Handler>::set_horizontal_tabstop(&mut *self.term);
+        self.history.collect(&mut *self.term);
         if let Some(stop) = self.side.tabs.get_mut(column) {
             *stop = true;
         }
@@ -228,6 +251,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         let column = self.term.grid().cursor.point.column.0;
         let all = matches!(mode, TabulationClearMode::All);
         <Term<L> as Handler>::clear_tabs(&mut *self.term, mode);
+        self.history.collect(&mut *self.term);
         match all {
             false => {
                 if let Some(stop) = self.side.tabs.get_mut(column) {
@@ -243,10 +267,13 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
             self.side.color_queries.push_back(self.term.colors()[index]);
         }
         <Term<L> as Handler>::dynamic_color_sequence(&mut *self.term, prefix, index, terminator);
+        self.history.collect(&mut *self.term);
     }
 
     fn reset_state(&mut self) {
+        self.history.clear();
         <Term<L> as Handler>::reset_state(&mut *self.term);
+        self.history.collect(&mut *self.term);
         let risk = self.side.risk;
         let last_input = self.side.last_input;
         let queries = std::mem::take(&mut self.side.color_queries);
@@ -259,11 +286,13 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
     fn set_scrolling_region(&mut self, top: usize, bottom: Option<usize>) {
         let lines = self.term.screen_lines();
         <Term<L> as Handler>::set_scrolling_region(&mut *self.term, top, bottom);
+        self.history.collect(&mut *self.term);
         self.side.apply_region(lines, top, bottom);
     }
 
     fn set_active_charset(&mut self, index: CharsetIndex) {
         <Term<L> as Handler>::set_active_charset(&mut *self.term, index);
+        self.history.collect(&mut *self.term);
         self.side.active_charset = index;
     }
 
@@ -272,6 +301,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         let deccolm = matches!(mode, PrivateMode::Named(NamedPrivateMode::ColumnMode));
         let lines = self.term.screen_lines();
         <Term<L> as Handler>::set_private_mode(&mut *self.term, mode);
+        self.history.collect(&mut *self.term);
         if deccolm {
             self.side.apply_region(lines, 1, None);
         }
@@ -282,6 +312,7 @@ impl<L: EventListener> Handler for Tracked<'_, L> {
         let deccolm = matches!(mode, PrivateMode::Named(NamedPrivateMode::ColumnMode));
         let lines = self.term.screen_lines();
         <Term<L> as Handler>::unset_private_mode(&mut *self.term, mode);
+        self.history.collect(&mut *self.term);
         if deccolm {
             self.side.apply_region(lines, 1, None);
         }

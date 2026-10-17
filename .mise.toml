@@ -16,6 +16,10 @@ run = ["cargo xtask check", "pnpm --filter ui check"]
 description = "Run unit and shared-fixture tests"
 run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
 
+[tasks.clean-dev]
+description = "Clean dev/test debug artifacts after an acceptance batch; preserve target/probes evidence"
+run = "cargo clean --profile dev"
+
 [tasks.probe]
 description = "Compare Rust terminal state and xterm headless"
 run = ["cargo xtask probe", "pnpm --filter ui probe"]
@@ -47,6 +51,18 @@ run = "cargo xtask probe-local-profile-session"
 [tasks.probe-login-arguments]
 description = "Validate explicit Unix login arguments, literal profile argv and no program fallback"
 run = "cargo xtask probe-login-arguments"
+
+[tasks.probe-theme-file]
+description = "Verify four independent background theme IO processes, cancelled handoff, UUID slots, reopening and rejected stale saves"
+run = "cargo run -p xtask --features cli-probe -- probe-theme-file"
+
+[tasks.probe-theme]
+description = "Verify seven theme imports, explicit base projection, complete TOML, bounded paint images and WCAG warnings"
+run = "cargo xtask probe-theme"
+
+[tasks.probe-theme-paint]
+description = "Verify actual Rust theme paint JSON through strict decoding and complete Radix UI resolution without DOM writes"
+run = "cargo build -p xtask --features cli-probe --locked && pnpm --dir ui exec tsx scripts/theme-paint-probe.ts"
 
 [tasks.probe-shell-startup]
 description = "Validate isolated Bash startup config, scalar/array hooks and OSC prompt boundaries"
@@ -162,6 +178,28 @@ run = "cargo run -p xtask --features cli-probe --locked -- probe-cli"
 description = "Validate isolated loopback SSH host keys, authentication and PTY channels"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh"
 
+[tasks.probe-ssh-target]
+description = "Validate private saved source/page/original epoch preconditions with actual SSH peer guard; no credential use"
+run = "cargo run -p xtask --features ssh-target-probe --locked -- probe-ssh-target"
+
+[tasks.probe-ssh-password-use]
+description="Validate explicit backend Vault password action into actual fixed SSH peer with native drain; no plaintext/session IPC"
+run="cargo run -p xtask --features ssh-target-probe --locked -- probe-ssh-password-use"
+
+[tasks.probe-ssh-private-key-use]
+description = "Validate bounded OpenSSH Ed25519 Vault ciphertext to actual signed SSH auth and resource exit; no product key entry"
+run = "cargo run -p xtask --features ssh-private-key-probe --locked -- probe-ssh-private-key-use"
+[tasks.probe-ssh-private-key-session]
+description = "Validate encrypted OpenSSH Ed25519 session handoff, stale source and setup revocation, shared root navigation, resize notification, EOF and native exit; no WebView claim"
+run = "cargo run -p xtask --features ssh-private-key-probe --locked -- probe-ssh-private-key-session"
+[tasks.probe-ssh-owned-session]
+description = "Validate explicit saved-ciphertext SSH session handoff to root actor across navigation, EOF and native read cancellation; no product/resize/GUI claim"
+run = "cargo run -p xtask --features ssh-target-probe --locked -- probe-ssh-owned-session"
+
+[tasks.probe-ssh-first-pin]
+description = "Validate actual offered key and original registry page through atomic first-use pin approval; auth stays zero"
+run = "cargo run -p xtask --features ssh-target-probe --locked -- probe-ssh-first-pin"
+
 [tasks.probe-ssh-system]
 description = "Validate russh against an isolated real OpenSSH server and native PTY"
 run = "cargo run -p xtask --features ssh-probe --locked -- probe-ssh-system"
@@ -202,6 +240,494 @@ run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features en
 description = "Validate GBK dual-coordinate recovery through actual Channel and DOM callbacks"
 depends = ["desktop-encoding-build"]
 run = "cargo xtask probe-encoding-window"
+
+[tasks.desktop-settings-build]
+description = "Build isolated native configuration receipt adapter, not default desktop"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features settings-probe --locked"]
+
+[tasks.probe-settings-window]
+description = "Validate fixed configuration and theme provenance and retirement with actual native windows"
+depends = ["desktop-settings-build"]
+run = "cargo xtask probe-settings-window"
+
+[tasks.workspace-preview-build]
+description = "Build separate opt-in workspace assets before embedding them in Tauri"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --bin pulseterm-workspace --features workspace --locked"]
+
+[tasks.workspace-webgl-probe-build]
+description = "Build fixed public-canvas observer for actual WebGL validation only"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --bin pulseterm-workspace --features validation-probe-webgl --locked"]
+
+[tasks.workspace-ssh-preview-build]
+description = "Build opt-in saved-host fingerprint and Vault-password SSH workspace after fresh UI assets"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --bin pulseterm-workspace --features workspace-ssh --locked"]
+
+[tasks.probe-workspace-cli-ssh]
+description = "Verify original-window saved-host/identity CLI consent, Vault lock rejection, cancellation/navigation, one real ciphertext authentication and native drain"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "timeout --kill-after=5s 90s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-cli-ssh-wm.log sh scripts/probe-workspace-ssh-session.sh cli"]
+
+[tasks.probe-workspace-cli-ssh-private-key]
+description = "Verify saved-key CLI original-window approval, lock/cancel/disconnect/navigation/source rejection, one real signature and terminal refresh/drain"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "timeout --kill-after=5s 90s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-cli-ssh-private-key-wm.log sh scripts/probe-workspace-ssh-session.sh key-cli"]
+[tasks.probe-workspace-cli-ssh-agent]
+description = "Verify saved Agent CLI lock/cancel/navigation/disconnect refusal, original-window consent, one selected signature and refresh/reopen/drain"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_CLI_AGENT=1 timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-agent-cli-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-cli-ssh-route]
+description = "Verify CLI original-snapshot mixed Agent jump route, first-peer cancel zero auth, three approvals, selected signatures, refresh/reopen and parent native exit"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_CLI_ROUTE=1 timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-agent-cli-route-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+
+[tasks.probe-workspace-fingerprint]
+description = "Verify explicit fingerprint cancel/approve/matched/changed/reload/reopen against independent OpenSSH with zero authentication"
+depends = ["workspace-ssh-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-fingerprint-wm.log sh scripts/probe-workspace-fingerprint.sh"
+
+[tasks.probe-workspace-ssh-session]
+description = "Verify opt-in saved Vault ciphertext SSH in real Linux WebView with input, refresh, transport-specific resize, confirmed close, ended-page recovery, handshake cancellation and native drain"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-window.log sh scripts/probe-workspace-ssh-session.sh window", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-close.log sh scripts/probe-workspace-ssh-session.sh close", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-eof.log sh scripts/probe-workspace-ssh-session.sh eof", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-cancel.log sh scripts/probe-workspace-ssh-session.sh cancel", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-commands.log sh scripts/probe-workspace-ssh-session.sh commands"]
+
+[tasks.probe-workspace-recent-hosts]
+description = "Verify one real successful saved SSH recent target, cancel zero writes, original approval, source invariance, refresh and reopen"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/recent-host-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-fuzzy-search]
+description = "Verify noncontiguous and multi-term metadata search, saved target preselection, cancellation zero writes and normal exit"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_FUZZY_SEARCH=1 timeout --kill-after=5s 70s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/fuzzy-search-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-host-endpoints]
+description = "Verify legacy-only read/cancel zero writes, explicit machine migration, a second saved SSH entrance, independent naming, tombstones, original target, refresh and process reopen without authentication"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_HOST_ENDPOINTS=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/host-endpoint-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-temporary-ssh]
+description = "Verify temporary target cancellation, explicit original SSH approval, skip-save session retention, registered-only saving, recent binding, refresh and reopen"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_TEMPORARY_SSH=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/temporary-ssh-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-route]
+description = "Verify real nested SSH routing, per-peer explicit approval, cancel zero auth, first pins, leaf-only terminal, refresh/reopen and ordered native exit"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_SSH_ROUTE=1 timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-route-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-agent]
+description = "Verify explicit Agent key saving, cancel zero writes/signs, selected-key-only terminal, refresh/reopen and physical exit"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_SSH_AGENT=1 timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-agent-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-jump-config]
+description = "Verify saved SSH Profile jump reference, cancellation zero writes, original-source invariance, refresh/process reopen and explicit detach without authentication"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_SSH_JUMPS=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-jump-config-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-profiles]
+description = "Verify independent SSH preference and default identity metadata save, original preselection/cancel, immutable credential/trust data, refresh and process reopen without authentication"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_SSH_PROFILES=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-profile-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-quick-connect]
+description = "Verify quick target preview, invalid/cancel zero writes, saved reuse, one IPv6 save, original SSH form, refresh and process reopen without a new authentication matrix"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-target-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_QUICK_CONNECT=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/quick-connect-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-private-key-session]
+description = "Verify saved encrypted Ed25519 SSH in real Linux WebView with signature authentication, drawing, input, refresh, resize, EOF, cancellation and native drain"
+depends = ["workspace-ssh-preview-build"]
+run = [
+  "cargo build -p xtask --bin xtask --features ssh-target-probe --locked",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-key-window.log sh scripts/probe-workspace-ssh-session.sh key-window",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-key-close.log sh scripts/probe-workspace-ssh-session.sh key-close",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-key-eof.log sh scripts/probe-workspace-ssh-session.sh key-eof",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-session-wm-key-cancel.log sh scripts/probe-workspace-ssh-session.sh key-cancel",
+]
+
+[tasks.probe-workspace-reload]
+description = "Verify current-page Profile reads, three generations and ordered physical shutdown under isolated Linux Openbox"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-reload-wm.log sh scripts/probe-workspace-reload.sh"
+
+[tasks.probe-workspace-terminal]
+description = "Verify discovered-Profile Raw/DOM keyboard input, native-ACK auto-resize across reload, and both window exit and explicit session cleanup"
+depends = ["workspace-preview-build"]
+run = [
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-terminal-wm.log sh scripts/probe-workspace-reload.sh terminal",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-terminal-close-wm.log sh scripts/probe-workspace-reload.sh terminal-close",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-terminal-resize-wm.log sh scripts/probe-workspace-reload.sh terminal-resize",
+]
+
+[tasks.probe-keymap]
+description = "Verify real Rust keymap projection policy parity and three-process private file conflict/reopen"
+run = "sh scripts/probe-keymap.sh"
+
+[tasks.probe-workspace-keymap-state]
+description = "Verify real keymap GUI external-source conflicts and two application processes reopening the same GUI-saved file"
+depends = ["workspace-preview-build"]
+run = [
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/keymap-conflict-wm.log sh scripts/probe-workspace-reload.sh terminal-keymap-conflict",
+  "timeout --kill-after=5s 170s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/keymap-process-reopen-wm.log sh scripts/probe-workspace-keymap-reopen.sh",
+]
+
+[tasks.probe-workspace-keymap]
+description = "Verify current-page keymap GUI save, disable, inherited restore and physical chord sequences in a real WebView"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-terminal-keymap-controls-wm.log sh scripts/probe-workspace-reload.sh terminal-keymap-controls"
+
+[tasks.probe-workspace-commands]
+description = "Verify current-page command palette, search, modal Escape isolation, same-PTY keyboard after refresh and confirmed close"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-terminal-commands-wm.log sh scripts/probe-workspace-reload.sh terminal-commands"
+
+[tasks.workspace-cli-build]
+description = "Build opt-in Linux warm CLI and workspace against the actual WebView asset bundle"
+depends = ["workspace-preview-build"]
+run = "cargo build -p pulseterm-desktop --features workspace-cli --bin pulse --bin pulseterm-workspace --locked"
+
+[tasks.probe-workspace-cli]
+description = "Verify fixed pulse focus via a separate process and real Openbox WebView across three page generations"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cli.sh"
+
+[tasks.probe-workspace-single-instance]
+description = "Verify primary GUI, PTY and CLI endpoint ownership across six secondary processes and three confirmed page generations"
+depends = ["workspace-cli-build"]
+run = "PULSE_CLI_SINGLE_INSTANCE_PROBE=1 sh scripts/probe-workspace-cli.sh"
+
+[tasks.probe-workspace-cold-focus]
+description = "Verify cold pulse focus binds the original document, one GUI, private app data, read-only discovery, three warm focus requests, zero PTYs and actual exit"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-focus.sh"
+
+[tasks.probe-workspace-cold-profiles]
+description = "Verify original-document cold Profile discovery is read-only, creates one GUI and no PTY, preserves endpoint identity and actually drains"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-focus.sh profiles"
+
+[tasks.probe-workspace-cli-window-selector]
+description = "Verify explicit fixed workspace selector uses original-page focus, same-PTY input and actual endpoint/native drain"
+depends = ["workspace-cli-build"]
+run = "PULSE_CLI_WINDOW_PROBE=1 sh scripts/probe-workspace-cli.sh"
+
+[tasks.probe-workspace-cold-failures]
+description = "Verify actual CLI partial/unsafe/occupied endpoints, EOF/timeout and broker failure never repair or cold-retry"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-failures.sh"
+
+[tasks.probe-workspace-cold-unbound]
+description = "Verify valid cold split/SSH requests without original pane or epoch reject with zero GUI exec, connect or endpoint writes"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-failures.sh unbound"
+
+[tasks.probe-workspace-cold-concurrent]
+description = "Verify simultaneous cold focus/profiles CLI pairs, actual two-GUI competition, one broker owner and endpoint preservation"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-concurrent.sh"
+
+[tasks.probe-workspace-cold-sensitive]
+description = "Verify simultaneous cold creation clients cannot share original-page approval, with cancel/disconnect/refresh and single approved PTY drain"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-sensitive.sh"
+
+[tasks.probe-native-parallel]
+description = "Bounded Linux reproduction of native local-session tests with original deadlines and default/high/overlap concurrency"
+run = "python3 scripts/probe-native-parallel.py"
+
+[tasks.probe-workspace-cli-capacity]
+description = "Verify eight authenticated CLI slots, ninth-client rejection, actual slot reclamation and same primary endpoint retention"
+depends = ["workspace-cli-build"]
+run = "PULSE_CLI_CAPACITY_PROBE=1 sh scripts/probe-workspace-cold-focus.sh profiles"
+[tasks.probe-workspace-cold-new-tab]
+description = "Verify cold CLI original-page GUI consent, cancel/disconnect/refresh, delayed approval, same-PTY recovery and actual native drain"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cold-new-tab.sh"
+
+[tasks.probe-workspace-cli-selection]
+description = "Verify original-page CLI selection, exact two-PTY keyboard routing, retained split leases and actual root exit"
+depends = ["workspace-cli-build"]
+run = [
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_SELECTION_PROBE=1 sh scripts/probe-workspace-cli.sh",
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_SELECTION_PROBE=1 PULSE_CLI_SPLIT_PROBE=row sh scripts/probe-workspace-cli.sh",
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_SELECTION_PROBE=1 PULSE_CLI_SPLIT_PROBE=column sh scripts/probe-workspace-cli.sh",
+]
+
+[tasks.probe-workspace-cli-chain]
+description = "Verify whole-chain preflight, per-step GUI consent, same-instance partial success, two PTYs, refresh and exit"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-cli-chain.sh"
+
+[tasks.probe-workspace-cli-multiwindow]
+description = "Verify same-process empty windows, original-page creation consent, exact routing, independent PTYs, refresh and last-window drain"
+depends = ["workspace-cli-build"]
+run = "sh scripts/probe-workspace-multiwindow.sh"
+
+[tasks.probe-workspace-cli-multiwindow-ssh]
+description = "Verify independent window Vault/approval ownership, password and selected Agent key, actual three-hop fingerprints, refresh and parent exit"
+run = "sh scripts/probe-workspace-multiwindow-ssh.sh all"
+
+[tasks.probe-workspace-cli-new-tab]
+description = "Verify original-page GUI consent, cancellation, refresh revocation and actual CLI-created PTY through TermView and root drain"
+depends = ["workspace-cli-build"]
+run = "PULSE_CLI_NEW_TAB_PROBE=1 sh scripts/probe-workspace-cli.sh"
+
+[tasks.probe-workspace-cli-split]
+description = "Verify original-pane CLI split consent, both real PTYs, focus/input, refresh and root drain in two directions"
+depends = ["workspace-cli-build"]
+run = [
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_SPLIT_PROBE=row sh scripts/probe-workspace-cli.sh",
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_SPLIT_PROBE=column sh scripts/probe-workspace-cli.sh",
+]
+
+[tasks.probe-workspace-cli-aliases]
+description = "Verify local open and split-pane aliases retain original-page consent, independent PTYs, refresh recovery and native drain"
+depends = ["workspace-cli-build"]
+run = [
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_ALIAS_PROBE=1 sh scripts/probe-workspace-cli.sh",
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_ALIAS_PROBE=1 PULSE_CLI_SPLIT_PROBE=row sh scripts/probe-workspace-cli.sh",
+  "PULSE_CLI_NEW_TAB_PROBE=1 PULSE_CLI_ALIAS_PROBE=1 PULSE_CLI_SPLIT_PROBE=column sh scripts/probe-workspace-cli.sh",
+  "sh scripts/probe-workspace-cold-open.sh",
+]
+
+[tasks.probe-workspace-clipboard]
+description = "Validate actual isolated GTK clipboard copy, safe paste approval, interrupt, and page/resize revocation"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-clipboard-wm.log sh scripts/probe-workspace-clipboard.sh",
+]
+
+[tasks.probe-workspace-bracketed-paste]
+description = "Verify real Bash/Readline bracketed paste, consent, pending-input refresh, UTF8 limits, mode changes and native exit"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-bracketed-paste-wm.log sh scripts/probe-workspace-bracketed-paste.sh",
+]
+
+[tasks.probe-workspace-history-copy]
+description = "Verify actual deep wrapped Unicode history copied exactly via GTK clipboard before and after same-session page refresh"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-history-copy-wm.log sh scripts/probe-workspace-history-copy.sh",
+]
+
+[tasks.probe-workspace-vim]
+description = "Verify actual isolated Vim bracketed paste, Unicode, autoindent, pending-buffer refresh, undo, exact save and native exit"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-vim-wm.log sh scripts/probe-workspace-vim.sh",
+]
+
+[tasks.probe-workspace-selection-copy]
+description = "Validate default-off selection copy, authorized Settings persistence, real mouse gestures, same-PTY refresh and system clipboard"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "cc -std=c11 -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gobject-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-selection-copy-wm.log env PULSE_COPY_ON_SELECT_PROBE=1 sh scripts/probe-workspace-clipboard.sh",
+]
+
+[tasks.probe-workspace-right-click-paste]
+description = "Validate default-off trusted right-click clipboard read, approved Settings, original-view multiline approval/retirement and mouse-report priority in actual Linux WebView"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-right-click-paste-wm.log sh scripts/probe-workspace-right-click-paste.sh",
+]
+
+[tasks.probe-workspace-profile-editor]
+description = "Validate actual Profile editor cancellation/navigation, literal native arguments/cwd/env, immutable appearance, refresh/reopen and native exit"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 130s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-profile-editor-wm.log sh scripts/probe-workspace-profile-editor.sh",
+]
+
+[tasks.probe-workspace-custom-profile]
+description = "Validate actual custom Profile save with zero launch, UUID reopen, GUI/CLI explicit startup, refresh and native exit"
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p pulseterm-desktop --bin pulseterm-workspace --bin pulse --features workspace-cli --locked",
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 130s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-custom-profile-wm.log sh scripts/probe-workspace-custom-profile.sh",
+]
+
+[tasks.probe-workspace-profile-lifecycle]
+description = "Validate canceled deletion, default tombstones, live PTY preservation, refresh/reopen and explicit no-launch restoration in Linux WebView"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-profile-lifecycle-wm.log sh scripts/probe-workspace-profile-lifecycle.sh",
+]
+
+[tasks.probe-workspace-profile-default]
+description = "Validate default Profile save/clear, unavailable identities, refresh/reopen, explicit launch and native exit in Linux WebView"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-profile-default-wm.log sh scripts/probe-workspace-profile-default.sh",
+]
+
+[tasks.probe-workspace-profiles]
+description = "Validate fixed automatic Profile visibility edits, live PTY preservation, page reload and private database process reopen"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-profiles-wm.log sh scripts/probe-workspace-tabs.sh profiles",
+]
+
+[tasks.probe-workspace-settings]
+description = "Validate fixed page-scoped settings, default and user sources, persisted font edits and same-PTY physical grid changes"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-settings-wm.log sh scripts/probe-workspace-settings.sh",
+]
+
+[tasks.probe-workspace-font]
+description = "Validate bundled font preset explicit save, OFL notice, missing-primary fallback and same-PTY output in a real WebView"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "PULSE_FONT_PRESET=1 timeout --kill-after=5s 90s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-font-wm.log sh scripts/probe-workspace-settings.sh",
+]
+
+[tasks.probe-workspace-ligatures]
+description = "Verify explicitly saved WebGL ligatures, unchanged raw operator input, same PTY and independent reopen in a real WebView"
+depends = ["workspace-webgl-probe-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "PULSE_FONT_PRESET=1 PULSE_FONT_LIGATURES=1 timeout --kill-after=5s 110s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ligatures-wm.log sh scripts/probe-workspace-settings.sh",
+]
+
+[tasks.probe-workspace-organization]
+description = "Verify real WebView organization tree, host tree/list/search/favorites and saved host preselection, three-directory memberships, cancel/tombstone and reopen with unchanged sources"
+depends = ["workspace-ssh-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "PULSE_CATALOGUE_ORGANIZATION=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/catalogue-organization-wm.log sh scripts/probe-workspace-catalogue-batch.sh",
+]
+
+[tasks.probe-workspace-catalogue-batch]
+description = "Verify one real WebView Host/password/key search selection/cancel/atomic deletion, two-role tombstones, unchanged Vault, refresh/reopen and zero startup"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/catalogue-batch-wm.log sh scripts/probe-workspace-catalogue-batch.sh",
+]
+
+[tasks.probe-workspace-hosts]
+description = "Validate current-page SSH metadata CRUD, literal GUI rendering, refresh, three private-database process reopens and no Shell start"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-hosts-wm.log sh scripts/probe-workspace-hosts.sh"
+
+[tasks.probe-workspace-identities]
+description = "Validate current-page SSH identity metadata UI, absent Vault, backend-reserved refs, refresh, process reopen and confirmed deletion; no credentials or connections"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-identities-wm.log sh scripts/probe-workspace-identities.sh"
+
+[tasks.probe-workspace-key-identities]
+description = "Validate schema5 private-key identity metadata CRUD in four real GUI processes, original-page refresh, two-click deletion, tombstones and actual shutdown; no keys or SSH"
+depends = ["workspace-preview-build"]
+run = ["cargo test -p pulseterm-desktop --features workspace --lib --locked --no-run", "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-key-identities-wm.log sh scripts/probe-workspace-key-identities.sh"]
+[tasks.probe-workspace-key-import]
+description = "Validate receive-only encrypted Ed25519 import through GTK clipboard, locked/wrong-passphrase rejection, atomic paired ciphertext, original-page refresh and independent-process exact AEAD bytes; no SSH use"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo test -p pulseterm-desktop --features workspace-cli,workspace-ssh --lib --locked --no-run", "timeout --kill-after=5s 90s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-key-import-wm.log sh scripts/probe-workspace-key-import.sh"]
+
+[tasks.probe-workspace-identity-password]
+description = "Validate preview identity password locked rejection, current-page epoch-pinned ciphertext write, refresh, process reopen and fixed private byte verification; no plaintext reads or SSH"
+depends = ["workspace-preview-build"]
+run = [
+  "cargo test -p pulseterm-desktop --lib --features workspace --locked --no-run",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-identity-password-wm.log sh scripts/probe-workspace-identity-password.sh",
+]
+
+[tasks.probe-workspace-vault]
+description = "Validate preview master-password Vault creation stays locked, wrong password rejects, explicit frontend confirmation, lock/refresh/private process reopen; no secret reads or SSH"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-vault-wm.log sh scripts/probe-workspace-vault.sh"
+
+[tasks.probe-workspace-vault-revocation]
+description = "Validate admitted preview Vault auth cancellation and navigation, no late key enablement, bounded current-page Profile read admission and native drain"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-vault-wm.log sh scripts/probe-workspace-vault.sh revocation"
+
+[tasks.probe-workspace-labels]
+description = "Validate window-local tab labels and fixed colors survive refresh without metadata entering a PTY"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-labels-wm.log sh scripts/probe-workspace-tabs.sh labels"
+
+[tasks.probe-workspace-split]
+description = "Validate existing Profile PTYs, row/column dimensions, proportion resize, directional focus, rebinding and independent close"
+depends = ["workspace-preview-build"]
+run = [
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-split-wm.log sh scripts/probe-workspace-tabs.sh split",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-split-adjust-wm.log sh scripts/probe-workspace-tabs.sh split-adjust",
+]
+
+
+[tasks.probe-workspace-nested]
+description = "Validate nested panes, one-commit drag, keyboard ratio, maximum display, refresh pruning and native exit in one real WebView"
+depends = ["workspace-preview-build"]
+run = [
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-nested-wm.log sh scripts/probe-workspace-nested.sh",
+]
+[tasks.probe-workspace-nested-cli]
+description = "Verify original-page CLI split consent into a nested layout, preserved PTYs, cancel and maximum denial"
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p pulseterm-desktop --features workspace-cli --bin pulseterm-workspace --bin pulse --locked",
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  "PULSETERM_NESTED_CLI=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-nested-cli-wm.log sh scripts/probe-workspace-nested.sh",
+]
+
+[tasks.probe-workspace-tabs]
+description = "Validate two actual Profile PTYs with keyboard tab activation, refresh selection, independent close and complete echo pixels"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-tabs-wm.log sh scripts/probe-workspace-tabs.sh"
+
+[tasks.probe-workspace-eof]
+description = "Verify natural Profile PTY EOF retains the final drawn screen, disables input, and yields the independent native exit receipt"
+depends = ["workspace-preview-build"]
+run = [
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-eof-wm.log sh scripts/probe-workspace-reload.sh terminal-eof",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-eof-refresh-wm.log sh scripts/probe-workspace-reload.sh terminal-eof-refresh",
+]
+
+[tasks.probe-workspace-resize-lifecycle]
+description = "Verify finite WM resize event storms and navigation retiring real pending capture confirmation without closing the PTY"
+depends = ["workspace-preview-build"]
+run = [
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-storm-wm.log sh scripts/probe-workspace-reload.sh terminal-storm",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-refresh-resize-wm.log sh scripts/probe-workspace-reload.sh terminal-refresh-resize",
+  "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-paced-resize-wm.log sh scripts/probe-workspace-reload.sh terminal-paced-resize",
+]
 
 [tasks.desktop-login-build]
 description = "Build finite-helper Unix login validation app, not the default desktop"
@@ -261,6 +787,219 @@ run = "cargo run -p xtask --features cli-probe --locked -- settings-schema-check
 description = "Check committed IPC bindings without overwriting them"
 run = "cargo run -p pulseterm-desktop --features desktop --locked -- --check-bindings"
 
+[tasks.probe-ssh-config]
+description = "Verify bounded ssh_config metadata, real OpenSSH comparison and Unix fixed-file rejection without IO or connection authority"
+run = "cargo test -p pulse-ssh --all-features --locked config::"
+
+[tasks.probe-ssh-config-page]
+description = "Verify original-page config preview/source confirmation and native read-credit shutdown lifetime (Unix, optional SSH)"
+run = "cargo test -p pulseterm-desktop --features workspace-cli,workspace-ssh --lib --locked config_page"
+
+[tasks.probe-workspace-ssh-config]
+description = "Verify actual Linux config preview, visible completion/conflict, Include changes, refresh/reopen, full-store invariance and ordered exit"
+depends = ["workspace-ssh-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-config-wm.log sh scripts/probe-workspace-ssh-config.sh"
+
+[tasks.probe-ssh-config-import]
+description = "Verify actual config-to-host import source/SQL CAS, original-page rejection, precommit rollback and cancellation native resource lifetime"
+run = "cargo test -p pulseterm-desktop --features workspace-cli,workspace-ssh --lib --locked config_import"
+
+[tasks.probe-workspace-ssh-config-import]
+description = "Verify actual Linux two-step config import, cancel/source-conflict zero writes, same saved host after refresh/reopen, unchanged credential/trust tables and no terminal"
+depends = ["workspace-ssh-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-config-import-wm.log sh scripts/probe-workspace-ssh-config.sh import"
+
+[tasks.probe-workspace-ssh-agent-route]
+description = "Verify explicit actual peer approval with password outer, exact-key Agent intermediate/leaf, two signatures, no fallback, refresh/reopen and parent stream exit"
+depends = ["workspace-ssh-preview-build"]
+run = ["cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_SSH_AGENT_ROUTE=1 timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/ssh-agent-route-wm.log sh scripts/probe-workspace-recent-hosts.sh"]
+
+[tasks.probe-workspace-ssh-config-status]
+description = "Verify actual visible config source changes, preserved display, original single-use ticket, refresh/reopen, unchanged full store and ordered exit"
+depends = ["workspace-ssh-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-config-status-wm.log sh scripts/probe-workspace-ssh-config.sh status"
+
+[tasks.probe-workspace-cold-ssh]
+description = "Verify cold CLI saved SSH intent: locked and unlocked cancellation zero auth, separate explicit target consent, one password auth, terminal input, refresh and actual GUI/peer exit"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cold-ssh-wm.log python3 scripts/probe-workspace-cold-ssh.py"]
+
+[tasks.probe-workspace-cold-ssh-agent]
+description = "Verify cold saved Agent ID: locked and unlocked cancellations zero signatures, distinct click and target approval, selected second key signs once, password zero, refresh/input/native drain"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_COLD_SSH_AGENT=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cold-agent-wm.log python3 scripts/probe-workspace-cold-ssh.py"]
+
+[tasks.probe-workspace-cold-ssh-route]
+description = "Verify actual cold CLI password/Agent three-peer route, locked/unlocked/first-peer cancellations zero auth, per-peer targets and keys, exact two pins, refresh and parent stream exit"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_COLD_SSH_ROUTE=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cold-agent-route-wm.log python3 scripts/probe-workspace-cold-ssh.py"]
+
+[tasks.probe-workspace-cold-split]
+description = "Verify cold CLI split two independent consents, precise initial session, partial cancellation, both directions, independent native inputs, refresh and full exit"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "sh scripts/probe-workspace-cold-split.sh"]
+
+[tasks.probe-workspace-saved-ssh-alias]
+description = "Verify exact saved SSH aliases in cold/warm password, selected Agent and mixed routes; reject missing or duplicate aliases and missing default identity, with unchanged sources and native exit"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "sh scripts/probe-workspace-saved-ssh-alias.sh"]
+
+[tasks.probe-workspace-native-close]
+description = "Diagnose bounded locked/unlocked GUI cancellation-close cycles; exact exit0, zero authentication/signatures/writes and endpoint drain, optional owned gdb stacks"
+run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "sh scripts/probe-workspace-native-close.sh"]
+
 [tasks.audit]
-description = "Audit Rust dependency licenses and advisories"
-run = ["cargo deny --all-features --locked check", "pnpm audit --audit-level moderate"]
+description = "Run both Rust and JavaScript audits; preserve failures and per-tool evidence"
+run = "node scripts/audit-dependencies.mjs"
+
+[tasks.audit-check]
+description = "Verify independent audit execution and failure receipts with local child processes"
+run = "node --test scripts/audit-dependencies.test.mjs"
+
+[tasks.third-party-write]
+description = "Collect locked attribution archives and verify pinned supplemental sources"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = "python3 scripts/third-party.py --write"
+
+[tasks.third-party-check]
+description = "Offline verification of locked attribution inputs, original bytes and failure behavior"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = ["python3 scripts/test-third-party.py", "python3 scripts/third-party.py"]
+
+[tasks.distribution-review]
+description = "Review frozen candidate target dependency scopes without granting release approval"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = ["python3 scripts/test-distribution-review.py", "python3 scripts/distribution-review.py"]
+
+[tasks.third-party-release-check]
+description = "Reject incomplete attribution texts, including link-only supplements; policy remains separate"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = "python3 scripts/third-party.py --require-texts"
+
+
+[tasks.test-ssh-authentication]
+description = "Verify bounded Ed25519/NIST ECDSA formats, original-page MFA authority, exact challenges and real SSH peer cancellation/drain"
+run = [
+  "cargo test -p pulse-app --features ssh-use --lib interactive --locked",
+  "cargo test -p pulse-app --features ssh-use --lib route_hop_gestures_prepare_only_bound_kind_and_keep_original_epoch_guards --locked",
+  "cargo test -p pulse-app --features ssh-use --lib joint_private_key --locked",
+  "cargo test -p pulse-app --features ssh-use --lib agent_joint_ --locked",
+  "cargo test -p pulse-ssh --lib agent::tests --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --lib ssh_private_key_decode::tests:: --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --lib interactive::tests:: --locked",
+  "cargo test -p pulse-app --features cli-control --lib cli_control::tests:: --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --lib cli_interactive --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --lib route --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --lib runtime_tests --locked",
+  "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh --bin pulse interactive --locked",
+]
+
+[tasks.workspace-language-check]
+description = "Check reachable workspace static messages and untranslated DOM copy without inspecting user or terminal data"
+run = ["pnpm --filter ui exec tsc scripts/workspace-language-check.ts --noEmit --module ESNext --moduleResolution Bundler --target ES2022 --skipLibCheck --strict --types node", "pnpm --filter ui exec tsx scripts/workspace-language-check.ts"]
+
+
+[tasks.probe-workspace-ssh-interactive]
+description = "Validate production Linux WebView MFA choice, Esc native drain, two real SSH rounds, terminal input, refresh and window shutdown"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p xtask --features ssh-target-probe,ssh-private-key-probe --locked",
+  "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked",
+  "timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-interactive-wm.log sh scripts/probe-workspace-ssh-interactive.sh",
+]
+
+[tasks.probe-ssh-private-key-algorithms]
+description = "Validate encrypted NIST ECDSA keys after SQLite reopen, real SSH authentication, Root recovery and native drain"
+run = "cargo run -p xtask --features ssh-private-key-probe --locked -- probe-ssh-private-key-algorithms"
+
+[tasks.probe-workspace-cli-interactive]
+description = "Validate explicit cold/warm CLI MFA, original-window approvals, native cancellation, two SSH rounds and refresh recovery"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p xtask --features ssh-target-probe --locked",
+  "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulse --bin pulseterm-workspace --locked",
+  "timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh",
+]
+
+[tasks.probe-workspace-route-interactive]
+description = "Verify explicit mixed and three-hop MFA, actual peers, cancellation, Root recovery and all native streams exiting"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p xtask --features ssh-target-probe --locked",
+  "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulse --bin pulseterm-workspace --locked",
+  "timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-interactive-wm.log bash scripts/probe-workspace-route-interactive.sh",
+]
+
+
+[tasks.probe-workspace-temporary-interactive]
+description = "Verify temporary SSH MFA explicit selection, cancellation, failure, separate saving, refresh and native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p xtask --features ssh-target-probe --locked",
+  "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulse --bin pulseterm-workspace --locked",
+  "timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/temporary-interactive-wm.log sh scripts/probe-workspace-temporary-interactive.sh",
+]
+
+[tasks.probe-workspace-key-interactive]
+description = "Verify explicit private key plus MFA, partial-success gate, no fallback, two rounds and physical native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+fixture_dir=$(mktemp -d /data/temp/pulseterm-key-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask"
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/key-interactive-wm.log sh scripts/probe-workspace-key-interactive.sh
+"""
+
+
+[tasks.probe-workspace-cli-key-interactive]
+description = "Verify explicit CLI private key plus MFA, original cold/warm consent, cancellation, disconnect and physical native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-cli-key-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-key-interactive-test-server.json
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-key-interactive-wm.log sh scripts/probe-workspace-cli-key-interactive.sh
+"""
+
+
+[tasks.probe-workspace-route-key-interactive]
+description = "Verify explicit three-hop private key plus MFA, mixed methods, source revocation, role isolation and complete native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-route-key-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/route-key-interactive-test-server.json
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-key-interactive-wm.log sh scripts/probe-workspace-route-key-interactive.sh
+"""
+
+[tasks.probe-workspace-agent-interactive]
+description = "Verify explicitly selected saved Agent plus MFA, source revocation, one selected signature and complete native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-agent-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/agent-interactive-test-server.json
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/agent-interactive-wm.log sh scripts/probe-workspace-agent-interactive.sh
+"""

@@ -129,11 +129,82 @@ pub struct Request {
     jsonrpc: String,
     id: String,
     method: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_params")]
     params: Map<String, Value>,
 }
+// serde_json::Value's ordinary map decoder silently overwrites duplicate keys.
+// Keep JSON's original scalar semantics and recursion limit, but reject ambiguous parameters.
+struct UniqueJson(Value);
+impl<'de> Deserialize<'de> for UniqueJson {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = UniqueJson;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an unambiguous JSON value")
+            }
+            fn visit_bool<E: serde::de::Error>(self, value: bool) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::Bool(value)))
+            }
+            fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::Number(value.into())))
+            }
+            fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::Number(value.into())))
+            }
+            fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Self::Value, E> {
+                serde_json::Number::from_f64(value)
+                    .map(|number| UniqueJson(Value::Number(number)))
+                    .ok_or_else(|| E::custom("cli.invalid_request"))
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::String(value.into())))
+            }
+            fn visit_string<E: serde::de::Error>(self, value: String) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::String(value)))
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(UniqueJson(Value::Null))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut sequence: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = sequence.next_element::<UniqueJson>()? {
+                    values.push(value.0);
+                }
+                Ok(UniqueJson(Value::Array(values)))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = Map::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if values.contains_key(&key) {
+                        return Err(serde::de::Error::custom("cli.invalid_request"));
+                    }
+                    let value = map.next_value::<UniqueJson>()?;
+                    values.insert(key, value.0);
+                }
+                Ok(UniqueJson(Value::Object(values)))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+fn unique_params<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Map<String, Value>, D::Error> {
+    match UniqueJson::deserialize(deserializer)?.0 {
+        Value::Object(map) => Ok(map),
+        _ => Err(serde::de::Error::custom("cli.invalid_request")),
+    }
+}
+
 impl Request {
-    /// Parse only a complete bounded UTF-8 JSON object; duplicate fields are rejected by serde.
+    /// Parse only a complete bounded UTF-8 JSON object; duplicate fields are rejected, including nested parameter objects.
     pub fn parse(body: &[u8]) -> Result<Self, CliError> {
         if body.is_empty() || body.len() > MAX_BODY {
             return Err(CliError::Length);

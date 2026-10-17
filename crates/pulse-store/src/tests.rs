@@ -63,7 +63,7 @@ async fn actual_file_reopens_preferences_and_closes_all_worker_handles()
     drop(store);
     task.join().await?;
     let c = database::open(&path)?;
-    assert_eq!(version(&c)?, 1);
+    assert_eq!(version(&c)?, 5);
     assert_eq!(
         c.pragma_query_value::<String, _>(None, "journal_mode", |r| r.get(0))?,
         "wal"
@@ -89,6 +89,9 @@ fn bounded_queue_refuses_overload_closed_and_does_not_admit_failed_request() -> 
     let store = StateStore {
         requests,
         cancellation: CancellationToken::new(),
+        host_owner: uuid::Uuid::new_v4(),
+        #[cfg(feature = "ssh-trust")]
+        trust_owner: uuid::Uuid::new_v4(),
     };
     let mut results = Vec::new();
     for _ in 0..REQUEST_LIMIT {
@@ -140,11 +143,11 @@ fn future_or_unversioned_database_is_not_migrated()
         c.execute_batch(
             "CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES ('keep');",
         )?;
-        c.pragma_update(None, "user_version", if future { 2 } else { 0 })?;
+        c.pragma_update(None, "user_version", if future { 6 } else { 0 })?;
         drop(c);
         assert!(matches!(database::open(&path), Err(StoreError::Schema)));
         let c = Connection::open(&path)?;
-        assert_eq!(version(&c)?, if future { 2 } else { 0 });
+        assert_eq!(version(&c)?, if future { 6 } else { 0 });
         let keep: String = c.query_row("SELECT value FROM sentinel", [], |r| r.get(0))?;
         assert_eq!(keep, "keep");
         assert!(!Path::new(&format!("{}.bak-1", path.display())).exists());
@@ -162,7 +165,7 @@ fn upgrade_copies_committed_wal_state_before_schema_change()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
-    let mut c = database::open(&path)?;
+    let mut c = database::open_v1_fixture(&path)?;
     database::save(&c, &Prefs::default(), &value()?)?;
     database::migrate(&mut c, &path, &upgrade(), 2)?;
     assert_eq!(version(&c)?, 2);
@@ -177,7 +180,7 @@ fn backup_collision_refuses_upgrade_and_preserves_existing_file()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
-    let mut c = database::open(&path)?;
+    let mut c = database::open_v1_fixture(&path)?;
     let backup = dir.path().join("pulse.db.bak-2");
     fs::write(&backup, b"do-not-overwrite")?;
     assert_eq!(
@@ -193,7 +196,7 @@ fn failed_upgrade_rolls_back_and_keeps_preupgrade_backup()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
-    let mut c = database::open(&path)?;
+    let mut c = database::open_v1_fixture(&path)?;
     database::save(&c, &Prefs::default(), &value()?)?;
     let steps = Migrations::new(vec![
         M::up("CREATE TABLE app_state(key TEXT PRIMARY KEY NOT NULL,value TEXT NOT NULL) STRICT;"),

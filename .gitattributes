@@ -7,3 +7,5 @@ vendor/alacritty_terminal/** -text
 vendor/alacritty_terminal/tests/ref/**/alacritty.recording -text -diff
 # A unified diff contains literal space-only context lines.
 vendor/*.patch whitespace=-blank-at-eol
+# Collected upstream license/notice bytes must remain unchanged on every platform.
+third-party/licenses/** -text

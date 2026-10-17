@@ -201,6 +201,7 @@ pub(super) async fn after_source_destroyed(
     handle: &SessionHandle,
     previous: u64,
     channel: &Channel<RawFrame>,
+    #[cfg(feature = "settings-probe")] settings: settings_probe::Fixture,
 ) -> Result<()> {
     eprintln!("session.peer_transfer.source_destroyed");
     let before = state.0.registry.state(owner, id).map_err(error)?;
@@ -262,6 +263,10 @@ pub(super) async fn after_source_destroyed(
     .await
     .map_err(|_| "session.peer_transfer_input_deadline".to_string())??;
     eprintln!("session.peer_transfer.after_input_capture");
+    #[cfg(feature = "settings-probe")]
+    transfer_view::render_with_settings(state, owner, id, binding.generation, channel, settings)
+        .await?;
+    #[cfg(not(feature = "settings-probe"))]
     transfer_view::render(state, owner, id, binding.generation, channel).await?;
     Ok(())
 }

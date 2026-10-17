@@ -16,6 +16,60 @@ fn gate() -> SessionAuth {
     SessionAuth::new(Zeroizing::new(SECRET))
 }
 #[test]
+fn duplicate_cli_parameter_keys_are_rejected_before_auth_or_dispatch() {
+    for body in [
+        br#"{"jsonrpc":"2.0","id":"one","method":"hello","params":{"protocolVersion":2,"protocolVersion":1}}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":{"profile":"first","profile":"second"}}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":{"target":{"window":"first","window":"second"}}}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":{"target":[{"pane":"first","pane":"second"}]}}"#.as_slice(),
+    ] {
+        assert!(matches!(Request::parse(body), Err(CliError::Request)));
+    }
+}
+
+#[test]
+fn unique_cli_params_preserve_all_valid_json_scalar_and_nested_values()
+-> Result<(), Box<dyn std::error::Error>> {
+    let body = r#"{"jsonrpc":"2.0","id":"values","method":"probe","params":{"text":"中文🌍\\\"","yes":true,"no":false,"nil":null,"negative":-9223372036854775808,"maximum":18446744073709551615,"float":1.25,"negativeZero":-0.0,"array":[null,true,-5,1.25,{"same":"a"},{"same":"b"}],"object":{"same":"c"}}}"#;
+    let parsed = Request::parse(body.as_bytes())?;
+    let ordinary: Value = serde_json::from_str(body)?;
+    assert_eq!(Value::Object(parsed.params().clone()), ordinary["params"]);
+    let omitted = Request::parse(br#"{"jsonrpc":"2.0","id":"empty","method":"probe"}"#)?;
+    assert!(omitted.params().is_empty());
+    Ok(())
+}
+#[test]
+fn escaped_duplicate_parameter_names_and_nonobjects_are_rejected() {
+    for body in [
+        br#"{"jsonrpc":"2.0","id":"one","method":"hello","params":{"token":"one","\u0074oken":"two"}}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":{"target":{"window":"one","\u0077indow":"two"}}}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":null}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":[]}"#.as_slice(),
+        br#"{"jsonrpc":"2.0","id":"one","method":"open","params":{"number":1e999}}"#.as_slice(),
+    ] { assert!(matches!(Request::parse(body), Err(CliError::Request))); }
+}
+#[test]
+fn unique_parameter_parser_keeps_json_recursion_and_wire_budget_limits() {
+    let prefix = r#"{"jsonrpc":"2.0","id":"deep","method":"probe","params":{"data":"#;
+    let valid = format!("{prefix}{}null{}{}}}", "[".repeat(8), "]".repeat(8), "}");
+    assert!(Request::parse(valid.as_bytes()).is_ok());
+    let too_deep = format!(
+        "{prefix}{}null{}{}}}",
+        "[".repeat(130),
+        "]".repeat(130),
+        "}"
+    );
+    assert!(matches!(
+        Request::parse(too_deep.as_bytes()),
+        Err(CliError::Request)
+    ));
+    assert!(matches!(
+        Request::parse(&vec![b' '; MAX_BODY + 1]),
+        Err(CliError::Length)
+    ));
+}
+
+#[test]
 fn one_frame_per_push_even_with_coalesced_frames() {
     let first = encode(&json!({"id":"one","text":"中文🌍"})).unwrap();
     let second = encode(&json!({"id":"two"})).unwrap();

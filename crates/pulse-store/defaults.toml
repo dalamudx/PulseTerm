@@ -2,6 +2,26 @@
 schema_version = 1
 
 [terminal]
+color_preset = "classic"
+theme = { mode = "fixed", light = "paper", dark = "midnight" }
+history_limit = 100000
 font_size = 14
+line_height_percent = 100
+letter_spacing = 0
 font_family = "monospace"
+font_fallback = "monospace"
+font_ligatures = false
 cursor_blink = false
+scroll_on_input = true
+scroll_on_output = false
+mac_option_as_meta = false
+backspace_send = "del"
+delete_send = "csi"
+term_type = "xterm-256color"
+copy_on_select = false
+right_click_paste = false
+
+[ui]
+appearance = "light"
+accent = "cyan"
+language = "zh-CN"

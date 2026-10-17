@@ -24,6 +24,8 @@ pub(crate) struct NativeWatcher {
     ledger: Mutex<Ledger>,
     wake: watch::Sender<()>,
     query: Arc<tokio::sync::Semaphore>,
+    relay: Arc<tokio::sync::Semaphore>,
+    sampling: tokio::sync::Mutex<()>,
 }
 impl NativeWatcher {
     pub(crate) fn new() -> Arc<Self> {
@@ -31,6 +33,8 @@ impl NativeWatcher {
         Arc::new(Self {
             wake,
             query: Arc::new(tokio::sync::Semaphore::new(1)),
+            relay: Arc::new(tokio::sync::Semaphore::new(1)),
+            sampling: tokio::sync::Mutex::new(()),
             ledger: Mutex::new(Ledger {
                 closed: false,
                 sample: NativeVisibilitySample {
@@ -125,6 +129,7 @@ impl NativeWatcher {
         )
     }
     pub(crate) async fn sample(&self, window: WebviewWindow) -> Result<NativeVisibilitySample> {
+        let _sampling = self.sampling.lock().await;
         let state = self
             .query(move || {
                 window
@@ -146,9 +151,25 @@ impl NativeWatcher {
             })
     }
     pub(crate) fn launch(self: &Arc<Self>, window: WebviewWindow) {
+        self.launch_with(window, |window, sample| {
+            sample
+                .emit_to(window, tauri::EventTarget::webview_window(window.label()))
+                .is_ok()
+        });
+    }
+    pub(crate) fn launch_with(
+        self: &Arc<Self>,
+        window: WebviewWindow,
+        emit: fn(&WebviewWindow, &NativeVisibilitySample) -> bool,
+    ) {
+        let Ok(relay) = self.relay.clone().try_acquire_owned() else {
+            self.close();
+            return;
+        };
         let mut wake = self.wake.subscribe();
         let observer = self.clone();
         tauri::async_runtime::spawn(async move {
+            let _relay = relay;
             let mut first = true;
             let mut last_emitted = 0;
             loop {
@@ -156,8 +177,7 @@ impl NativeWatcher {
                     break;
                 }
                 first = false;
-                // Coalesce the latest window hints and sample only a bounded settling burst.
-                // Desktop WindowEvent has no universal minimized event; no idle polling.
+                // Focus/resize are sampling hints only. No idle polling.
                 for delay in [50, 50, 100] {
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                     if observer.closed() {
@@ -166,40 +186,42 @@ impl NativeWatcher {
                     let sample = match observer.sample(window.clone()).await {
                         Ok(sample) => sample,
                         Err(error) => {
-                            // Internal static error code only, no terminal data/window labels.
                             eprintln!("native.visibility_observer_failed:{error}");
                             if let Ok(Some(invalid)) = observer.commit(None) {
-                                let _ = invalid.emit_to(
-                                    &window,
-                                    tauri::EventTarget::webview_window(window.label()),
-                                );
+                                let _ = emit(&window, &invalid);
                             }
                             observer.close();
                             return;
                         }
                     };
-                    if observer.closed() {
-                        return;
-                    }
-                    let valid = sample.valid;
                     if sample.revision <= last_emitted {
                         continue;
                     }
                     last_emitted = sample.revision;
-                    if sample
-                        .emit_to(&window, tauri::EventTarget::webview_window(window.label()))
-                        .is_err()
-                    {
-                        observer.close();
-                        return;
-                    }
-                    if !valid {
+                    if !emit(&window, &sample) || !sample.valid {
                         observer.close();
                         return;
                     }
                 }
             }
         });
+    }
+    #[cfg(any(feature = "workspace", test))]
+    pub(crate) async fn shutdown(&self) -> Result<()> {
+        self.close();
+        let _relay = self
+            .relay
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| "native.closed")?;
+        let _query = self
+            .query
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| "native.closed")?;
+        Ok(())
     }
 }
 #[cfg(test)]
@@ -229,10 +251,18 @@ mod tests {
             .is_err()
         );
         assert!(!called.load(std::sync::atomic::Ordering::Relaxed));
+        let closing = w.clone();
+        let shutdown = tokio::spawn(async move { closing.shutdown().await });
+        tokio::task::yield_now().await;
+        assert!(
+            !shutdown.is_finished(),
+            "native work still owns query credit"
+        );
         assert!(release.send(()).is_ok());
         let returned =
             tokio::time::timeout(Duration::from_secs(1), w.query.clone().acquire_owned()).await;
         assert!(returned.is_ok_and(|permit| permit.is_ok()));
+        assert!(shutdown.await.is_ok_and(|result| result.is_ok()));
     }
 
     #[test]

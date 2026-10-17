@@ -80,6 +80,9 @@ pub enum RestoreGap {
     InactiveCursorDivergence,
     /// A pending-wrap bit away from the right edge has no direct VT setter.
     NonEdgePendingWrap,
+    /// A pending-wrap cursor points at a clipped wide head on the right edge.
+    /// Reprinting that head would wrap/scroll instead of recreating the same cursor.
+    ClippedWideHeadPendingWrap,
 }
 
 /// VT bytes plus the parts that could not be expressed.
@@ -87,6 +90,9 @@ pub enum RestoreGap {
 pub struct Restore {
     /// Feed into a freshly created terminal of the same size.
     pub bytes: Vec<u8>,
+    /// Set renderer base theme BEFORE replay. These are not remote OSC overrides;
+    /// OSC resets and RIS must continue to resolve to this same base.
+    pub palette: crate::QueryPalette,
     /// Compatibility diagnostic; always false with the approved inactive getter.
     /// Unrepresentable hidden cursor states return RestoreGap, never blank data.
     pub main_screen_missing: bool,
@@ -180,6 +186,18 @@ impl TerminalProbe {
             || (alternate && nonedge(&inactive.cursor))
         {
             return Err(RestoreGap::NonEdgePendingWrap);
+        }
+        let clipped_wrap = |grid: &Grid<Cell>, cursor: &Cursor<Cell>| {
+            cursor.input_needs_wrap
+                && cursor.point.column.0 + 1 == grid.columns()
+                && grid[cursor.point].flags.contains(Flags::WIDE_CHAR)
+        };
+        if clipped_wrap(grid, &grid.cursor)
+            || clipped_wrap(grid, &grid.saved_cursor)
+            || clipped_wrap(inactive, &inactive.saved_cursor)
+            || (alternate && clipped_wrap(inactive, &inactive.cursor))
+        {
+            return Err(RestoreGap::ClippedWideHeadPendingWrap);
         }
         if alternate {
             if cursor_key(&inactive.cursor) != cursor_key(&inactive.saved_cursor) {
@@ -408,6 +426,7 @@ impl TerminalProbe {
         bytes.extend_from_slice(pending);
         bytes.extend_from_slice(&self.utf8_tail);
         Ok(Restore {
+            palette: self.palette.clone(),
             bytes,
             main_screen_missing: false,
             approximations,
@@ -470,6 +489,7 @@ impl TerminalProbe {
             side.scroll_region, side.active_charset, side.tabs
         );
         let _ = writeln!(out, "style: {:?}", term.cursor_style());
+        let _ = writeln!(out, "base palette: {:?}", self.palette);
         for index in 0..alacritty_terminal::term::color::COUNT {
             if let Some(rgb) = term.colors()[index] {
                 let _ = write!(out, "{index}={rgb:?} ");
@@ -494,7 +514,7 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
     if let Some(zero) = cell.zerowidth() {
         key.extend(zero);
     }
-    // Soft-wrap markers are not restored by the spike (affect reflow only).
+    // Cell keys omit row metadata; wrap continuity is checked separately.
     let flags = cell.flags - Flags::WRAPLINE - Flags::LEADING_WIDE_CHAR_SPACER;
     let link = cell.hyperlink().map(|link| link.uri().to_owned());
     format!(
@@ -509,15 +529,30 @@ pub(crate) fn cell_key(cell: &Cell) -> String {
 fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'static str>) {
     // ED2 pushes the primary viewport into alacritty history, even if blank.
     // Erase each row instead: recovery must not manufacture scrollback.
+    // Entering alt can inherit Alacritty's global partial scroll region from
+    // hidden-primary setup. Draw with full margins before natural autowrap;
+    // each buffer's source margins are restored after its cells are drawn.
+    out.push_str("\x1b[r");
     out.push_str("\x1b[0m\x1b]8;;\x1b\\");
+    let history_continuation = grid.history_size() > 0
+        && grid[Line(-1)][Column(grid.columns() - 1)]
+            .flags
+            .contains(Flags::WRAPLINE);
     for line in 1..=grid.screen_lines() {
-        let _ = write!(out, "\x1b[{line};1H\x1b[2K");
+        if line == 1 && history_continuation {
+            // xterm EL2 clears isWrapped on this row. ECH clears the same cells
+            // while preserving the soft continuation seeded by history replay.
+            let _ = write!(out, "\x1b[1;1H\x1b[{}X", grid.columns());
+        } else {
+            let _ = write!(out, "\x1b[{line};1H\x1b[2K");
+        }
     }
     out.push_str("\x1b[H");
     let blank = Cell::default();
     let mut pen: Option<Cell> = None;
+    let mut pending_soft_wrap = false;
     for line in 0..grid.screen_lines() as i32 {
-        let mut next_column = None;
+        let mut next_column = pending_soft_wrap.then_some(0);
         // Anomaly repair via DCH/ICH/ECH can recolour its vacated trailing cells.
         // Do not skip defaults on those rows: rewrite the whole tail explicitly.
         let row = &grid[Line(line)];
@@ -533,6 +568,9 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
         while !anomalous && end > 0 && row[Column(end - 1)] == blank {
             end -= 1;
         }
+        if pending_soft_wrap && end == 0 {
+            approximations.push("empty soft-wrap continuation cannot be reproduced exactly");
+        }
         for column in 0..end {
             if out.exceeded {
                 return;
@@ -543,6 +581,11 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 column > 0 && row[Column(column - 1)].flags.contains(Flags::WIDE_CHAR);
             if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 if previous_wide {
+                    write_spacer_marks(out, cell, line, column, grid.columns(), approximations);
+                    if cell.zerowidth().is_some_and(|zero| !zero.is_empty()) {
+                        next_column = None;
+                        pen = None;
+                    }
                     continue;
                 }
                 next_column = None;
@@ -573,6 +616,7 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                     approximations
                         .push("orphan wide-char spacer after a spacer in the last column");
                 }
+                write_spacer_marks(out, cell, line, column, grid.columns(), approximations);
                 continue;
             }
             if cell.flags.contains(Flags::WIDE_CHAR) && column + 1 == grid.columns() {
@@ -629,6 +673,64 @@ fn write_grid(out: &mut Emitter, grid: &Grid<Cell>, approximations: &mut Vec<&'s
                 let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
             }
         }
+        let wrapped = row[Column(grid.columns() - 1)]
+            .flags
+            .contains(Flags::WRAPLINE);
+        // The first print on the following row must trigger real autowrap:
+        // CUP would turn that continuation into a hard line for copy/reflow.
+        pending_soft_wrap = wrapped && next_column == Some(grid.columns());
+        if wrapped && (!pending_soft_wrap || line + 1 == grid.screen_lines() as i32) {
+            approximations
+                .push("soft-wrap boundary cannot be reproduced without altering the grid");
+        }
+    }
+}
+
+// DCH/ICH can preserve combining data on a width-zero spacer. A synthetic wide
+// head does not preserve that data: deleting the head discards its marks too.
+fn write_spacer_marks(
+    out: &mut Emitter,
+    cell: &Cell,
+    line: i32,
+    column: usize,
+    columns: usize,
+    approximations: &mut Vec<&'static str>,
+) {
+    let Some(zero) = cell.zerowidth().filter(|zero| !zero.is_empty()) else {
+        return;
+    };
+    if column == 0 {
+        let _ = write!(out, "\x1b[{};1H", line + 1);
+    } else if column + 2 < columns {
+        // Alacritty backs up once more if the previous cell is a spacer. Put a
+        // temporary orphan at c+1, then attach at c via a zero-width write from
+        // c+2. The next columns are not drawn yet, so their scratch data is safe.
+        let mut head = cell.clone();
+        head.c = '中';
+        head.flags.remove(Flags::WIDE_CHAR_SPACER);
+        head.flags.insert(Flags::WIDE_CHAR);
+        let _ = write!(out, "\x1b[{};{}H", line + 1, column + 2);
+        write_cell(out, &head);
+        let _ = write!(
+            out,
+            "\x1b[{};{}H\x1b[P\x1b[{};{}H",
+            line + 1,
+            column + 2,
+            line + 1,
+            column + 3
+        );
+    } else {
+        approximations.push("combining data on a trailing wide-char spacer is not restored");
+        return;
+    }
+    for &mark in zero {
+        out.print(mark);
+    }
+    if column > 0 {
+        // Writing over a spacer calls clear_wide on its left neighbor, which
+        // would discard the just-restored marks. ECH clears only the temporary
+        // cell before normal drawing reaches it.
+        let _ = write!(out, "\x1b[{};{}H\x1b[X", line + 1, column + 2);
     }
 }
 

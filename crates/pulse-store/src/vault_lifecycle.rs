@@ -39,6 +39,100 @@ pub enum KeyStatus {
     /// A current key was explicitly confirmed.
     Available,
 }
+/// Keyless exact-controller/epoch evidence, not SecretRef/target or frontend authorization.
+/// ```compile_fail
+/// fn dump(e:pulse_store::vault_lifecycle::AvailableKeyEpoch){println!("{e:?}");}
+/// ```
+/// ```compile_fail
+/// fn export(e:pulse_store::vault_lifecycle::AvailableKeyEpoch){let _=serde_json::to_string(&e);}
+/// ```
+#[must_use]
+#[derive(Clone)]
+pub struct AvailableKeyEpoch {
+    owner: Weak<Mutex<State>>,
+    epoch: u64,
+}
+impl AvailableKeyEpoch {
+    /// Key-free boolean check of this original weak controller only, without retaining it in a resource guard.
+    /// Owner destruction/lock/reunlock cannot upgrade it. Not a use grant; crypto must validate under its key lock.
+    pub fn is_original_current(&self) -> Result<bool, LifecycleError> {
+        let Some(owner) = self.owner.upgrade() else {
+            return Ok(false);
+        };
+        let state = guard(&owner)?;
+        Ok(state.epoch == self.epoch
+            && state.key.is_some()
+            && state.pending.is_none()
+            && state.candidate_key.is_none())
+    }
+    /// Availability check only; not target authorization. Crypto use must revalidate in the same key lock.
+    pub fn is_current_for(&self, scope: &VaultKeyLifecycle) -> Result<bool, LifecycleError> {
+        match scope.guard_epoch(self) {
+            Ok(_) => Ok(true),
+            Err(LifecycleError::Stale | LifecycleError::Locked) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+}
+impl VaultKeyLifecycle {
+    /// Capture only an explicitly available key. Has-value or pending candidates are insufficient.
+    pub fn available_epoch(&self) -> Result<AvailableKeyEpoch, LifecycleError> {
+        let state = guard(&self.shared)?;
+        if state.key.is_none() || state.pending.is_some() || state.candidate_key.is_some() {
+            return Err(LifecycleError::Locked);
+        }
+        Ok(AvailableKeyEpoch {
+            owner: Arc::downgrade(&self.shared),
+            epoch: state.epoch,
+        })
+    }
+    fn guard_epoch(
+        &self,
+        epoch: &AvailableKeyEpoch,
+    ) -> Result<MutexGuard<'_, State>, LifecycleError> {
+        if !Weak::ptr_eq(&epoch.owner, &Arc::downgrade(&self.shared)) {
+            return Err(LifecycleError::Stale);
+        }
+        let state = guard(&self.shared)?;
+        if state.epoch != epoch.epoch {
+            return Err(LifecycleError::Stale);
+        }
+        if state.key.is_none() || state.pending.is_some() || state.candidate_key.is_some() {
+            return Err(LifecycleError::Locked);
+        }
+        Ok(state)
+    }
+    /// Trusted adapter must also authorize exact stored identity/reference/role/source and operation.
+    /// Epoch validation and encryption share one short key lock: later unlock cannot upgrade a request.
+    pub fn seal_in_epoch(
+        &self,
+        epoch: &AvailableKeyEpoch,
+        context: &SecretContext,
+        plain: &[u8],
+    ) -> Result<SealedSecret, KeyUseError> {
+        let state = self.guard_epoch(epoch)?;
+        Ok(state
+            .key
+            .as_ref()
+            .ok_or(LifecycleError::Locked)?
+            .seal(context, plain)?)
+    }
+    /// Rust-only adapter operation. Never register a plaintext IPC; exact target authorization remains independent.
+    pub fn open_for_adapter_in_epoch(
+        &self,
+        epoch: &AvailableKeyEpoch,
+        context: &SecretContext,
+        sealed: &SealedSecret,
+    ) -> Result<crate::vault_crypto::SecretBytes, KeyUseError> {
+        let state = self.guard_epoch(epoch)?;
+        Ok(state
+            .key
+            .as_ref()
+            .ok_or(LifecycleError::Locked)?
+            .open(context, sealed)?)
+    }
+}
+
 struct Token {
     epoch: u64,
     live: AtomicBool,
@@ -116,6 +210,30 @@ pub struct UnlockCandidate {
     owner: Weak<Mutex<State>>,
     token: Arc<Token>,
     confirmed: bool,
+}
+/// Key-free, epoch-specific publication receipt; lost delivery revokes only its activation.
+pub(crate) struct UnlockActivation {
+    owner: Weak<Mutex<State>>,
+    epoch: u64,
+    accepted: bool,
+}
+impl UnlockActivation {
+    pub(crate) fn accept(mut self) {
+        self.accepted = true;
+    }
+}
+impl Drop for UnlockActivation {
+    fn drop(&mut self) {
+        if self.accepted {
+            return;
+        }
+        if let Some(owner) = self.owner.upgrade() {
+            let mut state = owner.lock().unwrap_or_else(|p| p.into_inner());
+            if state.epoch == self.epoch {
+                state.key = None;
+            }
+        }
+    }
 }
 impl VaultKeyLifecycle {
     /// Trusted expected Vault identity; no caller-controlled window/generation strings.
@@ -195,6 +313,18 @@ impl VaultKeyLifecycle {
         permit.token.live.store(false, Ordering::Release);
         Ok(())
     }
+    pub(crate) fn confirm_guarded(
+        &self,
+        permit: &mut UnlockPermit,
+        candidate: &mut UnlockCandidate,
+    ) -> Result<UnlockActivation, LifecycleError> {
+        self.confirm(permit, candidate)?;
+        Ok(UnlockActivation {
+            owner: permit.owner.clone(),
+            epoch: permit.token.epoch,
+            accepted: false,
+        })
+    }
     /// Clear owned key/pending candidates even when epoch exhaustion closes the scope.
     /// Cannot retract a credential already released to an authorized transport.
     pub fn lock(&self) -> Result<(), LifecycleError> {
@@ -236,6 +366,9 @@ impl VaultKeyLifecycle {
             .open(context, sealed)?)
     }
 }
+#[cfg(test)]
+#[path = "vault_key_epoch_tests.rs"]
+mod key_epoch_tests;
 /// Static internal-use errors.
 #[derive(Debug, thiserror::Error)]
 pub enum KeyUseError {
@@ -246,7 +379,69 @@ pub enum KeyUseError {
     #[error(transparent)]
     Crypto(#[from] CryptoError),
 }
+/// Caller-side weak cancellation; neither key material nor I/O reservation is retained.
+pub(crate) struct UnlockConfirmationCancel {
+    owner: Weak<Mutex<State>>,
+    epoch: u64,
+    accepted: bool,
+}
+impl UnlockConfirmationCancel {
+    pub(crate) fn accept(mut self) {
+        self.accepted = true;
+    }
+}
+impl Drop for UnlockConfirmationCancel {
+    fn drop(&mut self) {
+        if self.accepted {
+            return;
+        }
+        if let Some(owner) = self.owner.upgrade() {
+            let mut state = owner.lock().unwrap_or_else(|p| p.into_inner());
+            if state.epoch == self.epoch {
+                state.retire();
+            }
+        }
+    }
+}
+/// Cloneable key-free handle that can revoke only its issued unlock epoch.
+/// Dropping a handle does not cancel; the native owner explicitly invokes cancel on retirement.
+#[derive(Clone)]
+pub struct UnlockRevocation {
+    owner: Weak<Mutex<State>>,
+    token: Arc<Token>,
+}
+impl UnlockRevocation {
+    /// Backend controller identity check without exposing an epoch, key or nonce.
+    pub fn belongs_to(&self, scope: &VaultKeyLifecycle) -> bool {
+        Weak::ptr_eq(&self.owner, &Arc::downgrade(&scope.shared))
+    }
+    /// Clear pending or already-enabled material for this epoch, never a subsequent epoch.
+    pub fn cancel(&self) {
+        self.token.live.store(false, Ordering::Release);
+        if let Some(owner) = self.owner.upgrade() {
+            let mut state = owner.lock().unwrap_or_else(|p| p.into_inner());
+            if state.epoch == self.token.epoch {
+                state.retire();
+            }
+        }
+    }
+}
+
 impl UnlockPermit {
+    /// Key-free explicit cancellation for this epoch, including its late activation.
+    pub fn revocation(&self) -> UnlockRevocation {
+        UnlockRevocation {
+            owner: self.owner.clone(),
+            token: self.token.clone(),
+        }
+    }
+    pub(crate) fn confirmation_cancel(&self) -> UnlockConfirmationCancel {
+        UnlockConfirmationCancel {
+            owner: self.owner.clone(),
+            epoch: self.token.epoch,
+            accepted: false,
+        }
+    }
     /// Issue exactly one worker token; no parallel duplicate computations.
     pub fn worker(&mut self) -> Result<UnlockWorker, LifecycleError> {
         let shared = self.owner.upgrade().ok_or(LifecycleError::Closed)?;

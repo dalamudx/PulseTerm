@@ -1,12 +1,48 @@
 //! Runtime-neutral application composition for supervised local terminal sessions.
 #![forbid(unsafe_code)]
 pub mod attachment;
+/// Opt-in Linux local control transport; caller authentication is not effect authorization.
+#[cfg(all(feature = "cli-control", target_os = "linux"))]
+pub mod cli_control;
+/// Trusted runtime scheduling for a registered local PTY; no frontend command surface.
+pub mod local_launch;
+/// Application-owned local-session completion and cleanup, independent of page lifetime.
+pub mod local_session_owner;
+/// Root-owned local sessions and pending native cleanup; never put in document state.
+pub mod local_session_root;
 mod native_control;
+pub mod native_lifecycle;
+/// Bounded native document lifecycle for a future product workspace, independent of probes.
+pub mod product_document;
 /// Validated local app-state preferences to automatic profile catalog composition.
 pub mod profile_state;
+/// Protocol-neutral native lifetime ownership; trusted backend adapters only, no network dependency.
+pub mod protocol_session_owner;
 pub mod registry;
 /// Backend-only generation-scoped settings capture and publication; not window authority.
 pub mod settings_context;
+/// Validated theme to terminal query/rendering base; no input or window permission.
+pub mod terminal_palette;
+mod terminal_start_config;
+pub use terminal_start_config::TerminalStartConfig;
+/// Trusted current-document v2 terminal views; not frontend or session-launch authority.
+pub mod terminal_view;
+/// Backend theme-selection epochs and explicit publication; not window/GUI authority.
+pub mod theme_context;
+/// Current-page opaque unlock handoff; frontend confirmation/cancellation is separate from key auth.
+pub mod vault_handoff;
+/// Independent original-page private-key/passphrase ciphertext write tickets; no SSH or read authority.
+pub mod vault_key_write_handoff;
+/// Native single-use saved-password tickets; not credential reading or SSH authority.
+pub mod vault_password_handoff;
+/// Original-page action preparation; not CLI authentication or an effect executor.
+pub mod window_action;
+/// Native-only multiwindow routing and lifecycle; labels never grant page authority.
+pub mod window_directory;
+#[cfg(test)]
+pub(crate) static VAULT_CRYPTO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Rust-only current-page Vault operations; no password IPC or SecretRef-use permission.
+pub mod vault_owner;
 use pulse_core::TermSize;
 use pulse_pty::{PtyCommand, PtySession};
 use pulse_term::session::{
@@ -20,8 +56,28 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 /// Local diagnostics only; do not display unredacted backend errors remotely.
 #[derive(Debug, thiserror::Error)]
-#[error("local session: {0}")]
-pub struct LocalSessionError(String);
+#[error("local session: {message}")]
+pub struct LocalSessionError {
+    message: String,
+    before_native: bool,
+}
+impl LocalSessionError {
+    fn unconfirmed(message: String) -> Self {
+        Self {
+            message,
+            before_native: false,
+        }
+    }
+    fn from_pty(error: pulse_pty::PtyError) -> Self {
+        Self {
+            before_native: matches!(error, pulse_pty::PtyError::WorkingDirectory),
+            message: error.to_string(),
+        }
+    }
+    pub(crate) fn rejected_before_native(&self) -> bool {
+        self.before_native
+    }
+}
 /// Direct-child completion, after all native workers have joined.
 #[derive(Debug)]
 pub struct NativeExit {
@@ -79,17 +135,17 @@ impl LocalSessionTask {
         let actor = self
             .actor
             .take()
-            .ok_or_else(|| LocalSessionError("actor receipt consumed".into()))?;
+            .ok_or_else(|| LocalSessionError::unconfirmed("actor receipt consumed".into()))?;
         let actor = actor
             .join_with_receipt()
             .await
-            .map_err(|e| LocalSessionError(e.to_string()))?;
+            .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
         let native = self
             .native
             .take()
-            .ok_or_else(|| LocalSessionError("native receipt consumed".into()))?
+            .ok_or_else(|| LocalSessionError::unconfirmed("native receipt consumed".into()))?
             .await
-            .map_err(|e| LocalSessionError(e.to_string()))??;
+            .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))??;
         Ok(LocalSessionReceipt { actor, native })
     }
 }
@@ -101,10 +157,28 @@ pub async fn spawn_local(
     size: TermSize,
     history: usize,
 ) -> Result<(SessionHandle, LocalSessionTask), LocalSessionError> {
+    spawn_local_with_palette(command, size, history, pulse_term::QueryPalette::default()).await
+}
+
+/// Trusted native startup with a fixed base before the actor processes output.
+pub async fn spawn_local_with_palette(
+    mut command: PtyCommand,
+    size: TermSize,
+    history: usize,
+    config: impl Into<TerminalStartConfig>,
+) -> Result<(SessionHandle, LocalSessionTask), LocalSessionError> {
+    let config = config.into();
+    config.apply_local_term(&mut command);
     let (transport, native) = tokio::task::spawn_blocking(move || setup(command, size))
         .await
-        .map_err(|e| LocalSessionError(e.to_string()))??;
-    let (handle, actor) = session::spawn_session(size, history, transport);
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))??;
+    let (handle, actor) = session::spawn_session_with_history_limit(
+        size,
+        history,
+        transport,
+        config.palette,
+        config.history_limit,
+    );
     let task = LocalSessionTask {
         handle: handle.clone(),
         actor: Some(actor),
@@ -117,14 +191,13 @@ fn setup(
     command: PtyCommand,
     size: TermSize,
 ) -> Result<(ChannelTransport, NativeReceipt), LocalSessionError> {
-    let mut pty =
-        PtySession::spawn(&command, size).map_err(|e| LocalSessionError(e.to_string()))?;
+    let mut pty = PtySession::spawn(&command, size).map_err(LocalSessionError::from_pty)?;
     let mut reader = pty
         .take_reader()
-        .map_err(|e| LocalSessionError(e.to_string()))?;
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
     let mut writer = pty
         .take_writer()
-        .map_err(|e| LocalSessionError(e.to_string()))?;
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
     let (transport, driver) = ChannelTransport::bounded_driver();
     let DriverEndpoint {
         output,
@@ -169,7 +242,7 @@ fn setup(
                 }
             }
         })
-        .map_err(|e| LocalSessionError(e.to_string()))?;
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
     let (resize_tx, resize_rx) = blocking::sync_channel::<(
         TermSize,
         oneshot::Sender<Result<(), SessionError>>,
@@ -209,8 +282,18 @@ fn setup(
                     }
                 }
             }
+            // Unix portable-pty sends newline + VEOF when its writer drops.
+            // Retain that writer in the JoinHandle until child exit is known.
+            #[cfg(unix)]
+            {
+                writer
+            }
+            #[cfg(not(unix))]
+            {
+                drop(writer);
+            }
         })
-        .map_err(|e| LocalSessionError(e.to_string()))?;
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
     let (completion, native) = oneshot::channel();
     std::thread::Builder::new()
         .name("pulse-pty-control".into())
@@ -224,7 +307,7 @@ fn setup(
                     // Observe an already-reaped exit before deciding to terminate.
                     let observed = pty
                         .try_wait()
-                        .map_err(|e| LocalSessionError(e.to_string()))?;
+                        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
                     let stopping =
                         *stop.borrow() || stop.has_changed().is_err() || *failed.borrow();
                     let eof_grace = native_control::eof_grace(
@@ -240,7 +323,7 @@ fn setup(
                             cancelled = true;
                             break pty
                                 .terminate()
-                                .map_err(|e| LocalSessionError(e.to_string()))?;
+                                .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
                         }
                         native_control::Action::Wait => {}
                     }
@@ -262,12 +345,14 @@ fn setup(
                 drop(pty);
                 reader_thread
                     .join()
-                    .map_err(|_| LocalSessionError("native reader panicked".into()))?;
+                    .map_err(|_| LocalSessionError::unconfirmed("native reader panicked".into()))?;
+                // Joining releases the returned writer only after child exit,
+                // so input closure cannot execute a pending Readline buffer.
                 writer_thread
                     .join()
-                    .map_err(|_| LocalSessionError("native writer panicked".into()))?;
+                    .map_err(|_| LocalSessionError::unconfirmed("native writer panicked".into()))?;
                 if *failed.borrow() {
-                    return Err(LocalSessionError("native I/O failed".into()));
+                    return Err(LocalSessionError::unconfirmed("native I/O failed".into()));
                 }
                 Ok(NativeExit {
                     exit_code: exit.exit_code(),
@@ -279,6 +364,6 @@ fn setup(
             })();
             let _ = completion.send(result);
         })
-        .map_err(|e| LocalSessionError(e.to_string()))?;
+        .map_err(|e| LocalSessionError::unconfirmed(e.to_string()))?;
     Ok((transport, native))
 }

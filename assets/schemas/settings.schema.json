@@ -19,9 +19,33 @@
       "description": "Initial terminal display settings only; no credential or command fields.",
       "$ref": "#/$defs/TerminalPatch",
       "default": {
+        "backspace_send": null,
+        "color_preset": null,
+        "copy_on_select": null,
         "cursor_blink": null,
+        "delete_send": null,
+        "font_fallback": null,
         "font_family": null,
-        "font_size": null
+        "font_ligatures": null,
+        "font_size": null,
+        "history_limit": null,
+        "letter_spacing": null,
+        "line_height_percent": null,
+        "mac_option_as_meta": null,
+        "right_click_paste": null,
+        "scroll_on_input": null,
+        "scroll_on_output": null,
+        "term_type": null,
+        "theme": null
+      }
+    },
+    "ui": {
+      "description": "User-level interface preferences, independent of terminal colors.",
+      "$ref": "#/$defs/UiPatch",
+      "default": {
+        "accent": null,
+        "appearance": null,
+        "language": null
       }
     }
   },
@@ -31,6 +55,35 @@
       "description": "Every field is optional, independently resolved and independently validated.",
       "type": "object",
       "properties": {
+        "backspace_send": {
+          "description": "Unmodified Backspace encoding: del (default) or bs.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "pattern": "^(del|bs)$"
+        },
+        "color_preset": {
+          "description": "Fixed base palette for new local sessions.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerminalPreset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "copy_on_select": {
+          "description": "User selection copy preference; false by default, never triggered by terminal output.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "cursor_blink": {
           "description": "Explicit false still replaces lower-priority true.",
           "type": [
@@ -38,6 +91,26 @@
             "null"
           ],
           "default": null
+        },
+        "delete_send": {
+          "description": "Plain Delete uses csi (ESC[3~) or del (DEL).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "pattern": "^(csi|del)$"
+        },
+        "font_fallback": {
+          "description": "One independently inherited fallback name with the primary name’s bounds.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[\\p{L}\\p{N}_-](?:[\\p{L}\\p{N} _-]*[\\p{L}\\p{N}_-])?$"
         },
         "font_family": {
           "description": "A single font name, at most 128 Unicode scalars, using safe characters.",
@@ -50,6 +123,14 @@
           "minLength": 1,
           "pattern": "^[\\p{L}\\p{N}_-](?:[\\p{L}\\p{N} _-]*[\\p{L}\\p{N}_-])?$"
         },
+        "font_ligatures": {
+          "description": "Default-off drawing of programming-operator ligatures in the built-in font.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "font_size": {
           "description": "Initial supported font-size range, in CSS pixels, inclusive.",
           "type": [
@@ -60,6 +141,317 @@
           "default": null,
           "maximum": 72,
           "minimum": 6
+        },
+        "history_limit": {
+          "description": "Maximum retained primary history rows; byte limits may trim earlier.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "maximum": 100000,
+          "minimum": 1000
+        },
+        "letter_spacing": {
+          "description": "Additional cell width in CSS pixels, zero through eight.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "default": null,
+          "maximum": 8,
+          "minimum": 0
+        },
+        "line_height_percent": {
+          "description": "Cell-height multiplier expressed as an integer percentage, 100 through 300.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "default": null,
+          "maximum": 300,
+          "minimum": 100
+        },
+        "mac_option_as_meta": {
+          "description": "Treat macOS Option as Meta in the renderer; default false.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "right_click_paste": {
+          "description": "Explicit default-off right-click paste preference; no input authority.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "scroll_on_input": {
+          "description": "Return to the live viewport after authorized input; display behavior only.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "scroll_on_output": {
+          "description": "Force the live viewport after parsed output; default false.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "term_type": {
+          "description": "Terminal capability name advertised only at new-session startup.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerminalType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "theme": {
+          "description": "Atomic user-level policy; scoped fixed palettes override it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerminalTheme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "TerminalPreset": {
+      "description": "Built-in base selection; remote OSC overrides remain independent.",
+      "oneOf": [
+        {
+          "description": "Existing default.",
+          "type": "string",
+          "const": "classic"
+        },
+        {
+          "description": "Cool dark base.",
+          "type": "string",
+          "const": "midnight"
+        },
+        {
+          "description": "Warm light base.",
+          "type": "string",
+          "const": "paper"
+        },
+        {
+          "description": "One Dark terminal colors.",
+          "type": "string",
+          "const": "one_dark"
+        },
+        {
+          "description": "One Light terminal colors.",
+          "type": "string",
+          "const": "one_light"
+        },
+        {
+          "description": "Catppuccin Mocha dark colors.",
+          "type": "string",
+          "const": "catppuccin_mocha"
+        },
+        {
+          "description": "Catppuccin Latte light colors.",
+          "type": "string",
+          "const": "catppuccin_latte"
+        },
+        {
+          "description": "Dracula dark colors.",
+          "type": "string",
+          "const": "dracula"
+        },
+        {
+          "description": "Solarized dark colors.",
+          "type": "string",
+          "const": "solarized_dark"
+        },
+        {
+          "description": "Solarized light colors with base01 body text.",
+          "type": "string",
+          "const": "solarized_light"
+        }
+      ]
+    },
+    "TerminalTheme": {
+      "description": "One atomic policy; partially supplied or unknown fields are rejected.",
+      "type": "object",
+      "properties": {
+        "dark": {
+          "description": "Palette for a dark native system appearance.",
+          "$ref": "#/$defs/TerminalPreset"
+        },
+        "light": {
+          "description": "Palette for a light or unavailable native system appearance.",
+          "$ref": "#/$defs/TerminalPreset"
+        },
+        "mode": {
+          "description": "Palette selection policy.",
+          "$ref": "#/$defs/TerminalThemeMode"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "light",
+        "dark"
+      ]
+    },
+    "TerminalThemeMode": {
+      "description": "Fixed palettes retain the existing color_preset selection.",
+      "oneOf": [
+        {
+          "description": "Use the fixed palette, including the existing default.",
+          "type": "string",
+          "const": "fixed"
+        },
+        {
+          "description": "Resolve the native window's system appearance at session startup.",
+          "type": "string",
+          "const": "system"
+        }
+      ]
+    },
+    "TerminalType": {
+      "description": "Fixed terminal type advertised to a new local or SSH session.",
+      "oneOf": [
+        {
+          "description": "The existing 256-color default.",
+          "type": "string",
+          "const": "xterm-256color"
+        },
+        {
+          "description": "Advertise the xterm capability name.",
+          "type": "string",
+          "const": "xterm"
+        },
+        {
+          "description": "Advertise the VT100 capability name without changing parser emulation.",
+          "type": "string",
+          "const": "vt100"
+        }
+      ]
+    },
+    "UiAccent": {
+      "description": "A fixed Radix accent family; never user-supplied CSS.",
+      "oneOf": [
+        {
+          "description": "Cyan accent.",
+          "type": "string",
+          "const": "cyan"
+        },
+        {
+          "description": "Blue accent.",
+          "type": "string",
+          "const": "blue"
+        },
+        {
+          "description": "Green accent.",
+          "type": "string",
+          "const": "green"
+        },
+        {
+          "description": "Amber accent.",
+          "type": "string",
+          "const": "amber"
+        },
+        {
+          "description": "Red accent.",
+          "type": "string",
+          "const": "red"
+        }
+      ]
+    },
+    "UiAppearance": {
+      "description": "Persisted UI mode. System follows this window's media query at display time.",
+      "oneOf": [
+        {
+          "description": "Use the operating system's preferred color scheme.",
+          "type": "string",
+          "const": "system"
+        },
+        {
+          "description": "Use the existing light interface.",
+          "type": "string",
+          "const": "light"
+        },
+        {
+          "description": "Use the dark interface.",
+          "type": "string",
+          "const": "dark"
+        }
+      ]
+    },
+    "UiLanguage": {
+      "description": "Supported interface languages; no arbitrary locale or resource path.",
+      "oneOf": [
+        {
+          "description": "Simplified Chinese.",
+          "type": "string",
+          "const": "zh-CN"
+        },
+        {
+          "description": "English.",
+          "type": "string",
+          "const": "en"
+        }
+      ]
+    },
+    "UiPatch": {
+      "description": "Sparse user-level UI preferences, separate from terminal overlays.",
+      "type": "object",
+      "properties": {
+        "accent": {
+          "description": "Fixed Radix accent; omission inherits the compiled cyan default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiAccent"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "appearance": {
+          "description": "An omitted preference inherits the compiled light default.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiAppearance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "language": {
+          "description": "Omission inherits the compiled Chinese interface.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiLanguage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "additionalProperties": false

@@ -108,9 +108,32 @@ pub struct AttachmentHandle {
     cancel: watch::Sender<bool>,
     bootstrap_boundary: SessionState,
     bootstrap_digest: String,
+    bootstrap_palette: pulse_term::QueryPalette,
     status: watch::Receiver<pulse_term::session::StreamStatus>,
+    bootstrap_ready: watch::Receiver<bool>,
 }
 impl AttachmentHandle {
+    /// Internal one-way lease retirement signal, not a permission token.
+    pub(crate) fn cancellation(&self) -> watch::Receiver<bool> {
+        self.cancel.subscribe()
+    }
+    /// Supervised bootstrap ACK validation, not frontend ACK queue admission.
+    /// Cancellation, protocol failure or actual driver exit revokes this receipt.
+    pub(crate) async fn wait_bootstrap_ready(&self) -> Result<(), AttachmentError> {
+        let mut ready = self.bootstrap_ready.clone();
+        loop {
+            if *self.cancel.borrow() {
+                return Err(AttachmentError::Detached);
+            }
+            if *ready.borrow_and_update() && ready.has_changed().is_ok() {
+                return Ok(());
+            }
+            ready
+                .changed()
+                .await
+                .map_err(|_| AttachmentError::Detached)?;
+        }
+    }
     pub(crate) fn bootstrap_projection(&self) -> Option<(&SessionState, &str)> {
         use pulse_term::session::StreamEnd;
         if *self.cancel.borrow()
@@ -122,6 +145,10 @@ impl AttachmentHandle {
             return None;
         }
         Some((&self.bootstrap_boundary, &self.bootstrap_digest))
+    }
+    pub(crate) fn bootstrap_palette(&self) -> Option<(&SessionState, &pulse_term::QueryPalette)> {
+        self.bootstrap_projection()
+            .map(|(boundary, _)| (boundary, &self.bootstrap_palette))
     }
     /// Admission only: the driver validates generation and outstanding sequence.
     pub fn acknowledge(&self, generation: u64, sequence: u32) -> Result<(), AttachmentError> {
@@ -151,13 +178,20 @@ impl AttachmentHandle {
             .await
             .map_err(AttachmentError::Capture)
     }
-    /// Native ACK commits dimensions, invalidating this stream before reattachment.
+    /// Compatibility API; commits grid using the transport contract, not remote kernel ACK.
     pub async fn resize(&self, size: pulse_core::TermSize) -> Result<(), AttachmentError> {
+        self.resize_with_receipt(size).await.map(|_| ())
+    }
+    /// Original lease checks remain authoritative; receipt grants no new input permission.
+    pub async fn resize_with_receipt(
+        &self,
+        size: pulse_core::TermSize,
+    ) -> Result<pulse_term::session::ResizeReceipt, AttachmentError> {
         if *self.cancel.borrow() {
             return Err(AttachmentError::Detached);
         }
         self.session
-            .resize_for_lease(self.lease_id, self.cancel.subscribe(), size)
+            .resize_for_lease_with_receipt(self.lease_id, self.cancel.subscribe(), size)
             .await
             .map_err(|e| AttachmentError::Capture(e.into()))
     }
@@ -263,6 +297,7 @@ async fn attach_inner(
     let captured = stream.bootstrap.boundary.clone();
     let bootstrap_boundary = captured.clone();
     let bootstrap_digest = stream.bootstrap.digest.clone();
+    let bootstrap_palette = stream.bootstrap.palette.clone();
     let status = stream.status.clone();
     let sender = Sender::new(
         v2,
@@ -277,6 +312,7 @@ async fn attach_inner(
     let (wire, receiver) = mpsc::channel(config.frames);
     let (ack, acks) = mpsc::channel(config.frames);
     let (cancel, cancellation) = watch::channel(false);
+    let (bootstrap_state, bootstrap_ready) = watch::channel(false);
     let task = tokio::spawn(
         Driver {
             stream,
@@ -291,6 +327,8 @@ async fn attach_inner(
             repair_hold: None,
             repair_acks: 0,
             repair_sending: false,
+            bootstrap_state,
+            commit_sequence: None,
         }
         .run(),
     );
@@ -300,9 +338,11 @@ async fn attach_inner(
             lease_id,
             bootstrap_boundary,
             bootstrap_digest,
+            bootstrap_palette,
             status,
             ack,
             cancel: cancel.clone(),
+            bootstrap_ready,
         },
         receiver,
         AttachmentTask {
@@ -324,12 +364,25 @@ struct Driver {
     repair_hold: Option<tokio::sync::OwnedSemaphorePermit>,
     repair_acks: usize,
     repair_sending: bool,
+    bootstrap_state: watch::Sender<bool>,
+    commit_sequence: Option<u32>,
+}
+impl Drop for Driver {
+    fn drop(&mut self) {
+        self.bootstrap_state.send_replace(false);
+    }
 }
 impl Driver {
     fn acknowledge(&mut self, ack: (u64, u32)) -> Result<(), AttachmentError> {
         let release = self.sender.acknowledge(ack.0, ack.1)?;
         if release.frames > self.deadlines.len() {
             return Err(AttachError::Flow(FlowError::InvalidAck).into());
+        }
+        if self
+            .commit_sequence
+            .is_some_and(|sequence| ack.1 >= sequence)
+        {
+            self.bootstrap_state.send_replace(true);
         }
         for _ in 0..release.frames {
             self.deadlines.pop_front();
@@ -499,7 +552,21 @@ impl Driver {
                 ack=self.acks.recv()=>self.acknowledge(ack.ok_or(AttachmentError::Detached)?)?,
                 _=async {match deadline{Some(at)=>tokio::time::sleep_until(at).await,None=>std::future::pending().await}}=>return Err(AttachmentError::AckTimeout),
                 _=self.wire.closed()=>return Err(AttachmentError::Detached),
-                permit=wire.reserve(), if pending.is_some()=>{permit.map_err(|_|AttachmentError::Detached)?.send(pending.take().ok_or(AttachmentError::Supervisor)?);self.deadlines.push_back(pending_deadline.take().ok_or(AttachmentError::Supervisor)?);},
+                permit=wire.reserve(), if pending.is_some()=>{
+                    let permit = permit.map_err(|_| AttachmentError::Detached)?;
+                    let bytes = pending.take().ok_or(AttachmentError::Supervisor)?;
+                    let frame = pulse_ipc::decode(&bytes).map_err(|_| AttachmentError::Supervisor)?;
+                    if self.commit_sequence.is_none() {
+                        let part = if frame.payload.first() == Some(&2) {
+                            pulse_ipc::attach_v2::decode_fragment(frame.payload).map_err(|_| AttachmentError::Supervisor)?.part
+                        } else {
+                            pulse_ipc::attach::decode_fragment(frame.payload).map_err(|_| AttachmentError::Supervisor)?.part
+                        };
+                        if part == pulse_ipc::attach::Part::Commit { self.commit_sequence = Some(frame.sequence); }
+                    }
+                    permit.send(bytes);
+                    self.deadlines.push_back(pending_deadline.take().ok_or(AttachmentError::Supervisor)?);
+                },
                 value=self.stream.output.recv(), if !bootstrap && record.is_none() && !self.repair_sending && self.repair_acks == 0 && !drained && pending.is_none()=>{match value{Some(value)=>record=Some(value),None=>drained=true,}},
             }
         }

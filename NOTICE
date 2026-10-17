@@ -1,0 +1,23 @@
+PulseTerm third-party attribution materials
+
+PulseTerm incorporates third-party software and the unmodified JetBrains Mono font.
+See THIRD_PARTY.md and third-party/inventory.json for exact locked versions, declared
+licenses, archive integrity, and links to collected original license/notice texts.
+Redistributions must retain the applicable original texts in third-party/licenses/.
+
+The alacritty_terminal 0.26.0 source contains the approved read-only inactive_grid
+accessor patch. Upstream copyright and Apache-2.0 license are retained. Modification
+and provenance details: vendor/README.md, vendor/alacritty_terminal.patch, and
+vendor/alacritty_terminal.upstream.json. No upstream acceptance is claimed.
+
+JetBrains Mono 2.304: Copyright 2020 The JetBrains Mono Project Authors
+(https://github.com/JetBrains/JetBrainsMono). Licensed under SIL Open Font License 1.1.
+Original font bytes and complete OFL are retained; see ui/src/assets/fonts/jetbrains-mono/.
+
+This is a workspace-wide review inventory, including development/build tools and
+optional platform packages. It is not a per-binary SBOM or release authorization.
+Supplemental texts retain their locked-parent, published-commit or explicit source
+reference provenance in THIRD_PARTY.md. Link-only notices do not satisfy the text gate.
+Native subcomponents and operating-system libraries still require distribution review.
+Declared licenses have not been accepted by this inventory. The independent audit,
+source-distribution obligations, and platform release gates continue to apply.

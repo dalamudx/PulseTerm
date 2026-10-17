@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PulseTerm · 工作区预览</title>
+    <style id="terminal-style-nonce" nonce="__TAURI_STYLE_NONCE__"></style>
+  </head>
+  <body>
+    <main class="workspace">
+      <header class="workspace-header"><strong>PulseTerm</strong><span>本地终端预览</span><button id="workspace-command-open" type="button" title="命令面板（Ctrl+Shift+P）" disabled>命令</button><button id="workspace-settings-open" class="workspace-reload" type="button">设置</button></header>
+      <div class="workspace-content">
+        <aside class="workspace-sidebar" aria-label="本地会话">
+          <h2 class="workspace-profile-heading">本地 Profile<button id="workspace-profile-manage" type="button" disabled>管理</button></h2>
+          <ul id="workspace-profiles" class="workspace-profiles" aria-label="可见的本地 Profile"></ul>
+          <ul id="workspace-custom-profiles" class="workspace-profiles" aria-label="自定义 Profile"></ul>
+          <h2>保留的会话</h2>
+          <ul id="workspace-sessions" class="workspace-profiles" aria-label="根持有的会话"></ul>
+          <section id="workspace-split-controls" hidden aria-label="分屏显示">
+            <label for="workspace-split-target">与已有会话分屏</label>
+            <select id="workspace-split-target" aria-label="选择已有会话"></select>
+            <div class="workspace-split-buttons"><button id="workspace-split-row" class="workspace-reload" type="button">左右分屏</button><button id="workspace-split-column" class="workspace-reload" type="button">上下分屏</button></div>
+            <div id="workspace-ratio-controls" hidden><label for="workspace-split-ratio">焦点分屏前侧比例 <output id="workspace-split-percent">50%</output></label><input id="workspace-split-ratio" type="range" min="20" max="80" step="5" value="50" aria-label="第一个窗格比例"><p>拖动分隔条调整，或用方向键／比例滑块。Ctrl+Shift+方向键切换窗格。</p></div><div class="workspace-split-buttons"><button id="workspace-pane-maximize" class="workspace-reload" type="button" hidden>最大化窗格</button><button id="workspace-pane-single" class="workspace-reload" type="button" hidden>仅显示焦点</button></div>
+          </section>
+          <h2 class="workspace-profile-heading">SSH 主机<button id="workspace-ssh-open" type="button" hidden disabled>连接</button><button id="workspace-host-open" aria-label="管理 SSH 主机" type="button" disabled>管理</button></h2>
+          <button id="workspace-quick-connect-open" class="workspace-reload" type="button" hidden disabled>快速连接</button>
+          <section id="workspace-host-tree" class="workspace-host-tree" aria-label="已保存SSH主机"></section>
+          <h2 class="workspace-profile-heading">SSH 身份<button id="workspace-identity-open" type="button" disabled>管理</button><button id="workspace-key-identity-open" type="button" disabled>私钥</button></h2>
+          <button id="workspace-agent-open" class="workspace-reload" type="button" aria-label="管理 SSH Agent 身份" hidden disabled>Agent</button>
+          <button id="workspace-ssh-profile-open" class="workspace-reload" type="button" disabled>SSH 配置</button>
+          <button id="workspace-organization-open" class="workspace-reload" type="button" disabled>分组、标签与收藏</button>
+          <button id="workspace-reload" class="workspace-reload" type="button">重新加载工作区</button>
+          <h2 class="workspace-profile-heading">保险库<button id="workspace-vault-open" aria-label="管理保险库" type="button" disabled>管理</button></h2>
+        </aside>
+        <section class="workspace-terminal-panel" aria-labelledby="workspace-title">
+          <div class="workspace-terminal-header"><h1 id="workspace-title" class="workspace-visually-hidden">尚无会话</h1><div id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="终端标签"></div><button id="workspace-rename" class="workspace-reload" type="button" disabled>标签名称</button><button id="workspace-history" class="workspace-reload" aria-label="查看当前窗格历史与查找" type="button" disabled>历史与查找</button><button id="workspace-close" class="workspace-reload" type="button" disabled>关闭会话</button></div>
+          <dialog id="workspace-command-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-command-title">
+            <h2 id="workspace-command-title">命令面板</h2>
+            <label for="workspace-command-search" class="workspace-visually-hidden">搜索命令</label><input id="workspace-command-search" type="search" maxlength="128" autocomplete="off" placeholder="搜索命令" role="combobox" aria-autocomplete="list" aria-controls="workspace-command-list" aria-expanded="false">
+            <ul id="workspace-command-list" class="workspace-command-list" role="listbox" aria-label="可用命令"></ul>
+            <p id="workspace-command-status" role="status" aria-live="polite"></p><div class="terminal-paste-actions"><button id="workspace-command-done" type="button">关闭</button></div>
+          </dialog>
+          <dialog id="workspace-settings-dialog" class="terminal-paste-dialog workspace-settings-dialog" aria-labelledby="workspace-settings-title">
+            <h2 id="workspace-settings-title">设置</h2>
+            <p>界面外观保存后立即应用；终端配色和历史容量用于新建终端，其他终端设置在下次显示时应用。</p>
+            <div id="workspace-settings-navigation"></div>
+            <div id="workspace-settings-fields" aria-label="设置项目"></div>
+            <p id="workspace-settings-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-settings-done" type="button">完成</button></div>
+          </dialog>
+          <dialog id="workspace-keymap-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-keymap-title"><h2 id="workspace-keymap-title">快捷键</h2><div id="workspace-keymap-fields" class="workspace-host-fields"></div><p id="workspace-keymap-status" role="status" aria-live="polite"></p><div class="terminal-paste-actions"><button id="workspace-keymap-done" type="button">返回设置</button></div></dialog>
+          <dialog id="workspace-host-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-host-title">
+            <h2 id="workspace-host-title">SSH 主机</h2><p>管理连接目标。不保存凭据，不修改主机指纹信任，也不启动 SSH 连接。</p>
+            <div id="workspace-host-fields" class="workspace-host-fields"></div><p id="workspace-host-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-config-open" type="button" hidden disabled>预览 ssh_config</button><button id="workspace-host-done" type="button">完成</button></div>
+          </dialog>
+          <dialog id="workspace-ssh-profile-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-ssh-profile-title"><h2 id="workspace-ssh-profile-title">SSH 配置</h2><p>为 SSH 入口保存独立的配置名称、登录用户名和默认身份。</p><div id="workspace-ssh-profile-fields" class="workspace-host-fields"></div><p id="workspace-ssh-profile-status" role="status" aria-live="polite"></p><div class="terminal-paste-actions"><button id="workspace-ssh-profile-done" type="button">完成SSH配置</button></div></dialog>
+          <dialog id="workspace-organization-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-organization-title"><h2 id="workspace-organization-title">分组、标签与收藏</h2><p>将主机和身份按分组、标签整理，并标记收藏。</p><div id="workspace-organization-fields" class="workspace-host-fields"></div><p id="workspace-organization-status" role="status" aria-live="polite"></p><div class="terminal-paste-actions"><button id="workspace-organization-done" type="button">完成</button></div></dialog>
+          <dialog id="workspace-config-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-config-title">
+            <h2 id="workspace-config-title">预览 ssh_config</h2>
+            <p>读取本机 SSH 配置，核对连接参数后可保存为主机。IdentityFile 仅提供数量提示，凭据需另外选择。</p>
+            <form id="workspace-config-form" class="workspace-host-form"><label for="workspace-config-alias">Host 别名<input id="workspace-config-alias" maxlength="253" autocomplete="off" spellcheck="false" required></label><div class="terminal-paste-actions"><button id="workspace-config-read" type="submit" disabled>预览</button></div></form>
+            <div id="workspace-config-fields"></div><p id="workspace-config-status" role="status" aria-live="polite"></p>
+            <div class="workspace-host-form"><label for="workspace-config-label">保存的主机名称<input id="workspace-config-label" maxlength="256" autocomplete="off" spellcheck="false"></label><div class="terminal-paste-actions"><button id="workspace-config-prepare" type="button" disabled>准备保存</button><button id="workspace-config-save" type="button" disabled>保存主机</button></div></div>
+            <div class="terminal-paste-actions"><button id="workspace-config-confirm" type="button" disabled>核对源文件</button><button id="workspace-config-done" type="button">关闭</button></div>
+          </dialog>
+          <dialog id="workspace-quick-connect-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-quick-connect-title">
+            <h2 id="workspace-quick-connect-title">快速连接 SSH</h2>
+            <p>核对地址后可临时连接，连上后选择保存。也可先保存或使用已有主机，再选择身份并确认连接。</p>
+            <div class="workspace-host-form"><label for="workspace-quick-connect-address">连接地址</label><input id="workspace-quick-connect-address" aria-label="快速连接地址" placeholder="user@host:22" maxlength="1024" autocomplete="off" spellcheck="false"><label for="workspace-quick-connect-label">名称（可选）</label><input id="workspace-quick-connect-label" aria-label="快速连接名称" maxlength="256" autocomplete="off" spellcheck="false"></div>
+            <pre id="workspace-quick-connect-preview" aria-live="polite"></pre><p id="workspace-quick-connect-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-quick-connect-cancel" type="button">取消快速连接</button><button id="workspace-quick-connect-inspect" type="button" disabled>核对地址</button><button id="workspace-quick-connect-continue" type="button" disabled>保存并继续</button><button id="workspace-quick-connect-temporary" type="button" disabled>临时连接</button></div>
+          </dialog>
+          <dialog id="workspace-quick-save-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-quick-save-title">
+            <h2 id="workspace-quick-save-title">保存此连接</h2>
+            <p id="workspace-quick-save-target"></p>
+            <div class="workspace-host-form"><label for="workspace-quick-save-label">保存的主机名称</label><input id="workspace-quick-save-label" aria-label="临时连接保存名称" maxlength="256" autocomplete="off" spellcheck="false"></div>
+            <p id="workspace-quick-save-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-quick-save-cancel" type="button">暂不保存</button><button id="workspace-quick-save-submit" type="button">保存此主机</button></div>
+          </dialog>
+          <dialog id="workspace-ssh-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-ssh-title">
+            <h2 id="workspace-ssh-title">连接 SSH 主机</h2>
+            <div class="workspace-host-form"><label for="workspace-ssh-host">主机</label><select id="workspace-ssh-host" aria-label="选择保存的SSH主机" aria-describedby="workspace-ssh-selected-host" disabled></select><label for="workspace-ssh-identity">身份</label><select id="workspace-ssh-identity" aria-label="选择保存的SSH身份" aria-describedby="workspace-ssh-selected-host" disabled></select></div>
+            <output id="workspace-ssh-selected-host" class="workspace-visually-hidden" aria-live="polite"></output>
+            <p id="workspace-ssh-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-ssh-cancel" type="button">取消</button><button id="workspace-ssh-connect" type="button" aria-describedby="workspace-ssh-selected-host" disabled>连接</button></div>
+          </dialog>
+          <dialog id="workspace-fingerprint-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-fingerprint-title">
+            <h2 id="workspace-fingerprint-title">SSH 主机指纹</h2>
+            <p>仅核对应用保存的目标与公开密钥，不读取系统 known_hosts，不发送凭据，也不启动 SSH 会话。</p>
+            <div id="workspace-fingerprint-fields"></div><p id="workspace-fingerprint-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-fingerprint-cancel" type="button" autofocus>取消</button><button id="workspace-fingerprint-approve" type="button" disabled>保存指纹</button></div>
+          </dialog>
+          <dialog id="workspace-identity-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-identity-title">
+            <h2 id="workspace-identity-title">SSH 身份</h2><p id="workspace-identity-description">管理名称和用户名。解锁凭据库后可单独保存密码，不显示已保存的密码，也不授予连接权限。</p>
+            <div id="workspace-identity-fields" class="workspace-host-fields"></div><p id="workspace-identity-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-identity-done" type="button">完成</button></div>
+          </dialog>
+          <dialog id="workspace-vault-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-vault-title">
+            <h2 id="workspace-vault-title">保险库</h2><p>主密码模式 · 开发预览。锁定不会关闭已有终端，解锁不授予 SSH 连接权限。</p><p>请保存主密码；本预览尚无密码找回、钥匙串或“记住我”。</p>
+            <div id="workspace-vault-fields" class="workspace-host-fields"></div><p id="workspace-vault-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-vault-done" type="button">关闭</button></div>
+          </dialog>
+          <dialog id="workspace-profile-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-profile-title">
+            <h2 id="workspace-profile-title">本地 Profile</h2><p>管理显示项、默认选择和已删除项。隐藏或删除不会关闭已有终端，保存或恢复不会启动终端。</p>
+            <div id="workspace-profile-preferences" class="workspace-profile-preferences"></div>
+            <div id="workspace-profile-default" class="workspace-host-fields"></div>
+            <div id="workspace-profile-lifecycle" class="workspace-host-fields"></div>
+            <div id="workspace-profile-editor" class="workspace-host-fields"></div>
+            <div class="terminal-paste-actions"><button id="workspace-custom-profile-manage" type="button">自定义 Profile</button></div>
+            <p id="workspace-profile-status" role="status" aria-live="polite"></p><div class="terminal-paste-actions"><button id="workspace-profile-done" type="button">完成</button></div>
+          </dialog>
+          <dialog id="workspace-custom-profile-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-custom-profile-title">
+            <h2 id="workspace-custom-profile-title">自定义 Profile</h2>
+            <div id="workspace-custom-profile-entries" class="workspace-host-fields"></div>
+            <div id="workspace-custom-profile-editor" class="workspace-host-fields"></div>
+            <p id="workspace-custom-profile-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-custom-profile-done" type="button">返回 Profile 管理</button></div>
+          </dialog>
+          <dialog id="workspace-agent-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-agent-title">
+            <h2 id="workspace-agent-title">SSH Agent 身份</h2><p>选择本机 Agent 中的一把公钥，保存名称和登录用户名。保存不会连接或请求签名。</p>
+            <div id="workspace-agent-fields" class="workspace-host-fields"></div><p id="workspace-agent-status" role="status" aria-live="polite"></p>
+            <div class="terminal-paste-actions"><button id="workspace-agent-done" type="button">完成</button></div>
+          </dialog>
+          <dialog id="workspace-label-editor" class="terminal-paste-dialog workspace-label-editor" aria-label="编辑当前标签显示偏好"><form id="workspace-label-form">
+            <label for="workspace-label-title">标签名称</label><input id="workspace-label-title" type="text" maxlength="80" autocomplete="off" placeholder="留空使用会话编号">
+            <label for="workspace-label-color">标色</label><select id="workspace-label-color"><option value="none">无标色</option><option value="cyan">青色</option><option value="blue">蓝色</option><option value="green">绿色</option><option value="amber">琥珀色</option><option value="red">红色</option></select>
+            <button type="submit" class="workspace-reload">保存</button><button id="workspace-label-cancel" type="button" class="workspace-reload">取消</button>
+          </form></dialog>
+          <p id="workspace-state" class="workspace-status" role="status" aria-live="polite">正在验证页面…</p>
+          <div id="workspace-terminal" data-state="empty" role="tabpanel" tabindex="0" aria-labelledby="workspace-title"></div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/src/workspace-main.ts"></script>
+  </body>
+</html>

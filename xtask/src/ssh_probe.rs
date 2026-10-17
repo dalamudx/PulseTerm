@@ -1,5 +1,15 @@
 //! Isolated S4 protocol probe, never a production SSH connection entry point.
 use anyhow::{Context, Result, ensure};
+#[cfg(unix)]
+use pulse_ssh::load_system_known_hosts_directory;
+#[cfg(unix)]
+use pulse_ssh::managed_store::{pin_edit, validated_pins};
+use pulse_ssh::{HostPin, HostTarget, verify_host_key};
+#[cfg(unix)]
+use pulse_store::{
+    StateStore, StoreError,
+    ssh_trust::{TrustEdit, TrustRecord, TrustTarget},
+};
 use russh::server::Server as _;
 use russh::{
     Channel, ChannelId, ChannelMsg, Disconnect, Pty, client,
@@ -224,13 +234,20 @@ impl server::Handler for ProbeServer {
         Ok(())
     }
 }
-fn host_matches(presented: &PublicKeyOrCertificate, expected: &PublicKey) -> bool {
-    matches!(presented,PublicKeyOrCertificate::PublicKey{key,..}if key==expected)
-}
 
 pub(crate) struct PinnedClient {
-    expected: PublicKey,
+    target: HostTarget,
+    source: TrustSource,
     mismatch: Arc<AtomicBool>,
+}
+enum TrustSource {
+    Direct(PublicKey),
+    System(Vec<HostPin>),
+    #[cfg(unix)]
+    Managed {
+        own: Vec<HostPin>,
+        system: Vec<HostPin>,
+    },
 }
 impl client::Handler for PinnedClient {
     type Error = russh::Error;
@@ -238,7 +255,25 @@ impl client::Handler for PinnedClient {
         &mut self,
         presented: &PublicKeyOrCertificate,
     ) -> std::result::Result<bool, Self::Error> {
-        let accepted = host_matches(presented, &self.expected);
+        let accepted = match presented {
+            PublicKeyOrCertificate::PublicKey { key, .. } => match &self.source {
+                TrustSource::Direct(expected) => verify_host_key(
+                    &self.target,
+                    key,
+                    Some(&[HostPin::new(self.target.clone(), expected.clone())]),
+                    None,
+                )
+                .is_ok(),
+                TrustSource::System(pins) => {
+                    verify_host_key(&self.target, key, Some(&[]), Some(pins)).is_ok()
+                }
+                #[cfg(unix)]
+                TrustSource::Managed { own, system } => {
+                    verify_host_key(&self.target, key, Some(own), Some(system)).is_ok()
+                }
+            },
+            _ => false, // No certificate trust-anchor policy yet.
+        };
         if !accepted {
             self.mismatch.store(true, Ordering::SeqCst);
         }
@@ -270,6 +305,48 @@ pub(crate) async fn connect_with_preferred(
     mismatch: Arc<AtomicBool>,
     preferred: russh::Preferred,
 ) -> Result<client::Handle<PinnedClient>> {
+    connect_with_source(address, TrustSource::Direct(key), mismatch, preferred).await
+}
+#[cfg(unix)]
+async fn connect_from_system_file(
+    address: std::net::SocketAddr,
+    ssh_dir: &std::path::Path,
+    mismatch: Arc<AtomicBool>,
+) -> Result<client::Handle<PinnedClient>> {
+    let target = HostTarget::new(&address.ip().to_string(), address.port())?;
+    let pins = load_system_known_hosts_directory(ssh_dir, &target)?;
+    connect_with_source(
+        address,
+        TrustSource::System(pins),
+        mismatch,
+        russh::Preferred::default(),
+    )
+    .await
+}
+#[cfg(unix)]
+async fn connect_from_managed(
+    address: std::net::SocketAddr,
+    store: &StateStore,
+    ssh_dir: &std::path::Path,
+    mismatch: Arc<AtomicBool>,
+) -> Result<client::Handle<PinnedClient>> {
+    let target = HostTarget::new(&address.ip().to_string(), address.port())?;
+    let own = validated_pins(&store.load_ssh_trust().await?)?;
+    let system = load_system_known_hosts_directory(ssh_dir, &target)?;
+    connect_with_source(
+        address,
+        TrustSource::Managed { own, system },
+        mismatch,
+        russh::Preferred::default(),
+    )
+    .await
+}
+async fn connect_with_source(
+    address: std::net::SocketAddr,
+    source: TrustSource,
+    mismatch: Arc<AtomicBool>,
+    preferred: russh::Preferred,
+) -> Result<client::Handle<PinnedClient>> {
     let config = Arc::new(client::Config {
         preferred,
         inactivity_timeout: Some(Duration::from_secs(5)),
@@ -282,7 +359,8 @@ pub(crate) async fn connect_with_preferred(
             config,
             address,
             PinnedClient {
-                expected: key,
+                target: HostTarget::new(&address.ip().to_string(), address.port())?,
+                source,
                 mismatch,
             },
         ),
@@ -448,6 +526,181 @@ async fn system_client(
         json!({"version":version,"publicKeyAuth":true,"strictIsolatedKnownHosts":true,"fixedExecOnly":true,"nativeChildExit":7,"stdoutDrained":true}),
     )
 }
+#[cfg(unix)]
+async fn system_file_probe(
+    address: std::net::SocketAddr,
+    expected: &PublicKey,
+    wrong: &PublicKey,
+    metrics: &Metrics,
+) -> Result<()> {
+    use std::{
+        fs::{self, DirBuilder, OpenOptions},
+        io::Write,
+        os::unix::fs::{DirBuilderExt, OpenOptionsExt},
+    };
+    let root = tempfile::tempdir()?;
+    let dir = root.path().join(".ssh");
+    DirBuilder::new().mode(0o700).create(&dir)?;
+    let file = dir.join("known_hosts");
+    let host = format!("[{}]:{}", address.ip(), address.port());
+    let mut stream = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&file)?;
+    writeln!(stream, "{host} {}", wrong.to_openssh()?)?;
+    drop(stream);
+    let refused = Arc::new(AtomicBool::new(false));
+    ensure!(
+        connect_from_system_file(address, &dir, refused.clone())
+            .await
+            .is_err()
+            && refused.load(Ordering::SeqCst)
+            && metrics.password_accepted.load(Ordering::SeqCst) == 0
+            && metrics.password_denied.load(Ordering::SeqCst) == 0,
+        "system file changed key reached authentication"
+    );
+    fs::write(&file, format!("{host} malformed-key !!!!\n"))?;
+    let target = HostTarget::new(&address.ip().to_string(), address.port())?;
+    ensure!(
+        load_system_known_hosts_directory(&dir, &target).is_err(),
+        "malformed system file was treated as first contact"
+    );
+    fs::write(&file, format!("{host} {}\n", expected.to_openssh()?))?;
+    let trusted = Arc::new(AtomicBool::new(false));
+    let mut connected = connect_from_system_file(address, &dir, trusted.clone()).await?;
+    ensure!(
+        !trusted.load(Ordering::SeqCst)
+            && connected
+                .authenticate_password(USER, PASSWORD)
+                .await?
+                .success(),
+        "system file did not permit exact key/password"
+    );
+    connected
+        .disconnect(Disconnect::ByApplication, "", "en")
+        .await?;
+    Ok(())
+}
+#[cfg(unix)]
+async fn managed_store_probe(
+    address: std::net::SocketAddr,
+    expected: &PublicKey,
+    wrong: &PublicKey,
+    metrics: &Metrics,
+) -> Result<()> {
+    use std::{
+        fs::{self, DirBuilder, OpenOptions},
+        io::Write,
+        os::unix::fs::{DirBuilderExt, OpenOptionsExt},
+    };
+    let root = tempfile::tempdir()?;
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))?;
+    let dir = root.path().join(".ssh");
+    DirBuilder::new().mode(0o700).create(&dir)?;
+    let path = dir.join("known_hosts");
+    let host = format!("[{}]:{}", address.ip(), address.port());
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&path)?;
+    writeln!(file, "{host} {}", wrong.to_openssh()?)?;
+    drop(file);
+    let db = root.path().join("trust.db");
+    let (store, owner) = StateStore::open(db.clone())
+        .await
+        .context("managed:first-open")?;
+    let target = HostTarget::new(&address.ip().to_string(), address.port())?;
+    let empty = store.load_ssh_trust().await?;
+    ensure!(
+        empty.revision() == 0 && empty.records().is_empty(),
+        "managed store not initially empty"
+    );
+    let original = store
+        .edit_ssh_trust(empty, pin_edit(&target, expected)?)
+        .await?;
+    ensure!(original.revision() == 1, "managed pin did not commit");
+    let refused = Arc::new(AtomicBool::new(false));
+    let mut trusted = connect_from_managed(address, &store, &dir, refused.clone()).await?;
+    ensure!(
+        !refused.load(Ordering::SeqCst)
+            && trusted
+                .authenticate_password(USER, PASSWORD)
+                .await?
+                .success(),
+        "owned correct key should precede system mismatch"
+    );
+    trusted
+        .disconnect(Disconnect::ByApplication, "", "en")
+        .await?;
+    fs::write(&path, format!("{host} {}\n", expected.to_openssh()?))?;
+    let changed = store
+        .edit_ssh_trust(original.clone(), pin_edit(&target, wrong)?)
+        .await?;
+    ensure!(changed.revision() == 2, "managed change did not commit");
+    ensure!(
+        matches!(
+            store
+                .edit_ssh_trust(original, pin_edit(&target, expected)?)
+                .await,
+            Err(StoreError::HostTrustConflict)
+        ),
+        "old trust receipt revived after key change"
+    );
+    let before = metrics.password_accepted.load(Ordering::SeqCst);
+    let mismatch = Arc::new(AtomicBool::new(false));
+    ensure!(
+        connect_from_managed(address, &store, &dir, mismatch.clone())
+            .await
+            .is_err()
+            && mismatch.load(Ordering::SeqCst)
+            && metrics.password_accepted.load(Ordering::SeqCst) == before
+            && metrics.password_denied.load(Ordering::SeqCst) == 0,
+        "changed owned key fell back to matching system record or reached authentication"
+    );
+    // An unrelated, shape-valid but cryptographically invalid record poisons the whole
+    // application source; do not silently fall through to a matching system pin.
+    let poisoned_target = TrustTarget::new("other.example", 22)?;
+    let poisoned = TrustRecord::new(poisoned_target.clone(), "ssh-ed25519 AAAA".into())?;
+    let poisoned_receipt = store
+        .edit_ssh_trust(changed, TrustEdit::Pin(poisoned))
+        .await?;
+    let no_network = Arc::new(AtomicBool::new(false));
+    ensure!(
+        connect_from_managed(address, &store, &dir, no_network.clone())
+            .await
+            .is_err()
+            && !no_network.load(Ordering::SeqCst)
+            && metrics.password_accepted.load(Ordering::SeqCst) == before
+            && metrics.password_denied.load(Ordering::SeqCst) == 0,
+        "corrupt unrelated application pin fell through to a system record or attempted authentication"
+    );
+    let cleared = store
+        .edit_ssh_trust(poisoned_receipt, TrustEdit::Forget(poisoned_target))
+        .await?;
+    ensure!(
+        cleared.revision() == 4,
+        "corrupt record was not explicitly removed"
+    );
+    owner.shutdown().await?;
+    let (reopened, reopened_owner) = StateStore::open(db).await.context("managed:reopen")?;
+    let persisted = reopened.load_ssh_trust().await?;
+    let system = load_system_known_hosts_directory(&dir, &target)?;
+    ensure!(
+        persisted.revision() == 4
+            && pulse_ssh::verify_host_key(
+                &target,
+                expected,
+                Some(&validated_pins(&persisted)?),
+                Some(&system)
+            ) == Err(pulse_ssh::HostKeyError::Changed),
+        "owned changed pin not durable across process-scoped reopen"
+    );
+    reopened_owner.shutdown().await?;
+    Ok(())
+}
 async fn probe() -> Result<serde_json::Value> {
     let host_key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519)?;
     let user_key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519)?;
@@ -485,7 +738,7 @@ async fn probe() -> Result<serde_json::Value> {
         task: Some(task),
     };
     let rejected = Arc::new(AtomicBool::new(false));
-    let bad = connect(address, wrong_key, rejected.clone()).await;
+    let bad = connect(address, wrong_key.clone(), rejected.clone()).await;
     ensure!(
         bad.is_err() && rejected.load(Ordering::SeqCst),
         "changed host key not explicitly rejected"
@@ -495,6 +748,10 @@ async fn probe() -> Result<serde_json::Value> {
             && metrics.password_denied.load(Ordering::SeqCst) == 0,
         "authentication occurred before host trust"
     );
+    #[cfg(unix)]
+    system_file_probe(address, &expected, &wrong_key, &metrics).await?;
+    #[cfg(unix)]
+    managed_store_probe(address, &expected, &wrong_key, &metrics).await?;
     let trusted = Arc::new(AtomicBool::new(false));
     let mut session = connect(address, expected.clone(), trusted.clone()).await?;
     ensure!(
@@ -572,12 +829,12 @@ async fn probe() -> Result<serde_json::Value> {
     .context("SSH connections did not drain")?;
     ensure!(
         metrics.password_denied.load(Ordering::SeqCst) == 1
-            && metrics.password_accepted.load(Ordering::SeqCst) == 1
+            && metrics.password_accepted.load(Ordering::SeqCst) == if cfg!(unix) { 3 } else { 1 }
             && metrics.public_accepted.load(Ordering::SeqCst) > 0,
         "authentication evidence missing"
     );
     Ok(
-        json!({"schemaVersion":1,"russh":"0.63.3","profile":"optional xtask ring/ed25519 probe; no RSA/compression/legacy feature validation","loopbackOnly":true,"changedHostKeyRejectedBeforeAuth":true,"wrongPasswordRejected":true,"passwordAuth":true,"publicKeyAuth":true,"keyboardInteractive":{"syntheticChallenge":true,"wrongAnswerRejected":true,"singleChallengeConsumed":true,"cancelledConnectionDrained":true,"noRealMfaHardware":true},"ptyRequestAcknowledged":true,"windowChangeObserved":[91,37],"utf8BinaryRoundtrip":true,"exitStatus":7,"eofAndOutputDrain":true,"arbitraryExecRejected":true,"connectionsAndListenerJoined":true,"systemClient":openssh,"limitations":["Controlled russh server, not real OS PTY or server SSH implementation matrix","OpenSSH 7-9, dropbear, old devices, real MFA/UI prompt integration, certificates, jumps, forwarding, Agent/FIDO2 and GBK are not yet accepted","No production SSH transport, known_hosts storage, user prompts or credential-vault integration"],"platform":std::env::consts::OS}),
+        json!({"schemaVersion":1,"russh":"0.63.3","profile":"optional xtask ring/ed25519 probe; no RSA/compression/legacy feature validation","loopbackOnly":true,"changedHostKeyRejectedBeforeAuth":true,"systemKnownHostsFileChecked":cfg!(unix),"managedTrustStoreChecked":cfg!(unix),"wrongPasswordRejected":true,"passwordAuth":true,"publicKeyAuth":true,"keyboardInteractive":{"syntheticChallenge":true,"wrongAnswerRejected":true,"singleChallengeConsumed":true,"cancelledConnectionDrained":true,"noRealMfaHardware":true},"ptyRequestAcknowledged":true,"windowChangeObserved":[91,37],"utf8BinaryRoundtrip":true,"exitStatus":7,"eofAndOutputDrain":true,"arbitraryExecRejected":true,"connectionsAndListenerJoined":true,"systemClient":openssh,"limitations":["Controlled russh server, not real OS PTY or server SSH implementation matrix","OpenSSH 7-9, dropbear, old devices, real MFA/UI prompt integration, certificates, jumps, forwarding, Agent/FIDO2 and GBK are not yet accepted","No production SSH transport, known_hosts storage, user prompts or credential-vault integration"],"platform":std::env::consts::OS}),
     )
 }
 fn validate_challenge(reply: &client::KeyboardInteractiveAuthResponse) -> Result<()> {
@@ -683,6 +940,8 @@ fn validate_report(r: &serde_json::Value) -> Result<()> {
     for field in [
         "loopbackOnly",
         "changedHostKeyRejectedBeforeAuth",
+        "systemKnownHostsFileChecked",
+        "managedTrustStoreChecked",
         "wrongPasswordRejected",
         "passwordAuth",
         "publicKeyAuth",
@@ -795,18 +1054,28 @@ mod tests {
         }
     }
 
-    #[test]
-    fn pinned_ed25519_key_equality_is_required() {
+    #[tokio::test]
+    async fn host_key_gate_denies_mismatch_before_auth() {
         let key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
         let wrong = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
-        assert!(host_matches(
-            &key.public_key().clone().into(),
-            key.public_key()
-        ));
-        assert!(!host_matches(
-            &wrong.public_key().clone().into(),
-            key.public_key()
-        ));
+        let mismatch = Arc::new(AtomicBool::new(false));
+        let mut client = PinnedClient {
+            target: HostTarget::new("127.0.0.1", 2222).unwrap(),
+            source: TrustSource::Direct(key.public_key().clone()),
+            mismatch: mismatch.clone(),
+        };
+        assert!(
+            client::Handler::check_server_key(&mut client, &key.public_key().clone().into())
+                .await
+                .unwrap()
+        );
+        assert!(!mismatch.load(Ordering::SeqCst));
+        assert!(
+            !client::Handler::check_server_key(&mut client, &wrong.public_key().clone().into())
+                .await
+                .unwrap()
+        );
+        assert!(mismatch.load(Ordering::SeqCst));
     }
     #[test]
     fn success_flag_alone_is_not_an_ssh_report() {

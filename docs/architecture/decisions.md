@@ -39,6 +39,10 @@
 
 | ADR-030 | 已知 Unix shell 的登录启动采用显式登录参数，而非改写 argv0；保留选定程序与字面用户参数，不 patch portable-pty，不使用默认程序回退 | Accepted（用户选择登录参数） | bash 前置 `--login`，zsh/fish 前置 `-l`；generic sh、pwsh 和未知程序不自动推断支持。`$0` 不保证具有 `-` 前缀，不承诺与 Terminal.app/iTerm2 启动语义完全一致。macOS 默认登录、Linux 默认普通启动仍是目标配置，系统启动文件与跨平台兼容待实测。 |
 
+| ADR-031 | 布局尺寸控制与终端输入授权分开：当前窗口／页面／代际／会话归属的已连接视图可在捕获确认前执行有界 resize；输入仍需验证 Commit ACK 和捕获确认 | Accepted（用户确认布局专用授权） | 解决新捕获网格大于新窗口时绘制与 resize 互等。每代际单次原生调整、实际 I/O 结束才退信用；尺寸调整永久撤销该代际输入，错误／超时不自动重试，不缩字体或裁剪冒充绘制确认。方案见 [布局授权](./terminal-layout-authorization.md)，Linux 受控验证不代表跨平台验收。 |
+
+| ADR-032 | 本地 PTY 尺寸完成与 SSH 显示布局分开：本地仍要求原生操作成功，SSH 仅标记 window-change 请求入队及 Rust 网格应用，不假称远端 kernel ACK | Accepted（用户确认实施；尺寸语义基础已验，生产SSH入口未验） | RFC4254§6.7 want_reply=false；本地 Netcatty b2ed83ae5、NovaTerm0814347、Windows Terminal2b5336c1f 源码对照。可信transport选择basis，NoOp无新请求；原页/代际、Commit捕获确认、实际I/O信用与不确定不重试保持。见 terminal-layout-authorization.md。 |
+
 ## 待决事项
 
 | 事项 | 影响 | 计划 |

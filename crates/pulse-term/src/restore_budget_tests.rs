@@ -114,3 +114,109 @@ fn payload_bound_includes_incomplete_utf8_and_escape_tail() {
         restore
     );
 }
+
+#[test]
+#[allow(clippy::unwrap_used)]
+fn screen_soft_wraps_remain_logical_continuations_after_recovery() {
+    let size = pulse_core::TermSize::new(24, 6).unwrap();
+    for alternate in [false, true] {
+        let mut source = TerminalProbe::new(size, 128);
+        for n in 0..12 {
+            source.feed(format!("H{n} 漢字🙂e\u{301} {} END{n}\r\n", "A".repeat(37)).as_bytes());
+        }
+        if alternate {
+            source.feed(b"\x1b[?1049hABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\r\nZ");
+        }
+        let history = source.recent_history_bounded(128, 1_000_000).unwrap();
+        let restore = source.restore_screen_bounded(1_000_000).unwrap();
+        assert!(restore.approximations.is_empty());
+        let mut fresh = TerminalProbe::new(size, 128);
+        fresh.feed(&history.bytes);
+        fresh.feed(&restore.bytes);
+        assert_eq!(fresh.restore_fingerprint(), source.restore_fingerprint());
+        for (original, recovered) in [
+            (source.term.grid(), fresh.term.grid()),
+            (source.term.inactive_grid(), fresh.term.inactive_grid()),
+        ] {
+            assert_eq!(original.history_size(), recovered.history_size());
+            for line in 0..size.rows() as i32 {
+                let column = Column(size.columns() as usize - 1);
+                assert_eq!(
+                    original[Line(line)][column].flags.contains(Flags::WRAPLINE),
+                    recovered[Line(line)][column]
+                        .flags
+                        .contains(Flags::WRAPLINE),
+                    "alternate={alternate}, viewport row={line}"
+                );
+            }
+        }
+        assert!(fresh.take_replies().is_empty());
+    }
+}
+
+#[test]
+#[allow(clippy::unwrap_used)]
+fn unreproducible_soft_wrap_boundaries_cannot_claim_exact_recovery() {
+    let size = pulse_core::TermSize::new(8, 4).unwrap();
+    for (sequence, row, reason) in [
+        (
+            b"123456789\r\x1b[2K".as_slice(),
+            0,
+            "empty soft-wrap continuation",
+        ),
+        (
+            b"123456789\x1b[1;1H\x1b[3L".as_slice(),
+            3,
+            "soft-wrap boundary",
+        ),
+    ] {
+        let mut source = TerminalProbe::new(size, 64);
+        source.feed(sequence);
+        assert!(
+            source.term.grid()[Line(row)][Column(7)]
+                .flags
+                .contains(Flags::WRAPLINE)
+        );
+        let before = source.restore_fingerprint();
+        let restore = source.restore_screen_bounded(1_000_000).unwrap();
+        assert!(
+            restore
+                .approximations
+                .iter()
+                .any(|gap| gap.contains(reason))
+        );
+        assert_eq!(source.restore_fingerprint(), before);
+    }
+}
+
+#[test]
+#[allow(clippy::unwrap_used)]
+fn alternate_soft_wrap_drawing_cannot_scroll_inherited_partial_margins() {
+    let size = pulse_core::TermSize::new(24, 6).unwrap();
+    for preserve_history in [false, true] {
+        let mut source = TerminalProbe::new(size, 128);
+        source.feed(b"q\x1b[?1049h\x1b[6;22Ha123456789012345678901234\x1b[2;5r");
+        let before = source.restore_fingerprint();
+        let restore = if preserve_history {
+            source.restore_screen_bounded(1_000_000).unwrap()
+        } else {
+            source.restore_sequence().unwrap()
+        };
+        assert!(restore.approximations.is_empty());
+        assert_eq!(source.restore_fingerprint(), before);
+        let mut fresh = TerminalProbe::new(size, 128);
+        fresh.feed(&restore.bytes);
+        assert_eq!(fresh.restore_fingerprint(), before);
+        assert!(fresh.take_replies().is_empty());
+        for suffix in [
+            b"Z".as_slice(),
+            b"\x1b[?1049l\x1b[T".as_slice(),
+            b"\x1b[?1049h\x1b[6;1Hz".as_slice(),
+        ] {
+            source.feed(suffix);
+            fresh.feed(suffix);
+            assert_eq!(fresh.restore_fingerprint(), source.restore_fingerprint());
+            assert_eq!(fresh.take_replies(), source.take_replies());
+        }
+    }
+}

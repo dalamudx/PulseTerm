@@ -26,7 +26,7 @@ use tokio::{
     process::Command,
 };
 use zeroize::Zeroizing;
-const CASES: [&str; 8] = [
+const CASES: [&str; 11] = [
     "good",
     "wrong-token",
     "wrong-version",
@@ -35,6 +35,9 @@ const CASES: [&str; 8] = [
     "partial",
     "idle",
     "unknown-method",
+    "duplicate-preauth",
+    "duplicate-auth",
+    "duplicate-nested",
 ];
 fn private_token(path: &Path) -> Result<Zeroizing<[u8; 64]>> {
     let meta = std::fs::symlink_metadata(path)?;
@@ -137,6 +140,7 @@ fn reason(e: anyhow::Error) -> Result<&'static str> {
         Some(CliError::Handshake) => Ok("handshake"),
         Some(CliError::Length) => Ok("length"),
         Some(CliError::Truncated) => Ok("truncated"),
+        Some(CliError::Request) => Ok("request"),
         _ => Err(e),
     }
 }
@@ -217,7 +221,10 @@ async fn probe() -> Result<Value> {
                 "length",
                 "truncated",
                 "deadline",
-                "unknown-method"
+                "unknown-method",
+                "request",
+                "request",
+                "request"
             ],
         "CLI admission observations differ"
     );
@@ -229,7 +236,7 @@ async fn probe() -> Result<Value> {
     directory.close()?;
     ensure!(!root.exists(), "CLI private runtime remained after cleanup");
     Ok(
-        json!({"schemaVersion":1,"independentClientProcesses":10,"lengthPrefixedJsonRpc":true,"privateDirectory0700":true,"tokenAndSocket0600":true,"sameUserPeerCredChecked":true,"secretNotInArgsEnvironmentOrReports":true,"wrongTokenAndVersionRejected":true,"preauthDispatchRejected":true,"overlongHeaderRejectedBeforeAllocation":true,"truncatedEofRejected":true,"idleDeadlineClosesConnection":true,"unknownMethodCannotExecute":true,"unicodeReplyExact":true,"unsafeTokenModeAndSymlinkRejected":true,"clientsListenerAndDirectoryCleaned":true,"observations":results,"limits":["Fixed read-only native Unix socket fixture, not production interprocess adapter","Not Windows named-pipe ACL, cross-user impersonation, window creation latency or cold-start/single-instance acceptance","Authentication does not bypass Capability registry or risk confirmation"]}),
+        json!({"schemaVersion":1,"independentClientProcesses":13,"lengthPrefixedJsonRpc":true,"privateDirectory0700":true,"tokenAndSocket0600":true,"sameUserPeerCredChecked":true,"secretNotInArgsEnvironmentOrReports":true,"wrongTokenAndVersionRejected":true,"preauthDispatchRejected":true,"overlongHeaderRejectedBeforeAllocation":true,"truncatedEofRejected":true,"idleDeadlineClosesConnection":true,"unknownMethodCannotExecute":true,"duplicateParametersRejectedBeforeAuthenticationOrDispatch":true,"unicodeReplyExact":true,"unsafeTokenModeAndSymlinkRejected":true,"clientsListenerAndDirectoryCleaned":true,"observations":results,"limits":["Fixed read-only native Unix socket fixture, not production interprocess adapter","Not Windows named-pipe ACL, cross-user impersonation, window creation latency or cold-start/single-instance acceptance","Authentication does not bypass Capability registry or risk confirmation"]}),
     )
 }
 struct TaskGuard(tokio::task::AbortHandle);
@@ -240,7 +247,7 @@ impl Drop for TaskGuard {
 }
 fn validate(r: &Value) -> Result<()> {
     ensure!(
-        r["schemaVersion"] == 1 && r["independentClientProcesses"] == 10,
+        r["schemaVersion"] == 1 && r["independentClientProcesses"] == 13,
         "CLI version/process count"
     );
     for key in [
@@ -255,6 +262,7 @@ fn validate(r: &Value) -> Result<()> {
         "truncatedEofRejected",
         "idleDeadlineClosesConnection",
         "unknownMethodCannotExecute",
+        "duplicateParametersRejectedBeforeAuthenticationOrDispatch",
         "unicodeReplyExact",
         "unsafeTokenModeAndSymlinkRejected",
         "clientsListenerAndDirectoryCleaned",
@@ -271,7 +279,10 @@ fn validate(r: &Value) -> Result<()> {
                 "length",
                 "truncated",
                 "deadline",
-                "unknown-method"
+                "unknown-method",
+                "request",
+                "request",
+                "request"
             ])
             && r["limits"].as_array().is_some_and(|v| !v.is_empty()),
         "CLI failed-case receipts missing"
@@ -297,6 +308,41 @@ pub fn run() -> Result<()> {
     println!("PASS private Unix CLI framing, token admission, peer credentials and cleanup");
     Ok(())
 }
+async fn duplicate_client(socket: &Path, uid: u32, token: &[u8], mode: &str) -> Result<()> {
+    let mut stream = UnixStream::connect(socket).await?;
+    ensure!(stream.peer_cred()?.uid() == uid, "unexpected server UID");
+    let mut decoder = Decoder::default();
+    if mode != "duplicate-preauth" {
+        let secret = std::str::from_utf8(token)?;
+        send(
+            &mut stream,
+            &rpc("h", "hello", json!({"protocolVersion":1,"token":secret})),
+        )
+        .await?;
+        let accepted = reply(&mut stream, &mut decoder).await?;
+        ensure!(
+            accepted["result"]["protocolVersion"] == 1 && accepted["id"] == "h",
+            "hello receipt"
+        );
+    }
+    let body = match mode {
+        "duplicate-preauth" => br#"{"jsonrpc":"2.0","id":"h","method":"hello","params":{"protocolVersion":2,"protocolVersion":1}}"#.as_slice(),
+        "duplicate-auth" => br#"{"jsonrpc":"2.0","id":"p","method":"probe.ping","params":{"profile":"first","profile":"second"}}"#.as_slice(),
+        "duplicate-nested" => br#"{"jsonrpc":"2.0","id":"p","method":"probe.ping","params":{"target":[{"window":"first","window":"second"}]}}"#.as_slice(),
+        _ => anyhow::bail!("fixed duplicate helper mode required"),
+    };
+    let mut wire = Zeroizing::new(Vec::new());
+    wire.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    wire.extend_from_slice(body);
+    stream.write_all(&wire).await?;
+    let mut byte = [0u8; 1];
+    ensure!(
+        tokio::time::timeout(Duration::from_secs(2), stream.read(&mut byte)).await?? == 0,
+        "ambiguous request connection did not retire"
+    );
+    Ok(())
+}
+
 pub fn helper() -> Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
     ensure!(args.len() == 5, "fixed CLI helper arguments");
@@ -314,5 +360,11 @@ pub fn helper() -> Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
+    if matches!(
+        mode,
+        "duplicate-preauth" | "duplicate-auth" | "duplicate-nested"
+    ) {
+        return runtime.block_on(duplicate_client(&socket, uid, token.as_slice(), mode));
+    }
     runtime.block_on(async{let mut stream=UnixStream::connect(&socket).await?;ensure!(stream.peer_cred()?.uid()==uid,"unexpected server UID");let mut decoder=Decoder::default();match mode{"good"|"unknown-method"=>{let secret=std::str::from_utf8(token.as_slice())?;let hello=encode(&rpc("h","hello",json!({"protocolVersion":1,"token":secret})))?;for byte in hello.iter(){stream.write_all(&[*byte]).await?;}let accepted=reply(&mut stream,&mut decoder).await?;ensure!(accepted["jsonrpc"]=="2.0"&&accepted["id"]=="h"&&accepted["result"]["protocolVersion"]==1,"hello receipt");send(&mut stream,&rpc("p",if mode=="good"{"probe.ping"}else{"shell.exec"},json!({}))).await?;let response=reply(&mut stream,&mut decoder).await?;ensure!(response["jsonrpc"]=="2.0"&&response["id"]=="p","RPC id");if mode=="good"{ensure!(response["result"]["pong"]=="中文🌍","RPC Unicode reply");}else{ensure!(response["error"]["code"]==-32601,"unknown command executed");}},"wrong-token"|"wrong-version"|"denied-token"=>send(&mut stream,&rpc("h","hello",json!({"protocolVersion":if mode=="wrong-version"{2}else{1},"token":if mode=="wrong-token"{"0".repeat(64)}else{std::str::from_utf8(token.as_slice())?.to_string()}}))).await?,"preauth"=>send(&mut stream,&rpc("p","probe.ping",json!({}))).await?,"oversize"=>stream.write_all(&u32::MAX.to_le_bytes()).await?,"partial"=>{stream.write_all(&[16,0]).await?;stream.shutdown().await?;},"idle"=>{},_=>anyhow::bail!("fixed helper mode required")};let mut byte=[0u8;1];ensure!(tokio::time::timeout(Duration::from_secs(2),stream.read(&mut byte)).await??==0,"connection did not retire");Ok::<_,anyhow::Error>(())})
 }

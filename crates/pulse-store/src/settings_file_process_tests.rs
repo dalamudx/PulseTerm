@@ -29,8 +29,16 @@ fn fixture_child() -> TestResult {
     if !["temp", "installed", "writer18", "writer20"].contains(&mode.as_str()) {
         return Err("invalid fixed mode".into());
     }
-    let store = FileStore::open(dir.into())?;
-    let initial = store.load()?;
+    let store = FileStore::open(dir.into()).inspect_err(|_| {
+        let _sent = marker("open_failed");
+    })?;
+    let initial = store.load().inspect_err(|e| {
+        let _sent = marker(if matches!(e, SettingsFileError::Busy) {
+            "load_busy"
+        } else {
+            "load_failed"
+        });
+    })?;
     if mode.starts_with("writer") {
         marker("loaded")?;
         let mut command = String::new();
@@ -120,9 +128,18 @@ impl OwnedChild {
             reader: Some(reader),
         })
     }
-    fn expect(&self, phase: &str) -> TestResult {
+    fn expect(&mut self, phase: &str) -> TestResult {
         let expected = format!("PULSE_SETTINGS_FIXTURE:{phase}:{}", self.child.id());
-        let actual = self.events.recv_timeout(Duration::from_secs(5))?;
+        let actual = self
+            .events
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|e| {
+                format!(
+                    "settings_fixture.receipt_failed.phase={phase}.pid={}.reason={e}.exit={:?}",
+                    self.child.id(),
+                    self.child.try_wait()
+                )
+            })?;
         if actual != expected {
             return Err("mismatched phase or PID".into());
         }
@@ -167,8 +184,9 @@ fn two_independent_process_snapshots_cannot_overwrite_committed_settings() -> Te
     let dir = directory()?;
     initial(dir.path())?;
     let mut first = OwnedChild::spawn(dir.path(), "writer18")?;
-    let mut stale = OwnedChild::spawn(dir.path(), "writer20")?;
     first.expect("loaded")?;
+    // Both children remain alive with old snapshots, but initial nonblocking reads must not race.
+    let mut stale = OwnedChild::spawn(dir.path(), "writer20")?;
     stale.expect("loaded")?;
     first.release()?;
     first.expect("committed")?;

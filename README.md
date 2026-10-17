@@ -2,7 +2,7 @@
 
 跨平台终端与远程连接工作台。目标技术栈为 Rust + Tauri 2 + React。
 
-当前仓库包含工程基础、二进制 IPC 编解码、终端双解析器验证器，以及真实 Tauri WebView 数据通道验证应用，**尚未实现产品终端界面、PTY/SSH 会话或 RDP/VNC**。已实现范围和限制见 [验证记录](docs/development/validation.md)，产品与架构见 [文档索引](docs/README.md)。
+当前 Linux 工作区已接通本地 PTY、基础标签与双窗格、Profile 管理与参数／目录／环境／外观编辑、设置、Vault 及部分 SSH 和 CLI 路径，并完成各自限定范围的验证。**尚未达到 Alpha 发布标准**；macOS／Windows、系统 IME、性能和依赖审计等验收仍有缺口，RDP/VNC 未实现。最新状态以 [开发计划](docs/development/plan.md) 为准，证据与限制见 [验证记录](docs/development/validation.md)，产品与架构见 [文档索引](docs/README.md)。
 
 ## 本地检查
 

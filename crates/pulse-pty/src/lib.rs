@@ -7,6 +7,7 @@ mod command_validation;
 pub mod launch;
 /// Bounded local shell discovery and automatic profile reconciliation.
 pub mod profiles;
+mod working_directory;
 /// Strict decoding and literal launch construction for Windows WSL discovery output.
 pub mod wsl;
 /// Maximum literal arguments accepted before allocating a PTY.
@@ -88,6 +89,9 @@ pub enum PtyError {
     /// Malformed program, argument, environment key/value, or working directory.
     #[error("PTY command contains invalid fields")]
     InvalidCommand,
+    /// Explicit cwd rejected before allocating a PTY, child or native I/O worker.
+    #[error("PTY working directory is unavailable")]
+    WorkingDirectory,
     /// Explicit launch fields exceeded the bounded item or byte budget.
     #[error("PTY command exceeds launch budget")]
     CommandLimit,
@@ -125,7 +129,9 @@ pub struct PtySession {
 impl PtySession {
     /// Spawn literal argv. Parent slave is immediately dropped to permit Unix EOF.
     pub fn spawn(command: &PtyCommand, dimensions: TermSize) -> Result<Self, PtyError> {
-        let command = command.build()?;
+        let mut builder = command.build()?;
+        let cwd = working_directory::PreparedCwd::new(command.cwd.as_deref())?;
+        cwd.apply(&mut builder);
         let pair = portable_pty::native_pty_system()
             .openpty(size(dimensions))
             .map_err(|e| PtyError::Backend(e.to_string()))?;
@@ -139,8 +145,9 @@ impl PtySession {
             .map_err(|e| PtyError::Backend(e.to_string()))?;
         let child = pair
             .slave
-            .spawn_command(command)
+            .spawn_command(builder)
             .map_err(|e| PtyError::Backend(e.to_string()))?;
+        drop(cwd);
         drop(pair.slave);
         Ok(Self {
             master: pair.master,

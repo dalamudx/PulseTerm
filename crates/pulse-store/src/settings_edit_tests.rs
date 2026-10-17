@@ -112,3 +112,44 @@ fn input_and_result_stay_under_the_document_budget() {
         Err(SettingsError::Size)
     ));
 }
+
+#[test]
+fn selection_copy_edit_and_reset_preserve_comments_and_inherited_values() -> TestResult {
+    let text = "# preferences\r\nterminal . copy_on_select = true # selected text\r\nterminal.font_size=14\r\n";
+    let edited = set_terminal_setting(text, TerminalSettingEdit::CopyOnSelect(false))?;
+    assert_eq!(edited, text.replace("= true #", "= false #"));
+    let removed = crate::settings_remove::remove_terminal_setting(
+        &edited,
+        crate::settings_remove::TerminalSettingKey::CopyOnSelect,
+    )?;
+    assert_eq!(
+        SettingsPatch::parse(&removed)?.terminal.copy_on_select,
+        None
+    );
+    assert_eq!(SettingsPatch::parse(&removed)?.terminal.font_size, Some(14));
+    assert!(removed.contains("# selected text"));
+    assert!(removed.contains("\r\n"));
+    Ok(())
+}
+
+#[test]
+fn right_click_paste_edit_and_remove_preserve_other_bytes() -> Result<(), SettingsError> {
+    let text = "terminal.right_click_paste = false # approval remains separate\r\nterminal.copy_on_select = false\r\n";
+    let enabled = set_terminal_setting(text, TerminalSettingEdit::RightClickPaste(true))?;
+    assert_eq!(enabled, text.replacen("false", "true", 1));
+    let removed = crate::settings_remove::remove_terminal_setting(
+        &enabled,
+        crate::settings_remove::TerminalSettingKey::RightClickPaste,
+    )?;
+    assert_eq!(
+        SettingsPatch::parse(&removed)?.terminal.right_click_paste,
+        None
+    );
+    assert_eq!(
+        SettingsPatch::parse(&removed)?.terminal.copy_on_select,
+        Some(false)
+    );
+    assert!(removed.contains("# approval remains separate"));
+    assert!(removed.contains("\r\n"));
+    Ok(())
+}

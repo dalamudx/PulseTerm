@@ -1,5 +1,6 @@
 [package]
 name = "pulseterm-desktop"
+default-run = "pulseterm-desktop"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,17 +13,43 @@ default = []
 encoding-probe = ["desktop", "pulse-term/validation"]
 # Finite helper-only login bootstrap, never enabled by desktop/default.
 login-probe = ["desktop"]
+# Private fixed configuration receipts; no production settings factory or RPC.
+settings-probe = ["desktop", "dep:pulse-store", "dep:tempfile"]
 cli-window-probe = ["desktop", "dep:tempfile", "dep:zeroize", "tokio/io-util", "tokio/process"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
+# A distinct, native-only workspace entry. No validation command table is registered.
+workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep:gtk"]
+# Opt-in Linux CLI; single-instance/startup foundation never enters default/probe builds.
+workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tokio-util", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix"]
+# Opt-in saved-host/identity SSH trust and supervised session entry; default stays network-free.
+workspace-ssh = ["workspace", "dep:pulse-ssh", "dep:russh", "dep:pkcs8", "dep:zeroize", "pulse-ssh/managed-store", "pulse-store/ssh-trust", "pulse-app/ssh-use"]
+# Fixed public-canvas observer only; never part of default or production builds.
+validation-probe-webgl = ["workspace"]
 
 [[bin]]
 name = "pulseterm-desktop"
 path = "src/main.rs"
 required-features = ["desktop"]
 
+[[bin]]
+name = "pulseterm-workspace"
+path = "src/workspace_main.rs"
+required-features = ["workspace"]
+
+[[bin]]
+name = "pulse"
+path = "src/pulse_main.rs"
+required-features = ["workspace-cli"]
+
 [dependencies]
 pulse-ipc.workspace = true
+pulse-cap = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
 pulse-app = { workspace = true, optional = true }
+pulse-ssh = { workspace = true, optional = true }
+russh = { version = "=0.63.3", default-features = false, features = ["ring"], optional = true }
+pkcs8 = { version = "=0.11.0", features = ["encryption", "pem"], optional = true }
+pulse-store = { workspace = true, optional = true }
 pulse-core = { workspace = true, optional = true }
 pulse-term = { workspace = true, optional = true }
 pulse-pty = { workspace = true, optional = true }
@@ -33,6 +60,7 @@ tempfile = { workspace=true, optional=true }
 zeroize = { workspace=true, optional=true }
 tauri = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
 tokio-tungstenite = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
@@ -40,8 +68,17 @@ specta = { workspace = true, optional = true }
 tauri-specta = { workspace = true, optional = true }
 specta-typescript = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "=0.18.2", optional = true }
+tauri-plugin-single-instance = { workspace = true, optional = true }
+zbus = { workspace = true, optional = true }
+rustix = { workspace = true, optional = true }
 [build-dependencies]
 tauri-build = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+rand = "=0.10.3"
 
 [lints]
 workspace = true

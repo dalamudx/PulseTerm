@@ -13,6 +13,7 @@ validation = ["dep:encoding_rs"]
 alacritty_terminal.workspace = true
 pulse-core.workspace = true
 serde.workspace = true
+regex.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 unicode-width.workspace = true

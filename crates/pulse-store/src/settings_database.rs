@@ -21,7 +21,7 @@ pub(crate) fn load(
         _ => Err(StoreError::SettingsRecord),
     }
 }
-fn write(
+pub(crate) fn write(
     transaction: &Transaction<'_>,
     scope: SettingsScope,
     current: ScopedSettingsSnapshot,

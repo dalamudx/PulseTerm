@@ -2,7 +2,7 @@
 use alacritty_terminal::vte::ansi::Rgb;
 /// Fallback palette, independent from semantic UI tokens. Remote OSC overrides
 /// are owned by the terminal and take precedence until reset.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct QueryPalette {
     /// Sixteen ANSI RGB triples in conventional order.
     pub ansi: [[u8; 3]; 16],

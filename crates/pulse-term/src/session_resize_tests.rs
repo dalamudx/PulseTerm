@@ -11,6 +11,8 @@ async fn subscription_api_waits_for_actor_commit_not_just_capture_reply() {
     let (commands, mut requests) = mpsc::channel(1);
     let (cancel, _mock_stop) = watch::channel(false);
     let mock = SessionHandle {
+        final_bootstrap: std::sync::Arc::new(std::sync::OnceLock::new()),
+        final_history: std::sync::Arc::new(std::sync::OnceLock::new()),
         commands,
         cancel,
         state: handle.state.clone(),

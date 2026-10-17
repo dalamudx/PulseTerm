@@ -57,11 +57,11 @@ pub(super) fn helper() -> Result<()> {
                 let layers=store.load_settings_layers(Some(id()),Some(id())).await?;let g=layers.group().context("missing group")?;let h=layers.host().context("missing host")?;
                 if g.revision()!=3||g.patch().terminal.font_size!=Some(20)||g.patch().terminal.cursor_blink!=Some(false)||h.revision()!=1||h.patch().terminal.font_size!=Some(22){bail!("scoped atomic edit evidence missing");}
                 let resolved=layers.resolve(Some(user.patch()))?;if resolved.font_size.value!=22||resolved.font_size.source!=SettingsSource::Host||resolved.font_family.value!="Fira Code"||resolved.font_family.source!=SettingsSource::User||resolved.cursor_blink.value||resolved.cursor_blink.source!=SettingsSource::Group{bail!("layer source evidence mismatch");}
-                binding::check(&store,user.patch().clone()).await?;
-                if !source.is_current(&user){bail!("user source advanced during fixed capture");}
+                let final_user=binding::check(&store,&source,&user).await?;
+                if !source.is_current(&final_user)||final_user.patch()!=user.patch()||final_user.revision()!=user.revision(){bail!("joint source verification mismatch");}
                 source_task.shutdown().await?;
-                if source.is_current(&user)||!matches!(source.snapshot(),Err(SettingsSourceError::Closed))||store.load_scoped_settings(host()).await?.revision()!=1{bail!("source task did not retire independently");}
-                json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"backgroundSourceChecked":true,"sourceTaskJoined":true,"groupRevision":g.revision(),"hostRevision":h.revision()})
+                if source.is_current(&final_user)||!matches!(source.snapshot(),Err(SettingsSourceError::Closed))||store.load_scoped_settings(host()).await?.revision()!=1{bail!("source task did not retire independently");}
+                json!({"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"backgroundSourceChecked":true,"sourceTaskJoined":true,"jointSourceConfirmed":true,"oldUserVerificationRejected":true,"groupRevision":g.revision(),"hostRevision":h.revision()})
             },
             "aba"=>{let old=store.load_scoped_settings(group()).await?;store.edit_scoped_settings(group(),size(24)).await?;store.edit_scoped_settings(group(),size(20)).await?;if !matches!(store.replace_scoped_settings(old,SettingsPatch::default()).await,Err(StoreError::SettingsConflict)){bail!("old snapshot revived");}let current=store.load_scoped_settings(group()).await?;if current.revision()!=5||current.patch().terminal.cursor_blink!=Some(false)||store.load_scoped_settings(host()).await?.patch().terminal.font_size!=Some(22){bail!("ABA rejected but row not preserved");}json!({"abaRejected":true,"rowPreserved":true})},
             _=>bail!("unsupported helper mode")
@@ -120,6 +120,8 @@ fn verify(receipts: &[Value; 5]) -> Result<()> {
         (3, "registryTransferChecked"),
         (3, "backgroundSourceChecked"),
         (3, "sourceTaskJoined"),
+        (3, "jointSourceConfirmed"),
+        (3, "oldUserVerificationRejected"),
         (4, "abaRejected"),
         (4, "rowPreserved"),
     ] {
@@ -165,7 +167,7 @@ pub(super) fn run() -> Result<()> {
     std::fs::write(
         "target/probes/settings-scope.json",
         serde_json::to_vec_pretty(
-            &json!({"schemaVersion":4,"independentProcesses":5,"concurrentEditors":2,"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"abaRejected":true,"rowPreserved":true,"workerJoined":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"backgroundSourceChecked":true,"sourceTaskJoined":true,"nativeWindowsCreated":false,"renderer":"rust-diagnostic","userHomeRead":false,"hostAuthorityGranted":false,"crossFileDatabaseTransaction":false}),
+            &json!({"schemaVersion":5,"independentProcesses":5,"concurrentEditors":2,"scopeIsolation":true,"concurrentEditsPreserved":true,"userFileChecked":true,"perFieldSourcesChecked":true,"abaRejected":true,"rowPreserved":true,"workerJoined":true,"contextSwitchChecked":true,"lateCandidateRejected":true,"contextOwnerCloseChecked":true,"registryWindowAuthorizationChecked":true,"registryRefreshChecked":true,"registryTransferChecked":true,"backgroundSourceChecked":true,"sourceTaskJoined":true,"jointSourceConfirmed":true,"oldUserVerificationRejected":true,"nativeWindowsCreated":false,"renderer":"rust-diagnostic","userHomeRead":false,"hostAuthorityGranted":false,"crossFileDatabaseTransaction":false}),
         )?,
     )?;
     println!(

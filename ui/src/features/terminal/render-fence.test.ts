@@ -79,6 +79,67 @@ describe("DOM frame fence", () => {
     c.tick();
     await rejection;
   });
+  it("reports a delayed timer without pretending RAF ran", async () => {
+    vi.useFakeTimers();
+    const c = clock();
+    let time = 0;
+    const p = renderFence(new AbortController().signal, () => true, {
+      ...c,
+      now: () => time,
+      focused: () => false,
+    });
+    const rejection = expect(p).rejects.toThrow(
+      "terminal.render_timeout.frames=0.visible=true.connected=true.elapsedMs=2400.focused=false",
+    );
+    time = 2400;
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejection;
+    expect(c.callbacks.size).toBe(0);
+  });
+  it("focused metadata cannot release credit with only one frame", async () => {
+    vi.useFakeTimers();
+    const c = clock();
+    let time = 100;
+    const p = renderFence(new AbortController().signal, () => true, {
+      ...c,
+      now: () => time,
+      focused: () => true,
+    });
+    const rejection = expect(p).rejects.toThrow(
+      "terminal.render_timeout.frames=1.visible=true.connected=true.elapsedMs=1100.focused=true",
+    );
+    c.tick();
+    time = 1200;
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejection;
+    expect(c.callbacks.size).toBe(0);
+  });
+  it.each([0, 1])(
+    "rejects overdue RAF before timer dispatch after %i accepted frames",
+    async (earlyFrames) => {
+      vi.useFakeTimers();
+      const c = clock();
+      let time = 0;
+      const p = renderFence(new AbortController().signal, () => true, {
+        ...c,
+        now: () => time,
+        focused: () => true,
+      });
+      const rejection = expect(p).rejects.toThrow(
+        `terminal.render_timeout.frames=${earlyFrames}.visible=true.connected=true.elapsedMs=1000.focused=true`,
+      );
+      if (earlyFrames === 1) {
+        time = 10;
+        c.tick();
+      }
+      time = 1000;
+      c.tick(); // Deliberately do not dispatch the 1000ms timer before RAF.
+      await rejection;
+      expect(c.callbacks.size).toBe(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(c.callbacks.size).toBe(0);
+    },
+  );
   it("has a bounded deadline even when RAF never fires", async () => {
     vi.useFakeTimers();
     const c = clock();

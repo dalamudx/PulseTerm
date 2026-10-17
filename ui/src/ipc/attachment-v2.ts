@@ -135,6 +135,9 @@ export class AttachmentV2Receiver {
   }
 }
 export interface V2Sink {
+  /** After Commit ACK but before consuming queued Data: confirm the captured
+   * image, not latest-state freshness. Failure/cancellation retires the stream. */
+  ready?(boundary: V2Boundary, signal: AbortSignal): Promise<void>;
   reset(boundary: V2Boundary, signal: AbortSignal): Promise<void>;
   write(bytes: Uint8Array, signal: AbortSignal): Promise<void>;
   repair?(
@@ -249,6 +252,15 @@ export class AttachmentV2Consumer {
     });
     if (this.abort.signal.aborted) throw this.reason();
   }
+  /** Rendering is complete: discard owned wire BEFORE ACK can release sender
+   * credit and synchronously enqueue its replacement. Keep the active promise
+   * cancellable while ACK/Commit confirmation waits, but never double-charge it. */
+  private releaseWire(job: Job): void {
+    if (!job.wire.length) return;
+    this.frames--;
+    this.bytes -= job.wire.length;
+    job.wire = new Uint8Array(0);
+  }
   private async drain() {
     this.running = true;
     try {
@@ -282,9 +294,12 @@ export class AttachmentV2Consumer {
               if (!callback) throw new Error(`attach2.${e.kind}_unsupported`);
               await this.wait(callback.call(this.sink, e, s));
             }
+            this.releaseWire(job);
             await this.wait(
               Promise.resolve(this.ack(receipt.generation, receipt.sequence)),
             );
+            if (e.kind === "ready" && this.sink.ready)
+              await this.wait(this.sink.ready(e.boundary, s));
           }
           job.resolve(receipt);
         } catch (error) {
@@ -293,8 +308,7 @@ export class AttachmentV2Consumer {
           job.reject(e);
           this.cancel(e);
         } finally {
-          this.frames--;
-          this.bytes -= job.wire.length;
+          this.releaseWire(job);
           this.active = undefined;
         }
       }

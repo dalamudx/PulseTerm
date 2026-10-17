@@ -95,6 +95,9 @@ impl ScopedSettingsSnapshot {
         if self.revision == 0 || self.revision > i64::MAX as u64 {
             return Err(StoreError::SettingsRecord);
         }
+        if self.patch.ui != Default::default() || self.patch.terminal.theme.is_some() {
+            return Err(StoreError::SettingsRecord);
+        }
         let document = Document {
             schema_version: 1,
             kind: self.scope.kind(),
@@ -116,6 +119,8 @@ impl ScopedSettingsSnapshot {
         let document: Document =
             serde_json::from_slice(bytes).map_err(|_| StoreError::SettingsRecord)?;
         if document.schema_version != 1
+            || document.settings.ui != Default::default()
+            || document.settings.terminal.theme.is_some()
             || document.kind != scope.kind()
             || document.id != scope.id().to_string()
             || document.revision == 0
@@ -161,18 +166,94 @@ pub enum ScopedSettingsEdit {
 impl ScopedSettingsEdit {
     pub(crate) fn apply(self, patch: &mut SettingsPatch) -> Result<()> {
         match self {
+            Self::Set(TerminalSettingEdit::HistoryLimit(value)) => {
+                patch.terminal.history_limit = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::HistoryLimit) => patch.terminal.history_limit = None,
+            Self::Set(TerminalSettingEdit::UiAppearance(_))
+            | Self::Set(TerminalSettingEdit::Theme(_))
+            | Self::Remove(TerminalSettingKey::Theme)
+            | Self::Remove(TerminalSettingKey::UiAppearance)
+            | Self::Set(TerminalSettingEdit::UiAccent(_))
+            | Self::Set(TerminalSettingEdit::UiLanguage(_))
+            | Self::Remove(TerminalSettingKey::UiLanguage)
+            | Self::Remove(TerminalSettingKey::UiAccent) => {
+                return Err(StoreError::SettingsRecord);
+            }
+            Self::Set(TerminalSettingEdit::ColorPreset(value)) => {
+                patch.terminal.color_preset = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::ColorPreset) => patch.terminal.color_preset = None,
             Self::Set(TerminalSettingEdit::FontSize(value)) => {
                 patch.terminal.font_size = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::LineHeightPercent(value)) => {
+                patch.terminal.line_height_percent = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::LetterSpacing(value)) => {
+                patch.terminal.letter_spacing = Some(value)
             }
             Self::Set(TerminalSettingEdit::FontFamily(value)) => {
                 patch.terminal.font_family = Some(value)
             }
+            Self::Set(TerminalSettingEdit::FontFallback(value)) => {
+                patch.terminal.font_fallback = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::FontLigatures(value)) => {
+                patch.terminal.font_ligatures = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::ScrollOnInput(value)) => {
+                patch.terminal.scroll_on_input = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::ScrollOnOutput(value)) => {
+                patch.terminal.scroll_on_output = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::ScrollOnInput) => {
+                patch.terminal.scroll_on_input = None
+            }
+            Self::Remove(TerminalSettingKey::ScrollOnOutput) => {
+                patch.terminal.scroll_on_output = None
+            }
+            Self::Set(TerminalSettingEdit::MacOptionAsMeta(value)) => {
+                patch.terminal.mac_option_as_meta = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::MacOptionAsMeta) => {
+                patch.terminal.mac_option_as_meta = None
+            }
+            Self::Set(TerminalSettingEdit::DeleteSend(value)) => {
+                patch.terminal.delete_send = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::DeleteSend) => patch.terminal.delete_send = None,
+            Self::Set(TerminalSettingEdit::TermType(value)) => {
+                patch.terminal.term_type = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::TermType) => patch.terminal.term_type = None,
+            Self::Set(TerminalSettingEdit::BackspaceSend(value)) => {
+                patch.terminal.backspace_send = Some(value)
+            }
+            Self::Remove(TerminalSettingKey::BackspaceSend) => patch.terminal.backspace_send = None,
             Self::Set(TerminalSettingEdit::CursorBlink(value)) => {
                 patch.terminal.cursor_blink = Some(value)
             }
+            Self::Set(TerminalSettingEdit::CopyOnSelect(value)) => {
+                patch.terminal.copy_on_select = Some(value)
+            }
+            Self::Set(TerminalSettingEdit::RightClickPaste(value)) => {
+                patch.terminal.right_click_paste = Some(value)
+            }
             Self::Remove(TerminalSettingKey::FontSize) => patch.terminal.font_size = None,
             Self::Remove(TerminalSettingKey::FontFamily) => patch.terminal.font_family = None,
+            Self::Remove(TerminalSettingKey::FontFallback) => patch.terminal.font_fallback = None,
+            Self::Remove(TerminalSettingKey::FontLigatures) => patch.terminal.font_ligatures = None,
+            Self::Remove(TerminalSettingKey::LineHeightPercent) => {
+                patch.terminal.line_height_percent = None
+            }
+            Self::Remove(TerminalSettingKey::LetterSpacing) => patch.terminal.letter_spacing = None,
             Self::Remove(TerminalSettingKey::CursorBlink) => patch.terminal.cursor_blink = None,
+            Self::Remove(TerminalSettingKey::CopyOnSelect) => patch.terminal.copy_on_select = None,
+            Self::Remove(TerminalSettingKey::RightClickPaste) => {
+                patch.terminal.right_click_paste = None
+            }
         }
         patch.validate().map_err(|_| StoreError::SettingsRecord)
     }

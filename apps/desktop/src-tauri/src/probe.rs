@@ -461,6 +461,7 @@ struct DomEvidence {
     native_signal_checked: bool,
     native_pause_checked: bool,
     view_host_checked: bool,
+    ui_overrides_checked: bool,
     view_pool_checked: bool,
     active_park_checked: bool,
 }
@@ -478,6 +479,7 @@ impl DomEvidence {
             || !self.native_signal_checked
             || !self.native_pause_checked
             || !self.view_host_checked
+            || !self.ui_overrides_checked
             || !self.view_pool_checked
             || !self.active_park_checked
             || !self.width_px.is_finite()
@@ -647,6 +649,7 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::probe_session,
             crate::window_sessions::probe_session_protocol,
             crate::window_sessions::transfer_view::probe_transfer_ack,
+            crate::window_sessions::transfer_view::probe_transfer_palette,
             crate::window_sessions::transfer_view::probe_transfer_confirm,
             crate::window_sessions::peer_view::probe_peer_view,
             crate::window_sessions::peer_view::probe_peer_ack,
@@ -654,6 +657,16 @@ fn command_bindings() -> tauri_specta::Builder<tauri::Wry> {
             crate::window_sessions::peer_view::probe_peer_done,
             crate::window_sessions::peer_view::probe_peer_hold_ready,
             crate::window_sessions::shell_hints::probe_peer_shell_hints,
+            crate::window_sessions::theme_delivery::probe_peer_theme_read,
+            crate::window_sessions::theme_delivery::probe_peer_theme_confirm,
+            crate::window_sessions::theme_delivery::probe_peer_theme_drawn,
+            crate::window_sessions::theme_target::probe_target_theme_mode,
+            crate::window_sessions::theme_target::probe_target_theme_failed,
+            crate::window_sessions::theme_target::probe_target_theme_ready,
+            crate::window_sessions::theme_target::probe_target_theme_read,
+            crate::window_sessions::theme_target::probe_target_theme_confirm,
+            crate::window_sessions::theme_target::probe_target_theme_drawn,
+            crate::window_sessions::theme_target::probe_target_theme_wait_revoked,
             crate::window_sessions::encoding_probe::probe_encoding,
             crate::window_sessions::encoding_probe::probe_encoding_mode,
             crate::window_sessions::encoding_probe::probe_encoding_input,
@@ -797,6 +810,13 @@ pub fn run() {
         ))
         .invoke_handler(bindings.invoke_handler())
         .on_page_load(move |webview, payload| {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                crate::window_sessions::theme_target::retire_main_document(
+                    &webview.app_handle().state::<WindowSessions>(),
+                );
+            }
             #[cfg(all(feature = "cli-window-probe", unix))]
             if webview.label() == "main"
                 && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
@@ -1029,6 +1049,7 @@ mod tests {
             native_signal_checked: true,
             native_pause_checked: true,
             view_host_checked: true,
+            ui_overrides_checked: true,
             view_pool_checked: true,
             active_park_checked: true,
         };
@@ -1059,6 +1080,9 @@ mod tests {
         e.view_pool_checked = false;
         assert!(e.validate().is_err());
         e.view_pool_checked = true;
+        e.ui_overrides_checked = false;
+        assert!(e.validate().is_err());
+        e.ui_overrides_checked = true;
         e.readonly = false;
         assert!(e.validate().is_err());
     }

@@ -8,8 +8,18 @@ pub(crate) mod peer_view;
 mod profile_login;
 #[path = "window_reload_probe.rs"]
 mod reload;
+#[cfg(feature = "settings-probe")]
+#[path = "window_settings_probe.rs"]
+mod settings_probe;
 #[path = "window_shell_hints.rs"]
 pub(crate) mod shell_hints;
+#[path = "window_theme_delivery.rs"]
+pub(crate) mod theme_delivery;
+#[cfg(feature = "settings-probe")]
+#[path = "window_theme_probe.rs"]
+mod theme_probe;
+#[path = "window_theme_target.rs"]
+pub(crate) mod theme_target;
 #[path = "window_transfer_probe.rs"]
 mod transfer;
 #[path = "window_transfer_view.rs"]
@@ -39,6 +49,10 @@ struct Inner {
     observers: Mutex<HashMap<WindowToken, Arc<crate::native_visibility::NativeWatcher>>>,
     active: Mutex<Option<Active>>,
     transfer_view: Mutex<Option<transfer_view::Current>>,
+    theme_delivery: Mutex<Option<theme_delivery::Challenge>>,
+    theme_target_epoch: std::sync::atomic::AtomicU64,
+    #[cfg(feature = "login-probe")]
+    launch_page: Mutex<Option<(WindowToken, pulse_app::registry::PageLaunchScope)>>,
     peer_view_slot: Arc<Semaphore>,
     transfer_view_slot: Arc<Semaphore>,
     slot: Arc<Semaphore>,
@@ -99,16 +113,28 @@ impl Active {
         self.peer_owner = Some(owner);
         Ok(())
     }
+    #[cfg(any(test, not(feature = "login-probe")))]
     fn admit_peer(
         &mut self,
         owner: WindowToken,
         nonce: &str,
         page_nonce: &str,
     ) -> Result<(SessionId, Option<oneshot::Sender<bool>>)> {
+        self.admit_peer_with(owner, nonce, page_nonce, |_| Ok(()))
+    }
+
+    fn admit_peer_with(
+        &mut self,
+        owner: WindowToken,
+        nonce: &str,
+        page_nonce: &str,
+        after_confirm: impl FnOnce(&reload::PageTracker) -> Result<()>,
+    ) -> Result<(SessionId, Option<oneshot::Sender<bool>>)> {
         if self.peer_owner != Some(owner) || self.owner == owner || self.nonce != nonce {
             return Err("session.forbidden".into());
         }
         self.peer_pages.confirm_nonce(page_nonce)?;
+        after_confirm(&self.peer_pages)?;
         Ok((self.id, self.peer.take()))
     }
 }
@@ -131,6 +157,10 @@ impl WindowSessions {
             observers: Mutex::new(HashMap::new()),
             active: Mutex::new(None),
             transfer_view: Mutex::new(None),
+            theme_delivery: Mutex::new(None),
+            theme_target_epoch: std::sync::atomic::AtomicU64::new(0),
+            #[cfg(feature = "login-probe")]
+            launch_page: Mutex::new(None),
             peer_view_slot: Arc::new(Semaphore::new(1)),
             transfer_view_slot: Arc::new(Semaphore::new(1)),
             slot: Arc::new(Semaphore::new(1)),
@@ -164,7 +194,7 @@ pub(crate) fn probe_session_protocol(
     window: WebviewWindow,
     state: State<'_, WindowSessions>,
 ) -> Result<u8> {
-    if !local_url(&window.url().map_err(error)?) {
+    if !crate::native_origin::local_url(&window.url().map_err(error)?) {
         return Err("session.remote_origin".into());
     }
     Ok(if state.0.dual { 2 } else { 1 })
@@ -172,15 +202,6 @@ pub(crate) fn probe_session_protocol(
 
 fn error(_: impl std::fmt::Display) -> String {
     "session.probe_failed".into()
-}
-fn local_url(url: &tauri::Url) -> bool {
-    url.username().is_empty()
-        && url.password().is_none()
-        && url.port().is_none()
-        && matches!(
-            (url.scheme(), url.host_str()),
-            ("tauri", Some("localhost")) | ("http" | "https", Some("tauri.localhost"))
-        )
 }
 impl WindowSessions {
     pub(crate) fn install(&self, window: &WebviewWindow) -> Result<WindowToken> {
@@ -249,14 +270,23 @@ impl WindowSessions {
         match (run.peer_owner, token) {
             (None, _) => Ok(0),
             (Some(peer), Some(actual)) if peer == actual && actual != run.owner => {
-                self.0.registry.retire_window_views(actual).map_err(error)
+                let retired = self.0.registry.retire_window_views(actual).map_err(error)?;
+                #[cfg(feature = "login-probe")]
+                {
+                    let mut scope = self.0.launch_page.lock().map_err(error)?;
+                    if scope.as_ref().is_some_and(|(owner, _)| *owner == actual) {
+                        scope.take();
+                        eprintln!("session.native_page_launch.retired");
+                    }
+                }
+                Ok(retired)
             }
             _ => Err("session.forbidden".into()),
         }
     }
 
     fn caller(&self, window: &WebviewWindow) -> Result<WindowToken> {
-        if !local_url(&window.url().map_err(error)?) {
+        if !crate::native_origin::local_url(&window.url().map_err(error)?) {
             return Err("session.forbidden_origin".into());
         }
         self.0
@@ -409,6 +439,10 @@ pub(crate) struct SessionEvidence {
     pub peak_credit_bytes: u32,
     pub native_exit: u32,
     pub profile_login_checked: bool,
+    pub native_settings_checked: bool,
+    pub native_theme_checked: bool,
+    pub native_peer_theme_paint_checked: bool,
+    pub native_target_theme_paint_checked: bool,
     pub peer_denied: bool,
     pub peer_transfer_checked: bool,
     pub peer_display_checked: bool,
@@ -464,6 +498,10 @@ impl SessionEvidence {
                 .contains(&self.peak_credit_bytes)
             || self.native_exit != 0
             || self.profile_login_checked != cfg!(feature = "login-probe")
+            || self.native_settings_checked != cfg!(feature = "settings-probe")
+            || self.native_theme_checked != cfg!(feature = "settings-probe")
+            || self.native_peer_theme_paint_checked != cfg!(feature = "settings-probe")
+            || self.native_target_theme_paint_checked != cfg!(feature = "settings-probe")
             || !self.peer_denied
             || !self.peer_transfer_checked
             || !self.peer_display_checked
@@ -488,6 +526,27 @@ impl SessionEvidence {
         Ok(())
     }
 }
+// Finite validation only: scalar progress, never terminal or input content.
+fn trace_fixed_progress(
+    state: &WindowSessions,
+    owner: WindowToken,
+    id: SessionId,
+    phase: &'static str,
+    sequence: u32,
+) {
+    static ORIGIN: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    if let Ok(progress) = state.0.registry.state(owner, id) {
+        let ms = ORIGIN
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_millis();
+        eprintln!(
+            "session.native_progress phase={phase} at_ms={ms} sequence={sequence} parsed={} running={}",
+            progress.parsed_bytes,
+            progress.lifecycle == Lifecycle::Running
+        );
+    }
+}
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn probe_session_ack(
@@ -503,6 +562,11 @@ pub(crate) fn probe_session_ack(
         .0
         .registry
         .acknowledge(owner, id, generation, sequence)
+        .inspect(|_| {
+            if sequence > 0 && sequence.is_multiple_of(64) {
+                trace_fixed_progress(&state, owner, id, "ack", sequence);
+            }
+        })
         .map_err(error)
 }
 #[tauri::command]
@@ -853,6 +917,27 @@ fn validate_probe_input(text: &str) -> Result<()> {
     Ok(())
 }
 
+// Static diagnostic tokens only: never format input or an arbitrary native error.
+fn input_failure_code(failure: &pulse_app::registry::RegistryError) -> &'static str {
+    use pulse_app::registry::RegistryError as R;
+    use pulse_term::session::SessionError as S;
+    match failure {
+        R::Forbidden => "forbidden",
+        R::Stale => "stale",
+        R::Busy => "busy",
+        R::Unavailable => "unavailable",
+        R::Attachment(_) => "attachment",
+        R::History(_) => "history",
+        R::Session(S::ChunkTooLarge) => "chunk",
+        R::Session(S::Encoding) => "encoding",
+        R::Session(S::Busy) => "actor_busy",
+        R::Session(S::LeaseExhausted) => "lease_exhausted",
+        R::Session(S::StaleLease) => "stale_lease",
+        R::Session(S::InvalidDigest) => "digest",
+        R::Session(S::Closed) => "closed",
+        R::Session(S::Transport) => "transport",
+    }
+}
 /// Finite sample-only input, NOT a general session/user-shell endpoint.
 #[tauri::command]
 #[specta::specta]
@@ -863,14 +948,19 @@ pub(crate) async fn probe_session_input(
     generation: String,
     text: String,
 ) -> Result<()> {
-    validate_probe_input(&text)?;
-    let (owner, id) = state.owned(&window, &nonce)?;
-    state
-        .0
-        .registry
-        .input_bound(owner, id, parse_u64(&generation)?, text.into_bytes())
-        .await
-        .map_err(error)
+    validate_probe_input(&text)
+        .inspect_err(|_| eprintln!("session.native_input.failed phase=validation"))?;
+    let (owner, id) = state
+        .owned(&window, &nonce)
+        .inspect_err(|_| eprintln!("session.native_input.failed phase=owner"))?;
+    let generation = parse_u64(&generation)
+        .inspect_err(|_| eprintln!("session.native_input.failed phase=generation"))?;
+    state.0.registry.input_bound(owner, id, generation, text.into_bytes()).await.map_err(|failure| {
+        let bound = state.0.registry.check_binding(owner, id, generation).is_ok();
+        let running = state.0.registry.state(owner, id).is_ok_and(|s| s.lifecycle == Lifecycle::Running);
+        eprintln!("session.native_input.failed phase=admission kind={} generation={generation} bound={bound} running={running}", input_failure_code(&failure));
+        error(failure)
+    })
 }
 
 #[tauri::command]
@@ -886,6 +976,7 @@ pub(crate) async fn probe_session_resume(
         .registry
         .input(owner, id, b"m\n".to_vec())
         .await
+        .inspect(|_| trace_fixed_progress(&state, owner, id, "resume", 0))
         .map_err(error)
 }
 /// Explicit small control DTO; terminal bytes remain exclusively on Raw Channel.
@@ -1006,6 +1097,7 @@ pub(crate) async fn probe_session_go(
         .registry
         .input(owner, id, b"go\n".to_vec())
         .await
+        .inspect(|_| trace_fixed_progress(&state, owner, id, "go", 0))
         .map_err(error)
 }
 #[tauri::command]
@@ -1020,8 +1112,39 @@ pub(crate) async fn probe_session_peer(
     let (id, sender) = {
         let mut active = state.0.active.lock().map_err(error)?;
         let run = active.as_mut().ok_or("session.forbidden")?;
+        #[cfg(feature = "login-probe")]
+        {
+            let mut held = state.0.launch_page.lock().map_err(error)?;
+            run.admit_peer_with(owner, &nonce, &page_nonce, |pages| {
+                let scope = pages.with_ready_page(&page_nonce, || {
+                    state.0.registry.activate_launch_page(owner).map_err(error)
+                })?;
+                let ticket = state
+                    .0
+                    .registry
+                    .begin_page_local_launch(&scope)
+                    .map_err(error)?;
+                drop(ticket);
+                *held = Some((owner, scope));
+                eprintln!("session.native_page_launch.bound");
+                Ok(())
+            })?
+        }
+        #[cfg(not(feature = "login-probe"))]
         run.admit_peer(owner, &nonce, &page_nonce)?
     };
+    #[cfg(all(feature = "login-probe", unix))]
+    {
+        let pending = {
+            let held = state.0.launch_page.lock().map_err(error)?;
+            let (_, scope) = held
+                .as_ref()
+                .filter(|(page_owner, _)| *page_owner == owner)
+                .ok_or("session.page_launch_forbidden")?;
+            profile_login::start_page(&state.0.registry, scope)?
+        };
+        profile_login::verify_page_result(&state.0.registry, pending).await?;
+    }
     let denied = state
         .0
         .registry
@@ -1159,7 +1282,8 @@ pub(crate) async fn probe_session(
         .await
         .map_err(|_| "session.peer_timeout".to_string())?
         .map_err(|_| "session.peer_cancelled".to_string())?;
-    reload::verify(&state, &peer, peer_owner, peer_id, &peer_handle, &pages).await?;
+    let _settings_receipt =
+        reload::verify(&state, &peer, peer_owner, peer_id, &peer_handle, &pages).await?;
     // Fixed sample performs two render comparisons on the SAME actor. Respect
     // registry 500ms/session quota across ownership changes; never reset it.
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1204,8 +1328,12 @@ pub(crate) async fn probe_session(
         &peer_handle,
         peer_transfer,
         &transfer_channel,
+        #[cfg(feature = "settings-probe")]
+        _settings_receipt,
     )
     .await?;
+    let native_settings_checked = cfg!(feature = "settings-probe");
+    let native_theme_checked = cfg!(feature = "settings-probe");
     peer_handle.close();
     tokio::time::timeout(Duration::from_secs(5), peer_task.join())
         .await
@@ -1341,6 +1469,10 @@ pub(crate) async fn probe_session(
         peak_credit_bytes: u32::try_from(receipt.peak_credit_bytes).map_err(error)?,
         native_exit: native.exit_code,
         profile_login_checked: cfg!(feature = "login-probe"),
+        native_settings_checked,
+        native_theme_checked,
+        native_peer_theme_paint_checked: native_theme_checked,
+        native_target_theme_paint_checked: native_theme_checked,
         peer_denied,
         peer_shell_hints_checked: pages.shell_hints_checked(),
         peer_transfer_checked: true,
@@ -1429,6 +1561,27 @@ mod tests {
     }
 
     #[test]
+    fn input_failure_diagnostics_are_literal_tokens_not_dynamic_display() {
+        use pulse_app::registry::RegistryError as R;
+        use pulse_term::session::SessionError as S;
+        for (failure, code) in [
+            (R::Forbidden, "forbidden"),
+            (R::Stale, "stale"),
+            (R::Busy, "busy"),
+            (R::Unavailable, "unavailable"),
+            (R::Session(S::Closed), "closed"),
+            (R::Session(S::StaleLease), "stale_lease"),
+            (R::Session(S::Transport), "transport"),
+            (R::Session(S::Busy), "actor_busy"),
+            (
+                R::Attachment(pulse_app::attachment::AttachmentError::Limits),
+                "attachment",
+            ),
+        ] {
+            assert_eq!(input_failure_code(&failure), code);
+        }
+    }
+    #[test]
     fn finite_input_validation_uses_utf8_byte_budget_and_rejects_controls() {
         for input in ["typed", "中文🌍", "\r"] {
             assert!(validate_probe_input(input).is_ok());
@@ -1462,26 +1615,6 @@ mod tests {
         }
     }
     #[test]
-    fn origins_are_local_only() {
-        for url in [
-            "tauri://localhost/index.html",
-            "http://tauri.localhost/index.html?session-peer=1",
-            "https://tauri.localhost/",
-        ] {
-            assert!(local_url(&tauri::Url::parse(url).unwrap()));
-        }
-        for url in [
-            "https://example.com/",
-            "http://localhost/",
-            "http://tauri.localhost:99/",
-            "http://u@tauri.localhost/",
-            "file:///tmp/index.html",
-            "tauri://localhost.evil/",
-        ] {
-            assert!(!local_url(&tauri::Url::parse(url).unwrap()));
-        }
-    }
-    #[test]
     fn report_requires_canonical_native_session_evidence() {
         let mut e = SessionEvidence {
             attachment_version: 1,
@@ -1493,6 +1626,10 @@ mod tests {
             peak_credit_bytes: 6092,
             native_exit: 0,
             profile_login_checked: cfg!(feature = "login-probe"),
+            native_settings_checked: cfg!(feature = "settings-probe"),
+            native_theme_checked: cfg!(feature = "settings-probe"),
+            native_peer_theme_paint_checked: cfg!(feature = "settings-probe"),
+            native_target_theme_paint_checked: cfg!(feature = "settings-probe"),
             peer_denied: true,
             peer_shell_hints_checked: true,
             peer_transfer_checked: true,
@@ -1524,6 +1661,15 @@ mod tests {
         e.profile_login_checked = !cfg!(feature = "login-probe");
         assert!(e.validate().is_err());
         e.profile_login_checked = cfg!(feature = "login-probe");
+        e.native_settings_checked = !cfg!(feature = "settings-probe");
+        assert!(e.validate().is_err());
+        e.native_settings_checked = cfg!(feature = "settings-probe");
+        e.native_theme_checked = !cfg!(feature = "settings-probe");
+        assert!(e.validate().is_err());
+        e.native_theme_checked = cfg!(feature = "settings-probe");
+        e.native_target_theme_paint_checked = !cfg!(feature = "settings-probe");
+        assert!(e.validate().is_err());
+        e.native_target_theme_paint_checked = cfg!(feature = "settings-probe");
         e.native_window_checked = true;
         assert!(e.validate().is_err());
         e.pause_count = 1;

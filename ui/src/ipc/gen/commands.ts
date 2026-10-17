@@ -16,13 +16,27 @@ export const commands = {
 	probeSession: (nonce: string, channel: Channel<ArrayBuffer>, transferChannel: Channel<ArrayBuffer>) => __TAURI_INVOKE<SessionEvidence>("probe_session", { nonce, channel, transferChannel }),
 	probeSessionProtocol: () => __TAURI_INVOKE<number>("probe_session_protocol"),
 	probeTransferAck: (nonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_transfer_ack", { nonce, generation, sequence }),
-	probeTransferConfirm: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<null>("probe_transfer_confirm", { nonce, generation, rendered }),
+	/**  Fixed transfer capture base only. No session, theme path or update selection. */
+	probeTransferPalette: (nonce: string, generation: string) => __TAURI_INVOKE<string | null>("probe_transfer_palette", { nonce, generation }),
+	probeTransferConfirm: (nonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<boolean>("probe_transfer_confirm", { nonce, generation, rendered }),
 	probePeerView: (nonce: string, pageNonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<null>("probe_peer_view", { nonce, pageNonce, channel }),
 	probePeerAck: (nonce: string, pageNonce: string, generation: string, sequence: number) => __TAURI_INVOKE<null>("probe_peer_ack", { nonce, pageNonce, generation, sequence }),
 	probePeerConfirm: (nonce: string, pageNonce: string, generation: string, rendered: RenderedProjection) => __TAURI_INVOKE<null>("probe_peer_confirm", { nonce, pageNonce, generation, rendered }),
 	probePeerDone: (nonce: string, pageNonce: string) => __TAURI_INVOKE<null>("probe_peer_done", { nonce, pageNonce }),
 	probePeerHoldReady: (nonce: string, pageNonce: string, generation: string) => __TAURI_INVOKE<null>("probe_peer_hold_ready", { nonce, pageNonce, generation }),
 	probePeerShellHints: (nonce: string, pageNonce: string, generation: string) => __TAURI_INVOKE<ShellHints>("probe_peer_shell_hints", { nonce, pageNonce, generation }),
+	probePeerThemeRead: (nonce: string, pageNonce: string, generation: string) => __TAURI_INVOKE<ThemeDelivery>("probe_peer_theme_read", { nonce, pageNonce, generation }),
+	probePeerThemeConfirm: (nonce: string, pageNonce: string, generation: string, ticket: string) => __TAURI_INVOKE<null>("probe_peer_theme_confirm", { nonce, pageNonce, generation, ticket }),
+	probePeerThemeDrawn: (nonce: string, pageNonce: string, generation: string, ticket: string) => __TAURI_INVOKE<null>("probe_peer_theme_drawn", { nonce, pageNonce, generation, ticket }),
+	/**  Factory availability only; caller must be the registered local main window. */
+	probeTargetThemeMode: () => __TAURI_INVOKE<boolean>("probe_target_theme_mode"),
+	probeTargetThemeFailed: (nonce: string, generation: string, claim: string, stage: number) => __TAURI_INVOKE<null>("probe_target_theme_failed", { nonce, generation, claim, stage }),
+	probeTargetThemeReady: (nonce: string, generation: string) => __TAURI_INVOKE<null>("probe_target_theme_ready", { nonce, generation }),
+	probeTargetThemeRead: (nonce: string, generation: string, claim: string) => __TAURI_INVOKE<ThemeDelivery>("probe_target_theme_read", { nonce, generation, claim }),
+	probeTargetThemeConfirm: (nonce: string, generation: string, claim: string) => __TAURI_INVOKE<null>("probe_target_theme_confirm", { nonce, generation, claim }),
+	probeTargetThemeDrawn: (nonce: string, generation: string, claim: string) => __TAURI_INVOKE<null>("probe_target_theme_drawn", { nonce, generation, claim }),
+	/**  Single read-only, content-free observation. It cannot select a source or authorize repaint. */
+	probeTargetThemeWaitRevoked: (nonce: string, generation: string, claim: string) => __TAURI_INVOKE<null>("probe_target_theme_wait_revoked", { nonce, generation, claim }),
 	probeEncoding: (nonce: string, channel: Channel<ArrayBuffer>) => __TAURI_INVOKE<EncodingEvidence>("probe_encoding", { nonce, channel }),
 	probeEncodingMode: () => __TAURI_INVOKE<boolean>("probe_encoding_mode"),
 	probeEncodingInput: (nonce: string, generation: string, text: string) => __TAURI_INVOKE<null>("probe_encoding_input", { nonce, generation, text }),
@@ -78,6 +92,7 @@ export type DomEvidence = {
 	nativeSignalChecked: boolean,
 	nativePauseChecked: boolean,
 	viewHostChecked: boolean,
+	uiOverridesChecked: boolean,
 	viewPoolChecked: boolean,
 	activeParkChecked: boolean,
 };
@@ -176,6 +191,10 @@ export type SessionEvidence = {
 	peakCreditBytes: number,
 	nativeExit: number,
 	profileLoginChecked: boolean,
+	nativeSettingsChecked: boolean,
+	nativeThemeChecked: boolean,
+	nativePeerThemePaintChecked: boolean,
+	nativeTargetThemePaintChecked: boolean,
 	peerDenied: boolean,
 	peerTransferChecked: boolean,
 	peerDisplayChecked: boolean,
@@ -219,6 +238,12 @@ export type ShellHints = {
 export type SocketTicket = {
 	url: string,
 	token: string,
+};
+
+export type ThemeDelivery = {
+	ticket: string,
+	generation: string,
+	paintJson: string,
 };
 
 /* Tauri Specta runtime */

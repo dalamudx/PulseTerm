@@ -7,6 +7,28 @@ fn proof() -> Result<AuthenticatedDek, CryptoError> {
     AuthenticatedDek::fixture(id())
 }
 #[test]
+fn original_epoch_probe_is_weak_exact_and_never_revives_after_owner_destruction() -> TestResult {
+    let scope = VaultKeyLifecycle::new(id())?;
+    let mut permit = scope.begin()?;
+    let mut candidate = permit.worker()?.finish(proof()?)?;
+    scope.confirm(&mut permit, &mut candidate)?;
+    drop(candidate);
+    drop(permit);
+    let epoch = scope.available_epoch()?;
+    let weak = Arc::downgrade(&scope.shared);
+    let strong = Arc::strong_count(&scope.shared);
+    assert!(epoch.is_original_current()?);
+    let other = VaultKeyLifecycle::new(id())?;
+    assert!(!epoch.is_current_for(&other)?);
+    let cloned = epoch.clone();
+    assert_eq!(Arc::strong_count(&scope.shared), strong);
+    drop(scope);
+    assert!(weak.upgrade().is_none());
+    assert!(!epoch.is_original_current()?);
+    assert!(!cloned.is_original_current()?);
+    Ok(())
+}
+#[test]
 fn candidate_requires_confirmation_and_key_use_stops_on_lock() -> TestResult {
     let scope = VaultKeyLifecycle::new(id())?;
     let ctx = SecretContext::new(id(), "password")?;

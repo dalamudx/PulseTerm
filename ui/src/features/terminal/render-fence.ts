@@ -2,11 +2,16 @@ export interface FrameClock {
   request(callback: FrameRequestCallback): number;
   cancel(id: number): void;
   visible(): boolean;
+  /** Optional metadata only; never substitutes for an animation opportunity. */
+  now?(): number;
+  focused?(): boolean;
 }
 const browser: FrameClock = {
   request: (callback) => requestAnimationFrame(callback),
   cancel: (id) => cancelAnimationFrame(id),
   visible: () => document.visibilityState === "visible",
+  now: () => performance.now(),
+  focused: () => document.hasFocus(),
 };
 /** Two animation opportunities after parser completion, NOT compositor ACK.
  * Hidden/disconnected/aborted surfaces fail closed; never skip a frame deadline. */
@@ -18,6 +23,7 @@ export function renderFence(
   return new Promise((resolve, reject) => {
     let frame: number | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = clock.now?.() ?? performance.now();
     let count = 0;
     let done = false;
     const finish = (error?: Error) => {
@@ -30,6 +36,13 @@ export function renderFence(
       else resolve();
     };
     const abort = () => finish(new Error("terminal.render_cancelled"));
+    const elapsed = () => (clock.now?.() ?? performance.now()) - started;
+    const timeout = () =>
+      finish(
+        new Error(
+          `terminal.render_timeout.frames=${count}.visible=${clock.visible()}.connected=${connected()}.elapsedMs=${Math.max(0, Math.round(elapsed()))}.focused=${clock.focused?.() ?? "unknown"}`,
+        ),
+      );
     const step = () => {
       frame = undefined;
       if (signal.aborted) {
@@ -38,6 +51,11 @@ export function renderFence(
       }
       if (!clock.visible() || !connected()) {
         finish(new Error("terminal.render_unavailable"));
+        return;
+      }
+      // RAF may be dispatched before an overdue timer; elapsed time remains authoritative.
+      if (elapsed() >= 1000) {
+        timeout();
         return;
       }
       if (++count === 2) {
@@ -55,15 +73,7 @@ export function renderFence(
       finish(new Error("terminal.render_unavailable"));
       return;
     }
-    timer = setTimeout(
-      () =>
-        finish(
-          new Error(
-            `terminal.render_timeout.frames=${count}.visible=${clock.visible()}.connected=${connected()}`,
-          ),
-        ),
-      1000,
-    );
+    timer = setTimeout(timeout, 1000);
     frame = clock.request(step);
   });
 }

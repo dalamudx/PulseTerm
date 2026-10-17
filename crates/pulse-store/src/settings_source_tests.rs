@@ -1,20 +1,20 @@
 use super::*;
 use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-static TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-fn dir() -> std::io::Result<tempfile::TempDir> {
+pub(super) static TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(super) fn dir() -> std::io::Result<tempfile::TempDir> {
     let d = tempfile::tempdir()?;
     fs::set_permissions(d.path(), fs::Permissions::from_mode(0o700))?;
     Ok(d)
 }
-fn source(d: &tempfile::TempDir, text: &str) -> std::io::Result<()> {
+pub(super) fn source(d: &tempfile::TempDir, text: &str) -> std::io::Result<()> {
     fs::write(d.path().join("settings.toml"), text)?;
     fs::set_permissions(
         d.path().join("settings.toml"),
         fs::Permissions::from_mode(0o600),
     )
 }
-async fn status(h: &SettingsSourceHandle, expected: SettingsSourceStatus) -> TestResult {
+pub(super) async fn status(h: &SettingsSourceHandle, expected: SettingsSourceStatus) -> TestResult {
     let mut rx = h.subscribe()?;
     tokio::time::timeout(Duration::from_secs(2), rx.wait_for(|s| *s == expected)).await??;
     Ok(())

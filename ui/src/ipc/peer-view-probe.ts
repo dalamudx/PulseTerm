@@ -39,6 +39,11 @@ export async function verifyPeerView(
   let booted = false;
   const heldAck = new PeerAckHold(life.signal);
   const peerWindow = window as Window & {
+    __PULSE_PEER_THEME__?: (
+      run: string,
+      page: string,
+      generation: string,
+    ) => Promise<void>;
     __PULSE_PEER_HOLD_ACK__?: (
       run: string,
       page: string,
@@ -59,6 +64,44 @@ export async function verifyPeerView(
     await commands.probePeerHoldReady(nonce, pageNonce, generation);
   };
   if (keepLive) peerWindow.__PULSE_PEER_HOLD_ACK__ = pauseAck;
+  const paintTheme = async (run: string, page: string, generation: string) => {
+    if (
+      !keepLive ||
+      !booted ||
+      life.signal.aborted ||
+      run !== nonce ||
+      page !== pageNonce ||
+      !view
+    )
+      throw new Error("theme.delivery.page_retired");
+    let ticket: string | undefined;
+    await view.paintTheme(generation, async (signal) => {
+      const receipt = await commands.probePeerThemeRead(
+        nonce,
+        pageNonce,
+        generation,
+      );
+      if (
+        receipt.generation !== generation ||
+        !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(receipt.ticket) ||
+        signal.aborted
+      )
+        throw new Error("theme.delivery.receipt");
+      ticket = receipt.ticket;
+      await commands.probePeerThemeConfirm(
+        nonce,
+        pageNonce,
+        generation,
+        ticket,
+      );
+      if (signal.aborted) throw new Error("theme.delivery.retired");
+      return receipt.paintJson;
+    });
+    if (!ticket || life.signal.aborted)
+      throw new Error("theme.delivery.retired");
+    await commands.probePeerThemeDrawn(nonce, pageNonce, generation, ticket);
+  };
+  if (keepLive) peerWindow.__PULSE_PEER_THEME__ = paintTheme;
   let bootReady!: () => void;
   const bootstrap = new Promise<void>((resolve) => {
     bootReady = resolve;
@@ -238,6 +281,8 @@ export async function verifyPeerView(
   } finally {
     if (peerWindow.__PULSE_PEER_HOLD_ACK__ === pauseAck)
       delete peerWindow.__PULSE_PEER_HOLD_ACK__;
+    if (peerWindow.__PULSE_PEER_THEME__ === paintTheme)
+      delete peerWindow.__PULSE_PEER_THEME__;
     clearTimeout(deadline);
     stop();
     channel.onmessage = () => {};

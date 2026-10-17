@@ -6,7 +6,8 @@ use tokio::sync::{mpsc, watch};
 /// closing the session. Only one current diagnostic subscriber is supported.
 #[derive(Debug)]
 pub struct SessionStream {
-    /// Monotonic serial scoped to this actor, NOT a global/authenticated wire token.
+    /// Monotonic actor serial, NOT an authenticated wire token. Zero denotes a
+    /// frozen EOF stream with no actor lease or control permissions.
     pub lease_id: u64,
     /// History and screen captured before any queued Data, on the same actor turn.
     pub bootstrap: SessionBootstrap,
@@ -92,6 +93,22 @@ pub(super) fn create(lease_id: u64, bootstrap: SessionBootstrap) -> (Lease, Sess
         },
     )
 }
+/// Frozen EOF replay: no actor lease or control permission; the application still
+/// supplies a new authenticated generation and bounded ACK supervisor per view.
+pub(super) fn completed(bootstrap: SessionBootstrap) -> SessionStream {
+    let (tx, output) = mpsc::channel(1);
+    drop(tx);
+    let (_, status) = watch::channel(StreamStatus {
+        end: StreamEnd::Session(Lifecycle::Ended),
+        boundary: bootstrap.boundary.clone(),
+    });
+    SessionStream {
+        lease_id: 0,
+        bootstrap,
+        output,
+        status,
+    }
+}
 pub(super) fn invalidate(
     lease: &mut Option<Lease>,
     permit: &mut Option<mpsc::OwnedPermit<StreamRecord>>,
@@ -125,6 +142,7 @@ pub(super) fn prepare(
     Ok(SessionBootstrap {
         boundary: boundary.clone(),
         digest: terminal.screen_digest(),
+        palette: restore.palette,
         history,
         restore: restore.bytes,
     })

@@ -1,5 +1,27 @@
 # 开发指南
 
+
+设置弹窗的分类、搜索与焦点规则见[工作区设置导航](../architecture/workspace-settings-navigation.md)。快捷键入口纳入键盘与剪贴板分类及本地搜索；进入时挂起设置，返回保留筛选、未保存草稿和焦点，不转移或续期任一编辑器的保存票据。导航不写配置；字段继续使用既有单次票据保存／恢复，关闭撤销迟到显示，失败后重读。只检查受影响编辑器、类型、产品构建及集中组件使用链，沿用现有前端 CI；原生键位探针同步导航后留待集中实窗验收，不新增 SSH 或全量矩阵。
+私钥导入定向验收使用 `mise run probe-workspace-key-import`：原页面显式解锁后以隔离 GTK 剪贴板粘贴固定加密 Ed25519，验锁定／错口令拒绝、双密文原子保存、刷新／独立进程精确字节与退出。截图须等输入清除，不能将导入成功当作 SSH 连接授权；默认构建不开放导入。夹具和剪贴板 helper 只创建于自有 `/data/temp` 目录并在实际退出后清理。
+后台视图按[调度说明](../architecture/terminal-background-views.md)做受影响检查；原生可见性开发仅运行Visibility／Pane两个Vitest文件、TypeScript／Biome／前端构建，以及CLI＋SSH原生库的`native_visibility::tests`。原生实窗、跨平台、WebGL及资源指标另验。现有CI自动覆盖前端和原生构建，不增加重型矩阵。
+历史容量设置保存在[terminal].history_limit，默认100000、可设1000～100000；新建本地／SSH会话生效，已有会话不缩容，16MiB冷区预算不变。按配置继承／保存恢复、冷热裁剪和EOF保留、原生同快照冻结及前端范围校验做直接检查；沿用现有CI，不因容量新增SSH认证矩阵。
+输入滚动偏好见[输入时回到底部](../architecture/terminal-input-scroll.md)：`[terminal].scroll_on_input` 默认true，支持明确false与恢复继承；新挂载视图采用该值，已有视图不在线切换。沿用既有CI，原生WebView效果另验。
+输出滚动偏好见[新输出时回到底部](../architecture/terminal-output-scroll.md)：`[terminal].scroll_on_output` 默认false，保留SDK常规跟随；开启后有效输出完成解析时调用公开scrollToBottom，回看时也返回底部。与输入回底独立，保存后新挂载生效。v8封闭投影、继承恢复和旧页撤销沿用既有检查，取消／释放后迟到回调不得滚动；复用现有CI，不新增SSH矩阵。
+Backspace 编码见[实现说明](../architecture/terminal-backspace.md)：`[terminal].backspace_send` 默认 `del`，可选 `bs`，新挂载视图采用。只改可信无修饰且非组合输入的Backspace，字节仍经公开SDK进入既有onData／授权队列；不替换粘贴字节。仅做保存恢复、v10兼容与按键门禁检查，沿用既有CI；真实PTY／SSH、WebView和跨平台物理键另验。
+TERM-18 的成组设置见[TERM、Delete与Profile行为](../architecture/terminal-behavior.md)：`term_type`固定选择xterm-256color／xterm／vt100，与配色和历史容量同次读取后在新本地／SSH启动中冻结；本地Profile显式TERM环境优先。`delete_send`默认csi、可选del，普通可信Delete仍经SDK与既有输入授权；Profile可单次保存Option、Backspace、Delete稀疏覆盖。全局设置投影现为v13，分组／SSH入口的v2五项产品编辑与启动应用见下文。沿用现有CI，检查受影响功能，不增加SSH或全量矩阵。
+分组／SSH入口的[终端配色与行为覆盖](../architecture/terminal-scoped-behavior.md)以 v2 五字段统一编辑终端配色、TERM、Option／Meta、Backspace、Delete，按默认→用户→直属组→入口继承；显式null恢复继承，缺字段拒绝。保存通过原页票据和共享SQL事务验证组织源、成员关系及两层设置版本，保留其他字段。本地 Profile 另以稀疏 `appearance.colorPreset` 覆盖全局终端配色，缺省或null继承。GUI／CLI直连与跳板叶终端使用后端冻结基色；已有会话不在线换配置，祖先组不额外叠加。沿用现有CI，只验证受影响路径，真实SSH／原生WebView与跨平台效果另验。
+
+Option／Meta偏好见[macOS Option作为Meta键](../architecture/terminal-option-meta.md)：`[terminal].mac_option_as_meta`默认false，v9严格布尔投影，保存／恢复继承后新挂载视图采用该值。xterm公开macOptionIsMeta处理按键，不增加应用监听或输入权限；旧版投影缺字段按false，Profile显示合并保留该值。分组／SSH入口的[统一编辑与启动应用](../architecture/terminal-scoped-behavior.md)已接通，真实按键效果仍待验收。沿用既有CI，仅检查受影响设置和前端模块；真实macOS物理键、IME与原生WebView另验。
+回看后的手动入口见[回到最新输出](../architecture/terminal-output-scroll.md)：仅在当前窗格离开底部时显示，只滚动当前前端缓冲区；每窗格独立，支持点击和键盘激活，不更改自动回底设置，也不启用输入。沿用现有前端 CI，原生实窗另验。
+
+可视响铃见[终端可视响铃](../architecture/terminal-bell.md)：只为当前挂载窗格的实时 BEL 显示固定提示，重复合并、点击清除，恢复回放与已取消输出不得触发；不启用输入或为后台标签重建订阅。沿用前端类型、直接单测及构建 CI，原生响铃和系统通知另验。
+
+链接操作见[终端链接检查与系统交接](../architecture/terminal-links.md)：普通 HTTP／HTTPS、严格 IPv4／方括号 IPv6 的 IP:端口和 OSC8 共用完整目标检查；IP:端口明确按 HTTP 网页候选解释，不推断服务协议。显式复制和 Linux 系统打开独立确认；原生验证实际窗口、原页 nonce 与4096字节封闭目标，使用 GIO 默认 URI 接口而非命令行。每窗最多一个任务，容量保留至原生回调结束并纳入退出等待；Windows／macOS明确不可用。沿用现有检查入口，仅验证受影响路径，实际系统浏览器、剪贴板及原生 WebView 另验。 绝对文件路径（含完整单／双引号包围的带空格路径）使用独立来源标记，只读显示路径和行列、显式复制路径；不读取或打开文件，不把远程路径映射成本机路径。外部编辑器打开另需原生授权接线，OSC8文件目标不复用路径来源。
+
+
+入口或默认键位变化时，核对workspace-history-entry、命令目录／面板、keymap投影／表单和dispatcher；后端核对KeymapAction与封闭Capability目录。继承绑定参与冲突验证，Rust／TypeScript策略对照比较原始合并定义，不把编译后AST当源输入。find默认Ctrl/Meta+Shift+F仅终端聚焦时生效，保留Ctrl+F，禁用无旁路。复用既有CI，不增加回归矩阵。
+输入法应用层保护见[IME边界](../architecture/terminal-ime.md)。只对Composition、Chord／Dispatcher、ModalEscape、Palette及Surface桥接做受影响Vitest与TS／Biome／产品构建；系统IME、候选窗口位置／DPI和真实WebView另验，不将合成事件计为系统输入法通过。
+
 ## 1. 仓库结构
 
 ```
@@ -20,7 +42,7 @@
 ├─ assets/                  # 子集化字体、内置主题、Shell 集成脚本
 ├─ docs/
 ├─ deny.toml                # cargo-deny：许可证白名单与安全公告检查
-├─ NOTICE / THIRD_PARTY.md  # 第三方署名
+├─ NOTICE / THIRD_PARTY.md  # 已生成工作区署名材料；缺项与发行审查仍阻断
 └─ .github/workflows/
 ```
 
@@ -54,6 +76,7 @@ mise run check                    # Rust 格式/clippy/依赖分层 + TS 类型/
 mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
+mise run probe-ssh-private-key-use # Rust-only：Vault密文→实际Ed25519签名，独立于产品绘制验收
 mise run probe-profiles           # Unix只读Shell发现、自动profile规则与字面PTY启动
 mise run probe-login              # 公开默认login builder真实argv0/程序选择及回退限制
 mise run probe-pty-portable       # 三平台finite Rust helper：规范输入/Unicode/native尺寸/EOF
@@ -69,19 +92,43 @@ mise run terminal-vendor-check    # 检查211个源文件仅有批准的只读ge
 mise run terminal-vendor-test     # 独立锁文件运行上游178项测试
 mise run bindings                 # 从 Rust 命令表生成 IPC 类型、命令与事件
 mise run bindings-check           # 检查生成产物漂移，不覆盖源文件
-mise run audit                    # Rust 许可证/安全公告/来源检查
+mise run audit                    # Rust＋前端独立完成；任一失败仍阻断，日志见 target/probes/dependency-audit/
+mise run audit-check              # 审计先失败仍执行下一项、无效回执和陈旧报告的子进程反例
+mise run third-party-write        # 校验锁定归档＋父包/VCS/内嵌commit/源码官方引用，生成NOTICE/清单/原文；需网络
+mise run third-party-check        # 39项行为反例＋离线摘要、来源关联和完整集合检查，不代表发行批准
+mise run third-party-release-check # 缺完整原文或只有许可链接仍失败，许可证政策另行审查
+mise run distribution-review       # 五目标冻结依赖投影＋12项反例，不替代实际发行或许可批准
 mise run fmt                      # 统一格式
 mise run desktop-check            # 打包前端并检查真实 Tauri 适配层
 mise run desktop                  # 打开原生开发验证界面（不是完整终端）
 mise run probe-channel            # native PTY/窗口授权/EOF ACK/Commit/Data idle Marker及精确屏幕修复，两轮headless+两轮可见DOM及7组测量
+mise run probe-native-parallel     # Linux原生测试默认/64线程/重叠进程有界复现；不改变原5秒断言，不计历史故障修复
 mise run probe-channel-v2         # --probe-v2固定UTF8样例，两轮headless/DOM、版本收据和8220-byte窗口
 mise run probe-window             # Linux独立Xvfb/Openbox的真实native minimize/unminimize，同样验证PTY重绑/DOM/EOF
 mise run probe-window-external    # 独立xdotool进程通过WM最小化/恢复，应用不调用自身minimize API
 mise run probe-route              # 独立Direct/HTTP↔SOCKS双认证、真实binary半关闭与拒绝清理
-mise run probe-cli                # cli-probe可选feature，私有UDS/10独立固定子进程/握手与长度/权限/EOF验证
+mise run probe-cli                # cli-probe可选feature，私有UDS/13独立固定子进程/握手与长度/权限/EOF/重复参数前置拒绝验证
 mise run probe-cli-window         # cli-window-probe显式构建；真实CLI→native可见注册/page-load/销毁，独立计时
 mise run probe-cli-startup        # 只读daemon真实进程竞争/存活端点保护/SIGKILL后安全恢复与旧token拒绝
+mise run workspace-cli-build      # opt-in Linux：warm focus/profiles/focus-tab/new-tab/split/ssh；cold focus/profiles/new-tab，创建/SSH须原窗口确认
+mise run probe-workspace-cli      # 真WebView/Openbox三代原页focus/只读profiles且不增PTY创建数、同PTY输入、socket/token与Root排空；临时XDG只在/data/temp
+mise run probe-workspace-cold-new-tab # 冷GUI取消/断开/refresh零PTY；16s批准一次、实际回显/同PID恢复及原生退出
+mise run probe-workspace-cold-concurrent # FF/PP/FP独立CLI同冷启动，actual2GUI竞争/唯一brokerowner/0PTY/端点保留与真实退出
+mise run probe-workspace-cold-failures # strace只跟踪process/connect：43残缺/占用/不安全端点、EOF/5s超时及broker失败，不修复、不cold重试
+mise run probe-workspace-cli-new-tab # 默认取消/CLI断开/未决刷新不创建，明确批准创建一次、实际可见modal与新PTY回显/refresh恢复、两PID与端点退出
+mise run probe-workspace-cli-split # 原单pane左右/上下双PTY，Cancel/CLI断开/换页拒绝，慢批准/第二pane输入/同两PID恢复和root排空
+mise run probe-workspace-cli-selection # CLI原页一次选择两个已有Root会话；精确PID输入、重复选择、split lease保持与实际退出
+mise run probe-workspace-cli-aliases # open <已发现本地Profile>、split-pane -v/-h；复用原页创建确认、取消/换页、实际输入/同PTY恢复/回收
+PULSE_CLI_PENDING_PRESSURE=1 mise run probe-workspace-cold-sensitive # actual双CLI冷创建竞争＋48暖请求，原modal保持／零或单PTY／实际退出
+mise run probe-workspace-cli-capacity # 实际8个认证槽，第9个CLI拒绝；关闭单槽后回收、端点保持、原窗口三次聚焦及退出
+mise run probe-workspace-cli-window-selector # -w workspace闭合单窗口选择；实际三页focus／同PTY输入／端点排空
+mise run probe-workspace-cli-multiwindow # Linux同进程原窗确认建空窗/精确选窗/双PTY刷新/主窗先关与最终退出；SHA见cli-multiwindow-acceptance.json；1063Rust/1208前端、7忽略不计，清理25.2GiB
+mise run probe-workspace-cli-multiwindow-ssh # Linux双窗Vault/原页批准、密码/选定软件Agent/真实三跳；343份SHA见cli-multiwindow-ssh-acceptance.json；冷SSH/本地多窗/七链/六冷分屏及1063Rust/1208前端通过，7忽略不计，清理12.4GiB
+mise run probe-workspace-cli-ssh # Linux opt-in保存host/identity UUID，原page/Vault epoch+source批准；锁定/Cancel/断开/换页/同库外部变更auth0，新source慢批准auth1、真实输入/refresh/resize/SDK-native-root排空
+mise run probe-workspace-cli-ssh-private-key # 同一原epoch捕获、联合双目录消歧；锁定/Cancel/断开/换页/旧source零签名，新source慢批准一次真实签名、零密码回退及TermView刷新/输入/resize/退出
+mise run probe-workspace-cli-ssh-agent # 原SavedGesture三目录唯一ID、原epoch继承、锁定/取消/导航/断连零签名、原窗批准所选Agent一签名、终端/刷新/重开/退出
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
+mise run probe-ssh-owned-session  # 显式会话动作：私库密文→真实SSH→根actor，换页/EOF/read取消与SDK+流join；合成PTY尺寸通知与显示应用，不冒充kernel ACK，非产品/SSH GUI/OS PTY
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
 mise run probe-ssh-jump           # 双SSH/GBK actor与通用HTTP→SOCKS BoxStream接pinnedSSH/错key拒绝/EOF清理
 mise run probe-ssh-pressure       # 真远端window-aware生产者；ACK背压/detach/timeout及共享连接HOL限制
@@ -91,6 +138,56 @@ mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签�
 mise run probe-ssh-legacy         # 仅test profile旧KEX/MAC，安全default前后明确拒绝
 mise run probe-encoding-attachment # validation-only GBK actor/v2原子重绑/history/双坐标headless渲染
 mise run probe-encoding-window    # 显式encoding-probe build：固定分类GBK actor→真实Channel→DOM，两轮不同source/UTF8边界
+mise run probe-workspace-keymap-state # 当前表单票据期间独立atomic外改→CAS拒写/新源确认；两真实应用进程同GUI保存文件重开，各3页/PID回收/字节不改。
+mise run probe-workspace-keymap # 真实Linux当前页GUI保存/禁用/恢复/物理两步键位，focus A→B→A旧前缀拒绝，3页同PTY/PID/精确输入与实际Root排空；唯一/data/temp fixture，非三平台或systemIME。
+mise run probe-keymap # 固定内存Rust→TS6投影/1158策略对照，三独立进程私有keymap.toml旧快照拒写/提交重开/自有fixture清理；无真实用户配置或GUI键位编辑。
+mise run probe-workspace-commands # Linux当前页固定7动作palette：真实CtrlShiftP/检索/Settings跳转/empty取消/三页同PTY无按键漏写/default保留与确认close；不是通用Capability或可配置快捷键。严格CSP与原8s/80s截止。
+mise run probe-workspace-clipboard # Linux原生GTK剪贴板→WebView用户事件：copy／单行／审批取消／CtrlC中断／换页和resize撤销
+mise run probe-workspace-selection-copy # Linux默认关闭／授权保存／同PTY刷新／实际鼠标复制／关闭恢复；勾选、来源和成功状态同帧
+mise run probe-workspace-right-click-paste # LinuxGTK单次原页原连接读取，单行／多行批准取消／刷新退休／鼠标报告优先／迟到X11回调与退出等待；非跨平台结论
+mise run probe-workspace-bracketed-paste # 真实 Bash／GNU Readline 缓冲：多行取消／批准后等待Enter、待决输入刷新、UTF8预算及模式开关；非系统IME
+mise run probe-workspace-vim       # 真实Vim：审批／缩进及Unicode原文／插入缓冲跨页／一次撤销／文件字节保存／未保存关窗回收；非系统IME
+mise run probe-workspace-history-copy # Linux候选：600长逻辑行／软换行Unicode／真实鼠标跨历史选择／GTK字节核对／同进程刷新；未计验收
+mise run probe-workspace-settings # Linux设置：default14／逐字段CAS／行高与字距独立内核网格／刷新同PTY／两进程重开／恢复继承／退出排空
+mise run probe-workspace-font # Linux字体：预设与许可零写／明确保存／缺失主字体后备／同PTY重新加载与退出；不计连字
+mise run probe-workspace-ligatures # Linux按需WebGL：明确保存运算符连字／绘制完成ACK／同PTY原文输入／独立重开；不计GPU性能或跨平台
+mise run probe-workspace-profiles # Linux私有DB：自动Profile隐藏／恢复、现有PTY存活、换页／新进程持久、旧页／目录拒写
+mise run probe-workspace-profile-default # Linux默认选择：保存/清空零启动、隐藏不可用、刷新/双进程重开、明确一次启动与退出回收
+mise run probe-workspace-profile-lifecycle # Linux删除/恢复：取消零写、默认墓碑、原PTY输入/刷新、双进程墓碑持久及明确恢复零启动
+mise run probe-workspace-profile-editor # Linux真实编辑：原页取消/换页零写、参数/cwd/env原生精确字节、会话外观快照与双进程重开
+mise run probe-ssh-first-pin       # Unix固定TCP/私库：实际offered key与原registry page，原页/最终换页回滚、新页批准、重开strict peer；auth0，非真实WebView/产品连接
+mise run probe-workspace-fingerprint # 显式workspace-ssh/Linux：独立OpenSSH＋真实键鼠，未知取消／刷新／明确保存／匹配重开／服务器换key阻断；auth0、非SSH会话。随后普通workspace-preview-build恢复默认工厂关闭。
+mise run probe-workspace-ssh-session # 显式workspace-ssh/Linux：合成私库密文＋实际russh peer→真实TermView、auth1、三唯一键盘echo、换页同Root、SSH尺寸入队、窗口/确认close与native drain、EOF final画面/两次刷新同Ended快照/输入持续关闭、握手挂起时取消/换页实际流退出与零会话；remote exit-status7不作本地退出证明，非远端OS/跨平台验收。fixture显式重建，不沿用基础probe的默认xtask。
+mise run probe-workspace-ssh-private-key-session # 显式 workspace-ssh/Linux：已存加密 Ed25519→真实签名／TermView，三次回显／同连接刷新／尺寸通知／EOF／取消导航与 native drain；零密码回退
+mise run probe-workspace-ssh-route # Linux保存路线双跳：每跳实际peer/身份明确批准、精确首次pin、取消零认证、终端输入/刷新/独立重开与父native退出
+mise run probe-workspace-ssh-agent # Linux后端发现两钥、明确保存一钥、取消零签名、所选Ed25519单钥终端/刷新/重开/实际退出；不计硬件或其他平台
+mise run probe-workspace-ssh-agent-route # Linux密码外层/Agent中间与叶：三类联合来源、两次所选签名、每跳实际描述与SQL pin、叶/父从内到外回收
+mise run probe-workspace-cli-ssh-route # Linux CLI原SQL快照／原epoch：初始目标批准、三peer逐跳批准、首跳取消零认证、两selected Agent签名与父native退出；已归档39份SHA证据
+mise run probe-workspace-cold-ssh # Linux密码冷窗口已验：锁定取消／解锁后独立确认／精确目标批准／一次认证／生产刷新双原文echo／端点与peer退出；冷Agent/跳板未计
+mise run probe-workspace-cold-ssh-agent # Linux软件冷Agent已验：两取消零签名／独立点击／仅第二钥匙签名一次／零密码／刷新原文与native退出；最终共同回归通过，24份SHA见cold-agent-acceptance.json
+mise run probe-workspace-cold-ssh-route # Linux冷password/Agent三peer已验：首跳取消零认证／精确逐跳批准／外password1＋中叶Agent各1／两精确pin／刷新与父连接/转发退出；33份SHA见cold-agent-route-acceptance.json，批次清理完成
+mise run probe-workspace-cold-split # Linux六模式已验：双明确确认、首步取消零PTY、次步取消/断连/换页保留首个、左右/上下双pane原文刷新同PID及native/端点退出；56份SHA见cold-split-acceptance.json
+mise run probe-workspace-cli-chain # Linux七链+六coldsplit兼容已验：整链预检、同实例各步确认、原页呈现ACK、失败保留前缀、双PTY原文刷新与退出；111份SHA见cli-chain-acceptance.json；默认1050Rust/1204前端、7忽略不计；清理20.5GiB，审计/历史关闭仍阻断
+mise run probe-workspace-saved-ssh-alias # Linux八模式功能验收：open --host精确保存入口/default身份、冷暖密码/Agent/三跳、同名/缺默认拒绝与原文刷新；305份SHA已归档，历史SIGSEGV/非零关闭仍待定位
+mise run probe-workspace-native-close # Linux累计88正常+8 GDB关闭观测、3项真实退出屏障通过，254份SHA保留前批129份；历史SIGSEGV未定位不计修复，默认各12轮，可选PULSE_COLD_CLOSE_CYCLES<=32／PULSE_COLD_CLOSE_GDB=1
+mise run probe-ssh-config # Host/Include/常见Match、7样本OpenSSH差分、Unix固定文件与显式Include集合/原实例源确认；不授予导入/身份读取/连接权限
+mise run probe-workspace-catalogue-batch # Linux真实三目录搜索/取消零写、一次CAS批量墓碑删除、Vault逻辑内容保持、刷新/进程重开及零启动
+mise run probe-ssh-config-page # 原页配置元数据/一次性源确认、旧票据/跨实例拒绝；取消后的真实阻塞I/O与退出屏障（Unix/可选SSH）
+mise run probe-workspace-ssh-config # Linux真实预览/源冲突/刷新/进程重开；专用私目录、AT-SPI可见完成状态、全库摘要不变及零会话启动
+mise run probe-ssh-config-import # 原页独立保存授权、全源重验与数据库CAS；提交前源变回滚和取消后实际SQL额度保留
+mise run probe-workspace-ssh-config-import # Linux两步保存、取消／源冲突零写入、同主机ID刷新／重开；仅主机元数据变化，零终端启动
+mise run probe-workspace-ssh-config-status # Linux可见预览源变化／保留旧绘制／原票据不消费／刷新重开；全库不变、零会话
+mise run probe-workspace-selection-copy # Linux真实Settings开关、默认关闭、同PTY刷新、鼠标选择与GTK系统剪贴板；保持原安全粘贴门
+mise run probe-workspace-hosts    # Linux私有DB：当前页主机元数据增改删／字面显示／换页及三进程重开；零Shell启动，非SSH连接验收
+mise run probe-workspace-identities # Linux私有DB：缺Vault／身份名称+用户名增改删／刷新／三进程重开；非密码认证／连接验收
+mise run probe-workspace-key-identities # Linux私库：私钥身份元数据／双引用／刷新／四进程重开／删除墓碑；零终端启动，非密钥导入或认证验收
+mise run probe-workspace-identity-password # Linux预览：已保存身份／原epoch单次ticket，锁定拒绝、密码只接收→密文保存、刷新／重开及独立进程固定字节验证；不读取密码／连接SSH
+mise run probe-workspace-vault    # Linux预览单向主密码：创建保持锁定、错误密码拒绝、前端确认解锁、锁定／刷新／私库重开；不读取秘密或连接SSH
+mise run probe-workspace-vault-revocation # Linux认证已准入后关对话框／换页：无迟到启用、Profile读取等待实际旧信用退出
+mise run probe-workspace-labels   # Linux窗口显示偏好：原生modal编辑不泄入PTY、固定标色RGB、换页当前目录校验
+mise run probe-workspace-split    # Linux两个已有PTY：左右／上下尺寸、焦点路由、换页保活／重建、关闭焦点保留peer、完整回显
+mise run probe-workspace-tabs     # Linux双Profile PTY：标签键盘切换／活动选择刷新／独立关闭／完整回显像素／退出排空
+mise run probe-workspace-eof      # Linux隔离Profile：自然EOF及结束后两次刷新，保画面/禁输入/End ACK/独立native退出码与回收
 ```
 
 `probe-local-session`另含真实PTY detach6秒后继续Running/解析Unicode marker/准确新generation重绑、旧input拒绝、EOF ACK/direct-child join；报告schema4的detached证据独立于GUI有限5秒resume策略，不当长期GUI验证。
@@ -122,6 +219,16 @@ finite terminal sink现在使用GenerationViewHost/ViewScope按后端Begin管理
 IPC 绑定提交在 `ui/src/ipc/gen/commands.ts`，禁止手改；Biome 排除此目录，tsc 仍检查它。变更命令或 DTO 后运行 `mise run bindings`。生成与实际 invoke/event 注册共用一个命令表，`bindings-check` 已接入三平台 CI；这些任务需对应平台的原生开发依赖，但无需启动显示服务。
 
 输出在 `target/probes/`，详见 [验证记录](./validation.md)。使用未激活 mise 的 shell 时，单条工具命令加 `mise exec --` 前缀。CI 同样读取此配置，不在工作流里重复声明 Rust/Node/pnpm 版本。
+
+### 验收后的构建缓存清理
+
+多轮 dev/test、不同 feature 和原生 GTK/WebView 构建会累积 `target/debug/incremental`、`deps` 与带调试信息的测试二进制。每个验收批次全部结束、日志／截图归档且构建／探针／窗口进程退出后执行：
+
+```bash
+mise run clean-dev  # cargo clean --profile dev；保留 target/probes/ 和 release 产物
+```
+
+不要无范围执行 `cargo clean`，也不要在后续探针仍需已构建二进制时逐命令清理。清理后下一批构建会重新编译，不重跑已通过的验证仅为重建缓存。磁盘不足同时检查 `df -h` 与 `df -i`；共享 `/tmp` 的 inode 耗尽与本项目磁盘容量是不同问题，不删除其他项目缓存或用户数据。
 
 **下列是目标接口，相关模块尚未实现，不应视为可执行命令：**
 
@@ -216,6 +323,10 @@ pnpm tauri build                   # 本地打包
 - 依赖升级时，关注 `cargo-deny` 和公开安全公告（advisories）中的安全问题。
 - 数据目录权限设为仅当前用户可访问（Unix 0700；Windows 只给当前用户授权）。
 - 来自远端的终端内容一律视为不可信：OSC 52 剪贴板、OSC 8 链接、窗口标题、通知类序列都按 SEC-08 / SEC-09 处理；后端不应答可能泄露信息的查询（例如窗口标题回报）。
+
+界面外观支持浅色／深色／跟随系统，草稿仅局部预览；用户级保存沿用原页快照与CAS，成功后更新当前界面，不改终端ANSI或获取主题执行权限。其他窗口显式重读或重载后采用新值。开发验证与系统查询失败的行为见[界面外观说明](../architecture/ui-appearance.md)；沿用现有设置schema／前端检查，无新增重型任务。
+
+终端配色提供经典黑底／午夜／纸白预设，在终端设置中局部预览并单字段保存；GUI和CLI下一次新建本地或SSH会话冻结后端基色，SSH覆盖三类身份与跳板叶，已有会话保持原色。经典默认与14px不变，使用现有设置CAS／I/O监督及schema／前端／原生CI入口，单个真实SSH探针核验首条OSC及导航恢复，不新增重型任务。产品实窗配色仍待；见[配色预设说明](../architecture/terminal-color-presets.md)。
 
 ## 10. 开源协作
 

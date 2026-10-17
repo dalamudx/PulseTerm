@@ -23,6 +23,12 @@ pub use shell::{SessionReceipt, SessionShellMarkers};
 #[path = "bootstrap_tests.rs"]
 mod bootstrap_tests;
 #[cfg(test)]
+#[path = "session_final_history_tests.rs"]
+mod final_history_tests;
+#[cfg(test)]
+#[path = "session_final_tests.rs"]
+mod final_tests;
+#[cfg(test)]
 #[path = "session_input_tests.rs"]
 mod input_tests;
 #[cfg(test)]
@@ -59,10 +65,13 @@ pub const MAX_HISTORY_BYTES: usize = 4 * 1024 * 1024;
 
 /// Diagnostic transaction captured atomically; transport generation belongs to
 /// the driver, not this terminal state. Not a production subscribe/attach lease.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SessionBootstrap {
     /// Exact actor serialization boundary for both history and screen.
     pub boundary: SessionState,
+    /// Base colors from this SAME capture, applied before history and screen replay.
+    /// Does not include remote overrides, labels, or application authorization.
+    pub palette: crate::QueryPalette,
     /// Visible checksum computed on this SAME actor turn, not the latest state.
     /// Diagnostic confirmation only; does not clear divergence hints.
     pub digest: String,
@@ -78,6 +87,8 @@ pub struct SessionBootstrap {
 pub struct SessionRestore {
     /// State at the command serialization point, including parsed output bytes.
     pub boundary: SessionState,
+    /// Base colors from this SAME capture, applied before replay.
+    pub palette: crate::QueryPalette,
     /// All-or-nothing VT replay; no known approximation admitted by this API.
     pub bytes: Vec<u8>,
 }
@@ -172,9 +183,25 @@ pub enum ScreenVerification {
     /// Current visible projection matches; clears diagnostic risk only.
     Equal,
 }
+/// Backend completion contract, not page authority or remote kernel proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResizeBasis {
+    /// Actual local PTY resize completed successfully.
+    LocalNativeConfirmed,
+    /// SSH window-change admitted to the SDK channel, not remote confirmation.
+    SshWindowRequestAdmitted,
+}
+/// Produced only after the actor commits its authoritative display grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResizeReceipt {
+    /// Authoritative actor grid after successful layout application.
+    pub size: TermSize,
+    /// None: unchanged geometry, no new transport request.
+    pub basis: Option<ResizeBasis>,
+}
 struct PendingResize {
     size: TermSize,
-    reply: oneshot::Sender<Result<(), SessionError>>,
+    reply: oneshot::Sender<Result<ResizeReceipt, SessionError>>,
     native: oneshot::Receiver<Result<(), SessionError>>,
     deadline: tokio::time::Instant,
 }
@@ -204,6 +231,15 @@ struct InstalledStream {
     committed: oneshot::Receiver<()>,
 }
 enum Command {
+    HistorySearch {
+        request: crate::HistorySearchRequest,
+        reply: oneshot::Sender<Result<crate::HistorySearch, crate::HistoryPageError>>,
+    },
+    HistoryPage {
+        before: Option<usize>,
+        revision: Option<u64>,
+        reply: oneshot::Sender<Result<crate::HistoryPage, crate::HistoryPageError>>,
+    },
     Repair {
         request: SessionRepairRequest,
         reply: oneshot::Sender<Result<RepairAdmission, SessionRestoreError>>,
@@ -227,12 +263,15 @@ enum Command {
         bytes: Vec<u8>,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
-    Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
+    Resize(
+        TermSize,
+        oneshot::Sender<Result<ResizeReceipt, SessionError>>,
+    ),
     BoundResize {
         lease_id: u64,
         cancelled: watch::Receiver<bool>,
         size: TermSize,
-        reply: oneshot::Sender<Result<(), SessionError>>,
+        reply: oneshot::Sender<Result<ResizeReceipt, SessionError>>,
     },
     Palette(
         crate::QueryPalette,
@@ -263,7 +302,7 @@ pub enum TransportWrite {
     Input(Vec<u8>),
     /// Authoritative backend protocol reply.
     Reply(Vec<u8>),
-    /// Native resize acknowledged before terminal dimensions advance.
+    /// Driver completion obeys backend ResizeBasis, never a remote kernel ACK.
     Resize(TermSize, oneshot::Sender<Result<(), SessionError>>),
 }
 
@@ -275,6 +314,7 @@ pub struct ChannelTransport {
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
     failed: Option<watch::Receiver<bool>>,
+    resize_basis: ResizeBasis,
 }
 /// Test observations are bounded metadata, not a recording of terminal content.
 #[cfg(test)]
@@ -350,6 +390,7 @@ impl EchoTransport {
                 stop,
                 task: Some(task),
                 failed: None,
+                resize_basis: ResizeBasis::LocalNativeConfirmed,
             },
             observation,
         )
@@ -368,6 +409,14 @@ pub struct DriverEndpoint {
     pub failed: watch::Sender<bool>,
 }
 impl ChannelTransport {
+    /// Trusted backend adapter selects the completion contract before actor creation.
+    /// Must fulfill this basis before acknowledging TransportWrite::Resize.
+    /// This is not a page, input, connection or target permission.
+    pub fn bounded_driver_with_resize_basis(basis: ResizeBasis) -> (Self, DriverEndpoint) {
+        let (mut endpoint, driver) = Self::bounded_driver();
+        endpoint.resize_basis = basis;
+        (endpoint, driver)
+    }
     /// Fixed-capacity endpoints, without starting native I/O tasks.
     pub fn bounded_driver() -> (Self, DriverEndpoint) {
         let (output, receiver) = mpsc::channel(QUEUE);
@@ -381,6 +430,7 @@ impl ChannelTransport {
                 stop,
                 task: None,
                 failed: Some(failure),
+                resize_basis: ResizeBasis::LocalNativeConfirmed,
             },
             DriverEndpoint {
                 output,
@@ -406,6 +456,12 @@ impl Drop for ChannelTransport {
 pub struct SessionHandle {
     commands: mpsc::Sender<Command>,
     cancel: watch::Sender<bool>,
+    // One immutable exact EOF capture, <=4MiB recent history + <=1MiB screen.
+    final_bootstrap:
+        std::sync::Arc<std::sync::OnceLock<Result<SessionBootstrap, SessionRestoreError>>>,
+    final_history: std::sync::Arc<
+        std::sync::OnceLock<Result<crate::primary_text::FinalHistory, crate::HistoryPageError>>,
+    >,
     /// Coarse state subscription. Cloning this receiver is not an ownership lease.
     pub state: watch::Receiver<SessionState>,
 }
@@ -425,6 +481,16 @@ impl SessionHandle {
         history_budget: usize,
         restore_budget: usize,
     ) -> Result<SessionStream, SessionRestoreError> {
+        if let Some(finalized) = self.final_bootstrap.get() {
+            let capture = finalized.as_ref().map_err(Clone::clone)?;
+            if capture.history.retained_rows > rows.min(crate::MAX_RECENT_ROWS)
+                || capture.history.bytes.len() > history_budget.min(MAX_HISTORY_BYTES)
+                || capture.restore.len() > restore_budget.min(MAX_RESTORE_BYTES)
+            {
+                return Err(SessionRestoreError::Gap(crate::RestoreGap::OutputTooLarge));
+            }
+            return Ok(stream::completed(capture.clone()));
+        }
         let (reply, result) = oneshot::channel();
         self.enqueue(Command::Subscribe {
             history_rows: rows.min(crate::MAX_RECENT_ROWS),
@@ -441,6 +507,76 @@ impl SessionHandle {
     }
 }
 impl SessionHandle {
+    /// Search retained text through the same bounded read queue; never changes input authority.
+    pub async fn history_search(
+        &self,
+        request: crate::HistorySearchRequest,
+    ) -> Result<crate::HistorySearch, crate::HistoryPageError> {
+        let frozen = || {
+            self.final_history
+                .get()
+                .map(|result| result.as_ref().map_err(|error| *error)?.search(&request))
+        };
+        if let Some(result) = frozen() {
+            return result;
+        }
+        let result = async {
+            let (reply, result) = oneshot::channel();
+            self.enqueue(Command::HistorySearch {
+                request: request.clone(),
+                reply,
+            })?;
+            result
+                .await
+                .map_err(|_| crate::HistoryPageError::Unavailable)?
+        }
+        .await;
+        // EOF can finish between the initial snapshot check and command admission.
+        // Read the published immutable source; never enqueue another operation.
+        if matches!(result, Err(crate::HistoryPageError::Unavailable))
+            && let Some(result) = frozen()
+        {
+            return result;
+        }
+        result
+    }
+    /// Read a bounded page from the live actor or its immutable natural-EOF text.
+    /// Revisions prevent mixing pages across output, resize or the EOF boundary.
+    pub async fn history_page(
+        &self,
+        before: Option<usize>,
+        revision: Option<u64>,
+    ) -> Result<crate::HistoryPage, crate::HistoryPageError> {
+        let frozen = || {
+            self.final_history.get().map(|result| {
+                result
+                    .as_ref()
+                    .map_err(|error| *error)?
+                    .page(before, revision)
+            })
+        };
+        if let Some(result) = frozen() {
+            return result;
+        }
+        let result = async {
+            let (reply, result) = oneshot::channel();
+            self.enqueue(Command::HistoryPage {
+                before,
+                revision,
+                reply,
+            })?;
+            result
+                .await
+                .map_err(|_| crate::HistoryPageError::Unavailable)?
+        }
+        .await;
+        if matches!(result, Err(crate::HistoryPageError::Unavailable))
+            && let Some(result) = frozen()
+        {
+            return result;
+        }
+        result
+    }
     /// Compare and capture a precise screen repair on one actor turn, never clearing risk.
     pub async fn diagnostic_repair(
         &self,
@@ -492,15 +628,24 @@ impl SessionHandle {
         result.await.map_err(|_| SessionError::Closed)?
     }
 
-    /// Viewer geometry is authorized against its lease on the actor turn.
-    /// Native ACK, not frontend optimistic resize, commits dimensions and revokes
-    /// the lease. Cancellation after native admission cannot undo a physical resize.
+    /// Compatibility API; driver completion commits layout and revokes the old lease.
     pub async fn resize_for_lease(
         &self,
         lease_id: u64,
         cancelled: watch::Receiver<bool>,
         size: TermSize,
     ) -> Result<(), SessionError> {
+        self.resize_for_lease_with_receipt(lease_id, cancelled, size)
+            .await
+            .map(|_| ())
+    }
+    /// Original actor lease authorizes layout independently of input; no remote ACK implied.
+    pub async fn resize_for_lease_with_receipt(
+        &self,
+        lease_id: u64,
+        cancelled: watch::Receiver<bool>,
+        size: TermSize,
+    ) -> Result<ResizeReceipt, SessionError> {
         let (reply, result) = oneshot::channel();
         self.enqueue(Command::BoundResize {
             lease_id,
@@ -511,9 +656,12 @@ impl SessionHandle {
         result.await.map_err(|_| SessionError::Closed)?
     }
 
-    /// Request native resize; parser dimensions advance only after driver ACK.
-    /// An unacknowledged resize fails and closes the session after five seconds.
+    /// Compatibility API without transport-specific success metadata.
     pub async fn resize(&self, size: TermSize) -> Result<(), SessionError> {
+        self.resize_with_receipt(size).await.map(|_| ())
+    }
+    /// Grid advances after configured driver completion; original five-second cutoff retained.
+    pub async fn resize_with_receipt(&self, size: TermSize) -> Result<ResizeReceipt, SessionError> {
         let (reply, result) = oneshot::channel();
         self.enqueue(Command::Resize(size, reply))?;
         result.await.map_err(|_| SessionError::Closed)?
@@ -634,6 +782,10 @@ impl SessionTask {
         self.0.await
     }
 }
+#[cfg(test)]
+#[path = "session_initial_palette_tests.rs"]
+mod initial_palette_tests;
+
 /// Spawn one owner of parser/grid state. No shared Mutex<Term>, no GUI references.
 /// Uses the existing probe parser, so snapshot/OSC/color limitations still apply.
 pub fn spawn_session(
@@ -641,8 +793,51 @@ pub fn spawn_session(
     history: usize,
     transport: ChannelTransport,
 ) -> (SessionHandle, SessionTask) {
-    spawn_inner(size, history, transport, encoding::Mode::Utf8)
+    spawn_inner(
+        size,
+        history,
+        transport,
+        encoding::Mode::Utf8,
+        crate::QueryPalette::default(),
+        crate::cold_history::MAX_ROWS,
+    )
 }
+/// Start with the immutable base selected by the trusted native launcher.
+/// Palette is installed before any output or OSC request is parsed.
+pub fn spawn_session_with_palette(
+    size: TermSize,
+    history: usize,
+    transport: ChannelTransport,
+    palette: crate::QueryPalette,
+) -> (SessionHandle, SessionTask) {
+    spawn_inner(
+        size,
+        history,
+        transport,
+        encoding::Mode::Utf8,
+        palette,
+        crate::cold_history::MAX_ROWS,
+    )
+}
+
+/// Start with a native-frozen retention limit and base colors.
+pub fn spawn_session_with_history_limit(
+    size: TermSize,
+    history: usize,
+    transport: ChannelTransport,
+    palette: crate::QueryPalette,
+    limit: usize,
+) -> (SessionHandle, SessionTask) {
+    spawn_inner(
+        size,
+        history,
+        transport,
+        encoding::Mode::Utf8,
+        palette,
+        limit,
+    )
+}
+
 /// Validation-only already-classified GBK text. No production binary classifier.
 #[cfg(feature = "validation")]
 pub fn spawn_gbk_text_session(
@@ -650,13 +845,22 @@ pub fn spawn_gbk_text_session(
     history: usize,
     transport: ChannelTransport,
 ) -> (SessionHandle, SessionTask) {
-    spawn_inner(size, history, transport, encoding::Mode::Gbk)
+    spawn_inner(
+        size,
+        history,
+        transport,
+        encoding::Mode::Gbk,
+        crate::QueryPalette::default(),
+        crate::cold_history::MAX_ROWS,
+    )
 }
 fn spawn_inner(
     size: TermSize,
     history: usize,
     mut transport: ChannelTransport,
     mode: encoding::Mode,
+    palette: crate::QueryPalette,
+    history_limit: usize,
 ) -> (SessionHandle, SessionTask) {
     let (commands, mut receiver) = mpsc::channel(QUEUE);
     let (cancel, mut cancelled) = watch::channel(false);
@@ -669,13 +873,18 @@ fn spawn_inner(
         revision: 0,
     };
     let (state, subscription) = watch::channel(initial.clone());
+    let final_bootstrap = std::sync::Arc::new(std::sync::OnceLock::new());
+    let final_history = std::sync::Arc::new(std::sync::OnceLock::new());
     let handle = SessionHandle {
         commands,
         cancel,
         state: subscription,
+        final_bootstrap: final_bootstrap.clone(),
+        final_history: final_history.clone(),
     };
     let task = tokio::spawn(async move {
-        let mut terminal = TerminalProbe::new(size, history);
+        let mut terminal = TerminalProbe::with_history_limit(size, history, history_limit);
+        terminal.set_query_palette(palette);
         let mut decoder = encoding::Decoder::new(mode);
         let mut current = initial;
         let mut replies = VecDeque::<Vec<u8>>::new();
@@ -707,7 +916,7 @@ fn spawn_inner(
                   if failure.is_err(){transport.failed=None;}
                 }
                 native=async {match &mut resizing{Some(pending)=>(&mut pending.native).await, None=>std::future::pending().await}}=>{
-                    if let Some(PendingResize{size,reply,..})=resizing.take(){let result=native.unwrap_or(Err(SessionError::Transport));if result.is_ok(){terminal.resize(size);current.size=size;current.revision+=1;state.send_replace(current.clone());stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Reconfigured,&current);}let _=reply.send(result);}
+                    if let Some(PendingResize{size,reply,..})=resizing.take(){let result=native.unwrap_or(Err(SessionError::Transport));if result.is_ok(){terminal.resize(size);current.size=size;current.revision+=1;state.send_replace(current.clone());stream::invalidate(&mut lease,&mut stream_permit,StreamEnd::Reconfigured,&current);}let _=reply.send(result.map(|()|ResizeReceipt{size,basis:Some(transport.resize_basis)}));}
                 }
                 _=async {match resize_deadline{Some(deadline)=>tokio::time::sleep_until(deadline).await,None=>std::future::pending().await}}=>{
                     if let Some(pending)=resizing.take(){let _=pending.reply.send(Err(SessionError::Transport));}
@@ -784,7 +993,7 @@ fn spawn_inner(
                         if reply.is_closed()||*cancelled.borrow()||cancelled.has_changed().is_err()||lease.as_ref().is_none_or(|l|l.id!=lease_id||l.output.is_closed()){
                             let _=reply.send(Err(SessionError::StaleLease));
                         }else if resizing.is_some(){let _=reply.send(Err(SessionError::Busy));}
-                        else if size==current.size{let _=reply.send(Ok(()));}
+                        else if size==current.size{let _=reply.send(Ok(ResizeReceipt{size,basis:None}));}
                         else{let(sent,native)=oneshot::channel();match transport.input.try_send(TransportWrite::Resize(size,sent)){
                             Ok(())=>resizing=Some(PendingResize{size,reply,native,deadline:tokio::time::Instant::now()+std::time::Duration::from_secs(5)}),
                             Err(mpsc::error::TrySendError::Full(_))=>{let _=reply.send(Err(SessionError::Busy));},
@@ -816,7 +1025,7 @@ fn spawn_inner(
                                 .map_err(SessionRestoreError::Gap)
                                 .and_then(|restore| {
                                     if !restore.approximations.is_empty() { return Err(SessionRestoreError::Approximate(restore.approximations)); }
-                                    Ok(SessionRestore { boundary: current.clone(), bytes: restore.bytes })
+                                    Ok(SessionRestore { boundary: current.clone(), palette: restore.palette, bytes: restore.bytes })
                                 });
                             let _ = reply.send(result);
                         }
@@ -840,6 +1049,21 @@ fn spawn_inner(
                                     }
                                 }
                             }
+                        }
+                    }
+                    Some(Command::HistorySearch { request, reply }) => {
+                        if !reply.is_closed() {
+                            let _ = reply.send(terminal.history_search(&request, current.revision));
+                        }
+                    }
+                    Some(Command::HistoryPage { before, revision, reply }) => {
+                        if !reply.is_closed() {
+                            let result = if revision.is_some_and(|value| value != current.revision) {
+                                Err(crate::HistoryPageError::Stale)
+                            } else {
+                                terminal.history_page(before, current.revision)
+                            };
+                            let _ = reply.send(result);
                         }
                     }
                     Some(Command::Bootstrap { history_rows, history_budget, restore_budget, reply }) => {
@@ -923,6 +1147,20 @@ fn spawn_inner(
             let _ = task.await;
         }
         current.revision += 1;
+        if current.lifecycle == Lifecycle::Ended {
+            let capture = stream::prepare(
+                &terminal,
+                &current,
+                crate::MAX_RECENT_ROWS,
+                MAX_HISTORY_BYTES,
+                MAX_RESTORE_BYTES,
+            );
+            let _ = final_bootstrap.set(capture);
+            let _ = final_history.set(crate::primary_text::FinalHistory::take(
+                &mut terminal,
+                current.revision,
+            ));
+        }
         state.send_replace(current.clone());
         stream::invalidate(
             &mut lease,
@@ -957,6 +1195,10 @@ fn queue_replies(
     }
     true
 }
+
+#[cfg(test)]
+#[path = "session_resize_basis_tests.rs"]
+mod resize_basis_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -1232,6 +1474,7 @@ mod tests {
                 stop,
                 task: Some(task),
                 failed: None,
+                resize_basis: ResizeBasis::LocalNativeConfirmed,
             },
             output,
         )

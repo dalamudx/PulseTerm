@@ -137,11 +137,46 @@ impl PageTracker {
         require(accepted)
     }
 
+    // Only the fixed login-validation adapter uses this: keep navigation blocked while
+    // a current, already authenticated page generation is activated in the registry.
+    // The caller must still verify native WindowToken and local origin before entering.
+    #[cfg(feature = "login-probe")]
+    pub(super) fn with_ready_page<T>(
+        &self,
+        value: &str,
+        action: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        require(parsed.to_string() == value)?;
+        let n = self.nonce.lock().map_err(error)?;
+        require(n.current == Some(parsed) && self.snapshot().readonly_ready())?;
+        action()
+    }
+
     pub(super) fn authorize_view(&self, value: &str) -> Result<()> {
         let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
         require(parsed.to_string() == value)?;
         let n = self.nonce.lock().map_err(error)?;
         require(n.current == Some(parsed) && self.snapshot().readonly_ready())
+    }
+    /// Short synchronous metadata callback; navigation cannot change the nonce mid-check.
+    /// No IO/await or callback into this tracker. Lock order: active → nonce → delivery → registry.
+    pub(super) fn with_theme_page<T>(
+        &self,
+        value: &str,
+        action: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
+        let nonce = self.nonce.lock().map_err(error)?;
+        let p = self.snapshot();
+        require(
+            parsed.to_string() == value
+                && nonce.current == Some(parsed)
+                && p.readonly_ready()
+                && p.captured
+                && p.rendered,
+        )?;
+        action()
     }
     pub(super) fn claim_view(&self, value: &str) -> Result<bool> {
         let parsed = uuid::Uuid::parse_str(value).map_err(error)?;
@@ -446,6 +481,10 @@ fn require(value: bool) -> Result<()> {
         Err("session.peer_reload_invalid".into())
     }
 }
+#[cfg(feature = "settings-probe")]
+pub(super) type SettingsReceipt = settings_probe::Fixture;
+#[cfg(not(feature = "settings-probe"))]
+pub(super) struct SettingsReceipt;
 pub(super) async fn verify(
     state: &WindowSessions,
     window: &WebviewWindow,
@@ -453,7 +492,7 @@ pub(super) async fn verify(
     id: SessionId,
     handle: &SessionHandle,
     pages: &PageTracker,
-) -> Result<()> {
+) -> Result<SettingsReceipt> {
     require(pages.snapshot().ready(1) && state.caller(window)? == owner)?;
     let run_nonce = {
         let active = state.0.active.lock().map_err(error)?;
@@ -486,6 +525,8 @@ pub(super) async fn verify(
     // Initial and reloaded page compare the same actor. Keep the existing quota.
     tokio::time::sleep(Duration::from_millis(500)).await;
     let old_generation = transfer_view::live_generation(state, owner, id)?;
+    #[cfg(feature = "settings-probe")]
+    let settings = settings_probe::prepare(state, window, id, old_generation, pages).await?;
     // First hidden output was parsed before Begin reached the DOM. It now
     // needs to arrive as ordered Data and ACK after the captured Commit.
     require(pages.snapshot().bootstrap_advanced)?;
@@ -633,6 +674,10 @@ pub(super) async fn verify(
     require(pages.confirm_nonce(&old_nonce).is_err() && pages.injection()?.0 != old_nonce)?;
     let refreshed_generation = transfer_view::live_generation(state, owner, id)?;
     require(refreshed_generation > old_generation)?;
+    #[cfg(feature = "settings-probe")]
+    let settings = settings
+        .refreshed(state, window, id, refreshed_generation, pages)
+        .await?;
     let seed_count = handle
         .inspect()
         .await
@@ -724,7 +769,10 @@ pub(super) async fn verify(
         Err(pulse_app::attachment::AttachmentError::Detached)
     ))?;
     eprintln!("session.peer_reload.recaptured");
-    Ok(())
+    #[cfg(feature = "settings-probe")]
+    return Ok(settings);
+    #[cfg(not(feature = "settings-probe"))]
+    Ok(SettingsReceipt)
 }
 #[cfg(test)]
 mod tests {
@@ -1099,5 +1147,43 @@ mod tests {
             assert!(p.snapshot().invalid);
             assert!(p.snapshot().finished < 2);
         }
+    }
+
+    #[cfg(feature = "login-probe")]
+    #[test]
+    fn confirmed_page_action_holds_navigation_lock_and_old_scope_cannot_revoke_successor()
+    -> Result<()> {
+        use pulse_app::registry::{RegistryError, SessionRegistry};
+        let registry = SessionRegistry::new();
+        let owner = registry.open_window().map_err(error)?;
+        let p = PageTracker::new();
+        p.record(PageLoadEvent::Started);
+        p.record(PageLoadEvent::Finished);
+        let old_nonce = p.injection()?.0;
+        assert!(p.with_ready_page(&old_nonce, || Ok(())).is_err());
+        p.confirm_nonce(&old_nonce)?;
+        let old = p.with_ready_page(&old_nonce, || {
+            assert!(p.nonce.try_lock().is_err());
+            registry.activate_launch_page(owner).map_err(error)
+        })?;
+        let ticket = registry.begin_page_local_launch(&old).map_err(error)?;
+        p.record(PageLoadEvent::Started);
+        registry.retire_window_views(owner).map_err(error)?;
+        assert!(matches!(
+            registry.begin_page_local_launch(&old),
+            Err(RegistryError::Forbidden)
+        ));
+        drop(ticket);
+        p.record(PageLoadEvent::Finished);
+        let fresh = p.injection()?.0;
+        assert!(p.with_ready_page(&old_nonce, || Ok(())).is_err());
+        assert!(p.confirm_nonce(&old_nonce).is_err());
+        p.confirm_nonce(&fresh)?;
+        let current = p.with_ready_page(&fresh, || {
+            registry.activate_launch_page(owner).map_err(error)
+        })?;
+        drop(old);
+        drop(registry.begin_page_local_launch(&current).map_err(error)?);
+        Ok(())
     }
 }

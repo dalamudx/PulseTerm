@@ -5,18 +5,30 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+cli-control = ["dep:interprocess", "dep:zeroize", "dep:rustix", "dep:tokio-util", "tokio/io-util"]
+ssh-use = ["pulse-store/ssh-trust"]
+
 [dependencies]
+interprocess = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
+rustix = { workspace = true, optional = true, features = ["fs"] }
+tokio-util = { workspace = true, optional = true }
 pulse-store.workspace = true
 pulse-core.workspace = true
+pulse-cap.workspace = true
+serde_json.workspace = true
 pulse-ipc.workspace = true
 pulse-pty.workspace = true
 pulse-term.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-uuid.workspace = true
+serde.workspace = true
+schemars.workspace = true
 
 [lints]
 workspace = true

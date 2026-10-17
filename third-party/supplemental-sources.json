@@ -1,0 +1,1191 @@
+{
+  "bindings": {
+    "cargo:libappindicator-sys@0.9.0": {
+      "kind": "cargo-workspace-parent",
+      "parent": "cargo:libappindicator@0.9.0",
+      "archiveSha256": "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf",
+      "vcs": {
+        "git": {
+          "sha1": "eafd1e3682a1247f595410266091e9684021cb6f"
+        },
+        "path_in_vcs": "sys"
+      },
+      "vcsSha256": "2eb6d78db3efbbb1c498618238bad1377e08f43f12e9ba7e1fb128a8aedfe2c5"
+    },
+    "cargo:selectors@0.38.0": {
+      "kind": "cargo-license-reference",
+      "coverage": "full-text",
+      "archiveSha256": "8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d",
+      "proof": {
+        "path": "lib.rs",
+        "sha256": "d54c6e13e9e952dac17d209171df8657e3cae93beaddace4906150cdec8d02e9",
+        "base64": "LyogVGhpcyBTb3VyY2UgQ29kZSBGb3JtIGlzIHN1YmplY3QgdG8gdGhlIHRlcm1zIG9mIHRoZSBNb3ppbGxhIFB1YmxpYwogKiBMaWNlbnNlLCB2LiAyLjAuIElmIGEgY29weSBvZiB0aGUgTVBMIHdhcyBub3QgZGlzdHJpYnV0ZWQgd2l0aCB0aGlzCiAqIGZpbGUsIFlvdSBjYW4gb2J0YWluIG9uZSBhdCBodHRwczovL21vemlsbGEub3JnL01QTC8yLjAvLiAqLwoKLy8gTWFrZSB8Y2FyZ28gYmVuY2h8IHdvcmsuCiMhW2NmZ19hdHRyKGZlYXR1cmUgPSAiYmVuY2giLCBmZWF0dXJlKHRlc3QpKV0KCnB1YiBtb2QgYXR0cjsKcHViIG1vZCBibG9vbTsKbW9kIGJ1aWxkZXI7CnB1YiBtb2QgY29udGV4dDsKcHViIG1vZCBrbGVlbmVfdmFsdWU7CnB1YiBtb2QgbWF0Y2hpbmc7Cm1vZCBudGhfaW5kZXhfY2FjaGU7CnB1YiBtb2QgcGFyc2VyOwpwdWIgbW9kIHJlbGF0aXZlX3NlbGVjdG9yOwpwdWIgbW9kIHNpbms7Cm1vZCB0cmVlOwpwdWIgbW9kIHZpc2l0b3I7CgpwdWIgdXNlIGNyYXRlOjpudGhfaW5kZXhfY2FjaGU6Ok50aEluZGV4Q2FjaGU7CnB1YiB1c2UgY3JhdGU6OnBhcnNlcjo6e1BhcnNlciwgU2VsZWN0b3JJbXBsLCBTZWxlY3Rvckxpc3R9OwpwdWIgdXNlIGNyYXRlOjp0cmVlOjp7RWxlbWVudCwgT3BhcXVlRWxlbWVudH07Cg=="
+      },
+      "text": {
+        "path": "MPL-2.0.txt",
+        "url": "https://www.mozilla.org/media/MPL/2.0/index.txt",
+        "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+      }
+    },
+    "cargo:Inflector@0.11.4": {
+      "archiveSha256": "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/whatisinternet/inflector",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "03d1bd5bfbee8d44651e7f57faf9e5b4eda4233f0d4eda36a716f2f0533d230b",
+          "url": "https://raw.githubusercontent.com/whatisinternet/inflector/a4a95eac75043f4bffb127c7c8ec886b5b106053/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "a4a95eac75043f4bffb127c7c8ec886b5b106053"
+        }
+      },
+      "vcsSha256": "882e6524f5b956dd8a55b2f09c07b0128139240d7a2290bfca5e09e6b33eab21"
+    },
+    "cargo:alloc-stdlib@0.3.0": {
+      "archiveSha256": "0b5c1865780388bfa186411ab5f247819487fc4864c6e9c3106611fa347586e1",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/dropbox/rust-alloc-no-stdlib",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae",
+          "url": "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "0a81fd6928ea3b33c8cd484aa4575d50ffb98012"
+        },
+        "path_in_vcs": "alloc-stdlib"
+      },
+      "vcsSha256": "2bfc044805e0e75273a7e4d06c9d72f4e029a6cb926e4645c382bde160ecfd95"
+    },
+    "cargo:block2@0.6.2": {
+      "archiveSha256": "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "b4167b582b2f75f9a1be75495c41b765344fd03c"
+        },
+        "path_in_vcs": "crates/block2"
+      },
+      "vcsSha256": "5b87885cad87999d141e83cc8af4b073192f584b2b92cea77e2d87636621a264"
+    },
+    "cargo:defmt-parser@1.0.0": {
+      "archiveSha256": "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/knurling-rs/defmt",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "url": "https://raw.githubusercontent.com/knurling-rs/defmt/4a8cdb44891ed57b8ff5a023b6bec7137c48708f/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "2710a622a896bba67356913d4d0492cab5465f61b2ecce6d880aeb483834fb50",
+          "url": "https://raw.githubusercontent.com/knurling-rs/defmt/4a8cdb44891ed57b8ff5a023b6bec7137c48708f/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "4a8cdb44891ed57b8ff5a023b6bec7137c48708f"
+        },
+        "path_in_vcs": "parser"
+      },
+      "vcsSha256": "7ab8f01085721143c43db5db2528806f393df2058d03c5b8da20634e14886a05"
+    },
+    "cargo:delegate@0.13.5": {
+      "archiveSha256": "780eb241654bf097afb00fc5f054a09b687dad862e485fdcf8399bb056565370",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/kobzol/rust-delegate",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+          "url": "https://raw.githubusercontent.com/kobzol/rust-delegate/b129d4cbf4cc499eff7743365dcb0fe5d8d2e820/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "be7ee8aa49dc586023669a0c600a0536fce6a9f61264a53a67cdd842564ed899",
+          "url": "https://raw.githubusercontent.com/kobzol/rust-delegate/b129d4cbf4cc499eff7743365dcb0fe5d8d2e820/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "b129d4cbf4cc499eff7743365dcb0fe5d8d2e820"
+        },
+        "path_in_vcs": ""
+      },
+      "vcsSha256": "b3600d1ea4f6b24905e1c720c2dcee3af059ed2af45ed1e2a836124bb0bd3db2"
+    },
+    "cargo:dispatch2@0.3.1": {
+      "archiveSha256": "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a"
+        },
+        "path_in_vcs": "crates/dispatch2"
+      },
+      "vcsSha256": "26f5e6d699ba3ce13b8eea253ad7a7f7feb9345e9da3c01bb9b9bd911a6a7dba"
+    },
+    "cargo:dlopen2@0.8.2": {
+      "archiveSha256": "5e2c5bd4158e66d1e215c49b837e11d62f3267b30c92f1d171c4d3105e3dc4d4",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/OpenByteDev/dlopen2",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
+          "url": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "cc80e4a0a90d499b677fdf7743699b4b3a43a989"
+        },
+        "path_in_vcs": "dlopen2"
+      },
+      "vcsSha256": "ed795da0aa7789a000ca4c8708d047c26148b3938d44897c45c9acce4d3ae015"
+    },
+    "cargo:dlopen2_derive@0.4.3": {
+      "archiveSha256": "0fbbb781877580993a8707ec48672673ec7b81eeba04cfd2310bd28c08e47c8f",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/OpenByteDev/dlopen2",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
+          "url": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "cc80e4a0a90d499b677fdf7743699b4b3a43a989"
+        },
+        "path_in_vcs": "dlopen2-derive"
+      },
+      "vcsSha256": "90a5b706d2f492723b4c81afa07cea75eda9a4e4c7fc98c368931f539bf5b439"
+    },
+    "cargo:jni-sys-macros@0.4.1": {
+      "archiveSha256": "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/jni-rs/jni-sys",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+          "url": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "1d85bd754b04ceec93e98e890edd1fa3c6a22e81bcb32135806beeccefa51cd1",
+          "url": "https://raw.githubusercontent.com/jni-rs/jni-sys/64d77b7a5f119d7b55b4e2c169a4668067ff59e6/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "64d77b7a5f119d7b55b4e2c169a4668067ff59e6"
+        },
+        "path_in_vcs": "jni-sys-macros"
+      },
+      "vcsSha256": "1824b83bc25a1e245bcb97a6503105bfe07078a47cddc924c6b7db91e8852f45"
+    },
+    "cargo:ndk-context@0.1.1": {
+      "archiveSha256": "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/rust-windowing/android-ndk-rs",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "url": "https://raw.githubusercontent.com/rust-windowing/android-ndk-rs/10f2ba388fca20f7349996ebae26ccda7a6fda5c/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1",
+          "url": "https://raw.githubusercontent.com/rust-windowing/android-ndk-rs/10f2ba388fca20f7349996ebae26ccda7a6fda5c/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "10f2ba388fca20f7349996ebae26ccda7a6fda5c"
+        },
+        "path_in_vcs": "ndk-context"
+      },
+      "vcsSha256": "63e46f6a74bfd27b6634c1ebffab676492f589a2bc12010a2ef50a0f11660844"
+    },
+    "cargo:ndk-sys@0.6.0+11769913": {
+      "archiveSha256": "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/rust-mobile/ndk",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "url": "https://raw.githubusercontent.com/rust-mobile/ndk/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1",
+          "url": "https://raw.githubusercontent.com/rust-mobile/ndk/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25"
+        },
+        "path_in_vcs": "ndk-sys"
+      },
+      "vcsSha256": "04855a5c956a06190b9aae90fe172c8857d1afbf8fd676acc4c555161537b06e"
+    },
+    "cargo:ndk@0.9.0": {
+      "archiveSha256": "c3f42e7bbe13d351b6bead8286a43aac9534b82bd3cc43e47037f012ebfd62d4",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/rust-mobile/ndk",
+      "texts": [
+        {
+          "path": "LICENSE-APACHE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "url": "https://raw.githubusercontent.com/rust-mobile/ndk/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-APACHE"
+        },
+        {
+          "path": "LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1",
+          "url": "https://raw.githubusercontent.com/rust-mobile/ndk/49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25/LICENSE-MIT"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "49bbbba16c58ff63cb8a0ad0eca5a9fb7ecaec25"
+        },
+        "path_in_vcs": "ndk"
+      },
+      "vcsSha256": "77723ef695dbacca767bc080c017fe1c4ee651bb0bbd94512e0de3597558a536"
+    },
+    "cargo:objc2-app-kit@0.3.2": {
+      "archiveSha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-app-kit"
+      },
+      "vcsSha256": "07762c2a438c287ac124300928c9da0f96cefc1932ff8cadac13716fd1e195eb"
+    },
+    "cargo:objc2-cloud-kit@0.3.2": {
+      "archiveSha256": "73ad74d880bb43877038da939b7427bba67e9dd42004a18b809ba7d87cee241c",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-cloud-kit"
+      },
+      "vcsSha256": "62f199c0f8876bdc6d78976603201d3684c925632b1fe158f2d6816b28baf121"
+    },
+    "cargo:objc2-core-data@0.3.2": {
+      "archiveSha256": "0b402a653efbb5e82ce4df10683b6b28027616a2715e90009947d50b8dd298fa",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-data"
+      },
+      "vcsSha256": "7f8e9d957f5352b458a53d6e594c3f0f9033433224c6fb77823a6f0f421ef9e8"
+    },
+    "cargo:objc2-core-foundation@0.3.2": {
+      "archiveSha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-foundation"
+      },
+      "vcsSha256": "1c1a87985a2bd25015f5e2413f4041379bea0172b2fce88dae3e6482b50aab26"
+    },
+    "cargo:objc2-core-graphics@0.3.2": {
+      "archiveSha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-graphics"
+      },
+      "vcsSha256": "264ea4e6453d508410c33c7e5c05ef71f067cac56efc06603862b36d1fe5dfc3"
+    },
+    "cargo:objc2-core-image@0.3.2": {
+      "archiveSha256": "e5d563b38d2b97209f8e861173de434bd0214cf020e3423a52624cd1d989f006",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-image"
+      },
+      "vcsSha256": "c894249d194f6678eab85405db96965489b93eba3863198439f1014a21421c31"
+    },
+    "cargo:objc2-core-location@0.3.2": {
+      "archiveSha256": "ca347214e24bc973fc025fd0d36ebb179ff30536ed1f80252706db19ee452009",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-location"
+      },
+      "vcsSha256": "e5c887d503b15fdeedff465f5b2a20548c108c03a09e68cc6fa000083fcede82"
+    },
+    "cargo:objc2-core-text@0.3.2": {
+      "archiveSha256": "0cde0dfb48d25d2b4862161a4d5fcc0e3c24367869ad306b0c9ec0073bfed92d",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-core-text"
+      },
+      "vcsSha256": "505aa6c21bf36109e6e050055d239bcaf791b18e63cdefb7d601922b9f864545"
+    },
+    "cargo:objc2-encode@4.1.0": {
+      "archiveSha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "8d214f5477365ffcbcbb7de058c86ed9a518efb7"
+        },
+        "path_in_vcs": "crates/objc2-encode"
+      },
+      "vcsSha256": "b23c761215887d90ac44e18b18c8b386f93139c65a4a14f110e22405830cb3f1"
+    },
+    "cargo:objc2-exception-helper@0.1.1": {
+      "archiveSha256": "c7a1c5fbb72d7735b076bb47b578523aedc40f3c439bea6dfd595c089d79d98a",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "8d214f5477365ffcbcbb7de058c86ed9a518efb7"
+        },
+        "path_in_vcs": "crates/objc2-exception-helper"
+      },
+      "vcsSha256": "c7e239421c2f7dc6ec239f8d464ca656be3d325c801c780a341dfa99c79a0949"
+    },
+    "cargo:objc2-io-surface@0.3.2": {
+      "archiveSha256": "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-io-surface"
+      },
+      "vcsSha256": "a68dbb39ef7cfef6062e3d2e49c59539c7a34d70d13c5bdf4a443d2475280011"
+    },
+    "cargo:objc2-quartz-core@0.3.2": {
+      "archiveSha256": "96c1358452b371bf9f104e21ec536d37a650eb10f7ee379fff67d2e08d537f1f",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-quartz-core"
+      },
+      "vcsSha256": "d18b21bb115491577880f7f8c491ac10dd8d9947bd27fdc3f6dafcf4cf92b2e9"
+    },
+    "cargo:objc2-ui-kit@0.3.2": {
+      "archiveSha256": "d87d638e33c06f577498cbcc50491496a3ed4246998a7fbba7ccb98b1e7eab22",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-ui-kit"
+      },
+      "vcsSha256": "4c63b7685ce9aa0273820c80801fbd582bb3431815a318d0180f2ee7de85ba00"
+    },
+    "cargo:objc2-user-notifications@0.3.2": {
+      "archiveSha256": "9df9128cbbfef73cda168416ccf7f837b62737d748333bfe9ab71c245d76613e",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-user-notifications"
+      },
+      "vcsSha256": "f9f9fc21b411afa8a20002f259187760b838f8fb6db54814db214c1682a14344"
+    },
+    "cargo:objc2-web-kit@0.3.2": {
+      "archiveSha256": "b2e5aaab980c433cf470df9d7af96a7b46a9d892d521a2cbbb2f8a4c16751e7f",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b"
+        },
+        "path_in_vcs": "framework-crates/objc2-web-kit"
+      },
+      "vcsSha256": "af77e35da92d2c30dde7cd40ff3723ce9f312cddb639a388ae447979af630a30"
+    },
+    "cargo:objc2@0.6.4": {
+      "archiveSha256": "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f",
+      "coverage": "notice-only",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/madsmtm/objc2",
+      "texts": [
+        {
+          "path": "LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "url": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "8852b424193ca41602281b3d7540d7c8ed51e49a"
+        },
+        "path_in_vcs": "crates/objc2"
+      },
+      "vcsSha256": "45343a7cb8cebbb23c2804f99a14f01f6618ce0956dba62f387fb9ffaf00eff7"
+    },
+    "cargo:pageant@0.2.3": {
+      "archiveSha256": "6d8eab09a361a4afe0b1668be978cd97e4f052e927a92b0b608cf902965d49ce",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/warp-tech/russh",
+      "texts": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/warp-tech/russh/8a51a0dca4f6fbdcc3ce98c627254026b25b3252/LICENSE.txt"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "8a51a0dca4f6fbdcc3ce98c627254026b25b3252"
+        },
+        "path_in_vcs": "pageant"
+      },
+      "vcsSha256": "3360ca28ba4c2b28bcefb8f8f8b0b3e64b80f880a01d53b13979870264ff533b"
+    },
+    "cargo:rusqlite_migration@2.6.0": {
+      "archiveSha256": "03451d4dc523c0a96d9e412c574670b3f5f184c3988b77a435876be25477bbd3",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/cljoly/rusqlite_migration",
+      "texts": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/cljoly/rusqlite_migration/37c7a555018ecd80c58b2954779d83c281e4557a/LICENSE.txt"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "37c7a555018ecd80c58b2954779d83c281e4557a"
+        },
+        "path_in_vcs": "rusqlite_migration"
+      },
+      "vcsSha256": "89766f12dde6d351289a2ccb261382f3d8b209e0161882c07edf981afe73b6bc"
+    },
+    "cargo:russh-cryptovec@0.62.0": {
+      "archiveSha256": "3aec6cb630dbe85d72ffd7bcd95f07e1bd69f9f270ee8adfa1afe443a6331438",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/warp-tech/russh",
+      "texts": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/warp-tech/russh/907c732562c5732aad6c140dba958eafddc41ba0/LICENSE.txt"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "907c732562c5732aad6c140dba958eafddc41ba0"
+        },
+        "path_in_vcs": "cryptovec"
+      },
+      "vcsSha256": "82d38c488803ec0bcf277dfce8d7771c902f6931247d3f8d4040efb33d1c5350"
+    },
+    "cargo:russh@0.63.3": {
+      "archiveSha256": "036204edbd199552a5b3832f63c60dcdf395dc44c7f06b4af1c0e8139cc11bce",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/warp-tech/russh",
+      "texts": [
+        {
+          "path": "LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/warp-tech/russh/f33baf439be8c59c49cb6cb2ae5976c579495bdf/LICENSE.txt"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "f33baf439be8c59c49cb6cb2ae5976c579495bdf"
+        },
+        "path_in_vcs": "russh"
+      },
+      "vcsSha256": "2f631a9ea306c757eff30545913e9d796b98d590a4280d192ccbb36afc2470ab"
+    },
+    "cargo:specta-macros@2.0.0-rc.25": {
+      "archiveSha256": "2ce14957ecc2897f1f848b8255b6531d13ddf49cbcf506b7c2c9fb1d005593bb",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "9ec86f39e235fcd35e6d91ef3fd4d6b88e5763f3ce1e296c222969986b6f6475",
+          "url": "https://raw.githubusercontent.com/specta-rs/specta/e7fd23f586b9bd58de39002dabe49b1f978bf971/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e7fd23f586b9bd58de39002dabe49b1f978bf971"
+        },
+        "path_in_vcs": "specta-macros"
+      },
+      "vcsSha256": "3dbaa3b475b38941612ab9e4000ebe43914af4c3231834595d8ec0cac3c1909e"
+    },
+    "cargo:specta-serde@0.0.12": {
+      "archiveSha256": "ee8a72b755ddb8949fd8f17c5db43f0e8a806ea587d9bc602ee3f73240c00029",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "9ec86f39e235fcd35e6d91ef3fd4d6b88e5763f3ce1e296c222969986b6f6475",
+          "url": "https://raw.githubusercontent.com/specta-rs/specta/e7fd23f586b9bd58de39002dabe49b1f978bf971/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e7fd23f586b9bd58de39002dabe49b1f978bf971"
+        },
+        "path_in_vcs": "specta-serde"
+      },
+      "vcsSha256": "cfc4157056f1b47deafdfa5b0363401c199b84e08ea909f894da441ed7b4e761"
+    },
+    "cargo:specta-typescript@0.0.12": {
+      "archiveSha256": "639404ee95557f2f8b7e4cb773ffefd45304c7ab8ba21ac83b69051595e083c0",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "9ec86f39e235fcd35e6d91ef3fd4d6b88e5763f3ce1e296c222969986b6f6475",
+          "url": "https://raw.githubusercontent.com/specta-rs/specta/e7fd23f586b9bd58de39002dabe49b1f978bf971/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e7fd23f586b9bd58de39002dabe49b1f978bf971"
+        },
+        "path_in_vcs": "specta-typescript"
+      },
+      "vcsSha256": "c4b315f0f1ebdc7ccc6bf5e18a4b229ff364e39cd1eb9c7777d027d68d3530ea"
+    },
+    "cargo:specta-util@0.0.12": {
+      "archiveSha256": "29b1fc02b446f7244a92924fe68c0555921209f1d342990cd1539e9138e69502",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "9ec86f39e235fcd35e6d91ef3fd4d6b88e5763f3ce1e296c222969986b6f6475",
+          "url": "https://raw.githubusercontent.com/specta-rs/specta/e7fd23f586b9bd58de39002dabe49b1f978bf971/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e7fd23f586b9bd58de39002dabe49b1f978bf971"
+        },
+        "path_in_vcs": "specta-util"
+      },
+      "vcsSha256": "96e20a58606e972cbef61f4f59640369308541edb3042db4d2752695b1cc9aa5"
+    },
+    "cargo:specta@2.0.0-rc.25": {
+      "archiveSha256": "38f9a30cbcbb7011f1da7d73483983bf838af123883e45f2b36ed76328df9c50",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "9ec86f39e235fcd35e6d91ef3fd4d6b88e5763f3ce1e296c222969986b6f6475",
+          "url": "https://raw.githubusercontent.com/specta-rs/specta/e7fd23f586b9bd58de39002dabe49b1f978bf971/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e7fd23f586b9bd58de39002dabe49b1f978bf971"
+        },
+        "path_in_vcs": "specta"
+      },
+      "vcsSha256": "c9d299474ac387819ce58f647b1e96f091941bd6ceafde1ad035b3b4cf778d62"
+    },
+    "cargo:tauri-specta-macros@2.0.0-rc.25": {
+      "archiveSha256": "6a59dfdce06c98d8d211619bea5fdb39486d8a8c558e12b2d2ce255972320012",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/tauri-specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "79b0c7d284efc4c2dc8da73c01a6d10c19caf61e70fca813e642dc010049eee7",
+          "url": "https://raw.githubusercontent.com/specta-rs/tauri-specta/e5e578fb339fc2b0d6c676b3031c3dafcec88083/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e5e578fb339fc2b0d6c676b3031c3dafcec88083"
+        },
+        "path_in_vcs": "macros"
+      },
+      "vcsSha256": "ae2cf55eaaf11d36a3c9302766ba7e1e3d19497eab23812a53d432ee9b8752b4"
+    },
+    "cargo:tauri-specta@2.0.0-rc.25": {
+      "archiveSha256": "ee080f36d2ac17ce2f3a82fb53f02d664e8345457de51b56dad3c394dacc41a2",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/specta-rs/tauri-specta",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "79b0c7d284efc4c2dc8da73c01a6d10c19caf61e70fca813e642dc010049eee7",
+          "url": "https://raw.githubusercontent.com/specta-rs/tauri-specta/e5e578fb339fc2b0d6c676b3031c3dafcec88083/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "e5e578fb339fc2b0d6c676b3031c3dafcec88083"
+        },
+        "path_in_vcs": ""
+      },
+      "vcsSha256": "4df301ebb0af4d1a80febe0aa425674d8383b40cc944d0294e7e68a25d321184"
+    },
+    "cargo:webview2-com-macros@0.8.1": {
+      "archiveSha256": "67a921c1b6914c367b2b823cd4cde6f96beec77d30a939c8199bb377cf9b9b54",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/wravery/webview2-rs",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+          "url": "https://raw.githubusercontent.com/wravery/webview2-rs/dffa41a8a46d3f5565eefbff2de57d38d399f158/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "dffa41a8a46d3f5565eefbff2de57d38d399f158"
+        },
+        "path_in_vcs": "crates/callback-macros"
+      },
+      "vcsSha256": "c24c2646f52e6cb4c1f382afc69fa99c0dc78d6d8e4316ade7e51707b4f9af8e"
+    },
+    "cargo:webview2-com-sys@0.39.1": {
+      "archiveSha256": "b3a07132775117d6065853d9d1178157b8c90e228de47129d6bce2c7edebedfb",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/wravery/webview2-rs",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+          "url": "https://raw.githubusercontent.com/wravery/webview2-rs/edc2caf886175ccaebe86078c9cfe1ae2a187328/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "edc2caf886175ccaebe86078c9cfe1ae2a187328"
+        },
+        "path_in_vcs": "crates/bindings"
+      },
+      "vcsSha256": "d4137410068017c3f66fe98578f2fd40f0e76d3fd628fa361c758f3b262351c7"
+    },
+    "cargo:webview2-com@0.39.1": {
+      "archiveSha256": "3f89fca7a704cee10dcb3654c1dbb8941d1783132f1917358af75bec37a7d7e6",
+      "coverage": "full-text",
+      "kind": "cargo-vcs",
+      "repository": "https://github.com/wravery/webview2-rs",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73",
+          "url": "https://raw.githubusercontent.com/wravery/webview2-rs/edc2caf886175ccaebe86078c9cfe1ae2a187328/LICENSE"
+        }
+      ],
+      "vcs": {
+        "git": {
+          "sha1": "edc2caf886175ccaebe86078c9cfe1ae2a187328"
+        },
+        "path_in_vcs": "crates/webview2-com"
+      },
+      "vcsSha256": "88413f4e9de3a9360fafb0d8c9a0fdf5a01a45d73f9ded314fa7b9ffa2108ace"
+    },
+    "npm:@biomejs/cli-darwin-arm64@2.5.15": {
+      "integrity": "sha512-BZVzFhJ/mUvTLMYbc9x6el0o2Uv5zP7bACYyhFb6fSc1giroXm7PL0a5KqMJ9F+/BnkYRjagD/ROSDVOZ6eapg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-darwin-x64@2.5.15": {
+      "integrity": "sha512-V5Kw63V+fVGNFhFrizDxMbGXAzZCh8kYzJpy3GI6gTapWDg7bZK9oYC9CbVgQSEdTnupz0U5Efz8Ev+5vdBBXw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-linux-arm64-musl@2.5.15": {
+      "integrity": "sha512-tGzZUTcJCV7tj5Adh/Gn6nR4MycqA3iohq2LEcrarAgRBkU0h0OKd2UzCRkOsOYOuUGaUJb4YmqRqyy2feGGSw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-linux-arm64@2.5.15": {
+      "integrity": "sha512-XaG7P7eeSLYETD3K9grfB0mQmpLQZjygdbsxekWBJAg4am79fGAtRpfRyNnTvXB2fZFNnJZG3nXm7HBat0+VUw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-linux-x64-musl@2.5.15": {
+      "integrity": "sha512-IlxUcyxilVGPsE008x13pWdkTbU3nQpP2i9b5UrbOYj6goBkKsRX1XB7yJLcV+O1H9LBchIIm4adOaVLZBX0ZQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-linux-x64@2.5.15": {
+      "integrity": "sha512-xE4iEW/3LqlYj9GFgGrFsFSH51dEEpUbYWBfeOv0q87WkUDxK2o/HhreSb7qMJqck70RVM6Lg96hgedcAYcOkA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-win32-arm64@2.5.15": {
+      "integrity": "sha512-2kPKzhNlm8C+Ru3GcO0Me2ODkCBLrVOUNuyi84RJyWDVKAA4+Kjj3jMjL938lF6BRfvltC4vB2nPY9SvN51Ovg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@biomejs/cli-win32-x64@2.5.15": {
+      "integrity": "sha512-yAzh4UqEImV6Hcy0zjUqNfJAsUhoD64FBQCdTG8Md/Z2wQeVP/ZmJ3XRYAs1g8J9fjTFyl2fCtc5FB5til47+g==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:@biomejs/biome@2.5.15"
+    },
+    "npm:@esbuild/aix-ppc64@0.28.2": {
+      "integrity": "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/android-arm64@0.28.2": {
+      "integrity": "sha512-5YfKeeI8qWfBZIX+u2xZC3Zlb3Os/gLS2sbEKM+I4ZOcsWmHS2WLysCcQZDAFRslDUU5Oiq44gf6PYN1vGwG5A==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/android-arm@0.28.2": {
+      "integrity": "sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/android-x64@0.28.2": {
+      "integrity": "sha512-O387ite7SzUyCcy3JQX4P4bLtEA7bLLkx+esve5JHnyYfNTxcVpXZo9jhdB0lTKN44gztELTdU7nS8Nr16Fs1Q==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/darwin-arm64@0.28.2": {
+      "integrity": "sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/darwin-x64@0.28.2": {
+      "integrity": "sha512-uq6suIWYP37qzGddBKPw5QEQPi6HiLGsO7UmkpfyaYNQ3D+rN6w6WfwH+nuqcGXWvawGwxOEroO4YGnFh95azw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/freebsd-arm64@0.28.2": {
+      "integrity": "sha512-n+I0BTSRIoy+d6RPKnEVwql5UwBJolytvY4mAOIEJorKlqgPII8ix6slVVrfZ5Tnj7glIZvloylbB/EJPMWEXw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/freebsd-x64@0.28.2": {
+      "integrity": "sha512-78XJTJkvPs0kz2w61301PJjXl4g7q3JqiYMZ/M/yVI73EHBrCRTgkhu9oqG7vPqq+a/yadEW8aD+agKlk5xrmg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-arm64@0.28.2": {
+      "integrity": "sha512-pW4AC0P3it8c7do9MVM4p51FzHzdM/TZrerurgRcHJ2WTa1VQ1CIq18xncfpBJw4ojkiZZrKW2yIBWBP92j6Ug==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-arm@0.28.2": {
+      "integrity": "sha512-XlDnu2q5yoqems+xay6wSAcg9DDD7K9RLKZEBOMZm3ckNpJBvOX20tSfby8KfrrhINDyv9V2YVZKY/SpoGJI8w==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-ia32@0.28.2": {
+      "integrity": "sha512-CYbnj78HsIeA+DhgUKgFCfvNsTHFhMMrinUrMZpDXJXKN8T3XViTZ/+wtHeVxEWY8ewSzTFN+nRmSwO2tZaLUQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-loong64@0.28.2": {
+      "integrity": "sha512-buwkd8nsph4R+ajRvw0qM5Hja/TXQow3ptzWO2EbG/cqcIkHloRrdlBtQlshyYGTNFvfkfJ5tpPLVkY4DtsPfQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-mips64el@0.28.2": {
+      "integrity": "sha512-ZVykbDyk7519VwiNb9Lcj9m8XM6v5V9uKPvrEMkkEedVewf+0itkhahp4HDpgERXhwLRpWFypsGbG/J8s0QjJA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-ppc64@0.28.2": {
+      "integrity": "sha512-CAXl+Dtd9UUuJd8pKKdwh6MLm3MUMiqMPmhZ3tTSXPqfyQ3vDl6R5hZdZ/kYojK4ofXtdfSv1tFq8XzWx3heNQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-riscv64@0.28.2": {
+      "integrity": "sha512-GeXCej4IQtU1B+QlDV8W/RRvbzI3O/Stss+/bCXv4lZls5WGRtu2a+3JkA3i4qIUlMXpcHebWpF8AkJhATowuA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-s390x@0.28.2": {
+      "integrity": "sha512-3H1weTYZPxt/WOhByszQZybS9w5lKzUn1FDMsgEChbHWQwHYQQRfBxgCcZvPhjHfKyJjIievvMmEUawJrdY9Dg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/linux-x64@0.28.2": {
+      "integrity": "sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/netbsd-arm64@0.28.2": {
+      "integrity": "sha512-sSATRjPeDBg3pdgHoQfoYBob11Kk1FGa9lui5RIHZCoCkJa9QKlvl3/vKz2usCmYYjs7ymJR/2Nnsqe+Hjt5nw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/netbsd-x64@0.28.2": {
+      "integrity": "sha512-lqnzCV+mM0gIADaKihiCg6ifgfU2L3h5E33rNQBN1Y4MaVGnzryzmvvf7UHxprpQdE8hpqLolJ9Rl+SkIRDpyw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/openbsd-arm64@0.28.2": {
+      "integrity": "sha512-AL2qJILH7lNjrDmCQDvdxMfAUIv8KMNZOvrwAQ8i8//ntL9FflhOyMJ8OZSMBb8/AWXe3/5v5S20y3zCoZWKoQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/openbsd-x64@0.28.2": {
+      "integrity": "sha512-QtiuPytchRyC4rwUKhexJdQKvDuZ6hWloi3igqPQNUJCS1/v9EiO3UTOXR6A3FoMo4fnAKbWJdqaIwhOzh8qEw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/openharmony-arm64@0.28.2": {
+      "integrity": "sha512-WkhYDmpTjLvGlScA1rwjRUmhl4k8oXR3cIbtqWmELgU/dFeHHlEllxDvdWcNJV9rbzCexB5vz8gtNewWLgCT7Q==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/sunos-x64@0.28.2": {
+      "integrity": "sha512-GPMSkTOtMnv2U2F8gxe4Io6qmVs+YKyp832Etqqxr0hFngmXQ3rzwytelm3GIn7T4VviRUlf3sOgBOiTdvaf7g==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/win32-arm64@0.28.2": {
+      "integrity": "sha512-PIhhEkE9uPBleRBrQEJpUn7MBnibZzbGzYWPmY3x+YoVg/95zbjB4CxPPOQ8l5tYYM4mMaCthF8/1DIfBQQyWQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/win32-ia32@0.28.2": {
+      "integrity": "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@esbuild/win32-x64@0.28.2": {
+      "integrity": "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:esbuild@0.28.2"
+    },
+    "npm:@rolldown/binding-android-arm-eabi@1.2.12": {
+      "integrity": "sha512-dB/a1214qKfHMXCpgqR4OZT+jS4kTyEXbQGJPqzobt5EwH5rX080pxE37alt3RzvR1bf1Yz/yGqRfrYAxuPw0A==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-android-arm64@1.2.12": {
+      "integrity": "sha512-7KHFgQ5VJxIHcLlrwrc3Xbds7oTNQT7Pgi9gQCJKrd2VGab/UksIOYp6VD8MzCstGxOKMgNamPwUCfxPdP1OHg==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-darwin-arm64@1.2.12": {
+      "integrity": "sha512-3YIhqHD96nA5SaYNRBR16HnGv4oavZvXfD/ayHM+oYZ0WD/8lBAtf6zQua4kEyAvpqrluKXl0lnOBoiNby7x9w==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-darwin-x64@1.2.12": {
+      "integrity": "sha512-UuuJ35MFw4gmFOrE9pEqIV+K3syIKveph+Qc1/ljHZVdoDW4pz/JHR/eMVom+TZGl/5OOvGJOWaOCVt3ZfqhxA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-freebsd-x64@1.2.12": {
+      "integrity": "sha512-uMvssit0a4W+/7D8CbHUvG719mH3R2jwXAlh/XcPvuHTE0g++LymF88DCGNX0HM2rBOn0xrzgXktIB6fLSJBTQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-arm-gnueabihf@1.2.12": {
+      "integrity": "sha512-XcFu0R0xWnwzSf4IQgFH1rJIckPN1pLy2R+4r9IDB7Yfu/ys9cVqfa4pBrMHj7a3gl8mIR4nRNPg0e5IvEVs6g==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-arm64-gnu@1.2.12": {
+      "integrity": "sha512-260UrKgn8tz39ak+SMDOirKzr7V04M9dWPw5llW00SwBivCZoWcRBKV1d8cXnRkUmSZA3BdiUmBHWk7734Ulpw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-arm64-musl@1.2.12": {
+      "integrity": "sha512-5YK1I9SqDkbPgc1IA8BgDl34suqUS2q0KWnBrirm0E51YjOs6eo6dV6jbQfNE/argHRSvd0QUGgtpIoYx+WWpw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-ppc64-gnu@1.2.12": {
+      "integrity": "sha512-Rkcrmp7eFRg74yL5fXEU91JEWbdEPLevWwGtXpmhbjlD1StScbWTmO94Bhly+Mo+ketKYkdmM1vNUKeWSlx8cQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-s390x-gnu@1.2.12": {
+      "integrity": "sha512-qvK4DuAsQc2BSjlx+Xr+IzOIvvxbGZqxFwdWfG6F518Erj0GGISyQbJ6pIappnOxlNPzNHvo/L0BwB30GZ+zVw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-x64-gnu@1.2.12": {
+      "integrity": "sha512-Q9uLBO53Xd4QIq1WOycVQyPP1O4HhraEV2qqb3uTrnVw6QZih9duY4vNXOivL1xoUS1/z+W8eF4NMfl2a8Sdjw==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-linux-x64-musl@1.2.12": {
+      "integrity": "sha512-3IBxWFMjbOZskDPKv8Lf9BCnahlKuHthWkYnyIxOH/QcJrFcS4EmcenthApkwr/5+nEqZlLzeYbxeMaX7A5u4g==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-openharmony-arm64@1.2.12": {
+      "integrity": "sha512-xtX61xg4LKPkPWilZU1ynKClz5Gj4bf74LML4r3eVLWumKnGjoEr1OSHQhMdbBDoYTi+yjrujvpZe2pUnqCrrA==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-win32-arm64-msvc@1.2.12": {
+      "integrity": "sha512-At7fPB6PCaIjzgIhEZFxuT+BBFqiQibJDT4d3PhiR3f4E7bbMZF4aKblbFfEM3sETRDd1YiQx/+U/g/B/ou5Ew==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@rolldown/binding-win32-x64-msvc@1.2.12": {
+      "integrity": "sha512-WIw2haVKwjuYdXkHaoC0mF8Le71TuCBxjrdKqLbJGctbBABj+ClfmNvtbOnzpq3RokNo5+V1qhtSzJyXorsklQ==",
+      "kind": "npm-optional-parent",
+      "parent": "npm:rolldown@1.2.12"
+    },
+    "npm:@xterm/headless@6.0.0": {
+      "commit": "f447274f430fd22513f6adbf9862d19524471c04",
+      "coverage": "full-text",
+      "integrity": "sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==",
+      "kind": "npm-manifest-commit",
+      "manifestBase64": "ewogICJuYW1lIjogIkB4dGVybS9oZWFkbGVzcyIsCiAgImRlc2NyaXB0aW9uIjogIkEgaGVhZGxlc3MgdGVybWluYWwgY29tcG9uZW50IHRoYXQgcnVucyBpbiBOb2RlLmpzIiwKICAidmVyc2lvbiI6ICI2LjAuMCIsCiAgIm1haW4iOiAibGliLWhlYWRsZXNzL3h0ZXJtLWhlYWRsZXNzLmpzIiwKICAibW9kdWxlIjogImxpYi94dGVybS5tanMiLAogICJ0eXBlcyI6ICJ0eXBpbmdzL3h0ZXJtLWhlYWRsZXNzLmQudHMiLAogICJyZXBvc2l0b3J5IjogImh0dHBzOi8vZ2l0aHViLmNvbS94dGVybWpzL3h0ZXJtLmpzIiwKICAibGljZW5zZSI6ICJNSVQiLAogICJ3b3Jrc3BhY2VzIjogWwogICAgImFkZG9ucy8qIgogIF0sCiAgImtleXdvcmRzIjogWwogICAgImNsaSIsCiAgICAiY29tbWFuZC1saW5lIiwKICAgICJjb25zb2xlIiwKICAgICJwdHkiLAogICAgInNoZWxsIiwKICAgICJzc2giLAogICAgInN0eWxlcyIsCiAgICAidGVybWluYWwtZW11bGF0b3IiLAogICAgInRlcm1pbmFsIiwKICAgICJ0dHkiLAogICAgInZ0MTAwIiwKICAgICJ3ZWJnbCIsCiAgICAieHRlcm0iCiAgXSwKICAiY29tbWl0IjogImY0NDcyNzRmNDMwZmQyMjUxM2Y2YWRiZjk4NjJkMTk1MjQ0NzFjMDQiCn0=",
+      "manifestSha256": "6c39530ee759998113bd8bcc306d1b725c0b1d5b0cdc04e071f6945a5f5edf1a",
+      "repository": "https://github.com/xtermjs/xterm.js",
+      "texts": [
+        {
+          "path": "LICENSE",
+          "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd",
+          "url": "https://raw.githubusercontent.com/xtermjs/xterm.js/f447274f430fd22513f6adbf9862d19524471c04/LICENSE"
+        }
+      ]
+    }
+  },
+  "parents": {
+    "cargo:libappindicator@0.9.0": {
+      "archiveSha256": "03589b9607c868cc7ae54c0b2a22c8dc03dd41692d48f2d7df73615c6a95dc0a",
+      "manifestSha256": "0a952bcd72745e1ff4a7d265ffcdae8f688b6882c4fe3f99107f19f0ca0b549a",
+      "manifestBase64": "W3BhY2thZ2VdCm5hbWUgPSAibGliYXBwaW5kaWNhdG9yIgp2ZXJzaW9uID0gIjAuOS4wIgpkZXNjcmlwdGlvbiA9ICJSdXN0IHNhZmUgYmluZGluZ3MgZm9yIGxpYmFwcGluZGljYXRvciIKZWRpdGlvbiA9ICIyMDIxIgpsaWNlbnNlID0gIkFwYWNoZS0yLjAgT1IgTUlUIgprZXl3b3JkcyA9IFsgImxpbnV4IiwgImd1aSIsICJndGsiIF0KCltkZXBlbmRlbmNpZXNdCmxvZyA9ICIwLjQiCmdsaWIgPSAiMC4xOCIKZ3RrID0gIjAuMTgiCmd0ay1zeXMgPSAiMC4xOCIKbGliYXBwaW5kaWNhdG9yLXN5cyA9IHsgdmVyc2lvbiA9ICIwLjkiLCBwYXRoID0gInN5cy8iIH0KCltmZWF0dXJlc10KZGVmYXVsdCA9IFsgImJhY2tjb21wYXQiIF0KYmFja2NvbXBhdCA9IFsgImxpYmFwcGluZGljYXRvci1zeXMvYmFja2NvbXBhdCIgXQo=",
+      "vcs": {
+        "git": {
+          "sha1": "eafd1e3682a1247f595410266091e9684021cb6f"
+        },
+        "path_in_vcs": ""
+      },
+      "vcsSha256": "415a0343e684487048df8f40b710fd06e06860988d3b379821a574b19108b104"
+    },
+    "npm:@biomejs/biome@2.5.15": {
+      "integrity": "sha512-WZTW4slm/pdkh92K6t/3aEN++44JD1PQ7squ7RCMLI1flHGl43DVOIGXvCjHiZgBMO1V4uYxoFNtqrIA4qGuIQ==",
+      "manifestBase64": "ewogICJuYW1lIjogIkBiaW9tZWpzL2Jpb21lIiwKICAidmVyc2lvbiI6ICIyLjUuMTUiLAogICJiaW4iOiB7CiAgICAiYmlvbWUiOiAiYmluL2Jpb21lIgogIH0sCiAgImhvbWVwYWdlIjogImh0dHBzOi8vYmlvbWVqcy5kZXYiLAogICJyZXBvc2l0b3J5IjogewogICAgInR5cGUiOiAiZ2l0IiwKICAgICJ1cmwiOiAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS9iaW9tZWpzL2Jpb21lLmdpdCIsCiAgICAiZGlyZWN0b3J5IjogInBhY2thZ2VzL0BiaW9tZWpzL2Jpb21lIgogIH0sCiAgImF1dGhvciI6ICJFbWFudWVsZSBTdG9wcGEiLAogICJsaWNlbnNlIjogIk1JVCBPUiBBcGFjaGUtMi4wIiwKICAiYnVncyI6ICJodHRwczovL2dpdGh1Yi5jb20vYmlvbWVqcy9iaW9tZS9pc3N1ZXMiLAogICJkZXNjcmlwdGlvbiI6ICJCaW9tZSBpcyBhIHRvb2xjaGFpbiBmb3IgdGhlIHdlYjogZm9ybWF0dGVyLCBsaW50ZXIgYW5kIG1vcmUiLAogICJmaWxlcyI6IFsKICAgICJiaW4vYmlvbWUiLAogICAgImNvbmZpZ3VyYXRpb25fc2NoZW1hLmpzb24iLAogICAgIlJFQURNRS5tZCIsCiAgICAiTElDRU5TRS1BUEFDSEUiLAogICAgIkxJQ0VOU0UtTUlUIiwKICAgICJST01FLUxJQ0VOU0UtTUlUIgogIF0sCiAgImtleXdvcmRzIjogWwogICAgImZvcm1hdCIsCiAgICAibGludCIsCiAgICAidG9vbGNoYWluIiwKICAgICJKYXZhU2NyaXB0IiwKICAgICJUeXBlU2NyaXB0IiwKICAgICJKU09OIiwKICAgICJKU09OQyIsCiAgICAiSlNYIiwKICAgICJUU1giLAogICAgIkNTUyIsCiAgICAiR3JhcGhRTCIKICBdLAogICJlbmdpbmVzIjogewogICAgIm5vZGUiOiAiPj0xNC4yMS4zIgogIH0sCiAgImZ1bmRpbmciOiB7CiAgICAidHlwZSI6ICJvcGVuY29sbGVjdGl2ZSIsCiAgICAidXJsIjogImh0dHBzOi8vb3BlbmNvbGxlY3RpdmUuY29tL2Jpb21lIgogIH0sCiAgInB1Ymxpc2hDb25maWciOiB7CiAgICAicHJvdmVuYW5jZSI6IHRydWUKICB9LAogICJvcHRpb25hbERlcGVuZGVuY2llcyI6IHsKICAgICJAYmlvbWVqcy9jbGktd2luMzIteDY0IjogIjIuNS4xNSIsCiAgICAiQGJpb21lanMvY2xpLXdpbjMyLWFybTY0IjogIjIuNS4xNSIsCiAgICAiQGJpb21lanMvY2xpLWRhcndpbi14NjQiOiAiMi41LjE1IiwKICAgICJAYmlvbWVqcy9jbGktZGFyd2luLWFybTY0IjogIjIuNS4xNSIsCiAgICAiQGJpb21lanMvY2xpLWxpbnV4LXg2NCI6ICIyLjUuMTUiLAogICAgIkBiaW9tZWpzL2NsaS1saW51eC1hcm02NCI6ICIyLjUuMTUiLAogICAgIkBiaW9tZWpzL2NsaS1saW51eC14NjQtbXVzbCI6ICIyLjUuMTUiLAogICAgIkBiaW9tZWpzL2NsaS1saW51eC1hcm02NC1tdXNsIjogIjIuNS4xNSIKICB9Cn0=",
+      "manifestSha256": "72bb1900df96d9e24331c9f3d7cf5b4d44aac0aae3ff231e266df0c2cf9d5543"
+    },
+    "npm:esbuild@0.28.2": {
+      "integrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+      "manifestBase64": "ewogICJuYW1lIjogImVzYnVpbGQiLAogICJ2ZXJzaW9uIjogIjAuMjguMiIsCiAgImRlc2NyaXB0aW9uIjogIkFuIGV4dHJlbWVseSBmYXN0IEphdmFTY3JpcHQgYW5kIENTUyBidW5kbGVyIGFuZCBtaW5pZmllci4iLAogICJyZXBvc2l0b3J5IjogewogICAgInR5cGUiOiAiZ2l0IiwKICAgICJ1cmwiOiAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS9ldmFudy9lc2J1aWxkLmdpdCIKICB9LAogICJzY3JpcHRzIjogewogICAgInBvc3RpbnN0YWxsIjogIm5vZGUgaW5zdGFsbC5qcyIKICB9LAogICJtYWluIjogImxpYi9tYWluLmpzIiwKICAidHlwZXMiOiAibGliL21haW4uZC50cyIsCiAgImVuZ2luZXMiOiB7CiAgICAibm9kZSI6ICI+PTE4IgogIH0sCiAgImJpbiI6IHsKICAgICJlc2J1aWxkIjogImJpbi9lc2J1aWxkIgogIH0sCiAgIm9wdGlvbmFsRGVwZW5kZW5jaWVzIjogewogICAgIkBlc2J1aWxkL2FpeC1wcGM2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2FuZHJvaWQtYXJtIjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvYW5kcm9pZC1hcm02NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2FuZHJvaWQteDY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvZGFyd2luLWFybTY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvZGFyd2luLXg2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2ZyZWVic2QtYXJtNjQiOiAiMC4yOC4yIiwKICAgICJAZXNidWlsZC9mcmVlYnNkLXg2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2xpbnV4LWFybSI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2xpbnV4LWFybTY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvbGludXgtaWEzMiI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2xpbnV4LWxvb25nNjQiOiAiMC4yOC4yIiwKICAgICJAZXNidWlsZC9saW51eC1taXBzNjRlbCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2xpbnV4LXBwYzY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvbGludXgtcmlzY3Y2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL2xpbnV4LXMzOTB4IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvbGludXgteDY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvbmV0YnNkLWFybTY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvbmV0YnNkLXg2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL29wZW5ic2QtYXJtNjQiOiAiMC4yOC4yIiwKICAgICJAZXNidWlsZC9vcGVuYnNkLXg2NCI6ICIwLjI4LjIiLAogICAgIkBlc2J1aWxkL29wZW5oYXJtb255LWFybTY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvc3Vub3MteDY0IjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvd2luMzItYXJtNjQiOiAiMC4yOC4yIiwKICAgICJAZXNidWlsZC93aW4zMi1pYTMyIjogIjAuMjguMiIsCiAgICAiQGVzYnVpbGQvd2luMzIteDY0IjogIjAuMjguMiIKICB9LAogICJsaWNlbnNlIjogIk1JVCIsCiAgImVzYnVpbGQuYmluYXJ5SGFzaGVzIjogewogICAgIkBlc2J1aWxkL2FpeC1wcGM2NC9iaW4vZXNidWlsZCI6ICI2ZGUxNDhiOTMyZmM1ZDNiMjhhOTdmOWYwYmM0ZGU4ZTJiNDdkYjQ3OGI4YWQ2NzllMGVhYTZiOTZlMDA0MjBkIiwKICAgICJAZXNidWlsZC9hbmRyb2lkLWFybTY0L2Jpbi9lc2J1aWxkIjogIjg0ZWZiYmQyY2JmMjFiYmZlYzJhYWYzMDRiZWU3OWNiMmE0YTA1ZmUyZWE3Yjg2MWE4N2Y3YjhmMjEzYWMyN2QiLAogICAgIkBlc2J1aWxkL2Rhcndpbi1hcm02NC9iaW4vZXNidWlsZCI6ICIxMGI2MjQzZGY2MThkMzc0YmIyZDVjOWNmYmU3MDUyZTE0MDVmNmFhNGU1M2E2MTY0ZjExYTkxYjlmMmUxMzg0IiwKICAgICJAZXNidWlsZC9kYXJ3aW4teDY0L2Jpbi9lc2J1aWxkIjogIjdmZTVjOWM5MDVmZmYwYTA1ZDkyZGI5ODkyOTQzNGFiNGQzYjZkZDkyZDdhNzY4ODkyMmRiNzQzODBjNzVkZjMiLAogICAgIkBlc2J1aWxkL2ZyZWVic2QtYXJtNjQvYmluL2VzYnVpbGQiOiAiNmFiYTEwOGE2OGI5MzA2NGU0OTFiZmIxZWNmYTI4ODQzYjRkNGU1MDRkZmYwNjI3ZjUzZjY4ZjZiYjAxNWMwMSIsCiAgICAiQGVzYnVpbGQvZnJlZWJzZC14NjQvYmluL2VzYnVpbGQiOiAiOGEyMzdlMjIyYmVlMGU1MDU1NmU3YjAwZDgzZWMyZmY0MzcyMWJmNzJmMTk4MTFhNWYwZWU1NmYxZDQwMTc3YyIsCiAgICAiQGVzYnVpbGQvbGludXgtYXJtL2Jpbi9lc2J1aWxkIjogImQ4OGY3NTFiMjIwOTViMmYzYjQyYzhjMmU4YTNmMzZmYWJjMTcwNTQzOGM1ZDZlNzgzNjZiNjgxZjhiNGU3YTUiLAogICAgIkBlc2J1aWxkL2xpbnV4LWFybTY0L2Jpbi9lc2J1aWxkIjogIjkwYmQyNjk1NTNkMjU4ZTgwYjE5ZTNjY2FiNGY5OGYwODMxZjg3NDQyYTJmMDU2NTEwY2UyNGZkMWI0MjVmYzIiLAogICAgIkBlc2J1aWxkL2xpbnV4LWlhMzIvYmluL2VzYnVpbGQiOiAiYjFlMmQ4N2Q3OWY5YTJiYWEwZDMwNDNjZGYwZGM2NzE2ZjlmMmVlYTY2YzU4ZjQ3NTg4NjQxZmQ2MDE5ZjM2ZiIsCiAgICAiQGVzYnVpbGQvbGludXgtbG9vbmc2NC9iaW4vZXNidWlsZCI6ICI1NWE2NmY5ODU0ZDY3OThmMzZiMmI1NDcxZGI3NGYyZTU1MjQ4MTg4N2VhMTRkOGJkYTE2MzRhNTEyMzgzYTQzIiwKICAgICJAZXNidWlsZC9saW51eC1taXBzNjRlbC9iaW4vZXNidWlsZCI6ICI2YmY3OTIxYTNhZjRhODAxMDUxZTA1NmQ4NWMzNjBmZTI0YmI0NDZmNDg4ZWYzZGEyNWYwYjhlNWNmOTczZGIxIiwKICAgICJAZXNidWlsZC9saW51eC1wcGM2NC9iaW4vZXNidWlsZCI6ICJjMzBkZjYwZDA5YmIwYmE0ODUzZDdiMDZlMjQ0Y2U5NjY4OTBkNjFjZTYwY2FkZDliMjIzMzVmNjM3OWMzMTZhIiwKICAgICJAZXNidWlsZC9saW51eC1yaXNjdjY0L2Jpbi9lc2J1aWxkIjogIjM2YmRjZGM4MjMwZWVmMzg1ODM4Y2RmZWIwZDlhMTU2NWNiZTRiOWFjZTMwMDk3YTUxMWQ3N2U4OTRkZTM2YTEiLAogICAgIkBlc2J1aWxkL2xpbnV4LXMzOTB4L2Jpbi9lc2J1aWxkIjogImJiYmMxZjkyYTc2YTVjYTZlMjk3NjA2NTIyMmU0MmIwMjc5NzM2M2ExZjExOTQ5MGRkYTMxNWY3NDA0Nzc0MWYiLAogICAgIkBlc2J1aWxkL2xpbnV4LXg2NC9iaW4vZXNidWlsZCI6ICJlMTY5OGEzZDVjNmMwNzk4ZmVlNGZkM2I1Y2M4MTY2NTFmNDYwYzYzZDM5MGE3YTI2ZWE0YmViMGIxODg0MTAwIiwKICAgICJAZXNidWlsZC9uZXRic2QtYXJtNjQvYmluL2VzYnVpbGQiOiAiNjI1NDg1MTlkN2FlODc1ZDA2MGFhOGM5NGJmYjhlZDM4ZWYxOTE2NzFhNTE3M2Q5ZjYyNmJkYjZiNzUxNjk3MCIsCiAgICAiQGVzYnVpbGQvbmV0YnNkLXg2NC9iaW4vZXNidWlsZCI6ICJmOWQwZTU5ZDJiNDA0NTU5ZTNhMGM5NTgxNjRkOTY5NjBlYmYwZTA0NTgzYjg3OGIxZDY0ZDhmMWMzNjk4ZmNjIiwKICAgICJAZXNidWlsZC9vcGVuYnNkLWFybTY0L2Jpbi9lc2J1aWxkIjogImUxMGM0NWEwYjYyNDU2NjMyZGE0MWRmMDU4ZDc2MjZiMmU3Y2ZlNzEwNzgwYTJkYzdmOWY4NDY4MTc1M2YzYWEiLAogICAgIkBlc2J1aWxkL29wZW5ic2QteDY0L2Jpbi9lc2J1aWxkIjogIjcyMGJiZTYwNzczNjcxNmYyZWNkMzc5NjI0MzZjNTU4OWQ4MDE5NjZlODY4YTJhZTRlMGU3ZTYyZDFlNGU4ODciLAogICAgIkBlc2J1aWxkL3N1bm9zLXg2NC9iaW4vZXNidWlsZCI6ICIwMWEzYmQ5MTgzNjMxY2E3NDlmMzRkMTU2MDFlYTIxYmE2ODM0NjE0MTg0YzVjODU5Zjk5ZDU0YmQ2ODMyMDNkIiwKICAgICJAZXNidWlsZC93aW4zMi1hcm02NC9lc2J1aWxkLmV4ZSI6ICI1MzBmYjM5MzNhZjE0ZWVmZTg1ZGZkMDY1MDJmODI2ZTZlZjYwZmRmNGU3NTIyOGVhNjdjNjk2ZGIzMTJlY2IxIiwKICAgICJAZXNidWlsZC93aW4zMi1pYTMyL2VzYnVpbGQuZXhlIjogImIyZTYyYWY1YzE3ZTAwOTM5NTgzYmUwYTA3NjJmZGM0NjlmMzUyODY5YTYxN2VkYzkxMzcxYjAwNDU0Yzc2ZjAiLAogICAgIkBlc2J1aWxkL3dpbjMyLXg2NC9lc2J1aWxkLmV4ZSI6ICJjN2JlZTM3ODc3ZDBhYTZhMDQ2ZTUyNzgzZmEwYTJjZjFhOWNlNTU3OWQ2OGJiMzA4M2JkYTk5ZDRiZmYxOGVmIgogIH0KfQo=",
+      "manifestSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490"
+    },
+    "npm:rolldown@1.2.12": {
+      "integrity": "sha512-8wafseiaG80xmXSfqidUNqZcylTlhmPZZt+za2m+js2sFZ8dTNlhIOV2WcbIPx2hgwPBJpEUGFAMZ9bgBBLTSQ==",
+      "manifestBase64": "ewogICJuYW1lIjogInJvbGxkb3duIiwKICAidmVyc2lvbiI6ICIxLjIuMTIiLAogICJkZXNjcmlwdGlvbiI6ICJGYXN0IEphdmFTY3JpcHQvVHlwZVNjcmlwdCBidW5kbGVyIGluIFJ1c3Qgd2l0aCBSb2xsdXAtY29tcGF0aWJsZSBBUEkuIiwKICAia2V5d29yZHMiOiBbCiAgICAiYnVuZGxlciIsCiAgICAiZXNidWlsZCIsCiAgICAicGFyY2VsIiwKICAgICJyb2xsZG93biIsCiAgICAicm9sbHVwIiwKICAgICJ3ZWJwYWNrIgogIF0sCiAgImhvbWVwYWdlIjogImh0dHBzOi8vcm9sbGRvd24ucnMvIiwKICAiYnVncyI6IHsKICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JvbGxkb3duL3JvbGxkb3duL2lzc3VlcyIKICB9LAogICJsaWNlbnNlIjogIk1JVCIsCiAgInJlcG9zaXRvcnkiOiB7CiAgICAidHlwZSI6ICJnaXQiLAogICAgInVybCI6ICJnaXQraHR0cHM6Ly9naXRodWIuY29tL3JvbGxkb3duL3JvbGxkb3duLmdpdCIsCiAgICAiZGlyZWN0b3J5IjogInBhY2thZ2VzL3JvbGxkb3duIgogIH0sCiAgImJpbiI6IHsKICAgICJyb2xsZG93biI6ICIuL2Jpbi9jbGkubWpzIgogIH0sCiAgImZpbGVzIjogWwogICAgImJpbiIsCiAgICAiY2xpIiwKICAgICJkaXN0IiwKICAgICJMSUNFTlNFIiwKICAgICJUSElSRC1QQVJUWS1MSUNFTlNFIiwKICAgICIhZGlzdC8qLm5vZGUiCiAgXSwKICAidHlwZSI6ICJtb2R1bGUiLAogICJtYWluIjogIi4vZGlzdC9pbmRleC5tanMiLAogICJtb2R1bGUiOiAiLi9kaXN0L2luZGV4Lm1qcyIsCiAgInR5cGVzIjogIi4vZGlzdC9pbmRleC5kLm10cyIsCiAgImltcG9ydHMiOiB7CiAgICAiI3BhcmFsbGVsLXBsdWdpbi13b3JrZXIiOiAiLi9kaXN0L3BhcmFsbGVsLXBsdWdpbi13b3JrZXIubWpzIgogIH0sCiAgImV4cG9ydHMiOiB7CiAgICAiLiI6ICIuL2Rpc3QvaW5kZXgubWpzIiwKICAgICIuL2NvbmZpZyI6ICIuL2Rpc3QvY29uZmlnLm1qcyIsCiAgICAiLi9leHBlcmltZW50YWwiOiAiLi9kaXN0L2V4cGVyaW1lbnRhbC1pbmRleC5tanMiLAogICAgIi4vZXhwZXJpbWVudGFsL3J1bnRpbWUtdHlwZXMiOiB7CiAgICAgICJ0eXBlcyI6ICIuL2Rpc3QvZXhwZXJpbWVudGFsLXJ1bnRpbWUtdHlwZXMuZC50cyIKICAgIH0sCiAgICAiLi9leHBlcmltZW50YWwvcnVudGltZSI6IHsKICAgICAgInR5cGVzIjogIi4vZGlzdC9leHBlcmltZW50YWwtcnVudGltZS5kLnRzIiwKICAgICAgImRlZmF1bHQiOiAiLi9kaXN0L2V4cGVyaW1lbnRhbC1ydW50aW1lLm1qcyIKICAgIH0sCiAgICAiLi9maWx0ZXIiOiAiLi9kaXN0L2ZpbHRlci1pbmRleC5tanMiLAogICAgIi4vZ2V0TG9nRmlsdGVyIjogIi4vZGlzdC9nZXQtbG9nLWZpbHRlci5tanMiLAogICAgIi4vcGFyYWxsZWxQbHVnaW4iOiAiLi9kaXN0L3BhcmFsbGVsLXBsdWdpbi5tanMiLAogICAgIi4vcGFyc2VBc3QiOiAiLi9kaXN0L3BhcnNlLWFzdC1pbmRleC5tanMiLAogICAgIi4vcGFja2FnZS5qc29uIjogIi4vcGFja2FnZS5qc29uIiwKICAgICIuL3BsdWdpbnMiOiAiLi9kaXN0L3BsdWdpbnMtaW5kZXgubWpzIiwKICAgICIuL3V0aWxzIjogIi4vZGlzdC91dGlscy1pbmRleC5tanMiCiAgfSwKICAicHVibGlzaENvbmZpZyI6IHsKICAgICJhY2Nlc3MiOiAicHVibGljIiwKICAgICJyZWdpc3RyeSI6ICJodHRwczovL3JlZ2lzdHJ5Lm5wbWpzLm9yZy8iCiAgfSwKICAiZGVwZW5kZW5jaWVzIjogewogICAgIkBveGMtcHJvamVjdC90eXBlcyI6ICI9MC4xNTIuMCIsCiAgICAiQHJvbGxkb3duL3BsdWdpbnV0aWxzIjogIl4xLjAuMCIKICB9LAogICJkZXZEZXBlbmRlbmNpZXMiOiB7CiAgICAiQGVtbmFwaS9jb3JlIjogIjIuMC4wLWFscGhhLjUiLAogICAgIkBlbW5hcGkvcnVudGltZSI6ICIyLjAuMC1hbHBoYS41IiwKICAgICJAbmFwaS1ycy9jbGkiOiAiXjMuMTAuMCIsCiAgICAiQG5hcGktcnMvd2FzbS1ydW50aW1lIjogIn4xLjIuMiIsCiAgICAiQG94Yy1ub2RlL2NsaSI6ICJeMC4xLjAiLAogICAgImNhYyI6ICJeNy4wLjAiLAogICAgImNvbnNvbGEiOiAiXjMuNC4yIiwKICAgICJlbW5hcGkiOiAiMi4wLjAtYWxwaGEuNSIsCiAgICAiZXhlY2EiOiAiXjkuMi4wIiwKICAgICJmcmVzaC1pbXBvcnQiOiAiXjAuMi4xIiwKICAgICJnbG9iIjogIl4xMy4wLjAiLAogICAgIm94Yy1wYXJzZXIiOiAiPTAuMTUyLjAiLAogICAgInBhdGhlIjogIl4yLjAuMyIsCiAgICAicmVtZWRhIjogIl4yLjUwLjAiLAogICAgInJvbGxkb3duIjogIjEuMi4xMiIsCiAgICAicm9sbGRvd24tcGx1Z2luLWR0cyI6ICJeMC4yOC4wIiwKICAgICJyb2xsdXAiOiAiXjQuNjMuMCIsCiAgICAic2lnbmFsLWV4aXQiOiAiNC4xLjAiLAogICAgInNvdXJjZS1tYXAiOiAiMC44LjAiLAogICAgInR5cGVzY3JpcHQiOiAiXjYuMC4wIiwKICAgICJ2YWxpYm90IjogIjEuNS4wIgogIH0sCiAgIm5hcGkiOiB7CiAgICAiYmluYXJ5TmFtZSI6ICJyb2xsZG93bi1iaW5kaW5nIiwKICAgICJkdHNIZWFkZXIiOiAidHlwZSBNYXliZVByb21pc2U8VD4gPSBUIHwgUHJvbWlzZTxUPlxudHlwZSBOdWxsYWJsZTxUPiA9IFQgfCBudWxsIHwgdW5kZWZpbmVkXG50eXBlIFZvaWROdWxsYWJsZTxUID0gdm9pZD4gPSBUIHwgbnVsbCB8IHVuZGVmaW5lZCB8IHZvaWRcbmV4cG9ydCB0eXBlIEJpbmRpbmdTdHJpbmdPclJlZ2V4ID0gc3RyaW5nIHwgUmVnRXhwXG5leHBvcnQgdHlwZSBCaW5kaW5nUmVzdWx0PFQ+ID0geyBlcnJvcnM6IEJpbmRpbmdFcnJvcltdLCBpc0JpbmRpbmdFcnJvcnM6IGJvb2xlYW4gfSB8IFRcblxuIiwKICAgICJwYWNrYWdlTmFtZSI6ICJAcm9sbGRvd24vYmluZGluZyIsCiAgICAidGFyZ2V0cyI6IFsKICAgICAgImFhcmNoNjQtYXBwbGUtZGFyd2luIiwKICAgICAgImFhcmNoNjQtbGludXgtYW5kcm9pZCIsCiAgICAgICJhYXJjaDY0LXBjLXdpbmRvd3MtbXN2YyIsCiAgICAgICJhYXJjaDY0LXVua25vd24tbGludXgtZ251IiwKICAgICAgImFhcmNoNjQtdW5rbm93bi1saW51eC1tdXNsIiwKICAgICAgImFhcmNoNjQtdW5rbm93bi1saW51eC1vaG9zIiwKICAgICAgImFybXY3LWxpbnV4LWFuZHJvaWRlYWJpIiwKICAgICAgImFybXY3LXVua25vd24tbGludXgtZ251ZWFiaWhmIiwKICAgICAgInBvd2VycGM2NGxlLXVua25vd24tbGludXgtZ251IiwKICAgICAgInMzOTB4LXVua25vd24tbGludXgtZ251IiwKICAgICAgIndhc20zMi13YXNpcDEtdGhyZWFkcyIsCiAgICAgICJ4ODZfNjQtYXBwbGUtZGFyd2luIiwKICAgICAgIng4Nl82NC1wYy13aW5kb3dzLW1zdmMiLAogICAgICAieDg2XzY0LXVua25vd24tZnJlZWJzZCIsCiAgICAgICJ4ODZfNjQtdW5rbm93bi1saW51eC1nbnUiLAogICAgICAieDg2XzY0LXVua25vd24tbGludXgtbXVzbCIKICAgIF0sCiAgICAid2FzbSI6IHsKICAgICAgImluaXRpYWxNZW1vcnkiOiAxNjM4NCwKICAgICAgImJyb3dzZXIiOiB7CiAgICAgICAgImZzIjogdHJ1ZSwKICAgICAgICAiYXN5bmNJbml0IjogdHJ1ZSwKICAgICAgICAiZXJyb3JFdmVudCI6IHRydWUKICAgICAgfQogICAgfQogIH0sCiAgImVuZ2luZXMiOiB7CiAgICAibm9kZSI6ICJeMjAuMTkuMCB8fCA+PTIyLjEyLjAiCiAgfSwKICAib3B0aW9uYWxEZXBlbmRlbmNpZXMiOiB7CiAgICAiQHJvbGxkb3duL2JpbmRpbmctZGFyd2luLWFybTY0IjogIjEuMi4xMiIsCiAgICAiQHJvbGxkb3duL2JpbmRpbmctYW5kcm9pZC1hcm02NCI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLXdpbjMyLWFybTY0LW1zdmMiOiAiMS4yLjEyIiwKICAgICJAcm9sbGRvd24vYmluZGluZy1saW51eC1hcm02NC1nbnUiOiAiMS4yLjEyIiwKICAgICJAcm9sbGRvd24vYmluZGluZy1saW51eC1hcm02NC1tdXNsIjogIjEuMi4xMiIsCiAgICAiQHJvbGxkb3duL2JpbmRpbmctb3Blbmhhcm1vbnktYXJtNjQiOiAiMS4yLjEyIiwKICAgICJAcm9sbGRvd24vYmluZGluZy1hbmRyb2lkLWFybS1lYWJpIjogIjEuMi4xMiIsCiAgICAiQHJvbGxkb3duL2JpbmRpbmctbGludXgtYXJtLWdudWVhYmloZiI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLWxpbnV4LXBwYzY0LWdudSI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLWxpbnV4LXMzOTB4LWdudSI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLWRhcndpbi14NjQiOiAiMS4yLjEyIiwKICAgICJAcm9sbGRvd24vYmluZGluZy13aW4zMi14NjQtbXN2YyI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLWZyZWVic2QteDY0IjogIjEuMi4xMiIsCiAgICAiQHJvbGxkb3duL2JpbmRpbmctbGludXgteDY0LWdudSI6ICIxLjIuMTIiLAogICAgIkByb2xsZG93bi9iaW5kaW5nLWxpbnV4LXg2NC1tdXNsIjogIjEuMi4xMiIKICB9LAogICJzY3JpcHRzIjogewogICAgIiMgU2NyaXBzIGZvciBiaW5kaW5nICMiOiAiXyIsCiAgICAiYXJ0aWZhY3RzIjogIm5hcGkgYXJ0aWZhY3RzIC0tY3dkIC4vc3JjIC0tcGFja2FnZS1qc29uLXBhdGggLi4vcGFja2FnZS5qc29uIC1vPS4uL2FydGlmYWN0cyAtLW5wbS1kaXIgLi4vbnBtIiwKICAgICJidWlsZC1iaW5kaW5nIjogIm94bm9kZSAuL2J1aWxkLWJpbmRpbmcudHMiLAogICAgImJ1aWxkLWJpbmRpbmc6cmVsZWFzZSI6ICJwbnBtIGJ1aWxkLWJpbmRpbmcgLS1yZWxlYXNlIiwKICAgICJidWlsZC1iaW5kaW5nOnByb2ZpbGUiOiAicG5wbSBidWlsZC1iaW5kaW5nIC0tcHJvZmlsZSBwcm9maWxlIC0tZmVhdHVyZXMgY2hyb21lLXRyYWNpbmciLAogICAgImJ1aWxkLWJpbmRpbmc6d2FzaSI6ICJwbnBtIGJ1aWxkLWJpbmRpbmcgLS10YXJnZXQgd2FzbTMyLXdhc2lwMS10aHJlYWRzIiwKICAgICJidWlsZC1iaW5kaW5nOndhc2k6cmVsZWFzZSI6ICJwbnBtIGJ1aWxkLWJpbmRpbmcgLS1wcm9maWxlIHJlbGVhc2Utd2FzaSAtLXRhcmdldCB3YXNtMzItd2FzaXAxLXRocmVhZHMiLAogICAgIiMgU2NyaXBzIGZvciBub2RlICMiOiAiXyIsCiAgICAiYnVpbGQtbm9kZSI6ICJub2RlIC0tZW5hYmxlLXNvdXJjZS1tYXBzIC0taW1wb3J0IEBveGMtbm9kZS9jb3JlL3JlZ2lzdGVyIC1DIGRldiAuL2J1aWxkLnRzIiwKICAgICJidWlsZC10eXBlcy1jaGVjayI6ICJ0c2MgLXAgLi90c2NvbmZpZy5jaGVjay5qc29uIiwKICAgICJidWlsZC1qcy1nbHVlIjogInBucG0gcnVuIC0tc2VxdWVudGlhbCAnL15idWlsZC0obm9kZXx0eXBlcy1jaGVjaykkLyciLAogICAgImJ1aWxkLW5hdGl2ZTpkZWJ1ZyI6ICJwbnBtIHJ1biAtLXNlcXVlbnRpYWwgJy9eYnVpbGQtKGJpbmRpbmd8anMtZ2x1ZSkkLyciLAogICAgImJ1aWxkLW5hdGl2ZTpyZWxlYXNlIjogInBucG0gcnVuIC0tc2VxdWVudGlhbCAnL15idWlsZC0oYmluZGluZzpyZWxlYXNlfGpzLWdsdWUpJC8nIiwKICAgICJidWlsZC1uYXRpdmU6cHJvZmlsZSI6ICJwbnBtIHJ1biBidWlsZC1iaW5kaW5nOnByb2ZpbGUgJiYgcG5wbSBydW4gYnVpbGQtanMtZ2x1ZSIsCiAgICAiYnVpbGQtbmF0aXZlOm1lbW9yeS1wcm9maWxlIjogInBucG0gcnVuIGJ1aWxkLWJpbmRpbmc6cHJvZmlsZSAtLWZlYXR1cmVzIGRlZmF1bHRfZ2xvYmFsX2FsbG9jYXRvciAmJiBwbnBtIHJ1biBidWlsZC1qcy1nbHVlIiwKICAgICJidWlsZC13YXNpOmRlYnVnIjogIlRBUkdFVD0ncm9sbGRvd24td2FzaScgcG5wbSBydW4gLS1zZXF1ZW50aWFsICcvXmJ1aWxkLShiaW5kaW5nfGJpbmRpbmc6d2FzaXxub2RlKSQvJyIsCiAgICAiYnVpbGQtd2FzaTpyZWxlYXNlIjogIlRBUkdFVD0ncm9sbGRvd24td2FzaScgcG5wbSBydW4gLS1zZXF1ZW50aWFsICcvXmJ1aWxkLShiaW5kaW5nfGJpbmRpbmc6d2FzaTpyZWxlYXNlfG5vZGUpJC8nIiwKICAgICJidWlsZC1icm93c2VyLXBrZzpkZWJ1ZyI6ICJUQVJHRVQ9J2Jyb3dzZXInIHBucG0gcnVuIC0tc2VxdWVudGlhbCAnL15idWlsZC0oYmluZGluZzp3YXNpfG5vZGUpJC8nIiwKICAgICJidWlsZC1icm93c2VyLXBrZzpyZWxlYXNlIjogIlRBUkdFVD0nYnJvd3NlcicgcG5wbSBydW4gLS1zZXF1ZW50aWFsICcvXmJ1aWxkLShiaW5kaW5nOndhc2k6cmVsZWFzZXxub2RlKSQvJyIsCiAgICAiIyBTY3JpcHMgZm9yIGRvY3MgIyI6ICJfIiwKICAgICJwdWJsaW50IjogInB1YmxpbnQgLiIKICB9Cn0=",
+      "manifestSha256": "6cbb247d5ff8ae3d45cba6af71ab424aa887835d917573ad1bb54ef6b2ff3b0f"
+    }
+  },
+  "schemaVersion": 1
+}

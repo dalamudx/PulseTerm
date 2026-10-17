@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 /// fn dump(p:pulse_store::vault_unlock::PasswordInput) {println!("{p:?}");}
 /// ```
 pub struct PasswordInput {
-    bytes: Zeroizing<Vec<u8>>,
+    pub(crate) bytes: Zeroizing<Vec<u8>>,
 }
 impl PasswordInput {
     /// Invalid supplied buffers are also zeroized on return.
@@ -42,6 +42,7 @@ pub enum UnlockError {
 /// Pending ownership. Dropping this or the consuming `ready()` future cancels.
 /// The CPU job remains charged until its actual closure exits, even if detached.
 pub struct ValidationUnlockRequest {
+    source_envelope: Option<Vec<u8>>,
     permit: UnlockPermit,
     receiver: oneshot::Receiver<Result<UnlockCandidate, UnlockError>>,
     task: JoinHandle<()>,
@@ -58,10 +59,15 @@ impl CancelledUnlock {
 }
 /// A joined, authenticated result is still not active until explicit confirmation.
 pub struct ReadyUnlock {
+    source_envelope: Option<Vec<u8>>,
     permit: UnlockPermit,
     candidate: UnlockCandidate,
 }
 impl ValidationUnlockRequest {
+    /// Register explicit epoch cancellation with a trusted page/application owner before work completes.
+    pub fn revocation(&self) -> crate::vault_lifecycle::UnlockRevocation {
+        self.permit.revocation()
+    }
     /// Consuming async wait: timeout/drop cancels the permit and owned receiver.
     /// Awaits both delivery and worker join; errors never activate a key.
     pub async fn ready(self) -> Result<ReadyUnlock, UnlockError> {
@@ -70,6 +76,7 @@ impl ValidationUnlockRequest {
         joined.map_err(|_| UnlockError::Worker)?;
         let candidate = result.map_err(|_| UnlockError::Worker)??;
         Ok(ReadyUnlock {
+            source_envelope: self.source_envelope,
             permit: self.permit,
             candidate,
         })
@@ -82,6 +89,39 @@ impl ValidationUnlockRequest {
     }
 }
 impl ReadyUnlock {
+    /// Key-free same-epoch cancellation for trusted native ownership handoff.
+    pub fn revocation(&self) -> crate::vault_lifecycle::UnlockRevocation {
+        self.permit.revocation()
+    }
+    pub(crate) fn confirmation_cancel(&self) -> crate::vault_lifecycle::UnlockConfirmationCancel {
+        self.permit.confirmation_cancel()
+    }
+    pub(crate) fn confirm_bound(
+        mut self,
+        scope: &VaultKeyLifecycle,
+        envelope: &[u8],
+    ) -> Result<crate::vault_lifecycle::UnlockActivation, LifecycleError> {
+        if self.source_envelope.as_deref() != Some(envelope) {
+            return Err(LifecycleError::Stale);
+        }
+        scope.confirm_guarded(&mut self.permit, &mut self.candidate)
+    }
+    #[cfg(test)]
+    pub(crate) fn fixture(
+        scope: &VaultKeyLifecycle,
+        envelope: Vec<u8>,
+    ) -> Result<Self, LifecycleError> {
+        let mut permit = scope.begin()?;
+        let worker = permit.worker()?;
+        let proof =
+            AuthenticatedDek::fixture(scope.expected_id()?).map_err(|_| LifecycleError::Closed)?;
+        let candidate = worker.finish(proof)?;
+        Ok(Self {
+            permit,
+            candidate,
+            source_envelope: Some(envelope),
+        })
+    }
     /// Only a currently authorized backend adapter should call this.
     /// Foreign/old confirmation is rejected without consuming this receipt.
     pub fn confirm(&mut self, scope: &VaultKeyLifecycle) -> Result<(), UnlockError> {
@@ -96,14 +136,39 @@ pub fn begin_validation_unlock(
     password: PasswordInput,
     envelope: ValidationWrappedDek,
 ) -> Result<ValidationUnlockRequest, UnlockError> {
+    begin_validation_unlock_authorized(scope, password, envelope, std::sync::Arc::new(|| true))
+}
+/// Native-owned validation unlock; predicate retains actual operation resources until CPU exit.
+/// Reject retired authorization before admission/computation/publication, no implicit activation.
+pub fn begin_validation_unlock_authorized(
+    scope: &VaultKeyLifecycle,
+    password: PasswordInput,
+    envelope: ValidationWrappedDek,
+    authorize: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
+) -> Result<ValidationUnlockRequest, UnlockError> {
     let runtime = Handle::try_current().map_err(|_| UnlockError::Runtime)?;
+    if !authorize() {
+        return Err(LifecycleError::Stale.into());
+    }
     let id = scope.expected_id()?;
     envelope.validate_for(id)?;
+    let source_envelope = envelope.encode_ciphertext()?;
     let job = admit_validation_job()?;
-    dispatch(&runtime, scope, job, move |job| {
-        Ok(recover_admitted(&password.bytes, id, &envelope, job)?)
-    })
+    let retention = authorize.clone();
+    let mut request = dispatch_retained(&runtime, scope, job, Some(retention), move |job| {
+        if !authorize() {
+            return Err(LifecycleError::Stale.into());
+        }
+        let key = recover_admitted(&password.bytes, id, &envelope, job)?;
+        if !authorize() {
+            return Err(LifecycleError::Stale.into());
+        }
+        Ok(key)
+    })?;
+    request.source_envelope = Some(source_envelope);
+    Ok(request)
 }
+#[cfg(test)]
 fn dispatch<F>(
     runtime: &Handle,
     scope: &VaultKeyLifecycle,
@@ -113,10 +178,23 @@ fn dispatch<F>(
 where
     F: FnOnce(&KdfJob) -> Result<AuthenticatedDek, UnlockError> + Send + 'static,
 {
+    dispatch_retained(runtime, scope, job, None, compute)
+}
+fn dispatch_retained<F>(
+    runtime: &Handle,
+    scope: &VaultKeyLifecycle,
+    job: KdfJob,
+    retention: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
+    compute: F,
+) -> Result<ValidationUnlockRequest, UnlockError>
+where
+    F: FnOnce(&KdfJob) -> Result<AuthenticatedDek, UnlockError> + Send + 'static,
+{
     let mut permit = scope.begin()?;
     let worker = permit.worker()?;
     let (sender, receiver) = oneshot::channel();
     let task = runtime.spawn_blocking(move || {
+        let _retention = retention;
         let job = job;
         if sender.is_closed() {
             return;
@@ -131,6 +209,7 @@ where
         // `job` lives through authentication, publication/send and closure exit.
     });
     Ok(ValidationUnlockRequest {
+        source_envelope: None,
         permit,
         receiver,
         task,

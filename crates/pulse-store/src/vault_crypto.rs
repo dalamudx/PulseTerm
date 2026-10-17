@@ -34,6 +34,7 @@ pub enum CryptoError {
 pub struct SecretContext {
     id: Uuid,
     kind: String,
+    vault_id: Option<Uuid>,
 }
 impl SecretContext {
     /// Kind labels are canonical lower ASCII identifiers, not a credential taxonomy.
@@ -51,10 +52,33 @@ impl SecretContext {
         Ok(Self {
             id,
             kind: kind.into(),
+            vault_id: None,
         })
     }
+    pub(crate) fn bound_to_vault(
+        vault_id: Uuid,
+        id: Uuid,
+        kind: &str,
+    ) -> Result<Self, CryptoError> {
+        if vault_id.is_nil() {
+            return Err(CryptoError::Context);
+        }
+        let mut context = Self::new(id, kind)?;
+        context.vault_id = Some(vault_id);
+        Ok(context)
+    }
+    pub(crate) fn id(&self) -> Uuid {
+        self.id
+    }
+    pub(crate) fn kind(&self) -> &str {
+        &self.kind
+    }
     fn aad(&self) -> Vec<u8> {
-        let mut aad = Vec::with_capacity(16 + self.kind.len());
+        let mut aad = Vec::with_capacity(64 + self.kind.len());
+        if let Some(vault_id) = self.vault_id {
+            aad.extend_from_slice(b"PulseTerm/vault/credential/v1\0");
+            aad.extend_from_slice(vault_id.as_bytes());
+        }
         aad.extend_from_slice(self.id.as_bytes());
         aad.extend_from_slice(self.kind.as_bytes());
         aad
@@ -78,6 +102,18 @@ pub struct SealedSecret {
 /// ```
 pub struct SecretBytes(Zeroizing<Vec<u8>>);
 impl SecretBytes {
+    /// Take a bounded backend-owned secret buffer; failed input also zeroizes on drop.
+    /// This does not authorize use or add Debug/serialization/frontend reading.
+    pub fn from_owned(bytes: Vec<u8>) -> Result<Self, CryptoError> {
+        Self::from_zeroizing(Zeroizing::new(bytes))
+    }
+    pub(crate) fn from_zeroizing(bytes: Zeroizing<Vec<u8>>) -> Result<Self, CryptoError> {
+        if bytes.len() > SECRET_BYTES_LIMIT {
+            return Err(CryptoError::Context);
+        }
+        Ok(Self(bytes))
+    }
+
     /// Borrow for an authorized transport operation; never register this as frontend IPC.
     pub fn expose(&self) -> &[u8] {
         &self.0

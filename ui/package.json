@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit && biome check src scripts vite.config.ts",
+    "check": "tsc --noEmit && tsx scripts/workspace-language-check.ts && biome check src scripts vite.config.ts",
     "format": "biome check --write src scripts vite.config.ts",
     "test": "vitest run",
     "probe": "tsx scripts/terminal-probe.ts",
@@ -25,6 +25,7 @@
     "@vitejs/plugin-react": "6.1.1",
     "@xterm/addon-unicode-graphemes": "0.4.0",
     "@xterm/addon-unicode11": "0.9.0",
+    "@xterm/addon-webgl": "0.19.0",
     "@xterm/headless": "6.0.0",
     "@xterm/xterm": "6.0.0",
     "tailwindcss": "4.3.3",

@@ -40,7 +40,7 @@ export class GenerationViewHost {
         generation,
         (): boolean => this.current === scope && !this.closed,
         (g) => this.retire(g),
-        () => this.cleanupFailed(),
+        (error) => this.cleanupFailed(error),
       );
       this.current = scope;
       return scope;
@@ -69,10 +69,10 @@ export class GenerationViewHost {
     this.current = undefined;
     scope?.release();
   }
-  private cleanupFailed(): void {
+  private cleanupFailed(error = new Error("view.cleanup_failed")): void {
     this.dispose();
     try {
-      this.failed(new Error("view.cleanup_failed"));
+      this.failed(error);
     } catch {
       /* Failure reporting must not stop remaining resource cleanup. */
     }
@@ -92,10 +92,17 @@ export class ViewScope {
     readonly generation: bigint,
     private readonly current: () => boolean,
     private readonly retire: (generation: bigint) => boolean,
-    private readonly failed: () => void,
+    private readonly failed: (error?: Error) => void,
   ) {}
   isCurrent(): boolean {
     return !this.signal.aborted && this.current();
+  }
+  /** A current renderer failure retires native callbacks; late failures cannot
+   * invalidate a replacement generation. */
+  invalidate(error: Error): void {
+    if (!this.isCurrent()) return;
+    this.retire(this.generation);
+    this.failed(error);
   }
   /** Idempotent ownership by object/function identity. Stale registration disposes
    * immediately and rejects; cleanup may never be transferred to a new scope. */

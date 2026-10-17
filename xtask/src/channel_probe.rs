@@ -6,35 +6,50 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub fn run() -> Result<()> {
-    run_mode(false, false, false, false, false)
+    run_mode(false, false, false, false, false, false)
 }
 pub fn run_window() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("probe-window currently requires isolated Linux X11/Openbox");
     }
-    run_mode(true, false, false, false, false)
+    run_mode(true, false, false, false, false, false)
 }
 pub fn run_window_external() -> Result<()> {
     if !cfg!(target_os = "linux") {
         bail!("external window probe requires isolated X11/Openbox");
     }
-    run_mode(true, true, false, false, false)
+    run_mode(true, true, false, false, false, false)
 }
 pub fn run_v2() -> Result<()> {
-    run_mode(false, false, true, false, false)
+    run_mode(false, false, true, false, false, false)
 }
 pub fn run_encoding() -> Result<()> {
-    run_mode(false, false, true, true, false)
+    run_mode(false, false, true, true, false, false)
 }
 pub fn run_profile_login() -> Result<()> {
     if !cfg!(unix) {
         bail!("login window probe requires a known Unix Bash");
     }
-    run_mode(false, false, true, false, true)
+    run_mode(false, false, true, false, true, false)
 }
-fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool, login: bool) -> Result<()> {
+pub fn run_settings() -> Result<()> {
+    if !cfg!(target_os = "linux") {
+        bail!("native settings probe currently requires isolated Linux validation");
+    }
+    run_mode(false, false, true, false, false, true)
+}
+fn run_mode(
+    minimize: bool,
+    external: bool,
+    dual: bool,
+    encoding: bool,
+    login: bool,
+    settings: bool,
+) -> Result<()> {
     let root = super::root()?;
-    let report = root.join(if login {
+    let report = root.join(if settings {
+        "target/probes/settings-window.json"
+    } else if login {
         "target/probes/login-window.json"
     } else if encoding {
         "target/probes/encoding-window.json"
@@ -134,6 +149,9 @@ fn run_mode(minimize: bool, external: bool, dual: bool, encoding: bool, login: b
     if !profile_mode_matches(&actual, login) {
         bail!("profile login receipt does not match requested build mode");
     }
+    if !settings_mode_matches(&actual, settings) {
+        bail!("native settings receipt does not match requested build mode");
+    }
     if encoding {
         validate_encoding(&actual)?;
     } else if actual["encodingRuns"] != 0 || !actual["encoding"].is_null() {
@@ -230,6 +248,18 @@ fn profile_mode_matches(report: &Value, login: bool) -> bool {
         .iter()
         .all(|key| report[key]["profileLoginChecked"].as_bool() == Some(login))
 }
+fn settings_mode_matches(report: &Value, enabled: bool) -> bool {
+    ["session", "domSession"].iter().all(|key| {
+        [
+            "nativeSettingsChecked",
+            "nativeThemeChecked",
+            "nativePeerThemePaintChecked",
+            "nativeTargetThemePaintChecked",
+        ]
+        .iter()
+        .all(|field| report[key][field].as_bool() == Some(enabled))
+    })
+}
 fn attachment_mode_matches(report: &Value, dual: bool) -> bool {
     let version = if dual { 2 } else { 1 };
     ["session", "domSession"]
@@ -314,6 +344,7 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
         || dom["nativeSignalChecked"] != true
         || dom["nativePauseChecked"] != true
         || dom["viewHostChecked"] != true
+        || !ui_overrides_checked(dom)
         || dom["viewPoolChecked"] != true
         || dom["activeParkChecked"] != true
         || report["domSession"]["nativeOnlyChecked"] != true
@@ -376,9 +407,73 @@ fn validate(path: &Path, minimize: bool, external: bool, dual: bool) -> Result<(
     Ok(())
 }
 
+fn ui_overrides_checked(dom: &Value) -> bool {
+    matches!(dom.get("uiOverridesChecked"), Some(Value::Bool(true)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ui_override_receipt_rejects_missing_false_truthy_and_old_evidence() {
+        assert!(ui_overrides_checked(
+            &serde_json::json!({"uiOverridesChecked":true})
+        ));
+        for bad in [
+            Value::Null,
+            Value::Bool(false),
+            serde_json::json!("true"),
+            serde_json::json!(1),
+            serde_json::json!({}),
+        ] {
+            assert!(!ui_overrides_checked(
+                &serde_json::json!({"uiOverridesChecked":bad})
+            ));
+        }
+        assert!(!ui_overrides_checked(
+            &serde_json::json!({"viewHostChecked":true})
+        ));
+        assert!(!ui_overrides_checked(&Value::Null));
+    }
+    #[test]
+    fn settings_mode_rejects_missing_truthy_mixed_and_ordinary_receipts() {
+        let mut r = serde_json::json!({"session":{"nativeSettingsChecked":true,"nativeThemeChecked":true,"nativePeerThemePaintChecked":true,"nativeTargetThemePaintChecked":true},"domSession":{"nativeSettingsChecked":true,"nativeThemeChecked":true,"nativePeerThemePaintChecked":true,"nativeTargetThemePaintChecked":true}});
+        assert!(settings_mode_matches(&r, true));
+        assert!(!settings_mode_matches(&r, false));
+        for field in [
+            "nativeSettingsChecked",
+            "nativeThemeChecked",
+            "nativePeerThemePaintChecked",
+            "nativeTargetThemePaintChecked",
+        ] {
+            for bad in [
+                serde_json::Value::Null,
+                serde_json::json!("true"),
+                serde_json::json!(1),
+                serde_json::json!(false),
+            ] {
+                let mut rejected = r.clone();
+                rejected["domSession"][field] = bad;
+                assert!(!settings_mode_matches(&rejected, true));
+            }
+        }
+        let mut missing = r.clone();
+        missing["domSession"] = serde_json::json!({"nativeSettingsChecked":true});
+        assert!(!settings_mode_matches(&missing, true));
+        r["session"]["nativeTargetThemePaintChecked"] = serde_json::json!(false);
+        r["domSession"]["nativeTargetThemePaintChecked"] = serde_json::json!(false);
+        r["session"]["nativeSettingsChecked"] = serde_json::json!(false);
+        r["session"]["nativePeerThemePaintChecked"] = serde_json::json!(false);
+        r["domSession"]["nativePeerThemePaintChecked"] = serde_json::json!(false);
+        r["session"]["nativeThemeChecked"] = serde_json::json!(false);
+        r["domSession"]["nativeThemeChecked"] = serde_json::json!(false);
+        r["domSession"]["nativeSettingsChecked"] = serde_json::json!(false);
+        assert!(settings_mode_matches(&r, false));
+        r["domSession"] = serde_json::json!({"nativeSettingsChecked":false});
+        assert!(!settings_mode_matches(&r, false));
+        r["session"] = serde_json::json!({});
+        assert!(!settings_mode_matches(&r, false));
+    }
     #[test]
     fn login_mode_rejects_ordinary_missing_truthy_and_mixed_receipts() {
         let mut r = serde_json::json!({"session":{"profileLoginChecked":true},"domSession":{"profileLoginChecked":true}});

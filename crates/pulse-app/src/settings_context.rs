@@ -314,6 +314,11 @@ pub struct SettingsCandidate {
     group_revision: Option<u64>,
     host_revision: Option<u64>,
 }
+impl SettingsCandidate {
+    pub(crate) fn user_patch(&self) -> &SettingsPatch {
+        &self.capture.user
+    }
+}
 /// Immutable backend snapshot. Never serialized into an authorization payload.
 /// ```compile_fail
 /// use pulse_app::settings_context::PublishedSettings;

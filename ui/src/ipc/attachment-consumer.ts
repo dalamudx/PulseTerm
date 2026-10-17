@@ -136,6 +136,15 @@ export class AttachmentConsumer {
     });
     if (this.abort.signal.aborted) throw this.reason();
   }
+  /** Rendering is complete: discard owned wire BEFORE ACK can release sender
+   * credit and synchronously enqueue its replacement. Keep the active promise
+   * cancellable while ACK/Commit confirmation waits, but never double-charge it. */
+  private releaseWire(job: Job): void {
+    if (!job.wire.length) return;
+    this.frames--;
+    this.bytes -= job.wire.length;
+    job.wire = new Uint8Array(0);
+  }
   private async drain() {
     this.running = true;
     try {
@@ -200,6 +209,7 @@ export class AttachmentConsumer {
                 ),
               );
             }
+            this.releaseWire(job);
             await this.wait(
               Promise.resolve(this.ack(receipt.generation, receipt.sequence)),
             );
@@ -211,8 +221,7 @@ export class AttachmentConsumer {
           job.reject(reason);
           this.cancel(reason);
         } finally {
-          this.frames--;
-          this.bytes -= job.wire.length;
+          this.releaseWire(job);
           this.active = undefined;
         }
       }

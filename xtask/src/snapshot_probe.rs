@@ -83,6 +83,21 @@ fn named() -> Vec<Case> {
     let mut cases: Vec<(&str, Vec<u8>, Vec<u8>)> = vec![
         ("ordinary-text", b"hello".to_vec(), b" world".to_vec()),
         (
+            "spacer-combining-first",
+            "中e\u{301}\r\x1b[P\x1b[3b".into(),
+            b"\x1b[3b\x1b[2@\x1b[6n".to_vec(),
+        ),
+        (
+            "spacer-combining-middle",
+            "中e\u{301}\r\x1b[P\x1b[3b\x1b[3@".into(),
+            b"\x1b[3b\x1b[?1049hX\x1b[?1049l".to_vec(),
+        ),
+        (
+            "spacer-combining-trailing-nonexact",
+            "中e\u{301}\r\x1b[P\x1b[3b\x1b[30@".into(),
+            b"\x1b[3b".to_vec(),
+        ),
+        (
             "pending-wrap",
             b"12345678901234567890123456789012".to_vec(),
             b"Z".to_vec(),
@@ -293,6 +308,7 @@ pub fn run() -> Result<()> {
                     RestoreGap::PendingSequenceTooLong => "pending-too-long",
                     RestoreGap::InactiveCursorDivergence => "inactive-cursor-divergence",
                     RestoreGap::NonEdgePendingWrap => "nonedge-pending-wrap",
+                    RestoreGap::ClippedWideHeadPendingWrap => "clipped-wide-head-pending-wrap",
                 }),
                 false,
                 Vec::new(),

@@ -88,6 +88,9 @@ async fn foreign_registry_pointer_is_checked_even_if_private_test_forces_matchin
     b.finish().await
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "registry_settings_source_tests.rs"]
+mod source_tests;
 use super::*;
 use crate::registry::tests::{bootstrap, config, session};
 use pulse_store::{

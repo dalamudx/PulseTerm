@@ -1,0 +1,19 @@
+# 后台终端视图资源调度
+
+生产WorkspacePane同时接收布局可见性、当前document.visibilityState和原生窗口投影。分屏最大化隐藏其他已挂载窗格、文档hidden、原生隐藏或最小化时，停止本地输入、输出解析与渲染，释放xterm Surface，断开尺寸观察并取消票据。Root会话、PTY和SSH连接继续保留；普通标签切换仍卸载旧视图。
+
+恢复可见时，保留同一session和容器，先等待旧detach调用成功，再用原有prepare／connect／capture／ACK／输入确认链取得新generation。从当前权威快照与有界实时通道恢复，不重放隐藏期间全部原始输出，不创建PTY或重拨SSH。隐藏的新分屏仍推迟首次捕获，避免零尺寸网格。
+
+布局、文档和原生窗口三个条件必须同时可见。快速隐藏／显示合并到一个串行调度任务，每次prepare有独立取消信号与epoch；迟到prepare必须清理，旧回调不能发布状态或启用输入。prepare过程中隐藏同样适用。
+
+Connection.suspend同步停止本地资源并返回同一个可等待detach Promise。Pane还限制迟到prepare及清理等待；1.5秒内无结果、未获确认的detach拒绝或准备失败均停在失败状态，不自动重试。dispose仍为幂等、无需等待的页面退出入口，错误被接收但不授权重附着。已经被后端接收的输入或resize不因前端取消而回滚。
+
+原生detach成功仅证明TerminalBank接收取消并移除票据，不证明转发线程或容量已物理退出。原有转发监督器持有信用直到实际结束；Registry原页授权、换代安装与旧binding撤销继续生效。恢复的prepare遇到容量不足或不明错误会失败，不以重试绕过。没有修改原生权限、容量释放规则或输出ACK协议。
+
+自然EOF有一个正常分支：原生End ACK成功后，后端会自动移除票据。只有该End已经确认、detach又精确返回workspace.denied时，允许把自动退役当作正常暂停；仅观察到End、ACK仍未完成、其他错误或超时均不能使用该分支。它不释放后端信用，也不授权恢复；新prepare仍须通过原页和Registry检查。
+
+首窗和新建窗口分别安装NativeWatcher，事件精确发送到当前webview_window。Focused／Resized只触发有界50／50／100ms重新采样，不以失焦推断隐藏，无空闲轮询；Linux另接GTK visible与window-state信号。原生快照只允许实际Invoke窗口的当前原页，采样前后均复验；采样串行化，incarnation和revision拒绝其他窗口及过期事件。前端每页共享一个监听，先监听再取快照、缓冲较新事件；确认初始原生状态后才启动视图。未知、无效、超时均不默认可见；终止错误需要重新打开窗口。窗口关闭等待观察任务及超时后仍持有额度的真实采样退出。当前不判断遮挡、不保留停车池，不抢分屏焦点；已结束视图仍走只读恢复。
+
+本轮开发验证覆盖四个直接受影响Vitest模块的65项行为（最后仅重跑有修改的Pane／Connection共46项），TypeScript、改动文件Biome和Vite产品构建通过。覆盖隐藏立即停工、延迟detach、迟到prepare、布局与文档双条件、拒绝和超时不重试、失效回调、原生回执幂等、最大化通知以及已确认／未确认EOF。保留3项既有lint警告及既有动态导入构建警告。现有CI的Vitest／TypeScript入口自动覆盖，无新增重型任务。Astrolabe TypeScript诊断服务Unknown，不算通过；没有安装工具。
+
+本轮开发证据保存在target/probes/native-background-development/。新增可见性及Pane共25项前端行为、原生观察器7项（包括超时真实采样的退出等待）、TypeScript、改动文件Biome、CLI＋SSH原生库编译和Vite产品构建通过；Rust诊断Exact零，TS Unknown未计。原有前批65项结果另保留。没有运行全量回归、SSH／CLI矩阵、原生WebView或WebGL实窗，未测后台CPU、进程树内存或恢复延迟。跨平台原生验证、遮挡、停车池和TERM-05/06性能指标仍未完成。

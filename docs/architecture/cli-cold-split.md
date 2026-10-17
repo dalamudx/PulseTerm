@@ -1,0 +1,13 @@
+# 冷 CLI 分屏
+
+`pulse split -v sh`（左右）与 `pulse split -h sh`（上下）在没有现存端点时启动 GUI。请求只携带后端发现的 Profile 枚举与方向，不接受路径、argv、环境或执行文本。冷 SSH 意图确认不授予本地启动权限。
+
+空工作区没有已连接的目标，冷分屏因此使用两次独立批准。首次原页弹层明确说明先创建一个终端，再单独确认第二个；首次取消不创建 PTY。首次批准通过现有本地启动票据、原页校验与原生资源监管注册首个会话，并通过原页 owned-session 选择 ACK 呈现它。后台只在 Root 中找到这次返回的注册会话，不转授普通 focus-tab 动作。
+
+第二次批准消息带有首个注册的精确 SessionId、原 Profile 和方向。前端只在当前连接 pane 的 session 与该目标一致时捕获分屏目标，并在确认期间检查 pane identity。目标改变、换页、CLI 断连、取消或过期拒绝第二次启动。取消第二步会保留已经注册的首个会话；注册不可因丢失 CLI 回执回滚，也不会自动重试。
+
+每次批准的 30 秒期限、原生启动的 5 秒期限、原页选择 ACK 的 5 秒期限均保持现有边界。冷 bootstrap 外层观察预算为 90 秒，覆盖两次独立批准和呈现，不能延长任一票据或转用后续页面。SSH 解锁／epoch 边界不改变。
+
+内部 `CallOrigin::SplitBase` 与 `SplitFollowup` 只由后端发出；stage、target 不接受 CLI 参数注入。version 4 消息分别使用封闭的 base/split 字段集，未知阶段、非法 Profile／方向、额外字段、非规范 target 都拒绝。普通暖分屏、只读 metadata 启动与 secondary 实例转发保持独立授权。
+
+Linux 冷分屏实窗六模式已通过：首步取消零 PTY，次步取消／CLI 断连／换页只保留已注册首个会话；左右／上下分别创建两个独立 PTY，刷新前后独立原文输入、原 PID 保留、所有 GUI／PTY／端点正常退出。类型与36项局部前端、严格原生 Clippy、10项启动边界、一项观察期限及新模块 Exact 零诊断通过。默认 check、1050项Rust、1195项前端及基础 probe 通过，7项忽略不计。初次并行合并中9项既有native完成等待超时已保留，两组14项单独复核通过，完整回归以4个Rust测试线程运行且5秒断言未改；不据此声称默认并发稳定性已解决。证据见 `target/probes/cold-split-acceptance.json`。发行审计仍为许可证／维护策略阻断，跨平台、IME、性能与多窗口未验；全部退出后的clean-dev清理记录在manifest。

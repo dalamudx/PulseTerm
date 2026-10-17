@@ -2,6 +2,37 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AttachmentConsumer, type AttachmentSink } from "./attachment-consumer";
 
+it("reentrant ACK releases consumed wire capacity before the sender supplies its next frame", async () => {
+  let finish!: () => void, fail!: (e: unknown) => void;
+  const done = new Promise<void>((resolve, reject) => {
+    finish = resolve;
+    fail = reject;
+  });
+  let next = 1;
+  const jobs: Promise<unknown>[] = [];
+  const c = new AttachmentConsumer(
+    generation,
+    sink([]),
+    () => {
+      if (next < fixture.length) {
+        const wire = fixture[next++];
+        if (!wire) throw new Error("fixture");
+        const p = c.enqueue(wire);
+        jobs.push(p);
+        void p.catch(fail);
+      } else finish();
+    },
+    1,
+  );
+  jobs.push(c.enqueue(fixture[0] as Uint8Array));
+  void jobs[0]?.catch(fail);
+  await done;
+  await Promise.all(jobs);
+  expect(jobs).toHaveLength(fixture.length);
+  expect(c.queuedFrames).toBe(0);
+  expect(c.queuedBytes).toBe(0);
+});
+
 const fixture = readFileSync(
   new URL("../../../tests/fixtures/frames/attachment.hex", import.meta.url),
   "utf8",
@@ -358,14 +389,17 @@ describe("ordered attachment consumption", () => {
     const blocked = deferred();
     const consumer = new AttachmentConsumer(
       generation,
-      sink([]),
-      () => blocked.promise,
+      { reset: () => blocked.promise, async write() {} },
+      () => {},
       1,
       1024,
     );
-    const first = consumer.enqueue(wireAt(0));
+    for (const wire of fixture.slice(0, -2)) await consumer.enqueue(wire);
+    const first = consumer.enqueue(fixture.at(-2) as Uint8Array);
     const firstRejected = expect(first).rejects.toThrow("queue_limit");
-    await expect(consumer.enqueue(wireAt(1))).rejects.toThrow("queue_limit");
+    await expect(
+      consumer.enqueue(fixture.at(-1) as Uint8Array),
+    ).rejects.toThrow("queue_limit");
     await firstRejected;
     blocked.resolve();
     await Promise.resolve();

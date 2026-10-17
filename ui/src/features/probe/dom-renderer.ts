@@ -1,4 +1,4 @@
-import { Terminal } from "@xterm/xterm";
+import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { AttachBoundary } from "../../ipc/attachment";
 import type { DomEvidence } from "../../ipc/gen/commands";
@@ -23,6 +23,7 @@ export interface DomRenderer {
   markNativeSignalChecked(): void;
   markNativePauseChecked(): void;
   markViewHostChecked(): void;
+  markUiOverridesChecked(): void;
   markViewPoolChecked(): void;
   markActiveParkChecked(): void;
   dispose(): void;
@@ -33,6 +34,7 @@ export function createDomRenderer(
   host: HTMLElement,
   boundary: Pick<AttachBoundary, "columns" | "rows">,
   signal: AbortSignal,
+  capturedTheme?: Readonly<ITheme>,
 ): DomRenderer {
   if (signal.aborted || !host.isConnected)
     throw new Error("terminal.dom_unavailable");
@@ -49,7 +51,7 @@ export function createDomRenderer(
     cursorBlink: false,
     fontSize: 14,
     fontFamily: "monospace",
-    theme: {
+    theme: capturedTheme ?? {
       background: "#0f172a",
       foreground: "#f1f5f9",
       cursor: "#f1f5f9",
@@ -77,6 +79,7 @@ export function createDomRenderer(
     nativeSignalChecked = false,
     nativePauseChecked = false,
     viewHostChecked = false,
+    uiOverridesChecked = false,
     viewPoolChecked = false,
     activeParkChecked = false;
   const render = terminal.onRender(() => renders++);
@@ -113,6 +116,9 @@ export function createDomRenderer(
     },
     markViewHostChecked() {
       viewHostChecked = true;
+    },
+    markUiOverridesChecked() {
+      uiOverridesChecked = true;
     },
     markViewPoolChecked() {
       viewPoolChecked = true;
@@ -231,7 +237,19 @@ export function createDomRenderer(
       }
     },
     async settle(renderSignal) {
-      await renderFence(renderSignal, () => !disposed && host.isConnected);
+      try {
+        await renderFence(renderSignal, () => !disposed && host.isConnected);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith("terminal.render_timeout.")
+        ) {
+          throw new Error(
+            `${error.message}.renders=${renders}.fences=${fences}.disposed=${disposed}`,
+          );
+        }
+        throw error;
+      }
       const screen =
         terminal.element?.querySelector<HTMLElement>(".xterm-screen");
       const rect = screen?.getBoundingClientRect();
@@ -278,6 +296,7 @@ export function createDomRenderer(
         nativeSignalChecked,
         nativePauseChecked,
         viewHostChecked,
+        uiOverridesChecked,
         viewPoolChecked,
         activeParkChecked,
       };

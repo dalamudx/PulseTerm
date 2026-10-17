@@ -50,6 +50,9 @@ pub enum SettingsSourceError {
     /// No runtime; no file opened or work queued.
     #[error("settings.source.runtime")]
     Runtime,
+    /// Source identity/verification is no longer current. No callback was executed.
+    #[error("settings.source.stale")]
+    Stale,
     /// Owner closed; weak handles cannot resurrect it.
     #[error("settings.source.closed")]
     Closed,
@@ -176,6 +179,40 @@ impl SettingsSourceHandle {
             && state.requested == state.verified
             && snapshot.verified == state.verified
             && snapshot.revision == state.revision
+            && snapshot.patch == state.patch
+    }
+    /// Execute only short synchronous metadata work while this exact verification remains current.
+    /// Never perform I/O, reenter this source, or return/enqueue deferred work; callback is synchronous.
+    /// Lock order for view confirmation is source -> registry -> context; this is not GUI/host authority.
+    pub fn with_current<T>(
+        &self,
+        snapshot: &UserSettingsSnapshot,
+        apply: impl FnOnce() -> T,
+    ) -> Result<T, SettingsSourceError> {
+        if !self.shared.ptr_eq(&snapshot.owner) {
+            return Err(SettingsSourceError::Stale);
+        }
+        let shared = self.shared.upgrade().ok_or(SettingsSourceError::Closed)?;
+        let state = shared
+            .state
+            .lock()
+            .map_err(|_| SettingsSourceError::State)?;
+        if state.closed {
+            return Err(SettingsSourceError::Closed);
+        }
+        if state.dirty
+            || state.reading
+            || state.status != SettingsSourceStatus::Ready
+            || state.requested != state.verified
+            || snapshot.verified != state.verified
+            || snapshot.revision != state.revision
+            || snapshot.patch != state.patch
+        {
+            return Err(SettingsSourceError::Stale);
+        }
+        let result = apply();
+        drop(state);
+        Ok(result)
     }
     /// Watch channel holds only the latest static status, not a queue of file contents.
     pub fn subscribe(&self) -> Result<watch::Receiver<SettingsSourceStatus>, SettingsSourceError> {
@@ -375,6 +412,9 @@ fn run(mut cache: SettingsReloadCache, shared: &Shared) -> Result<(), SettingsSo
         shared.status.send_replace(state.status);
     }
 }
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[path = "settings_source_guard_tests.rs"]
+mod guard_tests;
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 #[path = "settings_source_tests.rs"]
 mod tests;

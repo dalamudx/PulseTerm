@@ -36,10 +36,27 @@ mod ssh_agent_probe;
 mod ssh_certificate_probe;
 #[cfg(feature = "ssh-probe")]
 mod ssh_jump_probe;
+#[cfg(all(feature = "ssh-target-probe", unix))]
+#[path = "../../apps/desktop/src-tauri/src/ssh_private_key_adapter.rs"]
+mod ssh_private_key_adapter;
+#[cfg(all(feature = "ssh-target-probe", unix))]
+#[path = "../../apps/desktop/src-tauri/src/ssh_private_key_decode.rs"]
+mod ssh_private_key_decode;
 #[cfg(feature = "ssh-probe")]
 mod ssh_probe;
+#[cfg(all(feature = "ssh-target-probe", unix))]
+#[path = "../../apps/desktop/src-tauri/src/ssh_session_adapter.rs"]
+mod ssh_session_adapter;
 #[cfg(feature = "ssh-probe")]
 mod ssh_system_probe;
+#[cfg(all(feature = "ssh-target-probe", unix))]
+mod ssh_target_probe;
+#[cfg(all(feature = "ssh-target-probe", unix))]
+#[path = "../../apps/desktop/src-tauri/src/ssh_terminal_io.rs"]
+mod ssh_terminal_io;
+#[cfg(feature = "cli-probe")]
+mod theme_file_probe;
+mod theme_probe;
 mod unicode_probe;
 mod unicode_table;
 
@@ -101,6 +118,10 @@ fn main() -> Result<()> {
     {
         return pty_probe::helper(&mode);
     }
+    #[cfg(all(feature = "ssh-target-probe", unix))]
+    if std::env::args().nth(1).as_deref() == Some("serve-workspace-ssh-fixture") {
+        return ssh_target_probe::password_use::owned_session::gui::run();
+    }
     std::env::set_current_dir(root()?)?;
     match std::env::args().nth(1).as_deref() {
         Some("check") => {
@@ -126,10 +147,25 @@ fn main() -> Result<()> {
         Some("probe-channel-v2") => channel_probe::run_v2()?,
         Some("probe-encoding-window") => channel_probe::run_encoding()?,
         Some("probe-login-window") => channel_probe::run_profile_login()?,
+        Some("probe-settings-window") => channel_probe::run_settings()?,
         Some("probe-window") => channel_probe::run_window()?,
         Some("probe-window-external") => channel_probe::run_window_external()?,
         Some("probe-pty") => pty_probe::run()?,
         Some("probe-profiles") => profile_probe::run()?,
+        Some("probe-theme") => theme_probe::run()?,
+        Some("probe-theme-paint-json") => theme_probe::run_json()?,
+        Some("probe-theme-file") => {
+            #[cfg(feature = "cli-probe")]
+            theme_file_probe::run()?;
+            #[cfg(not(feature = "cli-probe"))]
+            bail!("probe-theme-file requires --features cli-probe");
+        }
+        Some("probe-theme-file-child") => {
+            #[cfg(feature = "cli-probe")]
+            theme_file_probe::helper()?;
+            #[cfg(not(feature = "cli-probe"))]
+            bail!("probe-theme-file-child requires --features cli-probe");
+        }
         Some("probe-settings-scope") => {
             #[cfg(feature = "cli-probe")]
             settings_scope_probe::run()?;
@@ -225,6 +261,52 @@ fn main() -> Result<()> {
             #[cfg(not(feature = "ssh-probe"))]
             bail!("probe-ssh-system requires --features ssh-probe");
         }
+        Some("probe-ssh-first-pin") => {
+            #[cfg(all(feature = "ssh-target-probe", unix))]
+            ssh_target_probe::first_pin::run()?;
+            #[cfg(not(all(feature = "ssh-target-probe", unix)))]
+            bail!("probe-ssh-first-pin requires --features ssh-target-probe and Unix");
+        }
+        Some("probe-ssh-owned-session") => {
+            #[cfg(all(feature = "ssh-target-probe", unix))]
+            ssh_target_probe::password_use::owned_session::run()?;
+            #[cfg(not(all(feature = "ssh-target-probe", unix)))]
+            bail!("probe-ssh-owned-session requires Unix and --features ssh-target-probe");
+        }
+        Some("probe-ssh-password-use") => {
+            #[cfg(all(feature = "ssh-target-probe", unix))]
+            ssh_target_probe::password_use::run()?;
+            #[cfg(not(all(feature = "ssh-target-probe", unix)))]
+            bail!("probe-ssh-password-use requires Unix and --features ssh-target-probe");
+        }
+        Some("probe-ssh-private-key-use") => {
+            #[cfg(all(feature = "ssh-private-key-probe", unix))]
+            ssh_target_probe::private_key_use::run()?;
+            #[cfg(not(all(feature = "ssh-private-key-probe", unix)))]
+            bail!("probe-ssh-private-key-use requires Unix and --features ssh-private-key-probe");
+        }
+        Some("probe-ssh-private-key-session") => {
+            #[cfg(all(feature = "ssh-private-key-probe", unix))]
+            ssh_target_probe::private_key_use::run_session()?;
+            #[cfg(not(all(feature = "ssh-private-key-probe", unix)))]
+            bail!(
+                "probe-ssh-private-key-session requires Unix and --features ssh-private-key-probe"
+            );
+        }
+        Some("probe-ssh-private-key-algorithms") => {
+            #[cfg(all(feature = "ssh-private-key-probe", unix))]
+            ssh_target_probe::private_key_use::run_algorithms()?;
+            #[cfg(not(all(feature = "ssh-private-key-probe", unix)))]
+            bail!(
+                "probe-ssh-private-key-algorithms requires Unix and --features ssh-private-key-probe"
+            );
+        }
+        Some("probe-ssh-target") => {
+            #[cfg(all(feature = "ssh-target-probe", unix))]
+            ssh_target_probe::run()?;
+            #[cfg(not(all(feature = "ssh-target-probe", unix)))]
+            bail!("probe-ssh-target requires Unix and --features ssh-target-probe");
+        }
         Some("probe-ssh") => {
             #[cfg(feature = "ssh-probe")]
             ssh_probe::run()?;
@@ -232,7 +314,7 @@ fn main() -> Result<()> {
             bail!("probe-ssh requires --features ssh-probe");
         }
         _ => bail!(
-            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-profile-store|probe-settings-scope|settings-schema|settings-schema-check|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup>"
+            "usage: cargo xtask <check|check-deps|probe|probe-channel|probe-pty|probe-profiles|probe-theme|probe-theme-file|probe-profile-store|probe-settings-scope|probe-settings-window|settings-schema|settings-schema-check|probe-login|probe-login-arguments|probe-local-profile-session|probe-shell-startup|probe-ssh-target|probe-ssh-password-use|probe-ssh-owned-session|probe-ssh-first-pin>"
         ),
     }
     Ok(())
@@ -274,6 +356,7 @@ fn check_deps() -> Result<()> {
             }
             let allowed: &[&str] = match name {
                 "pulse-core" => &[],
+                "pulse-cap" => &["pulse-core"],
                 "pulse-ipc" => &["pulse-core"],
                 "pulse-term" => &["pulse-core", "pulse-ipc"],
                 "pulse-pty" => &["pulse-core"],
@@ -285,6 +368,7 @@ fn check_deps() -> Result<()> {
                     "pulse-term",
                     "pulse-ipc",
                     "pulse-store",
+                    "pulse-cap",
                 ],
                 _ => continue,
             };

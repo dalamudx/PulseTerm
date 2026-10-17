@@ -1,4 +1,6 @@
 //! Settings controller lifetime is owned by the exact authorized terminal Binding.
+#[path = "registry_settings_source.rs"]
+mod source;
 #[cfg(test)]
 #[path = "registry_settings_tests.rs"]
 mod tests;
@@ -8,6 +10,7 @@ use crate::settings_context::{
     SettingsContextOwner, SettingsContextTarget,
 };
 use pulse_store::{StateStore, settings::SettingsPatch};
+pub use source::SourceBoundSettingsSnapshot;
 use std::sync::Weak;
 /// Static boundary errors, without terminal/settings contents or raw paths.
 #[derive(Debug, thiserror::Error)]
@@ -18,6 +21,12 @@ pub enum RegistrySettingsError {
     /// Context lifetime, admission, validation or bounded store read failed.
     #[error(transparent)]
     Context(#[from] SettingsContextError),
+    /// Current verified user source is required; no file/document contents are reported.
+    #[error(transparent)]
+    Source(#[from] pulse_store::settings_source::SettingsSourceError),
+    /// Candidate was resolved from a different sparse user layer.
+    #[error("view_settings.source_mismatch")]
+    SourceMismatch,
     /// Trusted adapter has not configured this binding; do not use old-generation defaults.
     #[error("view_settings.unconfigured")]
     Unconfigured,

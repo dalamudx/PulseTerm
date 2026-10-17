@@ -1,9 +1,20 @@
 // Fixed readonly validation surface. Separate queue/ACK path from primary session.
 import type { Terminal as TerminalType } from "@xterm/headless";
 import type { DomRenderer } from "../features/probe/dom-renderer";
+import {
+  parseQueryPaletteData,
+  type QueryPaletteData,
+  queryPaletteTheme,
+} from "../features/terminal/query-palette";
 import { suppressQueryReplies } from "../features/terminal/query-policy";
 import { SharedUnicodeProvider } from "../features/terminal/unicode-provider";
 import { Utf8Stream } from "../features/terminal/utf8-stream";
+import {
+  GenerationViewHost,
+  type ViewScope,
+} from "../features/terminal/view-host";
+import { UiThemeOverrideTarget } from "../features/theme/ui-override-surface";
+import { ViewThemePaintGuard } from "../features/theme/view-paint-guard";
 import type { AttachBoundary } from "./attachment";
 import { decodeFrame } from "./frames";
 import {
@@ -30,6 +41,13 @@ export class TransferViewProbe {
   private boundary: AttachBoundary | undefined;
   private generation: bigint | undefined;
   private readonly lifetime = new AbortController();
+  private readonly themeHost = new GenerationViewHost(
+    this.lifetime.signal,
+    (e) => this.fail(e),
+  );
+  private themeScope: ViewScope | undefined;
+  private themeGuard: ViewThemePaintGuard | undefined;
+  private themeTarget: UiThemeOverrideTarget | undefined;
   private readonly cleanup: (() => void)[] = [];
   private decoder = new Utf8Stream();
   private latest: Promise<unknown> = Promise.resolve();
@@ -37,6 +55,8 @@ export class TransferViewProbe {
   private confirmed = false;
   private committing = false;
   private replies = 0;
+  private capturedPalette: QueryPaletteData | undefined;
+  private paletteChecked = false;
   constructor(
     private readonly options: {
       version: ProbeAttachmentVersion;
@@ -47,7 +67,10 @@ export class TransferViewProbe {
         generation: string,
         boundary: AttachBoundary,
         digest: string,
-      ) => Promise<void>;
+      ) => Promise<boolean> | Promise<void>;
+      retainedReady?: (generation: string) => Promise<void>;
+      /** Read-only metadata from this exact Begin generation, not a latest theme read. */
+      palette?: (generation: string) => Promise<string | null>;
       /** Validation-only retained view; snapshots still reject all continuation frames. */
       live?: {
         ready: () => Promise<void>;
@@ -90,6 +113,15 @@ export class TransferViewProbe {
               if (this.terminal) throw new Error("transfer.repeated_reset");
               this.boundary = boundary;
               const combined = AbortSignal.any([signal, this.lifetime.signal]);
+              const encoded = await this.options.palette?.(
+                header.generation.toString(),
+              );
+              if (combined.aborted) throw new Error("transfer.cancelled");
+              if (encoded != null)
+                this.capturedPalette = parseQueryPaletteData(encoded);
+              const base = this.capturedPalette
+                ? queryPaletteTheme(this.capturedPalette)
+                : undefined;
               if (this.options.host) {
                 const { createDomRenderer } = await import(
                   "../features/probe/dom-renderer"
@@ -99,8 +131,21 @@ export class TransferViewProbe {
                   this.options.host,
                   boundary,
                   combined,
+                  base,
                 );
                 this.terminal = this.renderer.terminal;
+                if (this.capturedPalette) {
+                  const { assertRenderedPalette } = await import(
+                    "../features/probe/terminal-palette"
+                  );
+                  if (combined.aborted) throw new Error("transfer.cancelled");
+                  assertRenderedPalette(
+                    this.renderer.terminal,
+                    this.capturedPalette,
+                  );
+                }
+                this.themeScope = this.themeHost.begin(header.generation);
+                this.cleanup.push(() => this.themeHost.dispose());
               } else {
                 const { default: headless } = await import("@xterm/headless");
                 if (combined.aborted) throw new Error("transfer.cancelled");
@@ -232,7 +277,7 @@ export class TransferViewProbe {
           this.replies !== 0
         )
           throw new Error("transfer.invalid_receipt");
-        await this.options.confirm(
+        const retainTheme = await this.options.confirm(
           this.generation.toString(),
           this.boundary,
           this.options.digest(this.terminal),
@@ -244,7 +289,8 @@ export class TransferViewProbe {
           await this.options.live.ready();
           if (this.lifetime.signal.aborted)
             throw new Error("transfer.cancelled");
-        } else this.releaseSurface();
+        } else if (retainTheme !== true) this.releaseSurface();
+        else await this.options.retainedReady?.(this.generation.toString());
       });
       this.latest = job;
       void job.catch((error) => this.fail(error));
@@ -257,6 +303,74 @@ export class TransferViewProbe {
     this.error = error;
     this.dispose();
     this.options.failed(error);
+  }
+  /** Controlled readonly snapshot only. Actual browser color state, never a PTY query. */
+  async verifyCapturedPalette(generation: string): Promise<void> {
+    if (
+      !this.confirmed ||
+      this.options.live ||
+      this.paletteChecked ||
+      !this.renderer ||
+      !this.capturedPalette ||
+      generation !== this.generation?.toString() ||
+      !this.themeScope?.isCurrent()
+    ) {
+      throw new Error("terminal.palette.view_retired");
+    }
+    const { verifyPaletteResets } = await import(
+      "../features/probe/terminal-palette"
+    );
+    if (!this.themeScope.isCurrent())
+      throw new Error("terminal.palette.view_retired");
+    await verifyPaletteResets(
+      this.renderer.terminal,
+      this.capturedPalette,
+      this.themeScope.signal,
+    );
+    if (!this.themeScope.isCurrent() || this.replies !== 0)
+      throw new Error("terminal.palette.query_leak");
+    this.paletteChecked = true;
+  }
+  /** Full stock Radix UI on the actual ordered Begin; no terminal palette change. */
+  async paintTheme(
+    generation: string,
+    reader: (signal: AbortSignal) => Promise<unknown>,
+  ): Promise<void> {
+    const scope = this.themeScope,
+      host = this.options.host;
+    if (
+      !scope ||
+      !host ||
+      !this.confirmed ||
+      generation !== this.generation?.toString() ||
+      !scope.isCurrent()
+    )
+      throw new Error("theme.delivery.view_retired");
+    const { resolveUiTheme } = await import("../features/theme/radix-theme");
+    if (!scope.isCurrent() || this.themeScope !== scope)
+      throw new Error("theme.delivery.view_retired");
+    this.themeTarget ??= new UiThemeOverrideTarget(scope, host);
+    this.themeGuard ??= new ViewThemePaintGuard(scope);
+    const target = this.themeTarget;
+    if (
+      (await this.themeGuard.refresh(reader, (data) =>
+        target.prepare(resolveUiTheme(data, { contrast: "reject" }).paint),
+      )) !== "applied" ||
+      !scope.isCurrent()
+    )
+      throw new Error("theme.delivery.stale");
+  }
+  /** A content-free trusted notification can clear only this exact live Begin generation. */
+  revokeTheme(generation: string): boolean {
+    if (
+      !this.confirmed ||
+      generation !== this.generation?.toString() ||
+      !this.themeScope?.isCurrent() ||
+      !this.themeGuard
+    )
+      return false;
+    this.themeGuard.revoke();
+    return true;
   }
   private releaseSurface(): void {
     for (const stop of this.cleanup.splice(0)) stop();

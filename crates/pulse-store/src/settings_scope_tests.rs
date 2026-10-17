@@ -54,15 +54,22 @@ fn same_uuid_group_and_host_are_distinct_and_nil_is_not_default_scope() -> TestR
 async fn independent_workers_concurrently_edit_different_fields_without_loss() -> TestResult {
     let dir = directory()?;
     let path = dir.path().join("state.db");
-    let (a, ta) = StateStore::open(path.clone()).await?;
-    let (b, tb) = StateStore::open(path).await?;
+    let (a, ta) = StateStore::open(path.clone())
+        .await
+        .map_err(|_| "settings.concurrent.open_a")?;
+    let (b, tb) = StateStore::open(path)
+        .await
+        .map_err(|_| "settings.concurrent.open_b")?;
     let (one, two) = tokio::join!(
         a.edit_scoped_settings(group(), size(18)),
         b.edit_scoped_settings(group(), ScopedSettingsEdit::Set(Set::CursorBlink(false)))
     );
-    one?;
-    two?;
-    let snapshot = a.load_scoped_settings(group()).await?;
+    one.map_err(|_| "settings.concurrent.edit_a")?;
+    two.map_err(|_| "settings.concurrent.edit_b")?;
+    let snapshot = a
+        .load_scoped_settings(group())
+        .await
+        .map_err(|_| "settings.concurrent.load")?;
     assert_eq!(snapshot.revision(), 2);
     assert_eq!(snapshot.patch().terminal.font_size, Some(18));
     assert_eq!(snapshot.patch().terminal.cursor_blink, Some(false));
@@ -274,5 +281,69 @@ async fn worker_reopen_persists_scopes_without_touching_profile_preferences() ->
         crate::profiles::AutoProfilePreferences::default()
     );
     task.shutdown().await?;
+    Ok(())
+}
+
+#[test]
+fn ui_appearance_is_rejected_by_scoped_edits_and_replacements() -> TestResult {
+    use crate::settings::UiAppearance;
+    let (_dir, c) = connection()?;
+    for scope in [group(), host()] {
+        let before = db::load(&c, scope)?;
+        assert!(
+            db::edit(
+                &c,
+                scope,
+                ScopedSettingsEdit::Set(Set::UiAppearance(UiAppearance::Dark))
+            )
+            .is_err()
+        );
+        assert!(db::edit(&c, scope, ScopedSettingsEdit::Remove(Key::UiAppearance)).is_err());
+        assert!(db::replace(&c, &before, SettingsPatch::parse("ui.appearance='dark'")?).is_err());
+        assert!(
+            db::edit(
+                &c,
+                scope,
+                ScopedSettingsEdit::Set(Set::UiAccent(crate::settings::UiAccent::Blue))
+            )
+            .is_err()
+        );
+        assert!(db::edit(&c, scope, ScopedSettingsEdit::Remove(Key::UiAccent)).is_err());
+        assert!(db::replace(&c, &before, SettingsPatch::parse("ui.accent='blue'")?).is_err());
+        let after = db::load(&c, scope)?;
+        assert_eq!(after.revision(), before.revision());
+        assert_eq!(after.patch(), before.patch());
+    }
+    Ok(())
+}
+
+#[test]
+fn mac_option_scoped_overrides_persist_explicit_false_and_reset() -> TestResult {
+    let (_dir, c) = connection()?;
+    for scope in [group(), host()] {
+        db::edit(&c, scope, size(18))?;
+        db::edit(
+            &c,
+            scope,
+            ScopedSettingsEdit::Set(Set::MacOptionAsMeta(true)),
+        )?;
+        assert_eq!(
+            db::load(&c, scope)?.patch().terminal.mac_option_as_meta,
+            Some(true)
+        );
+        db::edit(
+            &c,
+            scope,
+            ScopedSettingsEdit::Set(Set::MacOptionAsMeta(false)),
+        )?;
+        assert_eq!(
+            db::load(&c, scope)?.patch().terminal.mac_option_as_meta,
+            Some(false)
+        );
+        db::edit(&c, scope, ScopedSettingsEdit::Remove(Key::MacOptionAsMeta))?;
+        let after = db::load(&c, scope)?;
+        assert_eq!(after.patch().terminal.mac_option_as_meta, None);
+        assert_eq!(after.patch().terminal.font_size, Some(18));
+    }
     Ok(())
 }

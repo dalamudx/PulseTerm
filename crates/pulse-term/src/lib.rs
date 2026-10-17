@@ -3,13 +3,21 @@
 //! docs/architecture/terminal-restore-evaluation.md for coverage and gaps).
 #![forbid(unsafe_code)]
 
+mod cold_history;
 mod ground;
 /// Bounded recent-history VT replay for attachment transactions.
 pub mod history;
+mod history_search;
+pub use history_search::{HistorySearch, HistorySearchRequest};
+mod history_page;
+pub use history_page::{HistoryPage, HistoryPageError, HistoryRow};
+#[cfg(test)]
+mod history_page_tests;
 /// Bounded, untrusted OSC 133 hints; never session authorization or command execution.
 pub mod shell_markers;
 pub use history::{HistoryReplay, MAX_RECENT_ROWS};
 mod palette;
+mod primary_text;
 pub mod reconciliation;
 mod restore;
 mod tracked;
@@ -104,6 +112,7 @@ pub struct ObservedScreen {
 /// Owns the parser, grid and query replies without any window or transport.
 pub struct TerminalProbe {
     term: Term<ReplyListener>,
+    cold: cold_history::ColdHistory,
     parser: Processor,
     events: Receiver<Event>,
     replies: Vec<String>,
@@ -132,6 +141,7 @@ impl TerminalProbe {
             ground: ground::GroundScanner::default(),
             shell_markers: shell_markers::MarkerQueue::default(),
             term: Term::new(config, &Size(size), ReplyListener(sender)),
+            cold: cold_history::ColdHistory::new(history.min(10_000)),
             parser: Processor::new(),
             events: replies,
             replies: Vec::new(),
@@ -168,6 +178,18 @@ impl TerminalProbe {
         self.collect_events();
     }
 
+    /// Product actors retain bounded compact history beyond the hot restore grid.
+    /// Build retained history with an explicit hot+cold row limit.
+    pub fn with_history_limit(size: TermSize, hot: usize, limit: usize) -> Self {
+        let mut terminal = Self::with_cold_history(size, hot.min(limit));
+        terminal.cold.set_limit(limit);
+        terminal
+    }
+    pub(crate) fn with_cold_history(size: TermSize, hot_rows: usize) -> Self {
+        let mut terminal = Self::new(size, hot_rows);
+        terminal.cold.enable(&mut terminal.term);
+        terminal
+    }
     /// Deadline supplied by VTE for the current synchronized update, if any.
     pub fn sync_deadline(&self) -> Option<std::time::Instant> {
         self.parser.sync_timeout().sync_timeout()
@@ -190,6 +212,7 @@ impl TerminalProbe {
             let mut handler = tracked::Tracked {
                 term: &mut self.term,
                 side: &mut self.side,
+                history: &mut self.cold,
             };
             self.parser.stop_sync(&mut handler);
         }
@@ -199,6 +222,7 @@ impl TerminalProbe {
     pub fn resize(&mut self, size: TermSize) {
         let old = (self.term.columns(), self.term.screen_lines());
         self.term.resize(Size(size));
+        self.cold.collect(&mut self.term);
         self.side
             .on_resize(old, (self.term.columns(), self.term.screen_lines()));
     }
@@ -218,6 +242,11 @@ impl TerminalProbe {
     /// until reset by the program. Already queued replies are not recolored.
     pub fn set_query_palette(&mut self, palette: QueryPalette) {
         self.palette = palette;
+    }
+
+    /// Base rendering/query colors, never remote OSC overrides or application authority.
+    pub fn query_palette(&self) -> &QueryPalette {
+        &self.palette
     }
 
     /// Actual measured cell dimensions, or None when pixel geometry is unknown.
@@ -377,6 +406,7 @@ impl TerminalProbe {
         let mut handler = tracked::Tracked {
             term: &mut self.term,
             side: &mut self.side,
+            history: &mut self.cold,
         };
         self.parser.advance(&mut handler, bytes);
         let markers = &mut self.shell_markers;
@@ -512,6 +542,57 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn base_palette_queries_follow_osc_overrides_ris_and_explicit_resets() {
+        let mut term = terminal();
+        let query = b"\x1b]4;1;?\x07\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07";
+        let base = QueryPalette {
+            ansi: std::array::from_fn(|i| [i as u8, 0x11, 0x22]),
+            foreground: [0x11, 0x22, 0x33],
+            background: [0x44, 0x55, 0x66],
+            cursor: [0x77, 0x88, 0x99],
+        };
+        term.set_query_palette(base.clone());
+        term.feed(query);
+        let expected_base = [
+            "\x1b]4;1;rgb:0101/1111/2222\x07",
+            "\x1b]10;rgb:1111/2222/3333\x07",
+            "\x1b]11;rgb:4444/5555/6666\x07",
+            "\x1b]12;rgb:7777/8888/9999\x07",
+        ];
+        assert_eq!(term.take_replies(), expected_base);
+        term.feed(b"\x1b]4;1;#abcdef\x07\x1b]10;#102030\x07\x1b]11;#203040\x07\x1b]12;#304050\x07");
+        let overrides = [
+            "\x1b]4;1;rgb:abab/cdcd/efef\x07",
+            "\x1b]10;rgb:1010/2020/3030\x07",
+            "\x1b]11;rgb:2020/3030/4040\x07",
+            "\x1b]12;rgb:3030/4040/5050\x07",
+        ];
+        term.feed(query);
+        assert_eq!(term.take_replies(), overrides);
+        let changed = QueryPalette {
+            ansi: std::array::from_fn(|i| [i as u8, 0x23, 0x45]),
+            foreground: [0x12, 0x34, 0x56],
+            background: [0x78, 0x9a, 0xbc],
+            cursor: [0xde, 0xf0, 0x13],
+        };
+        term.set_query_palette(changed);
+        term.feed(b"\x1bc");
+        term.feed(query);
+        assert_eq!(term.take_replies(), overrides);
+        term.feed(b"\x1b]104\x07\x1b]110\x07\x1b]111\x07\x1b]112\x07");
+        term.feed(query);
+        assert_eq!(
+            term.take_replies(),
+            [
+                "\x1b]4;1;rgb:0101/2323/4545\x07",
+                "\x1b]10;rgb:1212/3434/5656\x07",
+                "\x1b]11;rgb:7878/9a9a/bcbc\x07",
+                "\x1b]12;rgb:dede/f0f0/1313\x07",
+            ]
+        );
+    }
+
     #[test]
     fn pixel_geometry_uses_current_dimensions_and_never_overflows() {
         let mut term = terminal();
@@ -917,6 +998,134 @@ mod tests {
     }
 
     #[test]
+    fn spacer_combining_roundtrip_and_continuation() -> Result<(), Box<dyn std::error::Error>> {
+        let size = TermSize::new(12, 4)?;
+        for offset in 0..10 {
+            let mut original = TerminalProbe::new(size, 64);
+            original.feed("中e\u{301}\r\x1b[P\x1b[3b".as_bytes());
+            if offset > 0 {
+                original.feed(format!("\x1b[{offset}@").as_bytes());
+            }
+            let cell = &original.term.grid()[Point::new(Line(0), Column(offset))];
+            assert!(cell.flags.contains(Flags::WIDE_CHAR_SPACER));
+            assert_eq!(cell.zerowidth(), Some(&['\u{301}'; 3][..]));
+            let sequence = original
+                .restore_sequence()
+                .map_err(|_| "unexpected recovery gap")?;
+            assert!(
+                sequence.approximations.is_empty(),
+                "{:?}",
+                sequence.approximations
+            );
+            let mut restored = TerminalProbe::new(size, 64);
+            restored.feed(&sequence.bytes);
+            assert_eq!(
+                fingerprint_diff(
+                    &original.restore_fingerprint(),
+                    &restored.restore_fingerprint()
+                ),
+                None,
+                "offset {offset}"
+            );
+            for suffix in [
+                "\x1b[3b",
+                "\x1b[2@",
+                "\x1b[6n",
+                "\x1b[?1049hX\x1b[?1049l",
+                "\r\x1b[P",
+            ] {
+                original.feed(suffix.as_bytes());
+                restored.feed(suffix.as_bytes());
+                assert_eq!(
+                    fingerprint_diff(
+                        &original.restore_fingerprint(),
+                        &restored.restore_fingerprint()
+                    ),
+                    None,
+                    "offset {offset} suffix {suffix:?}"
+                );
+                assert_eq!(original.take_replies(), restored.take_replies());
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn trailing_spacer_combining_is_explicitly_nonexact() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let size = TermSize::new(12, 4)?;
+        for offset in [10, 11] {
+            let mut p = TerminalProbe::new(size, 64);
+            p.feed("中e\u{301}\r\x1b[P\x1b[3b".as_bytes());
+            p.feed(format!("\x1b[{offset}@").as_bytes());
+            let seq = p
+                .restore_sequence()
+                .map_err(|_| "unexpected recovery gap")?;
+            assert!(
+                seq.approximations
+                    .contains(&"combining data on a trailing wide-char spacer is not restored")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn clipped_wide_head_saved_wrap_never_loses_the_top_row()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let size = TermSize::new(24, 6)?;
+        let prefix = "a\x1b[6;22H中a\x1b7\x1b[4h\x1b[6;22H\x08中";
+        for suffix in ["", "\x1b8", "\x1b8\x1b[?1049h"] {
+            let mut original = TerminalProbe::new(size, 64);
+            original.feed(prefix.as_bytes());
+            original.feed(suffix.as_bytes());
+            let before = original.restore_fingerprint();
+            assert_eq!(
+                original.restore_sequence(),
+                Err(RestoreGap::ClippedWideHeadPendingWrap)
+            );
+            assert_eq!(
+                original.restore_screen_bounded(1024 * 1024),
+                Err(RestoreGap::ClippedWideHeadPendingWrap)
+            );
+            assert_eq!(
+                original.repair_screen_bounded(1024 * 1024),
+                Err(RestoreGap::ClippedWideHeadPendingWrap)
+            );
+            assert_eq!(
+                fingerprint_diff(&before, &original.restore_fingerprint()),
+                None
+            );
+        }
+        // Saving the current non-wrap cursor clears just the unsafe saved slot.
+        // Clipped wide cells and IRM themselves must remain recoverable.
+        let mut original = TerminalProbe::new(size, 64);
+        original.feed(prefix.as_bytes());
+        original.feed(b"\x1b7");
+        let sequence = original
+            .restore_sequence()
+            .map_err(|_| "unexpected cleared gap")?;
+        assert!(sequence.approximations.is_empty());
+        let mut restored = TerminalProbe::new(size, 64);
+        restored.feed(&sequence.bytes);
+        assert_eq!(
+            fingerprint_diff(
+                &original.restore_fingerprint(),
+                &restored.restore_fingerprint()
+            ),
+            None
+        );
+        original.feed(b"\x1b[4lZ");
+        restored.feed(b"\x1b[4lZ");
+        assert_eq!(
+            fingerprint_diff(
+                &original.restore_fingerprint(),
+                &restored.restore_fingerprint()
+            ),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
     fn restore_roundtrip_and_continuation_property() {
         let size = TermSize::new(24, 6).unwrap();
         use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
@@ -1020,7 +1229,7 @@ mod tests {
             })
             .unwrap();
         eprintln!(
-            "restore property: exact={} gap(sync/overlong)={} approx={} alt-active={} (visible+continuation checked {}) alt-reentry={}",
+            "restore property: exact={} gap={} approx={} alt-active={} (visible+continuation checked {}) alt-reentry={}",
             exact.load(Relaxed),
             gap.load(Relaxed),
             approx.load(Relaxed),

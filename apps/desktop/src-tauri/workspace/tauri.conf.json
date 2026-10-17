@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PulseTerm Workspace Preview",
+  "version": "0.1.0",
+  "identifier": "dev.pulseterm.workspace-preview",
+  "build": {"frontendDist": "../../../../ui/dist"},
+  "app": {
+    "windows": [],
+    "security": {"capabilities": ["workspace"], "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:"}
+  },
+  "bundle": {"active": false, "icon": ["../icons/icon.png", "../icons/icon.ico"]}
+}

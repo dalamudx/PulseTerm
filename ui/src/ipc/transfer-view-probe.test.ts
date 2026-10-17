@@ -8,6 +8,60 @@ function deferred() {
   });
   return { promise, resolve };
 }
+for (const retain of [false, true]) {
+  it(`snapshot retention ${retain} is explicit and abort still releases resources once`, async () => {
+    const life = new AbortController();
+    let disposals = 0;
+    const view = new TransferViewProbe({
+      version: 2,
+      signal: life.signal,
+      ack: async () => {},
+      confirm: async () => retain,
+      digest: (terminal) => {
+        const original = terminal.dispose.bind(terminal);
+        terminal.dispose = () => {
+          disposals++;
+          original();
+        };
+        return "a".repeat(16);
+      },
+      failed: () => {},
+    });
+    for (const frame of frames(2)) view.receive(frame);
+    await view.finish();
+    expect(disposals).toBe(retain ? 0 : 1);
+    life.abort();
+    view.dispose();
+    expect(disposals).toBe(1);
+  });
+}
+it("retained ready starts only after confirmation and never reopens snapshot streaming", async () => {
+  const confirmed = deferred();
+  const ready = vi.fn(async () => {});
+  const view = new TransferViewProbe({
+    version: 2,
+    signal: new AbortController().signal,
+    ack: async () => {},
+    confirm: async () => {
+      await confirmed.promise;
+      return true;
+    },
+    retainedReady: ready,
+    digest: () => "a".repeat(16),
+    failed: () => {},
+  });
+  for (const frame of frames(2)) view.receive(frame);
+  expect(ready).not.toHaveBeenCalled();
+  confirmed.resolve();
+  await view.finish();
+  expect(ready).toHaveBeenCalledExactlyOnceWith("17");
+  // A retained renderer is not permission to accept another recovery transaction.
+  const [begin] = frames(2);
+  if (!begin) throw new Error("test begin missing");
+  view.receive(begin);
+  await expect(view.finish()).rejects.toThrow();
+  view.dispose();
+});
 function frames(version: 1 | 2) {
   const restore = new TextEncoder().encode("\x1b[Hhi中");
   const meta = new Uint8Array(version === 1 ? 28 : 36);

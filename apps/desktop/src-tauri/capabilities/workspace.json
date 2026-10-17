@@ -1,0 +1,6 @@
+{
+  "identifier": "workspace",
+  "description": "Restricted discovered-Profile terminal preview with current-view bounded UTF-8 input; no caller executable, arbitrary filesystem or credential permissions.",
+  "windows": ["workspace", "workspace-*"],
+  "permissions": ["core:default"]
+}

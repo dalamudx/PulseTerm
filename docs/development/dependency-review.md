@@ -104,6 +104,10 @@ xtask新增optional `ssh-probe`：精确russh0.63.3（Apache-2.0）、rand0.10�
 
 - KEK验证原语直接引用既锁`argon2 0.6.0`（MIT OR Apache-2.0），仅开启zeroize，未新增版本或默认Rayon/密码PHC接口；现有调用者的feature合并仍保留原依赖。新增功能的audit实际exit5仍原6license/2maintenance，未新增拒绝或豁免。
 
+- iTerm XML 子集新增 `plist =1.10.1` 与 `quick-xml =0.42.0` 直接引用，沿用锁定版本（无升级／第三方源码改动／新许可类型）。实际读取 `plist/LICENCE`（Edward Barnard，2015）与 `quick-xml/LICENSE-MIT.md`（Johann Tuffe，2016），均 MIT，分发须保留版权及许可。quick-xml 关闭默认 feature，用于 XML 结构和实体预检；plist 现有 serde 功能用于 typed 转换，避免 Value 字典覆写重复键。全特性 audit 再次 exit 5，仅原六项 license 拒绝及两项 maintenance 公告失败，sources/bans 通过，未批准 CC0 或新增 ignore。
+
+- base16/base24 事件导入新增锁定 `yaml-rust2 =0.13.0`（关闭默认编码／其他feature），传递新增 `arraydeque 0.5.1`、`hashlink 0.12.2`，既有包版本未升级，仅既有 foldhash 引用功能合并。实际读取 yaml-rust2 MIT-LICENSE、arraydeque LICENSE（Andy Lok，2018）及 hashlink LICENSE-MIT（含 Rust Project Developers，2015 的 linked-hash-map 派生声明）；分发须保留相应版权与许可。选择现有MIT/Apache许可路径，未批准CC0。仅逐事件reader，无树加载器、模板／外部文件／网络访问；全特性audit实际exit5，仍原6license／2maintenance拒绝，bans/sources通过，无新增拒绝或豁免。
+
 ## 检查边界
 
 - cargo-deny 的来源与 bans 检查通过（重复版本为警告）。

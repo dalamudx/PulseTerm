@@ -59,22 +59,32 @@ async fn independent_workers_merge_and_stale_snapshot_is_rejected()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
     let dir = private_dir()?;
     let path = dir.path().join("pulse.db");
-    let (a, ta) = StateStore::open(path.clone()).await?;
-    let (b, tb) = StateStore::open(path).await?;
-    let cached = b.load_auto_profiles().await?;
+    let (a, ta) = StateStore::open(path.clone())
+        .await
+        .map_err(|error| format!("independent_workers.open_a: {error}"))?;
+    let (b, tb) = StateStore::open(path)
+        .await
+        .map_err(|error| format!("independent_workers.open_b: {error}"))?;
+    let cached = b
+        .load_auto_profiles()
+        .await
+        .map_err(|error| format!("independent_workers.initial_load: {error}"))?;
     let (r1, r2) = tokio::join!(
         a.edit_auto_profiles(hide(Shell::Bash)),
         b.edit_auto_profiles(Edit::Suppress(Shell::Zsh))
     );
-    r1?;
-    r2?;
+    r1.map_err(|error| format!("independent_workers.edit_a: {error}"))?;
+    r2.map_err(|error| format!("independent_workers.edit_b: {error}"))?;
     let mut replacement = cached.clone();
     replacement.set_hidden(Shell::Fish, true)?;
     assert_eq!(
         b.save_auto_profiles(cached, replacement).await,
         Err(StoreError::Conflict)
     );
-    let mut current = a.load_auto_profiles().await?;
+    let mut current = a
+        .load_auto_profiles()
+        .await
+        .map_err(|error| format!("independent_workers.final_load: {error}"))?;
     assert_eq!(current.hidden().collect::<Vec<_>>(), vec![Shell::Bash]);
     assert_eq!(current.deleted().collect::<Vec<_>>(), vec![Shell::Zsh]);
     let expected = current.clone();

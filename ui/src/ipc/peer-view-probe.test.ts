@@ -2,6 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   protocol: vi.fn(),
+  paint: vi.fn(),
+  themeRead: vi.fn(),
+  themeConfirm: vi.fn(),
+  themeDrawn: vi.fn(),
   capture: vi.fn(),
   ack: vi.fn(),
   confirm: vi.fn(),
@@ -25,6 +29,9 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("./gen/commands", () => ({
   commands: {
     probeSessionProtocol: mock.protocol,
+    probePeerThemeRead: mock.themeRead,
+    probePeerThemeConfirm: mock.themeConfirm,
+    probePeerThemeDrawn: mock.themeDrawn,
     probePeerView: mock.capture,
     probePeerAck: mock.ack,
     probePeerConfirm: mock.confirm,
@@ -40,10 +47,109 @@ vi.mock("./transfer-view-probe", () => ({
       mock.options = options;
     }
     receive() {}
+    paintTheme = mock.paint;
     finish = mock.finish;
     dispose = mock.dispose;
   },
 }));
+type ThemeHook = (
+  run: string,
+  page: string,
+  generation: string,
+) => Promise<void>;
+async function liveTheme() {
+  const s = await setup();
+  let admit!: () => void;
+  const ready = new Promise<void>((r) => {
+    admit = r;
+  });
+  mock.capture.mockImplementation(async () => {
+    const options = mock.options as Options;
+    await options.confirm(
+      "17",
+      { columns: 40, rows: 12, revision: 3n, parsedBytes: 76n },
+      "a".repeat(16),
+    );
+    await options.live?.ready();
+    admit();
+    await new Promise<void>((resolve) =>
+      options.signal.addEventListener("abort", () => resolve(), { once: true }),
+    );
+  });
+  const completion = s.verifyPeerView("run", "page", undefined, true);
+  await ready;
+  const w = s.win as unknown as { __PULSE_PEER_THEME__?: ThemeHook };
+  const hook = w.__PULSE_PEER_THEME__;
+  if (!hook) throw new Error("missing native delivery bridge");
+  return { ...s, w, hook, completion };
+}
+it("actual-page bridge reads, confirms and reports draw in order, rejects foreign run/page and removes its own hook", async () => {
+  const s = await liveTheme();
+  try {
+    await expect(s.hook("foreign", "page", "17")).rejects.toThrow(
+      "theme.delivery.page_retired",
+    );
+    await expect(s.hook("run", "foreign", "17")).rejects.toThrow(
+      "theme.delivery.page_retired",
+    );
+    expect(mock.themeRead).not.toHaveBeenCalled();
+    await s.hook("run", "page", "17");
+    expect(mock.themeRead).toHaveBeenCalledWith("run", "page", "17");
+    expect(mock.themeConfirm).toHaveBeenCalledWith(
+      "run",
+      "page",
+      "17",
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(mock.themeDrawn).toHaveBeenCalledOnce();
+    expect(mock.themeRead.mock.invocationCallOrder[0]).toBeLessThan(
+      mock.themeConfirm.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mock.themeConfirm.mock.invocationCallOrder[0]).toBeLessThan(
+      mock.themeDrawn.mock.invocationCallOrder[0] ?? 0,
+    );
+  } finally {
+    s.win.dispatchEvent(new Event("pagehide"));
+    await s.completion;
+  }
+  expect(s.w.__PULSE_PEER_THEME__).toBeUndefined();
+  await expect(s.hook("run", "page", "17")).rejects.toThrow(
+    "theme.delivery.page_retired",
+  );
+});
+it("wrong-generation and malformed receipt cannot confirm or report a draw", async () => {
+  const s = await liveTheme();
+  try {
+    for (const receipt of [
+      { generation: "18", ticket: "11111111-1111-4111-8111-111111111111" },
+      { generation: "17", ticket: "../secret" },
+    ]) {
+      mock.themeRead.mockResolvedValue(receipt);
+      await expect(s.hook("run", "page", "17")).rejects.toThrow(
+        "theme.delivery.receipt",
+      );
+    }
+    expect(mock.themeConfirm).not.toHaveBeenCalled();
+    expect(mock.themeDrawn).not.toHaveBeenCalled();
+  } finally {
+    s.win.dispatchEvent(new Event("pagehide"));
+    await s.completion;
+  }
+});
+it("retirement during confirmation never reports applied theme and stale cleanup cannot delete replacement bridge", async () => {
+  const s = await liveTheme();
+  const replacement = async () => {};
+  s.w.__PULSE_PEER_THEME__ = replacement;
+  mock.themeConfirm.mockImplementation(async () => {
+    s.win.dispatchEvent(new Event("pagehide"));
+  });
+  await expect(s.hook("run", "page", "17")).rejects.toThrow(
+    "theme.delivery.retired",
+  );
+  await s.completion;
+  expect(mock.themeDrawn).not.toHaveBeenCalled();
+  expect(s.w.__PULSE_PEER_THEME__).toBe(replacement);
+});
 type Options = {
   signal: AbortSignal;
   ack: (generation: string, sequence: number) => Promise<void>;
@@ -69,6 +175,22 @@ async function setup() {
   mock.done.mockResolvedValue(undefined);
   mock.holdReady.mockResolvedValue(undefined);
   mock.initialPage = true;
+  mock.themeRead.mockResolvedValue({
+    ticket: "11111111-1111-4111-8111-111111111111",
+    generation: "17",
+    paintJson: "bounded-actual-wire",
+  });
+  mock.themeConfirm.mockResolvedValue(undefined);
+  mock.themeDrawn.mockResolvedValue(undefined);
+  mock.paint.mockImplementation(
+    async (
+      _generation: string,
+      reader: (signal: AbortSignal) => Promise<unknown>,
+    ) => {
+      const options = mock.options as Options;
+      await reader(options.signal);
+    },
+  );
   mock.hints.mockImplementation(
     async (_run: string, page: string, generation: string) => {
       if (page !== "page" || generation !== "17") throw new Error("denied");

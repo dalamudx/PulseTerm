@@ -55,6 +55,9 @@ async fn full_queue_cancellation_wakes_without_credit_and_never_executes_pending
     let store = StateStore {
         requests,
         cancellation: cancellation.clone(),
+        host_owner: uuid::Uuid::new_v4(),
+        #[cfg(feature = "ssh-trust")]
+        trust_owner: uuid::Uuid::new_v4(),
     };
     let mut results = Vec::new();
     for _ in 0..REQUEST_LIMIT {
@@ -68,9 +71,11 @@ async fn full_queue_cancellation_wakes_without_credit_and_never_executes_pending
     let worker_cancel = cancellation.clone();
     let runtime = tokio::runtime::Handle::current();
     let worker_path = path.clone();
+    // Prepare the actual schema before measuring cancellation of the full request queue.
+    // Database initialization/migration latency is not the cancellation wakeup under test.
+    let connection = tokio::task::spawn_blocking(move || database::open(&worker_path)).await??;
     let (start, wait) = std::sync::mpsc::channel();
     let task = tokio::task::spawn_blocking(move || {
-        let connection = database::open(&worker_path)?;
         wait.recv().map_err(|_| StoreError::Closed)?;
         serve(connection, &mut inbox, &worker_cancel, &runtime)
     });

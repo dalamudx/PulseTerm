@@ -123,13 +123,107 @@ impl SessionRegistry {
         generation: u64,
         rendered: RenderedScreen,
     ) -> Result<VisibleComparison, RegistryError> {
+        self.compare_bootstrap_scope(owner, None, id, generation, rendered)
+    }
+    /// Atomically validate the document which captured this view before comparing
+    /// its immutable projection. A current page cannot promote a legacy binding.
+    pub fn compare_bootstrap_page(
+        &self,
+        page: &PageLaunchScope,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<VisibleComparison, RegistryError> {
+        self.compare_bootstrap_scope(page.owner, Some(page), id, generation, rendered)
+    }
+    /// Single-flight accurate capture confirmation at the authoritative quota
+    /// deadline. Never retry or relax MIN_INTERVAL; revalidate the same source
+    /// after waiting. Only the comparison admission lock crosses this await.
+    pub async fn compare_bootstrap_page_when_ready(
+        &self,
+        page: &PageLaunchScope,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<VisibleComparison, RegistryError> {
+        self.compare_bootstrap_page_when_ready_observed(page, id, generation, rendered, || {})
+            .await
+    }
+    /// Read-only progress callback while holding the existing admission; it is
+    /// not a confirmation receipt and cannot upgrade this page or generation.
+    pub async fn compare_bootstrap_page_when_ready_observed(
+        &self,
+        page: &PageLaunchScope,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+        waiting: impl FnOnce() + Send,
+    ) -> Result<VisibleComparison, RegistryError> {
+        if rendered.digest.len() != 16
+            || !rendered
+                .digest
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(SessionError::InvalidDigest.into());
+        }
+        let (comparison, mut cancelled) = {
+            let state = self.lock()?;
+            let binding = self.page_binding(&state, page, id, generation)?;
+            (
+                Self::entry(&state, page.owner, id)?.comparison.clone(),
+                binding.handle.cancellation(),
+            )
+        };
+        let mut last = comparison
+            .try_lock_owned()
+            .map_err(|_| RegistryError::Busy)?;
+        if *cancelled.borrow() {
+            return Err(RegistryError::Stale);
+        }
+        if let Some(at) = *last {
+            if at + MIN_INTERVAL > Instant::now() {
+                waiting();
+            }
+            tokio::select! { biased;
+                _ = cancelled.changed() => return Err(RegistryError::Stale),
+                _ = tokio::time::sleep_until(at + MIN_INTERVAL) => {}
+            }
+        }
+        let state = self.lock()?;
+        let binding = self.page_binding(&state, page, id, generation)?;
+        *last = Some(Instant::now());
+        let Some((boundary, digest)) = binding.handle.bootstrap_projection() else {
+            return Ok(VisibleComparison::Stale);
+        };
+        if boundary != &rendered.boundary {
+            return Ok(VisibleComparison::Stale);
+        }
+        Ok(if digest == rendered.digest {
+            VisibleComparison::Equal
+        } else {
+            VisibleComparison::Mismatch
+        })
+    }
+    fn compare_bootstrap_scope(
+        &self,
+        owner: WindowToken,
+        page: Option<&PageLaunchScope>,
+        id: SessionId,
+        generation: u64,
+        rendered: RenderedScreen,
+    ) -> Result<VisibleComparison, RegistryError> {
         let state = self.lock()?;
         let entry = Self::entry(&state, owner, id)?;
-        let binding = state
-            .bindings
-            .get(&id)
-            .filter(|b| b.generation == generation)
-            .ok_or(RegistryError::Stale)?;
+        let binding = if let Some(page) = page {
+            self.page_binding(&state, page, id, generation)?
+        } else {
+            state
+                .bindings
+                .get(&id)
+                .filter(|b| b.generation == generation)
+                .ok_or(RegistryError::Stale)?
+        };
         if rendered.digest.len() != 16
             || !rendered
                 .digest

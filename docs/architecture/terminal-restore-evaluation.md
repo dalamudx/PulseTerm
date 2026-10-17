@@ -115,7 +115,17 @@
 - 命名用例增加退出/重入、笔属性、超链接继承、隐藏主屏软换行以及 shrink/grow。结构指纹已覆盖隐藏主屏 current/saved cursor、格子和备用屏 saved cursor；不比较下次切换时必然被清空的备用屏内容。
 - 3 万组 release 属性测试无失败，包含 4,693 个 alt-active 和 3,933 个 alt-reentry 场景；日志 exact=18,361、deferred=8,337、approx=2,496，计数并非完整互斥的3万分类。严格比较只对可编码的精确帧执行；延期与近似场景没有算作精确恢复通过。正常 project 检查、38 项 TS 测试、真实 Linux PTY、原生适配器和生成绑定一致性通过。原源码 132 unit + 45 reference + 1 doctest 通过。
 - **新增明确延期，不是新增修改解析行为的补丁**：主屏在备用屏 resize 后 current/saved cursor 分离，而 `1049h` 会覆盖保存光标，返回 InactiveCursorDivergence；非行尾 pending-wrap（例如 alacritty backward-tab 保留该位）无直接 VT setter，返回 NonEdgePendingWrap。后者来自扩大的随机测试，已用最小回归证明源终端不受影响。退出/更新状态后可以再次请求恢复，不能把此延期包装成成功 attach。
+- **剪断末列宽字符上的 pending-wrap 明确拒绝**：`a + CUP 6;22 + 中a + DECSC + IRM + CUP 6;22 + BS + 中`（24×6）会使已保存光标的 pending-wrap 落在最后一列被剪断的宽字符头；直接重写该字会在底行换行滚屏并丢失首行。返回 `ClippedWideHeadPendingWrap`，覆盖实际重建的活动／保存／隐藏屏光标，完整恢复、保历史恢复和同步修复均不输出部分字节。未修改 Alacritty 或限制一般 IRM／宽字符；覆盖保存槽后可再次精确捕获。这是显式安全延期，不是该异常状态已经可无损恢复；固定反例和一万组恢复属性检查已通过，live／EOF actor 反例纳入默认测试。
 - 进一步缩减 random-85 后确认真实恢复缺口：xterm 的主/备用屏分别保存滚动区域，而 alacritty 是全局区域；源流的隐藏主屏有非默认区域，但恢复只设置了活动备用屏。返回主屏后 `SD` 错误滚动了全屏。不是保存光标的DECOM问题（已检查实际xterm代码且撤销该假设）。恢复隐藏主屏时补写scroll margins即可解决，不修改上游源码或parser行为。最小回归为 `q + CSI 2;5 r + 1049 h + alt`，续流 `1049 l + CSI 2 T`：首行q在滚动区外，必须不动。
 - 当前 xterm 矩阵 546 个可编码非近似场景：M1=381、M2=301、M3=430，条件 M1|M2=301/301；所有随机/命名 restore-fail 都纳入强制失败，不再只强制命名案例。它仍不是双解析器全部行为一致或S2通过。
 - actor 使用 VTE 原始deadline驱动空闲同步flush，并有独立的EOF排空路径；事件回复仍有界。批量flush记录颜色查询时的override，避免后面的OSC set/reset/RIS改变较早查询。它只改变PulseTerm调用/观测层，不扩大vendor patch。
 - 随附源码来源/bans 审计通过；原有6个许可证拒绝、paste/proc-macro-error维护公告仍失败，未添加豁免。补丁仅限此 getter，GTK 宏链不变。历史、真实渲染器/窗口恢复、终端软件录制流与额度集成仍是后续工作。
+
+
+## 保留恢复后的逻辑行关系
+
+600 长行的真实 WebView 深历史复制暴露了与字符指纹不同的恢复边界：实时复制精确，刷新后字符仍一致，但屏幕逐行 CUP 打断了软换行，系统剪贴板多出 15 个 LF。恢复现在让连续满行后的首字符自然触发 autowrap，活动屏幕和隐藏主屏都遵循这条规则；字符／游标指纹之外另行验证 WRAPLINE，不能以视觉字符相同替代精确复制。
+
+历史与屏幕的接缝另有双解析器差异。Alacritty 的 WRAPLINE 存在上一行末单元，xterm 的 isWrapped 存在延续行；xterm EL2 会清掉后者。源历史最后一行确有 WRAPLINE 时，恢复仅用 ECH 擦除屏幕首行的单元，保留由历史回放建立的延续标记；其余行仍以 EL2 清除旧关系，再按源重建。清除不使用会制造历史的 ED2，不延长绘制／ACK 期限，也不通过去掉 LF 或改写选区来隐藏差异。
+
+空续行、无法从行尾实际触发 autowrap 的异常状态及最末屏幕行的软换行标记明确列为非精确，不能升级为精确恢复；恢复请求不改变源终端。初步 121 测试和 80,425 字节实窗通过后，合并随机测试又发现备用屏绘制继承 Alacritty 的全局局部滚动区：自然 autowrap 会在 margin 下边界滚动，搬移已绘单元。现在每个 grid 补绘开始先临时重置全屏 margins，补绘后仍分别恢复隐藏主屏与活动屏的原 scroll region；不删掉 xterm 每缓冲区 margin 的既有恢复。新增命名反例覆盖完整／保历史入口、隐藏主屏受保护的 q、SD／备用屏重入及无多余回复，先红后绿。最终 126 validation 终端测试、30,000 恢复属性样本、strict／Rust Exact 及最新定向 Linux WebView 深复制通过，live／refresh 仍为源的 80,425 字节。最新 check/test/probe、1018 前端、305 SSH app、228 组合 Native、strict／bindings 和 Bash／Vim／右键／密码与私钥 SSH／v1-v2 实窗全部通过；清单见 `target/probes/history-copy-acceptance.json`。审计仍为 8 项许可、2 项维护阻断，不能据此开放发布；这项不证明 4 MiB 极限、越过历史保留上限或其它平台。

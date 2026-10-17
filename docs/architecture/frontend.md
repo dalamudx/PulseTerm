@@ -124,6 +124,10 @@ interface PooledViewController {
 
 ## 6. TermView（features/terminal）
 
+**基础设置接入**：`product_settings.rs`只处理固定app-config目录中的settings.toml和三显示字段，opaque token强绑定后端Snapshot及原page Arc；目标、程序、参数和env不由此开放。原生blocking闭包持IO信用直到实际结束，退出Root等待；保存前／temp fsync后／install前再次核对原页执行准入，grant后在途install不undo，迟到receipt不发布／重试。`workspace-settings.ts`严格解码version/fields/default-user、安全字体名和范围，Modal epoch拒旧DOM与旧结果；恢复仅删除局部覆盖。工作区读取失败不以默认值覆盖文件或展示默认Shell。展示字体不属于VT协议，配置投影进入`SurfaceGeometry`，原Raw v1/v2和调色板/查询权威不变。保存供下次新视图或刷新应用，非外部watcher／即时多文件事务；Ended无法适配较小网格仍typed拒绝。\n
+
+**当前生产工作区接入**：独立 `workspace-main.ts` 使用后端发现的 Profile、根会话目录和页面代际授权，Raw v2 Consumer→Surface→绘制 ACK→捕获确认→输入门禁；并接原生 resize、刷新、Ended只读恢复与退出排空。`workspace-tabs.ts` 为手动激活的 ARIA tablist，Arrow/Home/End 仅移动焦点，显式激活才切租约；旧 DOM 回调不能选择新目录。关闭当前会话后恢复存活项；sessionStorage 只保存当前窗口的选择偏好，必须与新页后端目录交叉校验，不是执行或会话所有权。Linux双真实PTY已验收，关闭通过scope拥有的原生modal默认保留，只有批准且当前页／目标未变才撤租约和调用root回收；取消保留显示和PTY、不重试未知结果。`workspace-layout.ts`已实现有界不可变的布局操作，每个`WorkspacePane`独立ViewHost、capture epoch与fit/observer，防同代际数值或旧End/错误回调互相退役；单显示面已迁移，`WorkspaceSplit`现可把两个backend目录中的已有会话以左右／上下布局并行呈现，`WorkspaceLayoutView`只重建布局wrapper，稳定leaf由各自控制器持有；比例stylesheet通过每页nonce且仅插入经模型校验的节点ID和finite比例，不用inline CSS。关闭按focus所属Session而非rootTab身份；切回rootTab释放双view而保两PTY。刷新当前回到选中root单显示面，当前双窗格支持20–80%有界range比例调整与Ctrl+Shift+方向导航（Ctrl+Alt被Linux Openbox占用，未更改WM配置）；布局重建复用稳定leaf，调整串行且实际fit后恢复原显示焦点，未确认／resize／退休资源拒focus，focus不增加输入许可/RPC。比例仅两live Ready可改，Ended小窗口重排未做而明确禁用。布局持久化／嵌套分屏UI／gutter拖动／最大化仍未接入。重命名、全局快捷键、跨平台／系统IME与完整产品DoD未完成。Unix Profile管理modal已接fixedkind＋hidden布尔写私库，程序／参数／环境仍backend控制；currentPage执行gate带IOcredit进actualSQLite请求，SQL完成先退credit再publish，executing/committed写不随retirement undo。仅隐藏/恢复而不关闭原PTY，刷新及新app私库重开已验证；未知结果只freshread不retry/反向写。完整默认Profile／参数env配置／删除恢复、WindowsACL与三平台待做。下面固定探针段为独立历史验证范围，不再代表生产入口完全不存在。
+
 **当前实现边界（开发验证）**：`features/probe/dom-renderer.ts`已通过同一AttachmentConsumer接入初始40×12、128行history的只读xterm DOM。与headless共用Rust Unicode17 scalar、查询屏蔽、每流解码及repair；输出不进React state，React callback ref只注册容器，卸载作废lifetime/consumer并dispose旧surface。DOM ACK在parser callback和两次animation机会之后（1秒截止，隐藏/断开明确失败），不是compositor像素回执。动态stylesheet通过xterm公开`documentOverride`在创建时设置Tauri本地HTML style anchor的每页nonce；不改全局document或放开CSP unsafe-inline。无nonce时拒绝DOM启动。这里只验证固定helper，临时启用合成键盘/composition输入，经generation授权的有界队列回写，完成后恢复只读；paste在capture阶段阻止，未开放生产粘贴UX、link addon或user shell。输入队列单批≤1KiB、32项/8KiB（含活动IPC），一秒不确定超时/错误/取消作废且绝不自动重试；卸载或错误请求generation-scoped detach，不关闭registry会话。已在fixed helper中用ResizeObserver+DOM cell尺寸每generation重测，50ms去抖、160×60 cap、6秒不确定截止，连续完成3次受控容器尺寸变化（40×12→104×12→60×10→104×12），native ACK后重捕获而非optimistic调用term.resize。host现在有独立208px高度，样例临时改宽/高并恢复，observer风暴合并为一次native resize。每generation的SurfaceVisibility将container/document/native三种来源AND合并；DOM测量原子更新container/document并保留native来源，不把失焦当作hidden；bindSurfaceVisibility监听实际host.hidden属性及visibilitychange；后端NativeWatcher以Focused/Resized/ScaleFactorChanged作提示，有限50/50/100ms采样runtime visible/minimized，typed定向事件带每window独立incarnation与递增revision。前端先listen再owner授权snapshot，最多4个incarnation的最新样例做bootstrap buffer，旧/重复/乱序信号忽略；invalid回读fail closed。收到不可见通知先同步停用input/idle/consumer/renderer，再串行发owner/current generation授权的pause票据detach；native-only样例先调用有限原生动作入口（仅reserve窗口动作，不detach），Tauri hide/minimize后typed native false独立触发controller暂停；不先改host.hidden，也不绑定页面信号（其source保持true）。backend最长2秒等待controller pause票据后才产生隐藏期输出，由Rust负责100ms、show/unminimize及可见回读而非依赖hidden JS。Rust状态继续处理原生隐藏期间输出，native restored事件触发controller恢复，resume先等待同次native动作Promise收据与hidden期输出边界、确认无旧Channel帧再在5秒有限pause监督内请求resume，事先授权唯一新Begin，再按准确边界重捕获。每个pause/resume IPC有1.5秒不确定截止、无重试；early show不能跳过detach收据，resume在途再隐藏则fail closed。新generation接管后旧controller停止，observer/visibility监听在handoff/失败/abort时释放。新Begin须先有resize/resume许可；旧帧不算activity，旧consumer Promise成功/失败不操作新surface。已验证3次resize、一次容器隐藏及真实native hide/show；另有Linux隔离Xvfb/Openbox的CLI-only最小化模式，backend回读is_minimized=true后隐藏期输出、unminimize并回读可见再恢复，报告nativeMinimizeChecked由后台设置。新增nativeOnlyChecked/backend与nativePauseChecked/DOM证明原生信号作为唯一隐藏来源独立驱动pause→resume。另有probe-window-external：private Xvfb中独立xdotool进程按appPID匹配唯一窗口，外部WM最小化/激活；应用只发固定generation marker并readback，正常路径不调用minimize/unminimize/show，backend externalWmChecked及四动作日志要求通过。仍未验收人工点击标题栏按钮、任意ancestor CSS遮挡检测或应用全局可见性调度；DOM解绑须由ViewHost AbortSignal取消，不仅依赖observer；Destroyed立即关闭pause gate，待决/早到resume不能重新激活旧window；生产ViewHost、真实拖动/跨屏DPI/zoom、IME/selection与长期隐藏恢复策略仍待接入。
 
 **生命周期**：
@@ -149,7 +153,7 @@ dispose          → ipc.term.detach → term.dispose()
   3. 会话处于 win32-input-mode 时，由我们自己把按键编码成 `CSI Vk;Sc;Uc;Kd;Cs;Rc _` 发出；
   4. 其余交给 xterm 处理。
   另外提供一个“把下一个按键直接发送给终端”的动作，应对快捷键和终端程序冲突的情况。
-- **粘贴**：多行内容或包含控制字符时先弹窗确认（SEC-04）；终端开启了 bracketed paste 时交给 xterm 自动包裹。
+- **粘贴**：多行内容或包含控制字符时先弹窗确认（SEC-04）；终端开启了 bracketed paste 时交给 xterm 自动包裹。当前工作区仅受信用户 ClipboardEvent 的 text/plain；单次≤1012 UTF8字节，保留12字节bracket框架空间，仍走既有1KiB输入门禁。Tab／换行／Bidi及隐形格式字符需scope拥有的modal批准，取消默认焦点，预览仅纯文本并转义隐形字符；C0/C1不支持控制符及超限直接拒绝，不删改／截断／自动重发。view退役／EOF／resize关闭输入时同步撤销审批，迟到批准不得发送；没有policy的固定probe仍阻断粘贴。用户选区Ctrl+C使用公共getSelection及受信copy事件写text/plain，无选区仍交xterm编码中断；结束画面复制不授输入权。仅当前显示缓存复制，不替代未来backend深历史搜索／精确导出；OSC52依然一律禁止。
 - **历史与搜索**：xterm 缓冲区之外的历史，由“历史查看器”浮层分页读取（`term_history_page`）并用虚拟列表显示。搜索在后端执行（`term_search`）：命中的行如果仍在 xterm 缓冲区内，就在终端里高亮；否则在历史查看器中定位。
 - **屏蔽 xterm 的查询应答**：后端负责回答程序的查询（见 backend.md §4.5）。前端用 `term.parser.registerCsiHandler` / `registerDcsHandler` / `registerOscHandler` 拦截 DA1/DA2、DSR、DECRQM、XTVERSION、DECRQSS、OSC 4/10/11/12 查询和 CSI t 报告，返回 `true` 表示已处理，xterm 就不会再发出应答。拦截范围以 S2 的测试样例为准。前端切换终端配色时调用 `term_set_palette`，把配色同步给后端。
 - **链接**（SEC-09）：OSC 8 超链接和自动识别的 URL，点击后先显示完整地址；`file://` 和自定义协议需要用户确认。
@@ -241,6 +245,7 @@ black = "#…"   # red green yellow blue purple cyan white
 brightBlack = "#…"   # brightRed … brightWhite
 ```
 
+- **绘制投影边界**：后端`ThemeDocument::paint_data`现提供独立version=1、4096字节以内的serialize-only图像：ANSI16、可选cursor/selection、28固定UI色槽与显式appearance/neutral/accent；颜色是u8 RGB三元组，不携带主题名称、路径、任意CSS文本或权限。terminal低于4.5:1只告警，不改原色。已有严格Rust→TypeScript互通、复用真实ViewScope的撤销guard与nonce UI覆盖资源；fixed settings-probe 的peer页面已完成实际文件投影交付，迁移main的read/confirm/drawn与前端ready握手正在独立验收。主页面导航撤销主题document epoch，不关闭PTY；fixed UI色槽的computed读回与恢复不是生产完整主题应用。Radix尺度解析（尤其自定义seed）、UI对比度、源变化撤销通知和xterm默认色/OSC状态同步仍须独立实现及验收；不能将数据或受控页面回执当GUI完成。
 - **内置主题**：PulseTerm Dark / Light、One Dark / Light、Catppuccin（Latte / Mocha）、Dracula、Solarized Dark / Light。每套主题随应用分发前都要核对许可证，并登记到 `THIRD_PARTY.md`。
 - **跟随系统**：设置项 `theme = { light = "PulseTerm Light", dark = "PulseTerm Dark" }`；系统深浅色变化由 Tauri 的主题事件通知，前端只切换变量。
 - **导入**（UI-07）：
@@ -254,6 +259,16 @@ brightBlack = "#…"   # brightRed … brightWhite
 | base16 / base24 YAML（tinted-theming） | 按规范中的映射表同时生成终端配色和界面变量覆盖（base00–07 → 背景和文字层级，base08–0F → ANSI 和状态色） |
 
 - 解析和转换在后端完成（见 backend.md §10.3）；导入时检查对比度，前景与背景低于 WCAG 4.5:1 时提示用户。
+- 当前 `pulse-store::theme::import_theme` 是显式格式、64 KiB 限额的纯 Rust 导入入口，输出不是完整应用主题。Windows Terminal／VS Code／base16/base24 保留文件内名称，Alacritty／Ghostty／iTerm 必须提供独立显示名称，不嗅探扩展名或加载外部引用。VS Code 严格 JSON 同时提取完整终端色与六个固定 UI 覆盖；未知终端色、透明色、include 与 JSONC 拒绝，未映射编辑器色会明确计数，token grammar 不应用。iTerm 仅接受明确 sRGB、无透明度的 XML 子集，有限浮点分量按最近 RGB8 量化；不支持的色域、binary plist、未知实体及重复键拒绝，标准 Apple DOCTYPE 仅惯性识别，不取网络。
+- 统一结果保留组合覆盖与转换说明，不把 VS Code 组合片段降为终端片段；UI 基底／appearance 必须单独选择。`ThemeDocument::from_import` 和 `parse_theme_document` 已连接显式 scalar `appearance = "light" | "dark"`、六种 Radix 中性色、已知色系／opaque RGB8 强调色与 28 个固定语义颜色覆盖，完整 TOML 与片段互相不能误认。纯数据阶段不生成 Radix CSS（包含直接 RGB seed 的色阶）、保存文件或应用 GUI；七格式适配、固定探针和原生消费者通过不代表目录监听／GUI 应用已完成。
+- base16/base24 YAML 必须显式选择系统，支持 common 与受限 legacy 结构。按照官方 ANSI 映射处理，不把 base16 的重复亮色擅自替换成 orange/brown；原始 16/24 色和元数据保留于导入结果。64 KiB／192 事件／两层 mapping，拒绝 anchor／alias／tag、重复键、多个文档、深层容器及未知／额外色槽，不调用 YAML tree loader 或模板。`ThemeImportNotes::base_palette_projection` 标记 ANSI16 投影；普通完整文档／片段导出返回 `Projection`，必须显式调用 `from_projected_import`／`to_projected_toml_fragment` 才能导出终端模型未覆盖的 base 槽位。投影后的文件不保存这些额外源色，不是原始方案无损序列化。
+
+- 受控主题目标交付已验证只读源撤销观察：每 publication 是一次 false→true 的通知，不使用可回绕事件序号；观察本身不授予重绘权限、不保活 owner、也不能释放尚在运行的 I/O 额度。注册层先校验 exact WindowToken/session/generation/registry 和当前 snapshot，替换发布、失效或 source 关闭即通知。前端明确区分 `invalidate`（保留 stale-last-good 像素）与 `revoke`（authority 失效即移除样式，读槽待操作退出）；cleanup failure 使原 ViewHost fail-closed，不影响独立 view 或 session。
+- 固定 `settings-probe` 的实际移窗主视图已接单次 `probeTargetThemeWaitRevoked`：先真实绘制→native 显式失效→同 claim/document epoch/generation 复验通知→删除28色槽并读回原值→single-use 清理回执。challenge 导航／退出立即取消等待，整体维持原1秒截止；这不是生产连续主题订阅、外部文件 watcher、自动重取或终端配色同步，默认工厂仍关闭。
+
+- 前端 `features/theme/radix-theme.ts` 已生成全部28个固定UI语义槽，复用锁定Radix3的opaque sRGB light/dark色阶；仅stock家族，不支持直接RGB seed色阶且不做近似。完整解析不修改终端数据，行政窗口amber仅能由可信调用选项指定并屏蔽6个accent覆盖，不授予任何后端权限。accent-contrast在黑/白中最大化9/10两态最低对比；生成器报告25个正文色对的WCAG告警，显式reject策略在创建sheet前拒绝低于4.5:1的结果，绝不暗中修色。
+- Radix11在某些light有色背景不保证正文4.5:1；不能仅凭采用Radix宣布全部AA通过。受控light主题的4个高对比文字覆盖明确来自原主题数据和官方light12，不改变默认11级映射。实际peer light→dark与target dark已在原nonce/generation/撤销链通过，但这不是生产全局外壳、主题编辑界面、自定义seed、文件监听或终端查询配色同步；普通工厂不启用，生成器只在实际主题绘制时dynamic import。
+- 终端基础色与 UI 色槽为两个不同投影：后端 actor 捕获内的 19 色基础 QueryPalette 按绑定 generation 只读取得，在 xterm 恢复字节前配置实例；远端 OSC 覆盖仍由终端维护。RIS 保留远端 OSC 色覆盖（与既有后端查询语义一致），OSC 104/110/111/112 显式重置才回退基础色；不能为通过测试引入清除覆盖的 parser 钩子。不将基础色注入远端 VT，也不把读取颜色查询回复写回 PTY。真实 WebView 的一次捕获色验证不等于生产全局主题热切换或全平台性能/系统 IME 验收。
 
 ### 10.4 窗口材质与标题栏
 
@@ -266,12 +281,15 @@ brightBlack = "#…"   # brightRed … brightWhite
 
 ## 11. 快捷键与命令面板
 
-- 快捷键的来源是内置方案加上用户的 `keymap.toml`，由后端合并后下发。`KeybindingService` 支持连续按键（例如 `ctrl+k ctrl+s`）和生效条件（`when: terminalFocus && !broadcast`）。
+当前七固定动作的产品边界见 [workspace-command-palette.md](./workspace-command-palette.md)。有界 chord/when/定义冲突模型已测试，默认面板键位复用 matcher；当前页 keymap IPC／文件源联合确认保存、序列运行时和Settings快捷键表单已接，749TS／134Native／Linux受控GUI基本链与focus隔离通过，见 [keymap-source.md](./keymap-source.md)。`cap_list` 通用执行目录、三平台／系统IME与完整键位生态 **尚未交付**。以下是目标架构，不表示当前产品已实现。
+
+- 快捷键的来源是内置方案加上用户的 `keymap.toml`，由后端合并后下发。`KeybindingService` 支持连续按键（终端候选如 `ctrl+shift+k ctrl+shift+s`）和生效条件（`when: terminalFocus && !broadcast`）；普通 Shell 的 `ctrl+k ctrl+s` 只能用于显式 `!terminalFocus` 条件，不能为连续键功能吞掉 Shell 的 CtrlK。
 - 命令面板的数据来自 `cap_list`（过滤掉不支持从面板调用的 action），再加上 Vault 主机和片段。各项先按模糊匹配打分，再按最近使用加权排序。
 - macOS 的默认快捷键用 Cmd，另外两个平台用 Ctrl+Shift，避免和终端程序抢按键。
 
 ## 12. 多语言与无障碍
 
+- 当前生产工作区先接通用户层语言保存、显式文案绑定及工作区／设置／快捷键／命令面板双语，设计与剩余 UI-05 范围见[工作区语言](workspace-language.md)。终端输出与用户名称不参与翻译，保存后即时应用，读回同步实际值；原生与跨平台验收保持开放。
 - 文案按功能模块分文件（namespace），文案 key 由 TS 类型约束；错误码的翻译统一放在 `errors` 中。
 - 所有可交互元素都能用键盘操作；优先使用 Radix 组件以获得正确的 ARIA 属性；开启 xterm 的 `screenReaderMode` 选项（P2）。
 

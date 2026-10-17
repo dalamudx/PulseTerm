@@ -40,6 +40,7 @@ async fn bootstrap_captures_recent_history_and_screen_at_one_boundary() {
     handle.close();
     task.join().await.unwrap();
 }
+
 #[tokio::test]
 async fn bootstrap_failure_returns_no_partial_and_keeps_actor_running() {
     let (transport, _) = EchoTransport::spawn();
@@ -63,6 +64,73 @@ async fn bootstrap_failure_returns_no_partial_and_keeps_actor_running() {
             .await
             .is_ok()
     );
+    handle.close();
+    task.join().await.unwrap();
+}
+
+#[test]
+fn restore_carries_base_without_turning_it_into_remote_overrides() {
+    let mut source = TerminalProbe::new(size(), 64);
+    let palette = crate::QueryPalette {
+        foreground: [1, 2, 3],
+        background: [4, 5, 6],
+        cursor: [7, 8, 9],
+        ansi: std::array::from_fn(|i| [i as u8, 16 + i as u8, 32 + i as u8]),
+    };
+    source.set_query_palette(palette.clone());
+    source.feed(b"one\r\ntwo\x1b]4;1;#abcdef\x07\x1b]10;#102030\x07");
+    let frame = source.restore_sequence().unwrap();
+    assert_eq!(frame.palette, palette);
+    let mut restored = TerminalProbe::new(size(), 64);
+    restored.set_query_palette(frame.palette.clone());
+    restored.feed(&frame.bytes);
+    assert_eq!(restored.restore_fingerprint(), source.restore_fingerprint());
+    let mut wrong_base = TerminalProbe::new(size(), 64);
+    wrong_base.feed(&frame.bytes);
+    assert_ne!(
+        wrong_base.restore_fingerprint(),
+        source.restore_fingerprint()
+    );
+    for continuation in [b"\x1b]4;1;?\x07\x1b]10;?\x07".as_slice(), b"\x1b]104\x07\x1b]110\x07\x1b]111\x07\x1b]112\x07\x1b]4;1;?\x07\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07".as_slice(),b"\x1bc\x1b]10;?\x07".as_slice()] {
+      source.feed(continuation);restored.feed(continuation);
+      assert_eq!(source.take_replies(),restored.take_replies());
+      assert_eq!(source.restore_fingerprint(),restored.restore_fingerprint());
+    }
+}
+
+#[tokio::test]
+async fn captures_retain_palette_boundary_after_actor_reconfiguration() {
+    let (transport, _) = EchoTransport::spawn();
+    let (handle, task) = spawn_session(size(), 64, transport);
+    let a = crate::QueryPalette {
+        foreground: [1, 2, 3],
+        ..crate::QueryPalette::default()
+    };
+    handle.set_query_palette(a.clone()).await.unwrap();
+    let before = handle.state.borrow().clone();
+    let old = handle
+        .diagnostic_subscribe(2, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
+        .await
+        .unwrap();
+    let diagnostic = handle.diagnostic_restore(MAX_RESTORE_BYTES).await.unwrap();
+    assert_eq!(old.bootstrap.palette, a);
+    assert_eq!(old.bootstrap.boundary, before);
+    assert_eq!(diagnostic.palette, a);
+    assert_eq!(diagnostic.boundary, before);
+    let b = crate::QueryPalette {
+        background: [4, 5, 6],
+        ..a.clone()
+    };
+    handle.set_query_palette(b.clone()).await.unwrap();
+    assert_eq!(old.status.borrow().end, StreamEnd::Reconfigured);
+    assert_eq!(old.bootstrap.palette, a);
+    let fresh = handle
+        .diagnostic_bootstrap(2, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
+        .await
+        .unwrap();
+    assert_eq!(fresh.palette, b);
+    assert_eq!(fresh.boundary.revision, before.revision + 1);
+    assert_eq!(fresh.boundary.parsed_bytes, before.parsed_bytes);
     handle.close();
     task.join().await.unwrap();
 }
