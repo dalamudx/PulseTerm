@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 当前字体矩阵的生产 WebView 原生验收
+
+现有字号／行高／字距、预设／后备／连字范围仍按历史限定证据记录，本批复用该矩阵。`probe-workspace-font` 已改为私有TMPDIR、前端资产和C助手，并复用显式CARGO_TARGET_DIR；脚本独立重开使用同一生产二进制，通过当前设置搜索和ComboBox角色定位，保留默认14px、明确保存、实际PTY网格及三次原生退出要求。结构化字体收据在开始时写未通过，末尾才确认。
+
+正式字体矩阵已在当前生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建通过：默认14px的初始92×29格、18px后67×22，行高150%后67×15，字距2px后56×15；各次均与内核stty及后端resize日志一致。独立重开保持网格，清除行高／字距恢复继承后回到67×22，同一PTY未更换。JetBrains预设草稿和本地OFL许可展开均不写配置，明确保存后刷新成功；缺失主字体配合明确后备仍可显示，第三个独立窗口保持网格且零配置写入。三个独立GUI正常退出，3个不同PTY PID均已物理退出。收据 `target/probes/workspace-font-result.json` 为通过，日志／许可／输出截图及摘要另外保存在 `target/probes/workspace-font-current/c9d7c0a7/`。本轮未启用连字GPU探针，CJK只是固定示例，未扩大完整CJK／系统IME／DPI或跨平台范围。
+
+首轮生产CLI运行目录缺失导致初始化失败，夹具已提供短私有XDG_RUNTIME_DIR；第二轮字号、两项网格、独立重开和恢复继承通过，在字体操作前停止。两轮日志与失败收据分别保留在 `target/probes/font-attempts/3a0af8e2/` 和 `target/probes/font-attempts/2af2dca5/`。未将较早历史截图当作本轮故障，已补校验PID归属的当轮失败截图和固定步骤日志，并在原三秒期限内重试只读边界／幂等焦点查询。Shell语法、mise解析和收据Python语法通过，Shell诊断为0；最终完整任务已通过；先前失败仍单独保留。
+
+当前无IBus／Fcitx／Wayland合成器，真实系统IME及物理多屏DPI仍需环境。关闭与字体验证链的GUI、PTY、D-Bus／Xvfb及构建进程全部退出后，已执行 `mise run clean-dev` 清除9.2GiB dev/test产物，并移除本任务目录 `/data/temp/alpha-native-close.ONGeB6`。发布依赖查询时附带安装的Rust HTML文档组件已移除，1.95.0工具链及rust-src保持；私有查询缓存也已不存在。两批最终收据、SHA清单、原生图像与失败记录保留在 `target/probes/`。
+
 ## 未决原生关闭的增量验证
 
 生产构建的原流程锁定／解锁各12轮，两种新时序（取消后不等CLI回执、确认框未决时关窗）在锁定／解锁下也各12轮，共72个不同GUI PID。逐一核对72份实际waitpid退出文件均为0，零认证／签名、来源摘要不变、control.sock/control.token回收。新时序贡献48轮；原流程24轮另计。六组收据、72份退出文件和SHA256清单已单独保留在 `target/probes/native-close-pending-acceptance/962d5f04/`，汇总为该目录的 `summary.json`。

@@ -159,7 +159,7 @@ mise run probe-workspace-bracketed-paste # 真实 Bash／GNU Readline 缓冲：�
 mise run probe-workspace-vim       # 真实Vim：审批／缩进及Unicode原文／插入缓冲跨页／一次撤销／文件字节保存／未保存关窗回收；非系统IME
 mise run probe-workspace-history-copy # Linux候选：600长逻辑行／软换行Unicode／真实鼠标跨历史选择／GTK字节核对／同进程刷新；未计验收
 mise run probe-workspace-settings # Linux设置：default14／逐字段CAS／行高与字距独立内核网格／刷新同PTY／两进程重开／恢复继承／退出排空
-mise run probe-workspace-font # Linux字体：预设与许可零写／明确保存／缺失主字体后备／同PTY重新加载与退出；不计连字
+mise run probe-workspace-font # Linux字体：预设与许可零写／明确保存／缺失主字体后备／同PTY重新加载与退出；当前生产组合／私有构建／搜索定位及3个PTY物理退出已重验；不计连字
 mise run probe-workspace-ligatures # Linux按需WebGL：明确保存运算符连字／绘制完成ACK／同PTY原文输入／独立重开；不计GPU性能或跨平台
 mise run probe-workspace-profiles # Linux私有DB：自动Profile隐藏／恢复、现有PTY存活、换页／新进程持久、旧页／目录拒写
 mise run probe-workspace-profile-default # Linux默认选择：保存/清空零启动、隐藏不可用、刷新/双进程重开、明确一次启动与退出回收

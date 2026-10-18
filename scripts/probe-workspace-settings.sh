@@ -4,13 +4,22 @@ set -eu
 umask 077
 mkdir -p target/probes
 mkdir -p /data/temp
-fixture=$(mktemp -d /data/temp/workspace-settings.XXXXXX)
+if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
+  printf '%s\n' '{"version":1,"passed":false,"nativeExitConfirmed":false}' >target/probes/workspace-font-result.json
+fi
+fixture=$(mktemp -d /data/temp/pt-set.XXXXXX)
 export HOME="$fixture/home" XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$HOME" "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 app=""; browser_service=""
 cleanup(){
   cleanup_status=$?
   trap - EXIT
+  if [ "$cleanup_status" -ne 0 ] && [ "${PULSE_FONT_PRESET:-0}" = 1 ] && [ -n "${xid:-}" ] && [ -n "$app" ]; then
+    if [ "$(timeout 2s xdotool getwindowpid "$xid" 2>/dev/null || true)" = "$app" ];then
+      timeout 3s import -window "$xid" "target/probes/workspace-font-failure-$app.png" || true
+      printf 'workspace.font_failure_snapshot.%s\n' "$app" >&2
+    fi
+  fi
   if [ -n "$app" ]; then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi
   if [ -n "$browser_service" ]; then
     /usr/bin/python3 "$fixture/link-browser.py" stop "$fixture"
@@ -20,10 +29,8 @@ cleanup(){
   exit "$cleanup_status"
 }
 trap cleanup EXIT
-if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
-  export XDG_RUNTIME_DIR="$fixture/runtime"
-  mkdir -m 700 "$XDG_RUNTIME_DIR"
-fi
+export XDG_RUNTIME_DIR="$fixture/r"
+mkdir -m 700 "$XDG_RUNTIME_DIR"
 mkdir -m 700 "$fixture/bin"
 cat > "$fixture/bin/sh" <<'SHELL'
 #!/bin/sh
@@ -69,6 +76,25 @@ PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh
 app=$!
 count(){ grep -c "^workspace.$1$" "$log"||true; }
 await_count(){ wait_key=$1;wait_goal=$2;wait_tries=0;while [ "$(count "$wait_key")" -lt "$wait_goal" ];do kill -0 "$app" 2>/dev/null||exit 1;[ "$wait_tries" -lt 80 ]||{ echo "workspace.settings_timeout.$wait_key" >&2; if [ -n "${xid:-}" ];then timeout 3s import -window "$xid" "target/probes/workspace-settings-failure-$wait_key.png" || true;fi;tail -18 "$log" >&2;exit 1;};wait_tries=$((wait_tries+1));sleep 0.1;done; }
+native_helper="${PULSE_NATIVE_HELPER:-target/probes/x11-status}"
+settings_open(){
+  settings_reads=$(count settings_read_confirmed)
+  timeout 3s "$native_helper" "$app" '设置' activate
+  await_count settings_read_confirmed "$((settings_reads+1))"
+}
+settings_filter(){
+  printf 'workspace.font_step.filter.%s\n' "$1"
+  timeout 3s sh -c 'until timeout 2s "$1" "$2" "搜索设置" focus; do sleep .05; done' sh "$native_helper" "$app"
+  timeout 2s xdotool key --clearmodifiers ctrl+a
+  timeout 2s xdotool type --clearmodifiers "$1"
+}
+metric_filter(){
+  case "$1" in
+    '行高（%）') settings_filter line_height_percent ;;
+    '字距（px）') settings_filter letter_spacing ;;
+    *) return 1 ;;
+  esac
+}
 await_count profiles_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true)
 [ "$(printf '%s\n' "$xid"|awk 'NF{n++}END{print n+0}')" -eq 1 ]
@@ -96,12 +122,13 @@ if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
   python3 scripts/probe-workspace-settings-contract.py finalize "$fixture"
   exit 0
 fi
-timeout 2s xdotool mousemove --window "$xid" 904 22 click 1
+settings_open
 await_count settings_read_confirmed 2
 sleep 0.2
 timeout 3s import -window "$xid" target/probes/workspace-settings-default.png
 # Focus the current accessible field; adding settings/actions must not select a different row.
-timeout 3s target/probes/x11-status "$app" '字体大小' focus
+settings_filter font_size
+timeout 3s "$native_helper" "$app" '字体大小' focus
 timeout 2s xdotool key --clearmodifiers ctrl+a
 timeout 2s xdotool type --clearmodifiers 18
 timeout 2s xdotool key --clearmodifiers Return
@@ -114,7 +141,7 @@ await_count document_confirmed 2
 await_count profiles_listed 2
 await_count settings_read_confirmed 3
 await_count terminal_input_ready 2
-timeout 2s xdotool mousemove --window "$xid" 904 22 click 1
+settings_open
 await_count settings_read_confirmed 4
 sleep 0.2
 timeout 3s import -window "$xid" target/probes/workspace-settings-refreshed.png
@@ -135,7 +162,18 @@ sleep 0.2
 timeout 3s import -window "$xid" target/probes/workspace-settings-font-output.png
 echo "workspace.font_grid.$old_cols.$old_rows.$new_cols.$new_rows"
 # Independently change vertical and horizontal cell metrics without spawning a child.
-metric_edit(){ label=$1;value=$2;saves=$3;read_before=$(count settings_read_confirmed);timeout 2s xdotool mousemove --window "$xid" 904 22 click 1;await_count settings_read_confirmed "$((read_before+1))";sleep 0.2;timeout 3s target/probes/x11-status "$app" "$label" focus;timeout 2s xdotool key --clearmodifiers ctrl+a;timeout 2s xdotool type --clearmodifiers "$value";timeout 2s xdotool key --clearmodifiers Return;await_count settings_save_confirmed "$saves";timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r;await_count terminal_input_ready "$((saves+1))";timeout 2s xdotool mousemove --window "$xid" 400 300 click 1;}
+metric_edit(){
+  label=$1;value=$2;saves=$3
+  settings_open; metric_filter "$label"
+  timeout 3s "$native_helper" "$app" "$label" focus
+  timeout 2s xdotool key --clearmodifiers ctrl+a
+  timeout 2s xdotool type --clearmodifiers "$value"
+  timeout 2s xdotool key --clearmodifiers Return
+  await_count settings_save_confirmed "$saves"
+  timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r
+  await_count terminal_input_ready "$((saves+1))"
+  timeout 2s xdotool mousemove --window "$xid" 400 300 click 1
+}
 metric_edit '行高（%）' 150 2
 input USER_HEIGHT 3
 height_rows=$(tail -1 "$fixture/size"|awk '{print $1}')
@@ -159,7 +197,7 @@ await_count exited 1;wait "$app"
 if kill -0 "$pid" 2>/dev/null;then echo workspace.settings_native_still_alive >&2;exit 1;fi
 saved_hash=$(sha256sum "$file"|awk '{print $1}')
 log=target/probes/workspace-settings-reopened-native.log
-PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "$workspace_bin" > "$log" 2>&1 &
 app=$!
 await_count profiles_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true)
@@ -173,7 +211,15 @@ input REOPEN_METRICS 5
 [ "$(sha256sum "$file"|awk '{print $1}')" = "$saved_hash" ]
 pid=$(cat "$fixture/native.pid")
 kill -0 "$pid"
-metric_reset(){ label=$1;saves=$2;read_before=$(count settings_read_confirmed);timeout 2s xdotool mousemove --window "$xid" 904 22 click 1;await_count settings_read_confirmed "$((read_before+1))";sleep 0.2;timeout 3s target/probes/x11-status "$app" "${label}恢复继承" focus;timeout 2s xdotool key --clearmodifiers space;await_count settings_save_confirmed "$saves";timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r;await_count terminal_input_ready "$((saves+1))";timeout 2s xdotool mousemove --window "$xid" 400 300 click 1;}
+metric_reset(){
+  label=$1;saves=$2
+  settings_open; metric_filter "$label"
+  timeout 3s "$native_helper" "$app" "${label}恢复继承" activate
+  await_count settings_save_confirmed "$saves"
+  timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r
+  await_count terminal_input_ready "$((saves+1))"
+  timeout 2s xdotool mousemove --window "$xid" 400 300 click 1
+}
 metric_reset '行高（%）' 1
 input RESET_HEIGHT 6
 [ "$(tail -1 "$fixture/size")" = "$new_rows $spacing_cols" ]
@@ -185,9 +231,12 @@ node -e 'const s=require("node:fs").readFileSync(process.argv[1],"utf8");if(/^(l
 [ "$(count session_opened)" -eq 1 ]
 [ "$(cat "$fixture/native.pid")" = "$pid" ];kill -0 "$pid"
 if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
-  font_open(){ read_before=$(count settings_read_confirmed);timeout 2s xdotool mousemove --window "$xid" 904 22 click 1;await_count settings_read_confirmed "$((read_before+1))";sleep .2; }
+  font_open(){ settings_open; settings_filter "${1:-font_family}"; }
   font_click(){
-    if ! font_bounds=$(timeout 3s ./target/probes/x11-status "$app" "$1" bounds);then timeout 3s import -window "$xid" target/probes/workspace-font-control-failure.png || true;return 1;fi
+    font_action=bounds
+    if [ "$1" = '字体预设' ];then font_action=bounds-combo;fi
+    printf 'workspace.font_step.control.%s\n' "$1"
+    if ! font_bounds=$(timeout 3s sh -c 'until result=$(timeout 2s "$1" "$2" "$3" "$4"); do sleep .05; done; printf "%s\n" "$result"' sh "$native_helper" "$app" "$1" "$font_action");then timeout 3s import -window "$xid" target/probes/workspace-font-control-failure.png || true;return 1;fi
     font_x=$(printf '%s\n' "$font_bounds"|awk '{print int($1+$3/2)}')
     font_y=$(printf '%s\n' "$font_bounds"|awk '{print int($2+$4/2)}')
     timeout 2s xdotool mousemove "$font_x" "$font_y" click 1
@@ -203,7 +252,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
     if [ "$1" = Down ]; then
       font_click 'JetBrains Mono 字体许可'
       sleep .2
-      ./target/probes/x11-status "$app" 'JetBrains Mono 字体许可' inspect >target/probes/workspace-font-license-state.txt
+      "$native_helper" "$app" 'JetBrains Mono 字体许可' inspect >target/probes/workspace-font-license-state.txt
       awk '/expanded=1/{found=1}END{exit !found}' target/probes/workspace-font-license-state.txt
       timeout 3s import -window "$xid" target/probes/workspace-font-license.png
       [ "$(sha256sum "$file")" = "$font_before" ]
@@ -226,11 +275,11 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
   awk '/^font_family[ ]*=/ {if(index($0,"JetBrains Mono")) ok=1} END{exit !ok}' "$file"
   timeout 3s import -window "$xid" target/probes/workspace-font-preset-output.png
   expected=$(( $(count settings_save_confirmed) + 1 ))
-  font_open
-  ./target/probes/x11-status "$app" 后备字体 focus
+  font_open font_fallback
+  "$native_helper" "$app" 后备字体 focus
   timeout 2s xdotool key --clearmodifiers ctrl+a
   timeout 2s xdotool type --clearmodifiers 'JetBrains Mono'
-  ./target/probes/x11-status "$app" 保存后备字体 focus
+  "$native_helper" "$app" 保存后备字体 focus
   timeout 2s xdotool key --clearmodifiers space
   await_count settings_save_confirmed "$expected"
   timeout 2s xdotool key --clearmodifiers Escape
@@ -245,7 +294,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
     if [ "${PULSE_LIGATURE_TRACE:-0}" = 1 ];then set -x;fi
     ligature_before=$(sha256sum "$file")
     expected=$(( $(count settings_save_confirmed) + 1 ))
-    font_open
+    font_open font_ligatures
     font_click 运算符连字
     sleep .2
     [ "$(sha256sum "$file")" = "$ligature_before" ]
@@ -258,7 +307,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
     await_count terminal_input_ready "$font_ready"
     sleep .2
     timeout 3s import -window "$xid" target/probes/workspace-ligatures-renderer-observed.png
-    target/probes/x11-status "$app" "Renderer probe" description >target/probes/workspace-ligatures-renderer.txt
+    "$native_helper" "$app" "Renderer probe" description >target/probes/workspace-ligatures-renderer.txt
     grep -q "renderer-probe:webgl2" target/probes/workspace-ligatures-renderer.txt
     timeout 2s xdotool mousemove --window "$xid" 400 300 click 1
     input 'LIGATURES == === != !== => -> <= >= <=> && || :: := ...' 10
@@ -302,3 +351,27 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ];then
 fi
 echo workspace.settings_metrics_independent_reopen_reset_sources_grid_native_exit_confirmed
 echo workspace.settings_default_edit_reload_font_grid_confirmed
+if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
+  /usr/bin/python3 - "$fixture" <<'FONT_RECEIPT'
+import json, os, sys
+from pathlib import Path
+fixture = Path(sys.argv[1])
+pids = [int(value) for value in (fixture / 'native-pids').read_text().split()]
+assert len(pids) == len(set(pids)) == 3
+for pid in pids:
+    assert pid > 0
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        continue
+    raise AssertionError('font.native_session_still_alive')
+receipt = {'version': 1, 'passed': True, 'nativeExitConfirmed': True,
+    'nativePids': pids, 'nativeSessionCount': 3,
+    'checks': ['compiled_14px_default', '18px_native_grid', 'line_height_and_spacing',
+        'independent_reopen', 'restore_inheritance', 'preset_explicit_save',
+        'local_font_license', 'missing_primary_fallback', 'same_pty_after_refresh'],
+    'ligatureMode': os.environ.get('PULSE_FONT_LIGATURES') == '1',
+    'limitations': ['Linux Xvfb native WebView; system IME, physical DPI and other platforms remain open']}
+Path('target/probes/workspace-font-result.json').write_text(json.dumps(receipt, indent=2)+'\n')
+FONT_RECEIPT
+fi
