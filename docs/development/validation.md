@@ -2,6 +2,156 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 可复现源码基线与 Alpha 收敛
+
+已按依赖拆分签名实现提交：`110aa9e`（冷历史块索引与封存容量）、`008661b`（工作区／SSH联合认证、终端交付与Linux集中原生夹具），两者 `git verify-commit` 均通过。开发进度与本节记录单独提交；沿用已有签名配置，未推送。后续实施优先级及明确退出条件已整理到 `plan.md §15.2`。
+
+正式 `mise run check`、`mise run test`、`mise run probe` 依次通过；前端154个文件／1476项测试通过，Rust workspace及文档测试通过，手动ignore探针保持忽略。check仍有43项前端警告，未作为错误压制；Astrolabe对Rust的诊断认证不完整，以实际编译／测试为准。原生SSH／GUI沿用此前分项实窗收据，不将本次headless probe计作新原生验收。
+
+`mise run audit` 完整执行、退出5：Rust仍为8项许可证拒绝和5项维护公告，JavaScript审计通过且无漏洞；输入锁文件与策略均未变化。审计原文和哈希保留在 `target/probes/dependency-audit/`，组合结果收据为 `target/probes/alpha-convergence/baseline.json`。发布门继续阻断。
+
+当前主机Linux x86_64，已安装Rust目标仅`x86_64-unknown-linux-gnu`；Windows生产Profile多处仍unavailable。跨平台原生链、系统IME／DPI／辅助技术、最新release整进程性能和安装／签名／更新继续实施或保留资源阻塞；本批不登记Alpha完成。构建目录 `/data/temp/alpha-convergence.cuhc4O` 暂保留，供下一条release性能链复用，待验收链结束统一清理。
+
+## Linux 链接：实际 GIO 交接与图形浏览器加载
+
+`mise run probe-workspace-settings-contract` 版本4已通过生产WebView／真实PTY。检查窗口先核对精确的本机HTTP目标，批准前无浏览器进程及页面请求；可信鼠标点击“在系统浏览器打开”后，真实Tauri命令经GIO调用临时默认处理器，启动独立资料目录的图形Chrome 146.0.7680.177。HTTP服务仅绑定127.0.0.1，记录正确路径和Chrome User-Agent，并通过窗口PID、标题、页面文字OCR及截图确认实际加载。成功后打开按钮禁用，物理重复点击不再次启动；正常关闭浏览器后验证其进程组退出。
+
+临时`.desktop`与`mimeapps.list`只写入本批独立XDG目录，默认处理器是只接受本次精确URL的测试监督器，负责启动实际Chrome并在失败时回收它。原有用户浏览器配置不参与本检查。Chrome在root／软件渲染环境使用`--no-sandbox`及`--disable-gpu`，不计日常沙箱安全、硬件渲染或性能验收。此前设置、历史、滚动、响铃、链接检查与GTK剪贴板读回继续通过；PTY累计仍只收到明确测试的`6b`，工作区不导航，三条会话、worker、HTTP服务、图形浏览器与GUI全部退出。
+
+首轮GIO回执成功但Chrome网络服务报`FD ownership violation`；移除夹具的`--disable-crashpad-for-testing`后，独立GIO本地页面复现通过。随后一轮在旧OSC8目标的AT-SPI只读接口就绪前读取而失败，改为在原期限内等待逐字匹配，完整生产实窗通过。Python／Shell语法、脚本诊断、生产构建及补丁检查通过；沿用同一Linux CI任务并明确已有Chrome／Chromium前置要求，未重复无变化的产品单测。
+
+收据`target/probes/workspace-settings-contract-result.json`版本4、`workspace-link-browser-open.png`及`workspace-link-handoff-confirmed.png`已核对。该范围覆盖临时默认处理器到实际图形Chrome的本机HTTP交接；其他默认浏览器、HTTPS／代理／外网、SSH链接、跨平台、系统IME及辅助技术继续开放。
+
+原生窗口、Chrome进程组、三条PTY会话、worker与本地HTTP／OCR进程退出后，已执行 `mise run clean-dev`，清除7.3GiB dev/test产物并移除 `/data/temp/alpha-browser-handoff.ETnkRc`；临时默认处理器、XDG配置和浏览器资料目录已随夹具清除，版本4收据及两张交接截图仍保留在 `target/probes/`。
+
+## 终端链接：真实 WebView 检查与 GTK 剪贴板回读
+
+`mise run probe-workspace-settings-contract` 版本3已通过 Linux 生产WebView／真实PTY。受控输出中的普通HTTPS网址、IPv4:端口及OSC8链接均经真实鼠标点击进入检查窗口；OSC8显示文字为 `https://friendly.invalid`，实际目标及GTK剪贴板回读均为 `https://example.invalid/actual?via=osc8`。IP:端口按既定HTTP候选规则显示及复制。带引号的 `/remote/team notes/report.txt`:17:4 显示独立行列，实际复制仅含去引号后的路径，不显示浏览器按钮。含账号的OSC8目标被拒绝，地址框隐藏、复制与打开禁用。
+
+所有复制由可信鼠标事件触发，再用独立GTK进程读取私有Xvfb的CLIPBOARD逐字比较；Escape关闭不向PTY发送输入、不导航工作区。原raw worker累计接收仍恰为前一滚动场景的 `6b`；原有设置／历史／滚动／响铃检查继续通过，三条原生会话、worker及GUI全部退出。最终收据 `target/probes/workspace-settings-contract-result.json` 版本3，以及 `workspace-terminal-osc8-review.png`、`workspace-terminal-file-review.png` 已审阅。
+
+首轮在OCR定位阶段超过四秒进程期限；同一截图单线程复现可完成，修正为 `OMP_THREAD_LIMIT=1`，并规范标记大小写、选取同名标记的首个坐标，随后完整实窗通过。Python／Shell语法、Astrolabe脚本诊断、生产构建及补丁格式通过；本批只扩展测试夹具与现有Linux CI，未重复无变化的前端单测。实际GIO／默认浏览器交接、SSH输出、Windows路径原生交互、系统IME／辅助技术、外部编辑器和跨平台仍开放。
+
+原生窗口、三条PTY会话、worker与构建／OCR／剪贴板进程全部退出后，已执行 `mise run clean-dev`，清除7.3GiB dev/test产物并移除本任务目录 `/data/temp/alpha-terminal-links.3o53Nw`；收据及OSC8／文件路径截图仍保留在 `target/probes/`。Linux CI已在现有依赖安装步骤加入 `tesseract-ocr`，GTK剪贴板读回程序使用已有GTK开发库。
+
+## 真实 PTY 交互：滚动、响铃与视口绘制竞争修复
+
+`mise run probe-workspace-settings-contract` 版本2已通过 Linux 生产 WebView／真实PTY。沿用GUI／CLI的三会话设置与主／备用／自然结束查找链，新增160行受控输出和实时BEL：默认输出回底关闭时，回看位置在新输出后保留；真实鼠标点击及键盘空格均可返回最新；默认输入回底开启时，唯一明确输入的 `k` 返回底部。重复BEL单提示、清除后新BEL可再显示；保留未清除提示时刷新，同一原生会话恢复且回放不重放BEL。原始PTY记录仅为 `6b`，所有滚动／提示按钮与刷新未额外发送输入。三条会话、辅助worker及GUI全部退出，设置文档与既有冻结／继承检查继续通过。
+
+首轮真实滚轮操作触发 `terminal.dom_projection`，视图因此关闭。根因是视口在双帧等待期间改变，核验仍对应旧绘制。Surface现在采样公有buffer／baseY／viewportY／格子尺寸，并用滚动事件身份识别移出后又返回原行的情况；视口失效时重新安排完整重绘、重新等待两帧，复用原一秒总期限。稳定视口仍逐行核对DOM，取消、隐藏、断连、尺寸变化或超时仍拒绝，不提前释放ACK，也不新增输入权限。
+
+7份受影响Vitest共92项按有效候选合并通过；新增ACK反例修正对bootstrap多次绘制的错误假设后，流文件14项定向续跑通过。类型、局部Biome、Python／Shell语法、生产构建与补丁格式检查通过。收据 `target/probes/workspace-settings-contract-result.json` 版本2及 `workspace-terminal-reading-bell.png`、`workspace-terminal-interaction-refreshed.png` 已核对。正式mise入口、Linux CI及开发指南复用本集中场景。显式滚动偏好切换、SSH响铃／滚动、声音／通知／后台接收、辅助技术、跨平台和性能仍开放。
+
+本批原生窗口、三条PTY会话、辅助worker及构建／测试进程全部退出后，已执行 `mise run clean-dev`，清除7.3GiB dev/test产物并移除本任务目录 `/data/temp/alpha-terminal-interaction.GSPqnR`。版本2收据及两张实窗截图保留于 `target/probes/`，清理后已核对存在。
+
+## 冷历史封存：减少变长日志分配余量
+
+冷块封存时对文本和行索引执行一次容量收紧；活动块继续采用原增长策略，不改变十万行上限、16MiB预算、Unicode文本、软换行及裁剪规则。163项终端测试和严格Clippy通过，新增回归检查变长块裁剪后的内容／标记、累计分配计账和清空。Astrolabe诊断Unknown不计通过。
+
+同机release、相同100,010行输入、最终保留100,000行、64行热区的两轮前后对照：变长日志冷区分配稳定由7,949,824降至5,582,448字节，减少2,367,376字节（29.8%）；定长日志8,030,208字节不变。变长原始文本5,147,004字节及391块保持一致。首轮耗时出现波动，反向复测未优化实现也变慢；最终一轮变长输入未优化253.9～261.5ms、优化242.5～252.8ms，不据此宣称吞吐提升。全部样本见 `target/probes/history-capacity-result.json`。
+
+复现：`cargo test -p pulse-term --release cold_history_capacity_probe -- --ignored --nocapture`（通过mise工具链运行）。这是后端容器容量统计，不是分配器RSS、原生WebView进程树内存或输入延迟。真实release进程树基线仍保持原验收状态，十万行内存及性能门禁未通过。
+
+所有测量及测试进程退出后，已执行 `mise run clean-dev`，清理729.2MiB dev/test产物，再移除包含release构建的本任务目录 `/data/temp/alpha-history-capacity.9oInU5`。前后两轮全部样本已归档到收据，清理后检查 `target/probes/history-capacity-result.json` 仍存在。
+
+## SSH 历史：跨软换行、硬换行隔离与自然 EOF
+
+`mise run probe-workspace-ssh-settings` 版本3已通过 Linux 生产 WebView／真实 loopback SSH。远端输出一条超过最大列数的中文长逻辑行、分解形式 `e + U+0301` 和120行历史。以含中文的长查询确认跨多个物理软换行匹配，结果页直接检查原始组合字符码点保留；历史早期行定位成功，拼接硬换行两侧的查询明确无匹配。随后远端发送退出状态7、EOF和通道关闭，物理流退出后仍可查找原跨行历史及主屏结束标记。查找操作前后远端数据接收事件数不变，零终端输入和重新认证。
+
+原有三层 TERM、按键、前景色、逐级恢复继承及刷新冻结检查继续通过，五条 SSH 流和 GUI 全部退出，连接／凭据／信任数据直接比较不变。收据 `target/probes/workspace-ssh-settings-result.json` 版本3记录上述检查；`workspace-ssh-settings-ssh-history.png` 与 `workspace-ssh-settings-ssh-ended-history.png` 已审阅。正式mise任务、Linux CI和开发指南复用同一场景，没有增加认证矩阵。生产构建、Python语法和Rust格式检查通过；Astrolabe夹具诊断Unknown不计通过。
+
+初版将分解重音符号放入整串 X11 键盘查询，返回无匹配；尚无证据确认键盘产生的码点与原文一致。最终将跨行查询和组合字符保留分开验证，不改变原始Unicode不规范化的查找合同，也不将这批证据计作组合字符输入／系统IME验收。十万行内存、搜索／停止延迟及跨平台仍开放。
+
+本批原生窗口、SSH流和构建进程退出后，已执行 `mise run clean-dev`，清除9.1GiB dev/test产物，并移除本任务目录 `/data/temp/alpha-ssh-history.ZlEfMK`。最终收据、peer日志及截图保留于 `target/probes/`，清理后已核对仍存在。
+
+## SSH TERM：远端 PTY 请求与三层恢复继承
+
+`mise run probe-workspace-ssh-settings` 的版本2实窗链已通过。Linux 生产 WebView／真实 loopback SSH 密码会话的五次 PTY 请求实际依次收到 `xterm-256color`、`xterm`、`vt100`、`xterm`、`xterm-256color`，对应全局、直属组、入口、清除入口覆盖、清除组覆盖。每次保存先核对数据库中的精确 `term_type`，再检查远端请求；已有会话重新选择、设置修改和刷新不重发 PTY，不重新认证。按键原始字节和 OSC 10 前景色的原断言继续通过，五条连接及 GUI 全部退出，凭据、连接和信任记录直接比较未变。
+
+生产构建、Python语法、Rust格式及补丁格式检查通过。Astrolabe对特性下的夹具诊断为 Unknown，未计通过。夹具仅在作用域模式允许封闭 TERM 集合，其他场景仍仅接受默认值，尺寸约束保持原样。正式 mise、Linux CI 和开发说明同步扩展，无新增认证矩阵。收据 `target/probes/workspace-ssh-settings-result.json` 及 peer 日志已核对，最终窗口截图已审阅。此批验证远端协议请求，不代表外部 Shell 的 terminfo 兼容、macOS Option／IME、外部网络或跨平台完成。
+
+本批原生窗口、五条 SSH 流及构建进程退出后，已执行 `mise run clean-dev`，清除8.3GiB dev/test产物并移除本任务临时目录 `/data/temp/alpha-ssh-term.QI4EtN`；最终收据、peer日志和截图仍保留在 `target/probes/`。
+
+## 历史查找：主动停止与在途读取屏障
+
+历史查找新增双语“停止查找”。停止保留当前页与匹配位置，撤销扫描代际并丢弃迟到匹配／错误，不再读取下一批；单次后端读取仍按原行数、字节与授权预算完成，返回前继续占用 busy，禁止新查找与翻页。编辑查询、关闭弹窗及页面失效保留原清理语义，不向终端发送输入。
+
+类型、Biome、双语目录检查及 27 项历史查找／分页回归通过；新增反例覆盖重复停止、迟到成功／失败、在途时拒绝新请求、旧结果保留和关闭后零发布。Chrome 使用实际弹窗与受控 IPC 验证八项交互，包括语言实时切换、800px 无横向溢出和 Escape 返回入口；收据 `target/probes/history-search-stop-browser.json`，`history-search-stopping-en.png` 与 `history-search-stopped-zh.png` 已审阅。AFT 对查找状态机返回零诊断。原生 WebView／实际大历史停止延迟继续开放；本批不重跑认证、Rust 或全量矩阵，既有前端 CI 自动覆盖。
+
+## 临时目标 Agent＋MFA：原页认证、成功后保存与物理退出
+
+临时身份选择器已接通明确 Agent＋MFA，普通 Agent 保持默认。应用层新增 `prepare_temporary`，仅接受当前页发行的临时直连来源；保存目标 `prepare` 和路由 `prepare_route` 保持各自来源限制。原始页面、Vault epoch、选中 Agent、目标句柄及固定截止在准备与使用时复核，拒绝撤销后签名、跨来源准备与借用后来解锁。前端取消后的迟到成功不打开保存表单，不回退其他认证方法。
+
+10 项 Agent 后端回归、50 项前端对话框／连接回归、类型检查、App／desktop 生产组合严格 Clippy 已通过。AFT 诊断 Unknown 未计通过。现有 Linux CI 与 `mise run probe-workspace-agent-interactive` 共用扩展场景，原保存目标反例继续覆盖普通 Agent 不升级、第一因素拒绝、仅公钥成功拒绝联合策略、错误回答无回退和来源变化零回答。
+
+Linux 生产 WebView／真实软件 Agent／loopback SSH 的最终收据 `target/probes/workspace-agent-interactive-result.json` 记录十四项检查、四条成功联合会话和十一条连接退出；十一份签名均仅使用所选公钥，无 Agent 协议失败。新增临时链覆盖首轮取消后单条物理退出且原成功连接存活、两轮认证后暂不保存、终端输入、刷新不重认证，以及成功后明确保存精确已有目标。数据库以直接内容比较确认凭据、信任和主机元数据未变，最近记录不纳入内容不变断言；本次保存分支复用已有目标，不覆盖新建主机。最终窗口和全部 native 工作者退出，`workspace-temporary-agent-interactive.png` 已审阅。外部／硬件 Agent、企业 MFA、外部网络和跨平台继续开放。
+
+探针开发失败已修正：直接比较数据库时的缩进错误、首次窗口／页面准备未分步，以及把仍活跃成功会话算入取消退出数的旧断言。启动等待现分为创建窗口与页面就绪各30秒，仍拒绝非就绪页面；取消检查本次物理退出增量和成功连接零退出，最终仍要求十一条连接全部排空。
+
+本批窗口、全部连接及构建进程退出后执行 `mise run clean-dev`，清除 9.4GiB dev/test 产物，并移除本任务目录 `/data/temp/alpha-temporary-agent.7KDBN2`；最终收据、原生／peer 日志和截图保留在 `target/probes/`。
+
+## 十万行历史查找：冷区块索引
+
+冷历史行读取由逐块线性扫描改为块起点二分定位，分页、字面／正则查找和自然 EOF 文本共同受益；公开协议、修订、软换行、查找批次及 16MiB 冷区分配预算保持不变。补充变长块、行数／字节裁剪、环形块容器、部分前缀回收、清空与长会话计数重基反例。`cargo test -p pulse-term --release --locked` 通过 162 项，手动定时项默认忽略；显式定时也通过，`cargo clippy -p pulse-term --all-targets --locked -- -D warnings` 通过。AFT 诊断为 Unknown，未计通过。
+
+同机 release 对照使用 80×3 格、64 行热区，写入 100010 行含中文和组合字符的固定文字，确认保留 100000 行后，对不存在的字面查询前后各完整扫描十次。两候选每方向均执行 490 个有界查询回合。十次总耗时：向后续行扫描由 512123µs 降到 244822µs，向较早行扫描由 534133µs 降到 250144µs；平均每次约 51.2→24.5ms 和 53.4→25.0ms（约 2.1 倍）。仅为本机后端扫描观测，不含 WebView／IPC 往返、输入延迟或内存验收，不设墙钟通过阈值。复现命令：`mise exec -- cargo test -p pulse-term --release --locked history_search_100000_rows_timing -- --ignored --nocapture`。对照收据 `target/probes/history-index-result.json`；既有 Rust CI 自动覆盖新增正确性测试，不新增重型矩阵。
+
+## 终端失败提示：双语原因、恢复建议与输入不确定性
+
+单窗格、分屏、SSH 显示、GUI／CLI 本地启动及重新选择会话共用有限错误投影：已知字体、尺寸、绘制、恢复、队列上限和原生可见性失败显示固定中英文原因与下一步操作；输入不确定、传输中断或队列停止明确提示先检查终端状态，不重复发送刚才的输入。未知错误保留各阶段原有提示；原生／远端错误文本、路径和敏感内容不进入界面，诊断上报仍限于原有白名单。CLI 仅在原当前请求失败时向本地反馈传递错误，原批准、取消和完成回执合同保持不变。
+
+分屏按会话保留失败原因，其他窗格状态更新、聚焦和布局通知不会将其清空；对应窗格恢复／移除或整个视图销毁时清除。类型、Biome、双语目录检查与五个相关测试文件的 67 项回归已通过，覆盖输入不确定性、未知／恶意文本拒绝、分屏原因保留和 CLI 完成失败仅回报一次；AFT 对共享投影器返回零诊断。
+
+Chrome headless 使用实际工作区样式和错误绑定，模拟输入不确定、字体及尺寸失败，检查中英文切换、1280px／800px 宽度下的换行、无横向溢出和 `aria-live=polite`；四张截图已审阅，收据为 `target/probes/terminal-error-browser-result.json`。这组证据仅覆盖浏览器呈现，原生 WebView 故障注入和辅助技术验收继续开放。
+
+## SSH 作用域：全局／直属组／入口覆盖与逐级恢复继承
+
+`mise run probe-workspace-ssh-settings` 已通过 Linux 生产 WebView／真实 loopback SSH 密码会话：从冷启动的全局经典配色与 DEL／CSI，依次验证直属组午夜配色与 BS／DEL、入口纸张配色与 DEL／CSI；清除入口覆盖后新会话恢复直属组值，清除组覆盖后新会话恢复全局值。每次保存均核对数据库中的精确值，实际输入以远端接收字节确认，颜色以 OSC 10 前景色查询确认。已有会话保持原按键与前景色，刷新不重新认证，保存组织／行为设置不启动连接；除组织、对应作用域和最近记录外，其余数据库内容直接比较未变。
+
+收据 `target/probes/workspace-ssh-settings-result.json` 的检查全部为 true，记录五次密码认证及实际 GUI／五条 SSH 流全部退出；组行为面板和最终恢复全局的截图已审阅。正式 mise 任务及 Linux CI 已接入。本批覆盖按键和预设前景色，其他作用域字段、真实系统外观、macOS Option／IME、外部网络与跨平台仍按计划验收。
+
+实窗发现两处行为元数据丢失并已修复：Root 回收曾遗漏活跃协议 owner，密码认证完成又直接拆解 parts、绕过携带外观的统一 `commit`。现由统一提交保留冻结偏好，Root 在活跃和关闭中保留对应记录，确认物理回收后才清除。协议 Root 生命周期和实际密文密码会话回归、App／desktop 生产特性组合严格 Clippy 均通过。组织行为字段使用稳定可访问名称及关联描述，组／入口动作名称明确区分；类型、Biome、双语检查及六项现有前端回归通过。原生选择需避开分组控件中间值触发的重绘，保存前核对精确目标标题，原保存、批准、冻结、源比较和退出断言保留。
+
+`xtask --all-features` 的 `-D warnings` 检查仍被 54 项共享桌面模块未使用告警阻断；本批没有将该检查记为通过。
+
+本批原生窗口、SSH 流和构建进程退出后，已执行 `mise run clean-dev`，清除 24.6 GiB dev/test 构建产物，再移除本任务临时目录 `/data/temp/alpha-closure.o4Fg4G`。SSH、Profile、全局设置／历史及 release 性能收据保留在 `target/probes/`，清理后已检查其仍存在。
+
+## Profile 作用域：GUI／CLI 明确覆盖与恢复继承
+
+`mise run probe-workspace-profile-editor` 已通过 Linux 生产 WebView／真实 PTY，保留原页取消／换页零写入、参数／目录／环境的精确原生字节及字号几何检查。明确保存 Profile 的 BS／DEL 与午夜配色后，原会话继续使用全局按键和前景色，新 GUI 与原窗口批准的 CLI 会话使用 Profile 覆盖；刷新与独立进程重开保持同一含义。随后将三项恢复为继承，当前 CLI 会话仍保留原覆盖，新会话恢复全局按键与经典前景色。原生颜色证据为 OSC 10 前景色，按键证据为 PTY 实际接收字节。
+
+收据 `target/probes/workspace-profile-editor-result.json` 为 v2，记录九项检查、五次原生启动及全部退出。全局设置和其他表以直接内容比较确认未改。正式入口依次构建基础 workspace 与 workspace-cli，修复通用取消令牌和回答清零依赖仅在较高特性中启用的问题；两个构建及实窗均已通过。直属组／SSH 入口的按键与前景色继承验收见上节；其他 Profile 字段与跨平台继续验收。
+
+## 全局设置与历史查找：GUI／CLI 冻结启动及自然 EOF
+
+`mise run probe-workspace-settings-contract` 已通过 Linux 生产 WebView／真实 PTY：显式保存并重新打开 Backspace、Delete、TERM、终端预设及历史容量；刷新仍使用同一原生会话，按键编码按新显示设置生效，旧会话 TERM 和初始前景色保持启动值。新建 GUI 与经原页批准的 CLI 会话均继承新全局 TERM／前景色及 1000 行容量；原会话保留 1089 行，设置重开和会话启动均未改写配置。配色的原生查询证据为 OSC 10 前景色，不覆盖全部调色板或真实系统外观切换。
+
+同一实窗完成历史／主屏、备用屏、自然结束后保留文本的查找，覆盖大小写、整词、正则、双向定位及非法正则；查找文字没有写入 PTY。成功截图已审阅；收据 `target/probes/workspace-settings-contract-result.json` 的 `passed`、`checksPassed`、`nativeExitConfirmed` 均为 true，三条原生会话全部退出。SSH 查找、软换行的原生专项、十万行内存／延迟及作用域继承仍按计划推进。
+
+本场景发现并修复真实 EOF 缺陷：完成监督和 delivery 原本在 End ACK 后撤销页绑定，导致仍显示可查找的结束终端读取失败。生产捕获显式选择结束保留策略，仅在自然 `Ended` 且最终 ACK 成功时保留原页／代际的有界只读控制；转发任务退出，desktop 完成票据拒绝输入和布局。关闭视图、换页和替换代际撤销读取，旧票据不能操作新绑定；默认捕获的原撤销行为保留。24 项 Native 视图、17 项共享视图／交付回归及 App／desktop 全目标严格 Clippy 已通过，包含默认／显式保留、取消／发送失败、原页撤销及实际额度回收；Astrolabe Unknown 未作为检查通过。
+
+原生脚本先前失败分别保留在历史输出：WebKit 下拉项的原生展开／提交、同名标签与控件区分、CLI Profile 必填参数、历史入口和 EOF 读取。修正选择动作后仍检查持久化值及实际输入字节，未移除保存、批准、冻结或退出断言。
+
+## 保存路线 Agent + MFA：每跳批准、角色约束与物理排空
+
+保存路线每跳可明确选择普通 Agent 或 Agent + MFA；原跳捕获收紧后保留路线来源、页、Vault epoch、原期限与转发／叶终端用途。联合转发只允许已冻结的下一目标，叶联合只允许原终端，普通 Agent 的准备与认证策略保持原行为。所选指纹签名与实际部分成功仍是进入问答的前提；每轮及最终注册复核原来源，失败无其他钥匙／密码回退。
+
+`mise run probe-workspace-route-agent-interactive` 已通过 Linux 生产 WebView、软件 Agent 与真实三跳 SSH 的六项检查：密码第一跳、Agent 联合中间跳及 Agent 联合叶终端逐跳批准；终端输入和刷新不重新认证；每次签名只发生在对应精确 peer 批准后；第二次叶跳取消使父连接／转发通道退出，原成功会话继续存活；保存元数据和密文不变；关闭后父、叶及通道全部退出。收据 `target/probes/route-agent-interactive-result.json` 记录四次所选钥匙签名和零 Agent 协议失败；截图已审阅，正式任务及 Linux CI 已登记。
+
+原生探针先后修正了混合场景的累计签名基数、只读预览与精确 ID 等待、实际 Agent 失败事件名，以及取消后按每条连接新增退出计数；未将原失败改写为通过。该批不覆盖临时目标 Agent 联合、硬件 Agent、外部 MFA 或跨平台。
+
+## 原生可见性暂时失效的恢复
+
+修复原生可见性一次失败／忙后永久关闭观察器的问题：发布 invalid 使旧 view 退役，保留后续事件 hint 或新页 snapshot 的只读采样；未知状态禁止输入。真实 GUI I/O 继续持有额度直至退出，Destroyed／shutdown、元数据异常与晚到结果保持关闭边界。Rust 的失败／忙／恢复、超时额度和窗口关闭八项回归，以及前端来源组合与过滤十九项测试、严格 Clippy 已通过。Astrolabe 对该 opt-in 文件返回 unlinked／Unknown，未当作诊断通过。
+
+## CLI Agent + MFA：冷暖精确意图、原捕获与四条物理连接退出
+
+新增 `pulse ssh <保存入口 ID> --identity <Agent 身份 ID> --agent-interactive`，三个交互标志互斥，别名、路由直连绕过、未知字段及不匹配身份拒绝。暖请求只消费原 `SavedSessionGesture` 并收紧成联合手势，保留原页、epoch、取消与截止；不发现 Agent、不读取凭据、不借后续解锁。冷请求在原窗口先解锁，再查看明确方法与精确目标。普通 Agent 手势不能升级为联合意图。前端原 ticket／token／一次性轮次监督复用已有问答链。
+
+生产 Linux WebView、真实 CLI、双公钥软件 Agent 和实际 SSH partial_success 已通过：锁定取消、解锁不批准、目标取消均零新增签名；问题 Esc 和 CLI 断连各退出一条连接；冷暖两次联合认证各通过两轮、终端输入与刷新后输入，刷新不重新认证。四次签名均限保存公钥，未选公钥零签名；四条连接与原窗口端点退出，配置、Agent 元数据和密文保持原样。收据 `target/probes/cli-agent-interactive-result.json`，来源 `target/probes/cli-agent-interactive-test-server.json`；第二轮与刷新终端截图已审阅。正式 mise 任务及 Linux CI 已登记。
+
+开发检查覆盖捕获过期／旧 epoch／源失效／期限不续期、CLI 冷传输及命令链互斥、旧轮次和晚到回答，前端类型与双语检查通过。新增 CLI 测试首次错误引用二进制 crate 的私有模块，后改用库公开模块并通过；严格 Clippy 发现新增测试的 expect，改为正常错误返回后通过。实窗准备先因夹具变量错误失败；共享探针后发现旧累计零签名断言与前面合法取消签名冲突，改为每次批准前零新增签名，再独立完整复验通过。软件 Agent、loopback 与软件渲染的覆盖范围保持不变，外部 MFA、硬件 Agent、逐跳／临时目标联合及跨平台继续开放。
+
 ## GUI 保存直连 Agent + MFA：保存指纹唯一签名、原捕获与八条连接排空
 
 身份选择器新增明确的 Agent + MFA，普通 Agent 保持原方式。独立手势、动作、意图和标记 sink 保留原页、Vault epoch、保存 Host／Agent 元数据、取消及固定五分钟截止；后端发现 socket，只按保存算法和完整指纹请求所选公钥的一次实际 SSH 签名。只有已使用签名且服务器返回部分成功并继续声明 keyboard-interactive，才进入同一连接的有界问答。普通拒绝、仅公钥成功和普通 Agent 部分成功均不升级、不回退；每轮发送前重验来源。临时、路线、CLI 与密码联合不从本批意图继承权限。

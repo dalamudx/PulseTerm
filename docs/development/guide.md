@@ -5,18 +5,18 @@
 私钥导入定向验收使用 `mise run probe-workspace-key-import`：原页面显式解锁后以隔离 GTK 剪贴板粘贴固定加密 Ed25519，验锁定／错口令拒绝、双密文原子保存、刷新／独立进程精确字节与退出。截图须等输入清除，不能将导入成功当作 SSH 连接授权；默认构建不开放导入。夹具和剪贴板 helper 只创建于自有 `/data/temp` 目录并在实际退出后清理。
 后台视图按[调度说明](../architecture/terminal-background-views.md)做受影响检查；原生可见性开发仅运行Visibility／Pane两个Vitest文件、TypeScript／Biome／前端构建，以及CLI＋SSH原生库的`native_visibility::tests`。原生实窗、跨平台、WebGL及资源指标另验。现有CI自动覆盖前端和原生构建，不增加重型矩阵。
 历史容量设置保存在[terminal].history_limit，默认100000、可设1000～100000；新建本地／SSH会话生效，已有会话不缩容，16MiB冷区预算不变。按配置继承／保存恢复、冷热裁剪和EOF保留、原生同快照冻结及前端范围校验做直接检查；沿用现有CI，不因容量新增SSH认证矩阵。
-输入滚动偏好见[输入时回到底部](../architecture/terminal-input-scroll.md)：`[terminal].scroll_on_input` 默认true，支持明确false与恢复继承；新挂载视图采用该值，已有视图不在线切换。沿用既有CI，原生WebView效果另验。
+输入滚动偏好见[输入时回到底部](../architecture/terminal-input-scroll.md)：`[terminal].scroll_on_input` 默认true，支持明确false与恢复继承；新挂载视图采用该值，已有视图不在线切换。沿用既有CI，Linux原生PTY默认开启已通过，显式关闭／恢复与其他平台另验。
 输出滚动偏好见[新输出时回到底部](../architecture/terminal-output-scroll.md)：`[terminal].scroll_on_output` 默认false，保留SDK常规跟随；开启后有效输出完成解析时调用公开scrollToBottom，回看时也返回底部。与输入回底独立，保存后新挂载生效。v8封闭投影、继承恢复和旧页撤销沿用既有检查，取消／释放后迟到回调不得滚动；复用现有CI，不新增SSH矩阵。
 Backspace 编码见[实现说明](../architecture/terminal-backspace.md)：`[terminal].backspace_send` 默认 `del`，可选 `bs`，新挂载视图采用。只改可信无修饰且非组合输入的Backspace，字节仍经公开SDK进入既有onData／授权队列；不替换粘贴字节。仅做保存恢复、v10兼容与按键门禁检查，沿用既有CI；真实PTY／SSH、WebView和跨平台物理键另验。
 TERM-18 的成组设置见[TERM、Delete与Profile行为](../architecture/terminal-behavior.md)：`term_type`固定选择xterm-256color／xterm／vt100，与配色和历史容量同次读取后在新本地／SSH启动中冻结；本地Profile显式TERM环境优先。`delete_send`默认csi、可选del，普通可信Delete仍经SDK与既有输入授权；Profile可单次保存Option、Backspace、Delete稀疏覆盖。全局设置投影现为v13，分组／SSH入口的v2五项产品编辑与启动应用见下文。沿用现有CI，检查受影响功能，不增加SSH或全量矩阵。
 分组／SSH入口的[终端配色与行为覆盖](../architecture/terminal-scoped-behavior.md)以 v2 五字段统一编辑终端配色、TERM、Option／Meta、Backspace、Delete，按默认→用户→直属组→入口继承；显式null恢复继承，缺字段拒绝。保存通过原页票据和共享SQL事务验证组织源、成员关系及两层设置版本，保留其他字段。本地 Profile 另以稀疏 `appearance.colorPreset` 覆盖全局终端配色，缺省或null继承。GUI／CLI直连与跳板叶终端使用后端冻结基色；已有会话不在线换配置，祖先组不额外叠加。沿用现有CI，只验证受影响路径，真实SSH／原生WebView与跨平台效果另验。
 
 Option／Meta偏好见[macOS Option作为Meta键](../architecture/terminal-option-meta.md)：`[terminal].mac_option_as_meta`默认false，v9严格布尔投影，保存／恢复继承后新挂载视图采用该值。xterm公开macOptionIsMeta处理按键，不增加应用监听或输入权限；旧版投影缺字段按false，Profile显示合并保留该值。分组／SSH入口的[统一编辑与启动应用](../architecture/terminal-scoped-behavior.md)已接通，真实按键效果仍待验收。沿用既有CI，仅检查受影响设置和前端模块；真实macOS物理键、IME与原生WebView另验。
-回看后的手动入口见[回到最新输出](../architecture/terminal-output-scroll.md)：仅在当前窗格离开底部时显示，只滚动当前前端缓冲区；每窗格独立，支持点击和键盘激活，不更改自动回底设置，也不启用输入。沿用现有前端 CI，原生实窗另验。
+回看后的手动入口见[回到最新输出](../architecture/terminal-output-scroll.md)：仅在当前窗格离开底部时显示，只滚动当前前端缓冲区；每窗格独立，支持点击和键盘激活，不更改自动回底设置，也不启用输入。沿用现有前端 CI，Linux生产WebView／真实PTY鼠标与键盘返回已通过，SSH和跨平台另验。
 
-可视响铃见[终端可视响铃](../architecture/terminal-bell.md)：只为当前挂载窗格的实时 BEL 显示固定提示，重复合并、点击清除，恢复回放与已取消输出不得触发；不启用输入或为后台标签重建订阅。沿用前端类型、直接单测及构建 CI，原生响铃和系统通知另验。
+可视响铃见[终端可视响铃](../architecture/terminal-bell.md)：只为当前挂载窗格的实时 BEL 显示固定提示，重复合并、点击清除，恢复回放与已取消输出不得触发；不启用输入或为后台标签重建订阅。沿用前端类型、直接单测及构建 CI，Linux生产WebView／真实PTY的合并清除及刷新静默已通过，SSH与系统通知另验。
 
-链接操作见[终端链接检查与系统交接](../architecture/terminal-links.md)：普通 HTTP／HTTPS、严格 IPv4／方括号 IPv6 的 IP:端口和 OSC8 共用完整目标检查；IP:端口明确按 HTTP 网页候选解释，不推断服务协议。显式复制和 Linux 系统打开独立确认；原生验证实际窗口、原页 nonce 与4096字节封闭目标，使用 GIO 默认 URI 接口而非命令行。每窗最多一个任务，容量保留至原生回调结束并纳入退出等待；Windows／macOS明确不可用。沿用现有检查入口，仅验证受影响路径，实际系统浏览器、剪贴板及原生 WebView 另验。 绝对文件路径（含完整单／双引号包围的带空格路径）使用独立来源标记，只读显示路径和行列、显式复制路径；不读取或打开文件，不把远程路径映射成本机路径。外部编辑器打开另需原生授权接线，OSC8文件目标不复用路径来源。
+链接操作见[终端链接检查与系统交接](../architecture/terminal-links.md)：普通 HTTP／HTTPS、严格 IPv4／方括号 IPv6 的 IP:端口和 OSC8 共用完整目标检查；IP:端口明确按 HTTP 网页候选解释，不推断服务协议。显式复制和 Linux 系统打开独立确认；原生验证实际窗口、原页 nonce 与4096字节封闭目标，使用 GIO 默认 URI 接口而非命令行。每窗最多一个任务，容量保留至原生回调结束并纳入退出等待；Windows／macOS明确不可用。沿用现有检查入口，仅验证受影响路径，Linux生产WebView／真实PTY的链接检查与GTK剪贴板回读已通过，GIO经隔离处理器到图形Chrome的本机HTTP交接与退出也已通过，其他默认浏览器／网络环境、SSH及其他平台另验。 绝对文件路径（含完整单／双引号包围的带空格路径）使用独立来源标记，只读显示路径和行列、显式复制路径；不读取或打开文件，不把远程路径映射成本机路径。外部编辑器打开另需原生授权接线，OSC8文件目标不复用路径来源。
 
 
 入口或默认键位变化时，核对workspace-history-entry、命令目录／面板、keymap投影／表单和dispatcher；后端核对KeymapAction与封闭Capability目录。继承绑定参与冲突验证，Rust／TypeScript策略对照比较原始合并定义，不把编译后AST当源输入。find默认Ctrl/Meta+Shift+F仅终端聚焦时生效，保留Ctrl+F，禁用无旁路。复用既有CI，不增加回归矩阵。
@@ -127,6 +127,12 @@ mise run probe-workspace-cli-multiwindow-ssh # Linux双窗Vault/原页批准、�
 mise run probe-workspace-cli-ssh # Linux opt-in保存host/identity UUID，原page/Vault epoch+source批准；锁定/Cancel/断开/换页/同库外部变更auth0，新source慢批准auth1、真实输入/refresh/resize/SDK-native-root排空
 mise run probe-workspace-cli-ssh-private-key # 同一原epoch捕获、联合双目录消歧；锁定/Cancel/断开/换页/旧source零签名，新source慢批准一次真实签名、零密码回退及TermView刷新/输入/resize/退出
 mise run probe-workspace-cli-ssh-agent # 原SavedGesture三目录唯一ID、原epoch继承、锁定/取消/导航/断连零签名、原窗批准所选Agent一签名、终端/刷新/重开/退出
+mise run probe-workspace-cli-agent-interactive # --agent-interactive：冷暖批准、所选Agent签名、问答取消与真实退出
+mise run probe-workspace-route-agent-interactive # 三跳密码/Agent+MFA转发/Agent+MFA终端：逐跳批准、刷新与取消排空
+mise run probe-workspace-settings-contract # 全局保存重开、刷新按键字节、GUI/CLI新旧TERM/前景色/历史冻结，主/备用/结束查找、真实PTY滚动/响铃/回放隔离、链接/文件检查与GTK剪贴板回读、隔离GIO/Chrome本机页面交接与三PTY退出（需已有Chrome/Chromium）
+mise run probe-workspace-ssh-settings # SSH全局/直属组/入口的远端PTY TERM、按键与OSC10前景色、清除覆盖恢复继承、旧会话冻结/刷新、SSH软换行/自然结束查找及五连接退出
+mise run probe-workspace-performance # Linux真实WebView整进程树PSS/RSS：单会话、十万行、20标签；采集完成与性能达标分别记录
+mise run probe-workspace-performance-release # 同场景release构建，记录原产品MB目标；软件渲染基线不能代替硬件/跨平台验收
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-owned-session  # 显式会话动作：私库密文→真实SSH→根actor，换页/EOF/read取消与SDK+流join；合成PTY尺寸通知与显示应用，不冒充kernel ACK，非产品/SSH GUI/OS PTY
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证
@@ -154,7 +160,7 @@ mise run probe-workspace-ligatures # Linux按需WebGL：明确保存运算符连
 mise run probe-workspace-profiles # Linux私有DB：自动Profile隐藏／恢复、现有PTY存活、换页／新进程持久、旧页／目录拒写
 mise run probe-workspace-profile-default # Linux默认选择：保存/清空零启动、隐藏不可用、刷新/双进程重开、明确一次启动与退出回收
 mise run probe-workspace-profile-lifecycle # Linux删除/恢复：取消零写、默认墓碑、原PTY输入/刷新、双进程墓碑持久及明确恢复零启动
-mise run probe-workspace-profile-editor # Linux真实编辑：原页取消/换页零写、参数/cwd/env原生精确字节、会话外观快照与双进程重开
+mise run probe-workspace-profile-editor # Linux真实编辑：参数/cwd/env原生字节、GUI/CLI按键与前景色覆盖、旧会话冻结／刷新／重开及恢复继承
 mise run probe-ssh-first-pin       # Unix固定TCP/私库：实际offered key与原registry page，原页/最终换页回滚、新页批准、重开strict peer；auth0，非真实WebView/产品连接
 mise run probe-workspace-fingerprint # 显式workspace-ssh/Linux：独立OpenSSH＋真实键鼠，未知取消／刷新／明确保存／匹配重开／服务器换key阻断；auth0、非SSH会话。随后普通workspace-preview-build恢复默认工厂关闭。
 mise run probe-workspace-ssh-session # 显式workspace-ssh/Linux：合成私库密文＋实际russh peer→真实TermView、auth1、三唯一键盘echo、换页同Root、SSH尺寸入队、窗口/确认close与native drain、EOF final画面/两次刷新同Ended快照/输入持续关闭、握手挂起时取消/换页实际流退出与零会话；remote exit-status7不作本地退出证明，非远端OS/跨平台验收。fixture显式重建，不沿用基础probe的默认xtask。
