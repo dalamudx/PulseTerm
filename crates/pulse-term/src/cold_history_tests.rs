@@ -163,3 +163,150 @@ fn configured_history_capacity_bounds_hot_and_cold_and_survives_resize() {
         assert_eq!(t.history_page(None, 3).unwrap().total_rows, 0);
     }
 }
+
+#[test]
+fn indexed_rows_match_retained_suffix_across_variable_blocks_and_eviction() {
+    for budget in [96 * 1024, MAX_BYTES] {
+        let mut history = ColdHistory::new(4);
+        history.limit = 513;
+        history.byte_limit = budget;
+        let mut expected = VecDeque::new();
+        for index in 0..2400 {
+            let row = HistoryRow {
+                text: if index % 19 == 0 {
+                    format!("{index}:{}", "中".repeat(1700))
+                } else {
+                    format!("{index}:e\u{301}")
+                },
+                wrapped: index % 3 == 0,
+            };
+            expected.push_back(row.clone());
+            history.push(row);
+            while expected.len() > history.len() {
+                expected.pop_front();
+            }
+            if index % 97 == 0 || index == 2399 {
+                for (offset, expected) in expected.iter().enumerate() {
+                    let actual = history.row(offset).unwrap();
+                    assert_eq!(
+                        (&actual.text, actual.wrapped),
+                        (&expected.text, expected.wrapped)
+                    );
+                }
+                assert!(history.row(history.len()).is_none());
+                assert!(history.row(usize::MAX).is_none());
+                assert!(history.memory_bytes() <= budget);
+            }
+        }
+        history.clear();
+        assert!(history.row(0).is_none());
+        history.push(HistoryRow {
+            text: "after clear".into(),
+            wrapped: false,
+        });
+        assert_eq!(history.row(0).unwrap().text, "after clear");
+    }
+}
+
+#[test]
+fn indexed_rows_rebase_without_losing_partially_trimmed_blocks() {
+    let mut history = ColdHistory::new(4);
+    history.limit = 300;
+    for index in 0..700 {
+        history.push(HistoryRow {
+            text: index.to_string(),
+            wrapped: index % 2 == 0,
+        });
+    }
+    let shift = usize::MAX - history.next_row;
+    for block in &mut history.blocks {
+        block.start += shift;
+    }
+    history.next_row += shift;
+    history.push(HistoryRow {
+        text: "700".into(),
+        wrapped: true,
+    });
+    for index in 0..300 {
+        let row = history.row(index).unwrap();
+        assert_eq!(row.text, (401 + index).to_string());
+        assert_eq!(row.wrapped, (401 + index) % 2 == 0);
+    }
+}
+
+#[test]
+fn sealed_variable_blocks_preserve_rows_wraps_and_allocation_accounting() {
+    let mut history = ColdHistory::new(0);
+    history.set_limit(500);
+    for index in 0..900 {
+        history.push(HistoryRow {
+            text: format!("{index}:中e\u{301}{}", "x".repeat(1 + index * 37 % 1000)),
+            wrapped: index % 3 == 0,
+        });
+        assert_eq!(
+            history.bytes,
+            history.blocks.iter().map(Block::bytes).sum::<usize>()
+        );
+        assert!(history.memory_bytes() <= MAX_BYTES);
+    }
+    assert_eq!(history.len(), 500);
+    // Variable lengths seal blocks at both the byte and row limits. Trimming
+    // the front does not change the sealed blocks' relative row offsets.
+    assert!(history.blocks.len() > 2);
+    for index in 0..500 {
+        let original = index + 400;
+        let row = history.row(index).unwrap();
+        assert_eq!(
+            row.text,
+            format!(
+                "{original}:中e\u{301}{}",
+                "x".repeat(1 + original * 37 % 1000)
+            )
+        );
+        assert_eq!(row.wrapped, original % 3 == 0);
+    }
+    history.clear();
+    assert_eq!(history.memory_bytes(), 0);
+}
+
+/// Run with `cargo test -p pulse-term --release cold_history_capacity_probe -- --ignored --nocapture`.
+#[test]
+#[ignore = "explicit backend allocation/time probe; not a whole-process memory gate"]
+fn cold_history_capacity_probe() {
+    let mut bytes = Vec::new();
+    for row in 0..100_010 {
+        bytes.extend_from_slice(format!("HISTORY_{row:06} {row:060}\r\n").as_bytes());
+    }
+    for (case, bytes) in [
+        ("uniform", bytes),
+        (
+            "mixed",
+            (0..100_010)
+                .flat_map(|row| {
+                    let width = 8 + (row * 37 % 72);
+                    format!("{row:06} {}\r\n", "x".repeat(width)).into_bytes()
+                })
+                .collect(),
+        ),
+    ] {
+        for _ in 0..3 {
+            let mut terminal = TerminalProbe::with_cold_history(TermSize::new(96, 3).unwrap(), 64);
+            let started = std::time::Instant::now();
+            terminal.feed(&bytes);
+            let elapsed = started.elapsed().as_micros();
+            assert_eq!(terminal.history_page(None, 1).unwrap().total_rows, MAX_ROWS);
+            let payload: usize = terminal
+                .cold
+                .blocks
+                .iter()
+                .map(|block| block.data.len())
+                .sum();
+            println!(
+                "cold_capacity case={case} allocated={} payload={} blocks={} feed_us={elapsed}",
+                terminal.cold.memory_bytes(),
+                payload,
+                terminal.cold.blocks.len()
+            );
+        }
+    }
+}

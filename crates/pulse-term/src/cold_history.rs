@@ -25,6 +25,8 @@ struct Block {
     data: String,
     offsets: Vec<u32>,
     first: usize,
+    // Private monotonic row coordinate, independent of front-block trimming.
+    start: usize,
 }
 impl Block {
     fn bytes(&self) -> usize {
@@ -50,6 +52,7 @@ pub(crate) struct ColdHistory {
     limit: usize,
     blocks: VecDeque<Block>,
     rows: usize,
+    next_row: usize,
     bytes: usize,
     byte_limit: usize,
     truncated: bool,
@@ -64,6 +67,7 @@ impl ColdHistory {
             limit: MAX_ROWS,
             blocks: VecDeque::new(),
             rows: 0,
+            next_row: 0,
             bytes: 0,
             byte_limit: MAX_BYTES,
             truncated: false,
@@ -117,11 +121,33 @@ impl ColdHistory {
         }
     }
     fn push(&mut self, row: HistoryRow) {
+        // Rebase before the private ordinal can overflow in a long-lived session.
+        if self.next_row == usize::MAX {
+            let base = self
+                .blocks
+                .front()
+                .map_or(self.next_row, |block| block.start);
+            for block in &mut self.blocks {
+                block.start -= base;
+            }
+            self.next_row -= base;
+        }
         let new_block = self.blocks.back().is_none_or(|block| {
             block.offsets.len() >= BLOCK_ROWS || block.data.len() + row.text.len() + 1 > BLOCK_BYTES
         });
         if new_block {
-            self.blocks.push_back(Block::default());
+            // A sealed block will never grow again. Release growth slack once,
+            // while leaving the active block amortized and row offsets unchanged.
+            if let Some(block) = self.blocks.back_mut() {
+                let before = block.bytes();
+                block.data.shrink_to_fit();
+                block.offsets.shrink_to_fit();
+                self.bytes -= before - block.bytes();
+            }
+            self.blocks.push_back(Block {
+                start: self.next_row,
+                ..Block::default()
+            });
         }
         if let Some(block) = self.blocks.back_mut() {
             let before = block.bytes();
@@ -130,22 +156,23 @@ impl ColdHistory {
             block.data.push_str(&row.text);
             self.bytes += block.bytes() - before;
             self.rows += 1;
+            self.next_row += 1;
         }
         self.trim(0);
     }
-    pub(crate) fn row(&self, mut index: usize) -> Option<HistoryRow> {
-        for block in &self.blocks {
-            let count = block.offsets.len() - block.first;
-            if index < count {
-                return Some(block.row(index));
-            }
-            index -= count;
+    pub(crate) fn row(&self, index: usize) -> Option<HistoryRow> {
+        if index >= self.rows {
+            return None;
         }
-        None
+        let absolute = self.next_row - self.rows + index;
+        let block_index = self.blocks.partition_point(|block| block.start <= absolute) - 1;
+        let block = &self.blocks[block_index];
+        Some(block.row(absolute - block.start - block.first))
     }
     pub(crate) fn clear(&mut self) {
         self.blocks = VecDeque::new();
         self.rows = 0;
+        self.next_row = 0;
         self.bytes = 0;
         self.truncated = false;
     }

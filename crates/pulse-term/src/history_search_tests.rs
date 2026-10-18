@@ -274,3 +274,37 @@ fn history_search_alternate_isolated_unicode_wrap_and_inactive_rejection() {
         Err(HistoryPageError::Unavailable)
     ));
 }
+
+#[test]
+#[ignore = "manual release timing; no wall-clock assertion"]
+fn history_search_100000_rows_timing() {
+    let mut terminal = TerminalProbe::with_cold_history(TermSize::new(80, 3).unwrap(), 64);
+    let mut input = String::new();
+    for index in 0..100_010 {
+        use std::fmt::Write;
+        writeln!(input, "{index:06} retained history 中e\u{301}\r").unwrap();
+    }
+    terminal.feed(input.as_bytes());
+    assert_eq!(terminal.history_page(None, 1).unwrap().total_rows, 100_000);
+    for backwards in [false, true] {
+        let start = std::time::Instant::now();
+        let mut turns = 0;
+        for _ in 0..10 {
+            let mut request = query("absent-pattern", backwards);
+            loop {
+                let found = terminal.history_search(&request, 1).unwrap();
+                assert!(found.matched_row.is_none());
+                turns += 1;
+                if found.complete {
+                    break;
+                }
+                request.cursor = Some(found.cursor);
+                request.revision = Some(1);
+            }
+        }
+        eprintln!(
+            "history_search_100000 backwards={backwards} repetitions=10 turns={turns} elapsed_us={}",
+            start.elapsed().as_micros()
+        );
+    }
+}
