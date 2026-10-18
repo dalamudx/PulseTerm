@@ -2,6 +2,25 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 回显转发阶段取证与 DOM 变更行候选
+
+以 `1c0ffb3` 为源码基线，隔离 release／Linux Xvfb／软件渲染的临时取证完成了四轮真实 XTest→PTY→字形像素测量，每轮100次。只记录原生发送／有效ACK的序号、长度和时间，未记录终端内容；C使用单调时间与实时时钟配对。原生发送到像素变化的分段为诊断值，受时钟采样偏差影响；各段p95独立排序，不能相加或相减。
+
+| 运行 | 按键至字形 p95 | PTY写出至原生发送 p95 | 原生发送至字形 p95 |
+|---|---:|---:|---:|
+| 原逻辑，带临时取证 | 52.834ms | 0.334ms | 47.875ms |
+| DOM变更行候选，第1轮 | 50.020ms | 0.278ms | 47.041ms |
+| DOM变更行候选，第2轮 | 59.730ms | 0.254ms | 54.832ms |
+| DOM变更行候选，第3轮 | 57.983ms | 0.287ms | 54.092ms |
+
+四轮均完整测量、正常App退出且全部原生进程排空，`passed=false`，16ms门禁保持失败。原逻辑的发送至页面ACK p95为33.827ms；ACK包含双帧及投影核验，仍不代表桌面合成器实际呈现。发送前仅约0.25–0.33ms的耗时，将主要调查范围收窄至WebView投递／解析／绘制／呈现；尚未定位WebView内部具体函数，也不能直接归因为硬件或某个调度器。
+
+候选只让DOM数据帧使用xterm已调度的变更行绘制，控制／滚动／GPU仍全屏刷新；类型、格式、61项定向回归及release构建通过。但三轮未显示稳定回显收益，已撤回候选及全部临时取证，七个源码文件与签名基线完全一致。未发布新性能优化，也未替换此前无取证的58.746ms正式回显基线。后续需保留输入、ACK及显示核验约束，继续获取WebView时间线／真实显示器／硬件环境证据。
+
+原始收据与截图位于 `target/probes/workspace-load/echo-relay-trace/`、`echo-dirty-rows-1/`、`echo-dirty-rows-2/`、`echo-dirty-rows-3/`；候选与取证补丁为 `echo-dirty-rows-candidate.patch`，回归日志与汇总为 `echo-relay-diagnostic/`。
+
+本轮四次原生测量和全部构建进程退出后，已执行 `mise run clean-dev`（dev产物0项），再移除隔离release／UI构建目录 `/data/temp/alpha-echo-latency.b8WDwV`及本轮创建的 `target/probes/load-shell`、`echo-pixels`；原始收据、截图、候选补丁和回归日志仍保留。七个源码文件经 `git diff --exit-code` 确认为基线原文，未重复运行未变源码的既有检查。
+
 ## 已提交基线的 release 整进程复测与负载门禁
 
 `a81b693` 基线的 `mise run probe-workspace-performance` release 复测已完成，独立收据为 `target/probes/workspace-performance/post-convergence.json`，旧 `release.json` 保留。Linux Xvfb／软件渲染下，空窗PSS 284.75MB、单会话335.53MB、十万行历史总进程树增量82.90MB、20标签471.99MB；十万行已完整留存，20个真实会话及原生进程全部退出。单会话<120MB／20标签<250MB／历史增量≤20MB三项仍未达标。单次观测高于旧基线，不能据此将变化归因于某项补丁；后端容器容量收益不直接代表WebView整进程收益。
