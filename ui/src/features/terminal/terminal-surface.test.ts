@@ -97,6 +97,36 @@ function fixture(nonce = "runtime-style-nonce") {
     input: (text: string) => input?.(text),
   };
 }
+it("applies owner-document pixel spacing and releases ratio listeners with the Surface", async () => {
+  const f = fixture();
+  const view = Object.assign(new EventTarget(), { devicePixelRatio: 2 });
+  Object.assign(f.doc, { defaultView: view });
+  const display = {
+    fontSize: 18,
+    fontFamily: "monospace",
+    cursorBlink: false,
+    letterSpacing: 2,
+  };
+  const surface = await createTerminalSurface(
+    f.scope,
+    f.element,
+    palette,
+    { ...geometry, display },
+    f.load,
+  );
+  expect(f.factory).toHaveBeenCalledWith(
+    expect.objectContaining({ letterSpacing: 4 }),
+  );
+  expect(f.terminal.options).toHaveProperty("letterSpacing", 4);
+  view.devicePixelRatio = 1;
+  view.dispatchEvent(new Event("resize"));
+  expect(f.terminal.options).toHaveProperty("letterSpacing", 2);
+  surface.dispose();
+  view.devicePixelRatio = 3;
+  view.dispatchEvent(new Event("resize"));
+  expect(f.terminal.options).toHaveProperty("letterSpacing", 2);
+  expect(display.letterSpacing).toBe(2);
+});
 it("only validated display projection reaches constructor without changing palette or input authority", async () => {
   const f = fixture(),
     surface = await createTerminalSurface(

@@ -27,3 +27,14 @@ Linux真实WebView已验证webgl2，当前文档同字体整串／逐字Canvas�
 ## 验证边界
 
 `mise run probe-workspace-font` 是 Linux 真 WebView 验收：预设选择和许可证零写、明确保存内置字体、缺失主字体使用内置后备、固定 ASCII／中文／emoji 输出，以及同 PTY／PID 和退出。它复用设置网格、重开和恢复链，不能替代跨平台、IME、全面 CJK 覆盖、系统字体枚举或字体安装验证。Linux实窗及第三进程以67×20网格只读重开最终字体配置已通过，三进程及PTY最终退出。1173项全前端、84项设置Rust（1项忽略不计）、格式与CLI／SSH严格原生检查通过；Rust设置诊断Exact无诊断，TypeScript LSP Unknown不计通过。23项不可变证据见 `target/probes/terminal-font-acceptance.json`；clean-dev回收10.6GiB，临时目录已清除。
+
+
+## Linux 受控 1 倍／2 倍缩放与字距修复
+
+`mise run probe-workspace-dpi` 依次以 `GDK_SCALE=1` 和 `2`、`GDK_DPI_SCALE=1` 复用正式字体矩阵。生产窗口的逻辑尺寸保持960×640；X11实测分别为960×640和1920×1280。字体v2收据记录四组由内核stty与后端resize交叉核对的网格：14px为92×29、18px为67×22；150%行高为67×15／67×14，加2px字距后为56×15／56×14。各组列数严格相同，默认及18px行数严格相同；本矩阵的150%行高允许至多一行差异，因为锁定xterm在设备像素层对字符高度向上取整、对行高乘积向下取整，换算回CSS后可能改变边界行数。这个限定不扩展为任意字体或缩放比例的保证。
+
+锁定的DOM及WebGL renderer均把 `letterSpacing` 加在设备像素层。设置继续使用CSS像素，Surface按所属document的 `devicePixelRatio` 换算后传入xterm；非零字距监听所属窗口的resolution媒体查询与resize，像素比变化后重建查询，视图撤销／释放时清理监听。默认0字距不额外注册监听，输入授权、ACK屏障及14px产品默认值保持原合同。修复前2倍矩阵的2px字距错误地得到61列，修复后恢复56列；监听、过期事件和Surface实际接线有回归，真实多屏移动仍待验。
+
+字体探针等待前端“已保存”状态后再关闭／刷新，并把AT-SPI逻辑屏幕边界换算为X11设备坐标，真实点击后要求下拉菜单展开。两组预设明确保存、许可查看、后备字体、刷新／独立重开、恢复继承及六条PTY退出均通过。最终收据、截图、日志与修复前失败保留在 `target/probes/workspace-dpi/`。正式mise入口和Linux CI复用组合任务，失败不发布通过收据，子任务超时撤销自有进程组；仅复制本轮生成的图像／日志。
+
+验收限于Linux Xvfb软件渲染及固定GTK缩放；物理多屏移动、真实DPI／系统IME、硬件GPU、连字GPU路径和其他平台继续开放。

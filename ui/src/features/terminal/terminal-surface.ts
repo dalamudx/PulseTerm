@@ -13,6 +13,10 @@ import { bindRightClickPaste } from "./right-click-paste";
 import { bindAutoCopy } from "./selection-copy";
 import { createTerminalBellNotice } from "./terminal-bell";
 import {
+  bindTerminalDeviceSpacing,
+  terminalDeviceSpacing,
+} from "./terminal-device-spacing";
+import {
   terminalFontFamily,
   waitForBundledTerminalFont,
 } from "./terminal-fonts";
@@ -156,7 +160,10 @@ export async function createTerminalSurface(
       fontFamily: terminalFontFamily(display),
       fontSize: display.fontSize,
       lineHeight: (display.lineHeightPercent ?? 100) / 100,
-      letterSpacing: display.letterSpacing ?? 0,
+      letterSpacing: terminalDeviceSpacing(
+        display.letterSpacing ?? 0,
+        element.ownerDocument,
+      ),
       cursorBlink: display.cursorBlink,
       macOptionIsMeta: display.macOptionIsMeta ?? false,
       scrollOnUserInput: display.scrollOnInput ?? true,
@@ -189,6 +196,10 @@ export async function createTerminalSurface(
       );
       terminal.open(element);
       current(scope);
+      surface.bindDeviceSpacing(
+        element.ownerDocument,
+        display.letterSpacing ?? 0,
+      );
       if (display.fontLigatures === true)
         await surface.enableLigatures(loadWebgl);
       surface.bindSelectionCopy(display.copyOnSelect ?? false);
@@ -236,6 +247,17 @@ export class TerminalSurface implements ViewResource {
     private readonly deleteSend: "csi" | "del" = "csi",
   ) {
     this.cleanup = [queryCleanup];
+  }
+  bindDeviceSpacing(document: Document, cssPixels: number): void {
+    this.cleanup.push(
+      bindTerminalDeviceSpacing(
+        this.terminal,
+        document,
+        cssPixels,
+        this.lifetime.signal,
+        () => !this.disposed && this.scope.isCurrent(),
+      ),
+    );
   }
   bindLinks(
     element: HTMLElement,

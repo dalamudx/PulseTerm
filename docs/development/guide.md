@@ -133,6 +133,7 @@ mise run probe-workspace-cli-agent-interactive # --agent-interactive：冷暖批
 mise run probe-workspace-route-agent-interactive # 三跳密码/Agent+MFA转发/Agent+MFA终端：逐跳批准、刷新与取消排空
 mise run probe-workspace-settings-contract # 全局保存重开、刷新按键字节、GUI/CLI新旧TERM/前景色/历史冻结，主/备用/结束查找、真实PTY滚动/响铃/回放隔离、链接/文件检查与GTK剪贴板回读、隔离GIO/Chrome本机页面交接与三PTY退出（需已有Chrome/Chromium）
 mise run probe-workspace-history-stop # 独立真实100000行PTY：双向停止保页、重查、自然EOF只读及零输入／物理退出；观测延迟含AT-SPI开销
+mise run probe-workspace-dpi # 顺序1x/2x受控GTK缩放：实际物理窗口、四组逻辑PTY网格、字体保存/刷新/重开及六会话退出；实际多屏另验
 mise run probe-workspace-ssh-settings # SSH全局/直属组/入口的远端PTY TERM、按键与OSC10前景色、清除覆盖恢复继承、旧会话冻结/刷新、SSH软换行/自然结束查找及五连接退出
 mise run probe-workspace-performance # Linux真实WebView整进程树PSS/RSS：单会话、十万行、20标签；采集完成与性能达标分别记录
 mise run probe-workspace-performance-release # 同场景release构建，记录原产品MB目标；软件渲染基线不能代替硬件/跨平台验收

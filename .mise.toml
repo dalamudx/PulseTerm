@@ -630,6 +630,12 @@ description = "Validate bundled font preset explicit save, OFL notice, missing-p
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
 run = """
 set -eu
+case "${PULSE_FONT_SCALE:-1}" in
+  1) font_screen=1280x800x24 ;;
+  2) font_screen=2560x1600x24 ;;
+  *) echo 'font.invalid_scale' >&2; exit 1 ;;
+esac
+export GDK_SCALE="${PULSE_FONT_SCALE:-1}" GDK_DPI_SCALE=1
 mkdir -p /data/temp target/probes
 printf '%s\\n' '{"version":1,"passed":false,"nativeExitConfirmed":false}' >target/probes/workspace-font-result.json
 fixture_dir=$(mktemp -d /data/temp/pt-font.XXXXXX)
@@ -641,8 +647,13 @@ pnpm --filter ui exec vite build --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
 export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
-PULSE_FONT_PRESET=1 timeout --kill-after=5s 90s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-font-wm.log sh scripts/probe-workspace-settings.sh
+PULSE_FONT_PRESET=1 timeout --kill-after=5s 90s xvfb-run -a -s "-screen 0 $font_screen" dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-font-wm.log sh scripts/probe-workspace-settings.sh
 """
+
+[tasks.probe-workspace-dpi]
+description = "Compare real 1x and 2x GTK/WebView font grids, physical window sizes, refresh, inherited metrics and independent native exit"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = "python3 scripts/probe-workspace-dpi.py"
 
 [tasks.probe-workspace-ligatures]
 description = "Verify explicitly saved WebGL ligatures, unchanged raw operator input, same PTY and independent reopen in a real WebView"

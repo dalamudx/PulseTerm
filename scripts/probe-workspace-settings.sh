@@ -99,6 +99,9 @@ metric_filter(){
     *) return 1 ;;
   esac
 }
+await_settings_saved(){
+  timeout 3s sh -c 'until timeout 2s "$1" "$2" "已保存 · 重新加载终端后应用；当前会话未关闭"; do sleep .05; done' sh "$native_helper" "$app"
+}
 await_count profiles_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true)
 [ "$(printf '%s\n' "$xid"|awk 'NF{n++}END{print n+0}')" -eq 1 ]
@@ -119,6 +122,9 @@ pid=$(cat "$fixture/native.pid")
 old_rows=$(head -1 "$fixture/size"|awk '{print $1}')
 old_cols=$(head -1 "$fixture/size"|awk '{print $2}')
 kill -0 "$pid"
+if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
+  timeout 2s xdotool getwindowgeometry --shell "$xid" >"$fixture/physical-window"
+fi
 if [ "${PULSE_HISTORY_STOP:-0}" = 1 ]; then
   python3 scripts/probe-workspace-history-stop.py "$fixture" "$app" "$xid" "$log"
   timeout 2s xdotool key --clearmodifiers alt+F4
@@ -181,6 +187,7 @@ metric_edit(){
   timeout 2s xdotool type --clearmodifiers "$value"
   timeout 2s xdotool key --clearmodifiers Return
   await_count settings_save_confirmed "$saves"
+  await_settings_saved
   timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r
   await_count terminal_input_ready "$((saves+1))"
   timeout 2s xdotool mousemove --window "$xid" 400 300 click 1
@@ -227,6 +234,7 @@ metric_reset(){
   settings_open; metric_filter "$label"
   timeout 3s "$native_helper" "$app" "${label}恢复继承" activate
   await_count settings_save_confirmed "$saves"
+  await_settings_saved
   timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r
   await_count terminal_input_ready "$((saves+1))"
   timeout 2s xdotool mousemove --window "$xid" 400 300 click 1
@@ -248,9 +256,13 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
     if [ "$1" = '字体预设' ];then font_action=bounds-combo;fi
     printf 'workspace.font_step.control.%s\n' "$1"
     if ! font_bounds=$(timeout 3s sh -c 'until result=$(timeout 2s "$1" "$2" "$3" "$4"); do sleep .05; done; printf "%s\n" "$result"' sh "$native_helper" "$app" "$1" "$font_action");then timeout 3s import -window "$xid" target/probes/workspace-font-control-failure.png || true;return 1;fi
-    font_x=$(printf '%s\n' "$font_bounds"|awk '{print int($1+$3/2)}')
-    font_y=$(printf '%s\n' "$font_bounds"|awk '{print int($2+$4/2)}')
+    font_x=$(printf '%s\n' "$font_bounds"|awk -v scale="${PULSE_FONT_SCALE:-1}" '{print int(($1+$3/2)*scale)}')
+    font_y=$(printf '%s\n' "$font_bounds"|awk -v scale="${PULSE_FONT_SCALE:-1}" '{print int(($2+$4/2)*scale)}')
+    printf 'workspace.font_bounds.%s.%s.%s.%s\n' "$1" "$font_bounds" "$font_x" "$font_y"
     timeout 2s xdotool mousemove "$font_x" "$font_y" click 1
+    if [ "$1" = '字体预设' ];then
+      timeout 3s sh -c 'until timeout 2s "$1" "$2" "字体预设" inspect-combo | grep -q "expanded=1"; do sleep .05; done' sh "$native_helper" "$app"
+    fi
   }
   font_pick(){
     expected=$(( $(count settings_save_confirmed) + 1 ))
@@ -275,6 +287,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
     fi
     font_click 保存字体名称
     await_count settings_save_confirmed "$expected"
+    await_settings_saved
     font_ready=$(( $(count terminal_input_ready) + 1 ))
     timeout 2s xdotool key --clearmodifiers Escape ctrl+shift+r
     await_count terminal_input_ready "$font_ready"
@@ -293,6 +306,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
   "$native_helper" "$app" 保存后备字体 focus
   timeout 2s xdotool key --clearmodifiers space
   await_count settings_save_confirmed "$expected"
+  await_settings_saved
   timeout 2s xdotool key --clearmodifiers Escape
   font_pick custom
   input FONT_FALLBACK 9
@@ -363,7 +377,7 @@ fi
 echo workspace.settings_metrics_independent_reopen_reset_sources_grid_native_exit_confirmed
 echo workspace.settings_default_edit_reload_font_grid_confirmed
 if [ "${PULSE_FONT_PRESET:-0}" = 1 ]; then
-  /usr/bin/python3 - "$fixture" <<'FONT_RECEIPT'
+  /usr/bin/python3 - "$fixture" "$old_cols" "$old_rows" "$new_cols" "$new_rows" "$height_cols" "$height_rows" "$spacing_cols" "$spacing_rows" <<'FONT_RECEIPT'
 import json, os, sys
 from pathlib import Path
 fixture = Path(sys.argv[1])
@@ -376,7 +390,17 @@ for pid in pids:
     except ProcessLookupError:
         continue
     raise AssertionError('font.native_session_still_alive')
-receipt = {'version': 1, 'passed': True, 'nativeExitConfirmed': True,
+scale = int(os.environ.get('PULSE_FONT_SCALE', '1'))
+assert scale in (1, 2), 'font.invalid_scale'
+geometry = dict(line.split('=', 1) for line in (fixture / 'physical-window').read_text().splitlines())
+width, height = int(geometry['WIDTH']), int(geometry['HEIGHT'])
+assert (width, height) == (960 * scale, 640 * scale), 'font.physical_scale_mismatch'
+metrics = list(map(int, sys.argv[2:]))
+assert len(metrics) == 8 and all(value > 0 for value in metrics)
+grids = dict(zip(['default14', 'font18', 'height150', 'spacing2'],
+                 [metrics[index:index+2] for index in range(0, 8, 2)], strict=True))
+receipt = {'version': 2, 'passed': True, 'nativeExitConfirmed': True,
+    'gdkScale': scale, 'physicalWindow': {'width': width, 'height': height}, 'grids': grids,
     'nativePids': pids, 'nativeSessionCount': 3,
     'checks': ['compiled_14px_default', '18px_native_grid', 'line_height_and_spacing',
         'independent_reopen', 'restore_inheritance', 'preset_explicit_save',

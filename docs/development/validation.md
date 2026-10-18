@@ -2,6 +2,18 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 受控高DPI字体矩阵与CSS字距修复
+
+`mise run probe-workspace-dpi` 已通过Linux独立Xvfb／D-Bus和生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建。顺序运行GDK_SCALE=1／2，X11实测窗口960×640／1920×1280。四组内核PTY／后端网格为：默认14px均92×29；18px均67×22；150%行高67×15／67×14；增加2px字距56×15／56×14。列数一致、默认和18px行数一致；150%行高在本矩阵允许一行设备像素取整差异，依据锁定xterm的ceil／floor与DPR除法，原“全部行数完全相同”的探针假设已修正。每组内核／后端网格检查仍保留。
+
+实窗发现并修复了产品字距在高DPI下减半：xterm把letterSpacing加在设备像素层，Surface现在将CSS设置乘以所属document的DPR；2倍下由错误61列恢复56列。非零字距跟踪resolution和resize，释放／代际撤销后不再更新；默认0不注册额外监听。回归覆盖比例变化、过期媒体事件、释放／撤销、默认零开销及Surface接线。输入／ACK合同、行高参数和14px默认值未改。
+
+双组预设明确保存、草稿不落盘、许可展开查看、缺失主字体回退、恢复继承、同PTY刷新和独立重开均通过，六个不同PTY PID及GUI已退出。探针修正前端保存回执等待和AT-SPI逻辑坐标到X11设备坐标换算，并要求真实点击后菜单展开。首轮恢复时序失败及后续许可点击失败独立保存在 `target/probes/workspace-dpi/attempts/9c89ba47/` 和 `attempts/fb02de6d/`；最终收据在 `target/probes/workspace-dpi/result.json`，本轮两种缩放的字体截图已审阅。
+
+正式mise任务、Linux CI与开发指南共用组合入口。验收限于受控GTK固定缩放、DOM renderer及Xvfb软件渲染；真实跨屏移动、物理DPI、系统IME、硬件／连字GPU和其他平台仍待验，未据此关闭完整DPI或Alpha门禁。
+
+类型和格式检查通过，最终相关绘制、拟合、Surface生命周期及DPR回归共69项通过。最终独立归档为 `target/probes/workspace-dpi/accepted/9f04d24c/`，33份文件SHA256校验全部通过。原生、PTY、构建与桌面助手均退出后，已按私有CARGO_TARGET_DIR执行 `mise run clean-dev` 清除6.5GiB dev/test产物，保留 `target/probes/` 证据。
+
 ## 十万行历史停止的生产 WebView 原生验收
 
 `mise run probe-workspace-history-stop` 已在Linux独立Xvfb／D-Bus会话和当前生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建通过。真实PTY输出100100条固定短硬行，界面核对恰好保留100000行。先定位早期历史，再对无匹配查询分别向新／向旧扫描并明确停止；当前页逐字不变，停止提示稳定、停止按钮隐藏且下一次查询已可用，随后重新定位到较新历史。自然EOF及PTY物理回收后仍可读取相同会话的历史匹配，GUI正常退出。工作者最后一次输入快照也是空，覆盖停止后重新查询；未模拟IPC或注入后端延迟。
