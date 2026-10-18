@@ -1,4 +1,4 @@
-//! Explicit saved or temporary direct password plus MFA; ordinary intentions cannot be upgraded.
+//! Explicit password plus MFA for direct and frozen-route roles; ordinary intentions cannot upgrade.
 use crate::vault_owner::{
     Authorize, PageVaultCancellation, PageVaultOwner, PasswordSessionAction,
     PasswordSessionGesture, PasswordSessionIntent, PasswordSessionSink, PasswordSessionTask,
@@ -15,6 +15,8 @@ use uuid::Uuid;
 /// Trusted adapter requires password partial success, then MFA before terminal setup.
 /// Password borrowing must finish before prompting for the second factor.
 pub trait PasswordInteractiveSessionSink: PasswordSessionSink {}
+/// Trusted intermediate-hop adapter: finish the password loan before MFA and exact forwarding.
+pub trait PasswordInteractiveForwardSink: crate::vault_owner::PasswordForwardSink {}
 /// Original-page, epoch, selection and deadline for one explicit joint choice.
 pub struct PasswordInteractiveSessionGesture {
     capture: PasswordSessionGesture,
@@ -24,7 +26,7 @@ pub struct PasswordInteractiveSessionAction {
     action: PasswordSessionAction,
     deadline: Instant,
 }
-/// Prepared direct source, usable only with an explicitly selected trusted joint adapter.
+/// Prepared source, usable only through an explicitly selected trusted joint adapter and role.
 pub struct PasswordInteractiveSessionIntent {
     intent: PasswordSessionIntent,
 }
@@ -77,6 +79,22 @@ impl PasswordInteractiveSessionAction {
     pub fn cancellation(&self) -> PageVaultCancellation {
         self.action.cancellation()
     }
+    /// Prepare one frozen saved-route hop with the original selection, role and deadline.
+    pub async fn prepare_route(
+        self,
+        store: &StateStore,
+        source: SshTargetSource,
+    ) -> Result<PasswordInteractiveSessionIntent> {
+        if source.is_temporary() || !source.is_route_bound() {
+            return Err(VaultOwnerError::Denied);
+        }
+        Ok(PasswordInteractiveSessionIntent {
+            intent: self
+                .action
+                .prepare_interactive(store, source, self.deadline)
+                .await?,
+        })
+    }
     /// Prepare only a saved direct source under the deadline captured before approval.
     pub async fn prepare(
         self,
@@ -126,6 +144,25 @@ impl PasswordInteractiveSessionIntent {
     /// Revoke this pending attempt independently of registered sessions.
     pub fn cancellation(&self) -> PageVaultCancellation {
         self.intent.cancellation()
+    }
+    /// Forward only to the frozen next hop after both factors; the caller must drain on failure.
+    pub async fn authenticate_forward<S: PasswordInteractiveForwardSink>(
+        &self,
+        store: &StateStore,
+        sink: &mut S,
+    ) -> Result<S::Transport> {
+        self.intent.authenticate_forward(store, sink).await
+    }
+    /// Register only a route leaf after both factors, retaining the caller's cleanup barrier.
+    pub async fn authenticate_route_terminal<S: PasswordInteractiveSessionSink>(
+        &self,
+        store: &StateStore,
+        sink: &mut S,
+        started: &mut Option<StartedProtocolSession>,
+    ) -> Result<crate::protocol_session_owner::ProtocolSessionOwner> {
+        self.intent
+            .authenticate_route_terminal(store, sink, started)
+            .await
     }
     /// Both factors must succeed before the supervised task can register a terminal.
     pub fn start<S: PasswordInteractiveSessionSink>(

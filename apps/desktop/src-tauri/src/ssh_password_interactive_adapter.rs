@@ -11,6 +11,8 @@ use pulse_store::{StateStore, ssh_target_source::SshTargetSource};
 use std::{future::Future, pin::Pin, sync::Arc};
 use uuid::Uuid;
 
+#[path = "ssh_password_interactive_forward.rs"]
+pub(crate) mod forward;
 pub(crate) struct JointSessionSink {
     inner: SessionSink,
     broker: Arc<Broker>,
@@ -46,6 +48,68 @@ impl JointSessionSink {
             partial_user: None,
         })
     }
+    pub(crate) async fn new_route(
+        transport: PinnedTransport,
+        selected: (Uuid, Uuid),
+        size: TermSize,
+        rows: usize,
+        broker: Arc<Broker>,
+        store: StateStore,
+        source: SshTargetSource,
+    ) -> std::result::Result<Self, bool> {
+        if !source.is_route_bound()
+            || !source.supports_password_selection(selected.0, selected.1)
+            || !source.target_liveness()()
+        {
+            return Err(transport.close_and_join().await.is_ok());
+        }
+        Ok(Self {
+            inner: SessionSink::new_route(transport, selected, size, rows).await?,
+            broker,
+            store,
+            source,
+            partial_user: None,
+        })
+    }
+    pub(crate) fn attach_parents(&mut self, parents: pulse_ssh::peer::RouteTransports) {
+        self.inner.attach_parents(parents);
+    }
+    async fn complete_second_factor(&mut self, guard: Guard) -> Result<()> {
+        let username = self.partial_user.take().ok_or(VaultOwnerError::Denied)?;
+        let peer = self.inner.base.peer.clone();
+        let transport = self
+            .inner
+            .base
+            .transport
+            .as_mut()
+            .ok_or(VaultOwnerError::Denied)?;
+        let store = self.store.clone();
+        let source = self.source.clone();
+        let original = guard.clone();
+        let success = authenticate_client(
+            transport,
+            &peer,
+            &self.broker,
+            &username,
+            guard,
+            move || {
+                let store = store.clone();
+                let source = source.clone();
+                let guard = original.clone();
+                async move {
+                    store
+                        .validate_ssh_target_source(source, guard)
+                        .await
+                        .map_err(|_| VaultOwnerError::Denied)
+                }
+            },
+        )
+        .await?;
+        if !success {
+            return Err(VaultOwnerError::Denied);
+        }
+        Ok(())
+    }
     pub(crate) fn set_palette(&mut self, config: pulse_app::TerminalStartConfig) {
         self.inner.set_palette(config);
     }
@@ -57,7 +121,15 @@ impl JointSessionSink {
 impl PasswordInteractiveSessionSink for JointSessionSink {}
 impl PasswordTargetSink for JointSessionSink {
     fn matches_target(&self, source: &SshTargetSource, host: Uuid, identity: Uuid) -> bool {
-        !source.is_route_bound()
+        source.is_route_bound() == self.source.is_route_bound()
+            && source.is_route_leaf() == self.source.is_route_leaf()
+            && source
+                .forward_target()
+                .map(|target| (target.host(), target.port()))
+                == self
+                    .source
+                    .forward_target()
+                    .map(|target| (target.host(), target.port()))
             && source.is_temporary() == self.source.is_temporary()
             && self.source.target_liveness()()
             && self.inner.matches_target(source, host, identity)
@@ -105,39 +177,7 @@ impl PasswordSessionSink for JointSessionSink {
         guard: Guard,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            let username = self.partial_user.take().ok_or(VaultOwnerError::Denied)?;
-            let peer = self.inner.base.peer.clone();
-            let transport = self
-                .inner
-                .base
-                .transport
-                .as_mut()
-                .ok_or(VaultOwnerError::Denied)?;
-            let store = self.store.clone();
-            let source = self.source.clone();
-            let original = guard.clone();
-            let success = authenticate_client(
-                transport,
-                &peer,
-                &self.broker,
-                &username,
-                guard.clone(),
-                move || {
-                    let store = store.clone();
-                    let source = source.clone();
-                    let guard = original.clone();
-                    async move {
-                        store
-                            .validate_ssh_target_source(source, guard)
-                            .await
-                            .map_err(|_| VaultOwnerError::Denied)
-                    }
-                },
-            )
-            .await?;
-            if !success {
-                return Err(VaultOwnerError::Denied);
-            }
+            self.complete_second_factor(guard.clone()).await?;
             self.inner.prepare_authenticated_terminal(guard).await
         })
     }

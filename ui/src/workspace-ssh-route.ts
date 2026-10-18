@@ -8,7 +8,8 @@ export type RouteDecision =
   | boolean
   | "interactive"
   | "key-interactive"
-  | "agent-interactive";
+  | "agent-interactive"
+  | "password-interactive";
 type RouteAsk = (
   prompt: InteractivePrompt,
   signal: AbortSignal,
@@ -44,6 +45,7 @@ export type RoutePrompt = Readonly<{
   interactiveAvailable?: boolean;
   keyInteractiveAvailable?: boolean;
   agentInteractiveAvailable?: boolean;
+  passwordInteractiveAvailable?: boolean;
 }>;
 type Reply = Readonly<
   | { state: "connected"; session: string }
@@ -130,6 +132,11 @@ export function decodeRouteReply(value: unknown): Reply {
     Object.hasOwn(r.prompt, "agentInteractiveAvailable")
       ? ["agentInteractiveAvailable"]
       : []),
+    ...(r.prompt &&
+    typeof r.prompt === "object" &&
+    Object.hasOwn(r.prompt, "passwordInteractiveAvailable")
+      ? ["passwordInteractiveAvailable"]
+      : []),
   ]);
   if (
     !Number.isInteger(p.index) ||
@@ -148,6 +155,10 @@ export function decodeRouteReply(value: unknown): Reply {
       typeof p.keyInteractiveAvailable !== "boolean") ||
     (Object.hasOwn(p, "agentInteractiveAvailable") &&
       typeof p.agentInteractiveAvailable !== "boolean") ||
+    (Object.hasOwn(p, "passwordInteractiveAvailable") &&
+      typeof p.passwordInteractiveAvailable !== "boolean") ||
+    (p.passwordInteractiveAvailable === true &&
+      p.interactiveAvailable !== true) ||
     [
       p.interactiveAvailable,
       p.keyInteractiveAvailable,
@@ -186,6 +197,12 @@ export function decodeRouteReply(value: unknown): Reply {
         : {}),
       ...(Object.hasOwn(p, "agentInteractiveAvailable")
         ? { agentInteractiveAvailable: p.agentInteractiveAvailable as boolean }
+        : {}),
+      ...(Object.hasOwn(p, "passwordInteractiveAvailable")
+        ? {
+            passwordInteractiveAvailable:
+              p.passwordInteractiveAvailable as boolean,
+          }
         : {}),
     }),
   });
@@ -395,7 +412,8 @@ async function runSshRoute(
         approved !== true &&
         approved !== "interactive" &&
         approved !== "key-interactive" &&
-        approved !== "agent-interactive"
+        approved !== "agent-interactive" &&
+        approved !== "password-interactive"
       )
         throw Error("ssh.route_cancelled");
       if (approved === "interactive" && p.interactiveAvailable !== true)
@@ -407,10 +425,16 @@ async function runSshRoute(
         p.agentInteractiveAvailable !== true
       )
         throw Error("ssh.route_protocol");
+      if (
+        approved === "password-interactive" &&
+        p.passwordInteractiveAvailable !== true
+      )
+        throw Error("ssh.route_protocol");
       interactive =
         approved === "interactive" ||
         approved === "key-interactive" ||
-        approved === "agent-interactive";
+        approved === "agent-interactive" ||
+        approved === "password-interactive";
       interactionRounds = 0;
       reply = decodeRouteReply(
         await Promise.race([

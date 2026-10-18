@@ -210,6 +210,9 @@ jobs:
       - name: Verify CLI password plus MFA, original approval, zero use before consent and physical drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-cli-password-interactive
+      - name: Verify three password MFA hops, complete-factor rejection, refresh and parent drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-route-password-interactive
       - name: Verify selected Agent MFA route hops, terminal recovery and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-route-agent-interactive

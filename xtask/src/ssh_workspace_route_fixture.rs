@@ -17,6 +17,8 @@ struct Jump {
     interactive_round: Option<u8>,
     key_joint: bool,
     key_factor_complete: bool,
+    password_joint: bool,
+    password_factor_complete: bool,
 }
 impl Drop for Jump {
     fn drop(&mut self) {
@@ -37,6 +39,8 @@ impl server::Server for Jump {
             interactive_round: self.interactive_round.map(|_| 0),
             key_joint: self.key_joint,
             key_factor_complete: false,
+            password_joint: self.password_joint,
+            password_factor_complete: false,
         }
     }
 }
@@ -48,7 +52,9 @@ impl server::Handler for Jump {
         _: &str,
         response: Option<server::Response<'_>>,
     ) -> Result<server::Auth, Self::Error> {
-        if self.key_joint && !self.key_factor_complete {
+        if (self.key_joint && !self.key_factor_complete)
+            || (self.password_joint && !self.password_factor_complete)
+        {
             eprintln!("fixture.route.{}.premature_mfa_rejected", self.label);
             return Ok(server::Auth::reject());
         }
@@ -59,6 +65,30 @@ impl server::Handler for Jump {
         user: &str,
         password: &str,
     ) -> Result<server::Auth, Self::Error> {
+        if self.password_joint {
+            eprintln!("fixture.route.{}.password_attempt", self.label);
+            if self.agent_key.is_some() || user != "user" || password != "fixed-target-secret" {
+                return Ok(server::Auth::reject());
+            }
+            let policy = std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY")
+                .map(std::path::PathBuf::from)
+                .and_then(|path| std::fs::read_to_string(path.with_extension(self.label)).ok());
+            if policy.as_deref() == Some("partial") {
+                self.password_factor_complete = true;
+                eprintln!("fixture.route.{}.password_partial_success", self.label);
+                return Ok(server::Auth::Reject {
+                    proceed_with_methods: Some(
+                        (&[russh::MethodKind::KeyboardInteractive][..]).into(),
+                    ),
+                    partial_success: true,
+                });
+            }
+            if policy.as_deref() == Some("complete") {
+                eprintln!("fixture.route.{}.password_complete_success", self.label);
+                return Ok(server::Auth::Accept);
+            }
+            return Ok(server::Auth::reject());
+        }
         Ok(
             if self.agent_key.is_none() && user == "user" && password == "fixed-target-secret" {
                 eprintln!("fixture.route.{}.authenticated", self.label);
@@ -315,6 +345,9 @@ pub(super) async fn seed(
                     || (std::env::args().nth(3).as_deref() == Some("agent-interactive-route")
                         && label == "middle"),
                 key_factor_complete: false,
+                password_joint: std::env::args().nth(3).as_deref()
+                    == Some("password-interactive-route"),
+                password_factor_complete: false,
             };
             eprintln!("fixture.route.{label}.listening.{}", target.port());
             let _ = server

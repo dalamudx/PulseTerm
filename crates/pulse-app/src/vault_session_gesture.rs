@@ -33,8 +33,9 @@ pub use agent_interactive::{
     AgentInteractiveSessionIntent, AgentInteractiveSessionSink,
 };
 pub use password_interactive::{
-    PasswordInteractiveSessionAction, PasswordInteractiveSessionGesture,
-    PasswordInteractiveSessionIntent, PasswordInteractiveSessionSink,
+    PasswordInteractiveForwardSink, PasswordInteractiveSessionAction,
+    PasswordInteractiveSessionGesture, PasswordInteractiveSessionIntent,
+    PasswordInteractiveSessionSink,
 };
 
 #[path = "vault_interactive_session.rs"]

@@ -47,6 +47,8 @@ pub enum RouteHopGesture {
     PrivateKeyInteractive(crate::vault_owner::PrivateKeyInteractiveSessionGesture),
     /// Explicit selected-Agent plus MFA captured at this exact route hop.
     AgentInteractive(crate::vault_owner::AgentInteractiveSessionGesture),
+    /// Explicit password plus MFA captured at this exact route hop.
+    PasswordInteractive(crate::vault_owner::PasswordInteractiveSessionGesture),
 }
 /// Single-use typed gesture and its exact-hop source. No execution permission or plaintext.
 #[must_use]
@@ -91,6 +93,26 @@ impl RouteHopSelection {
     /// Frozen hop metadata only; actual-peer and credential-use approval remain independent.
     pub fn source(&self) -> &SshKeyTargetSource {
         &self.source
+    }
+    /// Consume only this frozen password hop; never capture a newer page, epoch or deadline.
+    pub fn into_password_interactive(self) -> Result<Self> {
+        let RouteHopGesture::Password(capture) = self.selection else {
+            return Err(VaultOwnerError::Denied);
+        };
+        if !self.source.password_source().is_route_bound()
+            || !self
+                .source
+                .password_source()
+                .supports_password_selection(capture.selected.0, capture.selected.1)
+        {
+            return Err(VaultOwnerError::Denied);
+        }
+        Ok(Self {
+            selection: RouteHopGesture::PasswordInteractive(
+                crate::vault_owner::PasswordInteractiveSessionGesture::from_saved_capture(capture)?,
+            ),
+            source: self.source,
+        })
     }
     /// Select both factors for this frozen Agent hop without discovering or signing with an Agent.
     pub fn into_agent_interactive(self) -> Result<Self> {
@@ -153,6 +175,7 @@ impl SavedSessionGesture {
             RouteHopGesture::PrivateKey(gesture) => gesture.capture,
             RouteHopGesture::Agent(gesture) => gesture.capture,
             RouteHopGesture::Interactive(_)
+            | RouteHopGesture::PasswordInteractive(_)
             | RouteHopGesture::PrivateKeyInteractive(_)
             | RouteHopGesture::AgentInteractive(_) => {
                 return Err(VaultOwnerError::Denied);

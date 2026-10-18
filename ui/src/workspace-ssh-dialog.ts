@@ -173,12 +173,6 @@ export class WorkspaceSshDialog {
   private applyProfile(): void {
     const host = this.hosts.find((h) => h.id === this.options.host.value),
       profile = host?.profile;
-    for (const option of Array.from(this.options.identity.options)) {
-      if (!this.passwordJointChoices.has(option.value)) continue;
-      const unavailable = !!profile?.via;
-      option.disabled = unavailable;
-      option.hidden = unavailable;
-    }
     if (!profile) return;
     const id = profile.identityId;
     const choices = id
@@ -510,7 +504,8 @@ export class WorkspaceSshDialog {
     if (
       prompt.interactiveAvailable ||
       prompt.keyInteractiveAvailable ||
-      prompt.agentInteractiveAvailable
+      prompt.agentInteractiveAvailable ||
+      prompt.passwordInteractiveAvailable
     ) {
       const doc = label.ownerDocument,
         caption = doc.createElement("span");
@@ -542,21 +537,32 @@ export class WorkspaceSshDialog {
             : "交互认证 / MFA",
       );
       method.append(saved, mfa);
+      if (prompt.passwordInteractiveAvailable) {
+        const passwordMfa = doc.createElement("option");
+        passwordMfa.value = "password-interactive";
+        uiText(passwordMfa, "密码 + MFA");
+        method.append(passwordMfa);
+      }
       method.value =
-        prompt.agentInteractiveAvailable &&
+        prompt.passwordInteractiveAvailable &&
         prompt.index + 1 === prompt.count &&
-        this.agentJointChoices.get(this.options.identity.value) ===
+        this.passwordJointChoices.get(this.options.identity.value) ===
           prompt.identity
-          ? "agent-interactive"
-          : prompt.index + 1 === prompt.count &&
-              this.jointChoices.get(this.options.identity.value) ===
+          ? "password-interactive"
+          : prompt.agentInteractiveAvailable &&
+              prompt.index + 1 === prompt.count &&
+              this.agentJointChoices.get(this.options.identity.value) ===
                 prompt.identity
-            ? "key-interactive"
+            ? "agent-interactive"
             : prompt.index + 1 === prompt.count &&
-                this.interactiveChoices.get(this.options.identity.value) ===
+                this.jointChoices.get(this.options.identity.value) ===
                   prompt.identity
-              ? "interactive"
-              : "saved";
+              ? "key-interactive"
+              : prompt.index + 1 === prompt.count &&
+                  this.interactiveChoices.get(this.options.identity.value) ===
+                    prompt.identity
+                ? "interactive"
+                : "saved";
       label.append(caption, method);
       this.options.status.before(label);
     }
@@ -575,13 +581,15 @@ export class WorkspaceSshDialog {
       this.routeAnswer = () =>
         finish(
           this.current(epoch) && !signal.aborted
-            ? method?.value === "agent-interactive"
-              ? "agent-interactive"
-              : method?.value === "key-interactive"
-                ? "key-interactive"
-                : method?.value === "interactive"
-                  ? "interactive"
-                  : true
+            ? method?.value === "password-interactive"
+              ? "password-interactive"
+              : method?.value === "agent-interactive"
+                ? "agent-interactive"
+                : method?.value === "key-interactive"
+                  ? "key-interactive"
+                  : method?.value === "interactive"
+                    ? "interactive"
+                    : true
             : false,
         );
       signal.addEventListener("abort", abort, { once: true });
@@ -637,7 +645,6 @@ export class WorkspaceSshDialog {
         (host) => host.id === this.options.host.value,
       );
       const route = selectedHost?.profile?.via;
-      if (passwordJointIdentity && route) throw Error("ssh.session_denied");
       const id =
         (interactiveIdentity ||
           jointIdentity ||
@@ -678,6 +685,7 @@ export class WorkspaceSshDialog {
                 {
                   host: selectedHost.id,
                   identity:
+                    passwordJointIdentity ??
                     agentJointIdentity ??
                     agentIdentity ??
                     keyIdentity ??

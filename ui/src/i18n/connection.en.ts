@@ -1,4 +1,5 @@
 export const connectionEnglish = {
+  "密码 + MFA": "Password + MFA",
   "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n密码 + MFA（两种因素均须成功）":
     "{0} · {1}:{2}\n{3} · {4}\nHost {5}\nIdentity {6}\nPassword + MFA (both factors must succeed)",
   "主机 {0}\n身份 {1}\n认证方式：密码 + MFA（两种因素均须成功）":

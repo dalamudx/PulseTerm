@@ -1,4 +1,6 @@
 //! Original approval and source boundaries for explicit saved-password joint authentication.
+#[path = "vault_password_route_interactive_tests.rs"]
+mod route;
 use super::*;
 use crate::vault_owner::{PasswordInteractiveSessionGesture, PasswordSessionGesture};
 use pulse_core::ssh_identity::SshPasswordIdentity;

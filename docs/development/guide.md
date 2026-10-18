@@ -131,6 +131,7 @@ mise run probe-workspace-cli-ssh-private-key # 同一原epoch捕获、联合双�
 mise run probe-workspace-cli-ssh-agent # 原SavedGesture三目录唯一ID、原epoch继承、锁定/取消/导航/断连零签名、原窗批准所选Agent一签名、终端/刷新/重开/退出
 mise run probe-workspace-cli-agent-interactive # --agent-interactive：冷暖批准、所选Agent签名、问答取消与真实退出
 mise run probe-workspace-cli-password-interactive # --password-interactive：原捕获、冷暖明确批准、零提前密码使用、问答取消/刷新/四连接退出
+mise run probe-workspace-route-password-interactive # 每跳密码＋两轮MFA、完整第一因素成功拒绝、刷新、叶跳取消父链排空
 mise run probe-workspace-route-agent-interactive # 三跳密码/Agent+MFA转发/Agent+MFA终端：逐跳批准、刷新与取消排空
 mise run probe-workspace-password-interactive # 保存/临时明确密码+MFA：部分成功门禁、取消/来源变化、刷新不重认证、成功后可选保存及十二连接退出
 mise run probe-workspace-settings-contract # 全局保存重开、刷新按键字节、GUI/CLI新旧TERM/前景色/历史冻结，主/备用/结束查找、真实PTY滚动/响铃/回放隔离、链接/文件检查与GTK剪贴板回读、隔离GIO/Chrome本机页面交接与三PTY退出（需已有Chrome/Chromium）

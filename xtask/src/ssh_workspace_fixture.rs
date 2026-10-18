@@ -526,6 +526,7 @@ pub(crate) fn run() -> Result<()> {
                         | "interactive-route"
                         | "key-interactive-route"
                         | "agent-interactive-route"
+                        | "password-interactive-route"
                 )
             ) {
                 Some(
@@ -540,6 +541,7 @@ pub(crate) fn run() -> Result<()> {
                                 "interactive-route"
                                     | "key-interactive-route"
                                     | "agent-interactive-route"
+                                    | "password-interactive-route"
                             )
                         ),
                     )
@@ -628,6 +630,7 @@ pub(crate) fn run() -> Result<()> {
                             | "key-interactive"
                             | "key-interactive-route"
                             | "password-interactive"
+                            | "password-interactive-route"
                             | "agent-interactive"
                             | "agent-interactive-route"
                     )

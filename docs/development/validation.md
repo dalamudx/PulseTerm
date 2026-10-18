@@ -2,6 +2,22 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 逐跳密码与 MFA 联合认证
+
+`RouteHopSelection::into_password_interactive` 消费本跳原密码捕获，保留原页、Vault代际、身份、角色及截止时间。新 `prepare_route` 仅接受冻结保存路线；保存和临时直连入口继续拒绝路由源。每跳后端声明密码和账户问答能力后，原生确认框才允许选择密码＋MFA，私钥／Agent和未知方法均不能转换。
+
+可信中间转发Sink在密码明文借用结束后完成MFA，然后只打开冻结下跳；叶终端沿用同一部分成功及问答逻辑，保留父链至原生退出。生产客户端必须实际收到 `partial_success=true` 且包含keyboard-interactive，密码完整成功也会拒绝联合流程；不自动降级。
+
+正式 `mise run probe-workspace-route-password-interactive` 的6项检查已通过Linux生产WebView／真实CLI发起路线／三跳loopback SSH：冷暖各三跳密码与两轮MFA成功；刷新不重认证；中间跳密码完整成功时不发MFA、不连叶跳；叶跳问答取消后排空两条父连接，先前成功会话仍可输入；三跳实际指纹／保存记录与来源摘要核对通过。四条测试输入被远端收到。外层／中层连接开启与退出分别5／9，叶层退出6，共20条连接；15条转发通道全部退出，中间跳零终端请求；GUI实际退出码0，控制端点与工作者排空。
+
+79项前端相关回归、6项密码授权回归、类型／格式／双语检查及完整生产／服务端全目标严格Clippy通过。共享App SSH完整372项测试、35项文档测试和8项SSH适配器回归均实际运行通过。
+
+接受证据归档于 `target/probes/route-password-interactive/accepted/fcf6517a/`。保留首次冷窗口八秒超时（零认证）、描述文件交接遗漏和ImageMagick三秒超时的独立尝试：`route-password-interactive-attempts/071144bf/`、`a282ce1e/`、`7eab2480/`。已补齐真实可访问描述文件，截图限单线程并每跳保留一张，所有原期限不变；后续成功不证明启动黑窗或历史关闭故障已定位。服务端仍仅在校验后的隔离源码中修正密码部分成功位，产品依赖及锁文件不改。
+
+验收窗口、SSH服务端与回归全部退出后执行 `mise run clean-dev`，清除12.1GiB dev/test产物，移除唯一任务临时目录 `/data/temp/alpha-route-password.d6R8sM`；接受证据及三次失败记录保留。复用桌面转发模块的rust-analyzer诊断为未归属入口，不计IDE通过；实际完整生产与服务端全目标严格Clippy、372／35／8项回归已通过。
+
+当前范围为受控密码与回答、软件渲染、保存路线每跳明确选择；CLI显式 `--password-interactive` 仍仅用于保存直连，普通CLI保存路线可以在原窗口逐跳选择联合。企业PAM、真实桌面与其他平台、性能门禁继续开放。
+
 ## CLI 保存密码与 MFA 联合认证
 
 新增 `--password-interactive`，与其余三种交互参数互斥。CLI解析、冷启动封闭元数据、Capability Schema／Serde／业务白名单、原窗口批准文案及问答ticket/token均已接通。暖启动一次性消费原 `SavedSessionGesture`，保持原页／Vault代际／期限／取消；密码单因素使用意图没有联合转换入口。来源分派只接受保存直连密码身份，别名、跳板及身份类型不匹配拒绝；连接仍必须实际返回密码部分成功并声明MFA，才进入既有问答／注册监督。

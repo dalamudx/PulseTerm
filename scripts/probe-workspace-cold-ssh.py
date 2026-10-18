@@ -26,9 +26,10 @@ agent_interactive_mode = os.environ.get("PULSE_CLI_AGENT_INTERACTIVE") == "1"
 key_interactive_mode = os.environ.get("PULSE_CLI_KEY_INTERACTIVE") == "1"
 interactive_mode = password_interactive_mode or key_interactive_mode or agent_interactive_mode or os.environ.get("PULSE_CLI_INTERACTIVE") == "1"
 binaries = Path(os.environ.get("CARGO_TARGET_DIR", "target")) / "debug"
+route_password_interactive_mode = os.environ.get("PULSE_ROUTE_PASSWORD_INTERACTIVE") == "1"
 route_agent_interactive_mode = os.environ.get("PULSE_ROUTE_AGENT_INTERACTIVE") == "1"
 route_key_interactive_mode = os.environ.get("PULSE_ROUTE_KEY_INTERACTIVE") == "1"
-route_interactive_mode = route_key_interactive_mode or route_agent_interactive_mode or os.environ.get("PULSE_ROUTE_INTERACTIVE") == "1"
+route_interactive_mode = route_password_interactive_mode or route_key_interactive_mode or route_agent_interactive_mode or os.environ.get("PULSE_ROUTE_INTERACTIVE") == "1"
 route_mode = route_interactive_mode or os.environ.get("PULSE_COLD_SSH_ROUTE") == "1"
 agent_mode = route_agent_interactive_mode or (route_mode and not route_interactive_mode) or os.environ.get("PULSE_COLD_SSH_AGENT") == "1"
 multiwindow_mode = os.environ.get("PULSE_SSH_MULTIWINDOW") == "1"
@@ -60,7 +61,7 @@ if interactive_mode:
 if route_interactive_mode:
     if interactive_mode or multiwindow_mode or alias_mode or close_cycles:
         raise RuntimeError("route MFA fixture cannot mix other diagnostic modes")
-    prefix = "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
+    prefix = "route-password-interactive" if route_password_interactive_mode else "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
 if scope_mode: prefix = "workspace-ssh-settings"
 for name, sub in [('HOME','home'),('XDG_DATA_HOME','data'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache'),('XDG_RUNTIME_DIR','runtime')]:
     path = root / sub
@@ -123,7 +124,7 @@ def click(name):
     xdo('key','--clearmodifiers','space')
 
 def shot(tag):
-    run(['/usr/bin/import','-window',xid,evidence / (prefix+'-'+tag+'.png')], timeout=3)
+    run(['/usr/bin/import','-limit','thread','1','-window',xid,evidence / (prefix+'-'+tag+'.png')], timeout=3)
 
 def event_count(name):
     return peer_log.read_text().splitlines().count(name)
@@ -337,7 +338,13 @@ try:
         policy = seed_root / "owned-password-policy"
         policy.write_text("partial")
         env["PULSE_SSH_PASSWORD_MFA_POLICY"] = str(policy)
-    mode = "password-interactive" if password_interactive_mode else "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
+    if route_password_interactive_mode:
+        policy = seed_root / "owned-route-password-policy"
+        policy.write_text("partial")
+        env["PULSE_SSH_PASSWORD_MFA_POLICY"] = str(policy)
+        for hop in ("outer", "middle"):
+            policy.with_suffix("."+hop).write_text("partial")
+    mode = "password-interactive-route" if route_password_interactive_mode else "password-interactive" if password_interactive_mode else "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
     peer = subprocess.Popen([os.environ.get("PULSE_SSH_FIXTURE_EXECUTABLE", str(binaries / "xtask")),"serve-workspace-ssh-fixture",str(directory),mode],env=env,stdout=peer_output,stderr=subprocess.STDOUT,start_new_session=True)
     wait(lambda:'fixture.ssh_gui_seeded_listening' in peer_log.read_text(),'fixture',30)
     def descriptor(prefix):
@@ -367,8 +374,12 @@ try:
         import runpy
         runpy.run_path("scripts/probe-workspace-ssh-settings.py")["verify"](globals())
         sys.exit(0)
+    if route_password_interactive_mode:
+        import runpy
+        runpy.run_path("scripts/probe-workspace-route-password-interactive.py")["verify"](globals())
+        sys.exit(0)
     if route_interactive_mode:
-        prefix = "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
+        prefix = "route-password-interactive" if route_password_interactive_mode else "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
         import runpy
         runpy.run_path("scripts/probe-workspace-route-interactive.py")["verify"](globals())
         sys.exit(0)

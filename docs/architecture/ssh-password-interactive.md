@@ -1,12 +1,12 @@
-# 直连密码与 MFA 联合认证
+# 密码与 MFA 联合认证
 
-保存及临时目标的GUI直连、保存直连CLI已通过Linux原生验收。临时目标使用独立 `prepare_temporary`，保留原点击期限、原页／代际和临时票据活性；保存 `prepare` 继续拒绝临时来源。逐跳方法选择继续按后续工作包接入。
+保存及临时目标的GUI直连、保存直连CLI、保存路线每跳明确选择已通过Linux原生验收。临时目标使用独立 `prepare_temporary`，保留原点击期限、原页／代际和临时票据活性；保存 `prepare` 继续拒绝临时来源，`prepare_route` 仅接受冻结保存路线。
 
 ## 授权与期限
 
-`PasswordInteractiveSessionGesture` 在原点击捕获页面、Host/Identity、可用Vault代际和固定300秒截止时间；批准不能借用后续解锁。动作和意图不能由普通密码请求、只读来源或认证布尔回执转换。保存 `prepare` 仅接受保存直连，`prepare_temporary` 仅接受临时直连；路由、来源类型不匹配、陈旧快照及取消均拒绝。普通密码准备仍为5秒。
+`PasswordInteractiveSessionGesture` 在原点击捕获页面、Host/Identity、可用Vault代际和固定300秒截止时间；批准不能借用后续解锁。动作和意图不能由普通直连密码请求、只读来源或认证布尔回执转换。保存 `prepare` 仅接受保存直连，`prepare_temporary` 仅接受临时直连；路由、来源类型不匹配、陈旧快照及取消均拒绝。普通密码准备仍为5秒。
 
-`workspace_ssh_password_interactive_session_begin` 是独立命令，复用现有问答Channel、原请求令牌和一次性轮次。共享准备命令通过当前页临时票据解析可信来源，再调用对应的保存／临时授权入口。界面在保存及临时直连中提供“密码 + MFA”，逐跳入口保持禁用；方法不可用或失败时不改用其他认证方法。联合适配器保留精确身份、来源类型一致、原目标活性与实际peer核验；成功注册后临时目标才获得可选保存回执。
+`workspace_ssh_password_interactive_session_begin` 是独立命令，复用现有问答Channel、原请求令牌和一次性轮次。共享准备命令通过当前页临时票据解析可信来源，再调用对应的保存／临时授权入口。界面在保存及临时直连中提供“密码 + MFA”，保存路线经独立逐跳入口选择本跳方法；方法不可用或失败时不改用其他认证方法。联合适配器保留精确身份、来源类型一致、原目标活性与实际peer核验；成功注册后临时目标才获得可选保存回执。
 
 ## 两因子与明文生命周期
 
@@ -23,3 +23,11 @@
 锁定russh服务端会覆盖密码部分成功位；测试沿用独立解压、归档摘要验证及单分支修正，产品客户端、注册表缓存和仓库锁文件不改。运行前校验服务端二进制摘要及 `partialSuccessMethod=password`；首次未修正服务端的失败保存在 `attempts/c26892e1/`。生产客户端正确拒绝了实际false的部分成功位。企业PAM、逐跳、新建主机保存和其他平台继续待验。
 
 `pulse ssh <保存入口 ID> --identity <保存密码身份 ID> --password-interactive` 已通过 Linux 生产 WebView／真实 CLI／loopback SSH 的冷暖验收。四次实际密码部分成功、两次两轮MFA成功和四条连接退出；锁定／目标取消及目标批准前零密码使用，Esc和CLI断连各物理退出一条连接，刷新前后四条测试输入均被peer收到且不重认证。四个GUI实际退出0，控制端点排空，保存元数据与密文摘要不变。58项前端、28项CLI、9项许可、5项密码授权回归及生产严格Clippy通过。正式任务为 `mise run probe-workspace-cli-password-interactive`，最终证据为 `target/probes/cli-password-interactive/accepted/f1063366/`。测试服务端仅隔离修正密码部分成功分支并校验归档／源码／二进制摘要；生产依赖与仓库锁文件不改。首次原生任务在冷窗口定位期限内失败，日志保存在 `target/probes/cli-password-interactive-attempts/06aa2ca8/`，没有认证事件，本轮成功不建立该启动故障的原因或修复。企业认证和跨平台继续待验。
+
+## 逐跳密码与 MFA 联合认证
+
+开发链新增 `prepare_route`，只接受冻结保存路线源。`RouteHopSelection::into_password_interactive` 消费原密码hop，不重捕获页面、Vault代际或期限。每跳声明账户问答及保存密码能力，界面才可提交独立的 `password-interactive`；未选择时仍为保存方法，私钥和Agent类型不能转换。
+
+中间跳的 `PasswordInteractiveForwardSink` 在密码明文借用释放后运行两轮MFA，再打开冻结下跳；叶终端共用部分成功门禁和问答，保持外观冻结、父链所有权及原退出屏障。六项密码授权回归、79项相关前端回归、类型／双语及完整生产全目标严格Clippy通过。
+
+正式原生任务 `mise run probe-workspace-route-password-interactive` 已接入CI，验证冷暖全联合、刷新不重认证、中间跳密码完整成功拒绝、叶跳取消父链排空、原成功会话保留及来源不变。6项原生检查通过：冷暖两次三跳成功、四条实际输入、20条连接和15条转发通道退出，GUI实际退出0；共享App SSH完整372项／35项文档测试和8项SSH适配器回归全部通过，企业／跨平台不计入本批。测试仍只在校验后的隔离服务端修正密码部分成功位，不改产品依赖。

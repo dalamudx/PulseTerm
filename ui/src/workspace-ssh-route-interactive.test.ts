@@ -130,25 +130,39 @@ it.each(["unsolicited", "repeat", "cancel", "unavailable"])(
   },
 );
 
-type JointMethod = "key-interactive" | "agent-interactive";
+type JointMethod =
+  | "key-interactive"
+  | "agent-interactive"
+  | "password-interactive";
 function jointHop(index = 0, method: JointMethod = "key-interactive") {
   const reply = hop(index, false);
   return {
     ...reply,
     prompt: {
       ...reply.prompt,
-      [method === "agent-interactive"
-        ? "agentInteractiveAvailable"
-        : "keyInteractiveAvailable"]: true,
+      ...(method === "password-interactive"
+        ? { interactiveAvailable: true }
+        : {}),
+      [method === "password-interactive"
+        ? "passwordInteractiveAvailable"
+        : method === "agent-interactive"
+          ? "agentInteractiveAvailable"
+          : "keyInteractiveAvailable"]: true,
     },
   };
 }
 function jointSelection(method: JointMethod) {
-  return method === "agent-interactive"
-    ? { ...selection, agent: true }
-    : { ...selection, privateKey: true };
+  return method === "password-interactive"
+    ? selection
+    : method === "agent-interactive"
+      ? { ...selection, agent: true }
+      : { ...selection, privateKey: true };
 }
-it.each(["key-interactive", "agent-interactive"] as const)(
+it.each([
+  "key-interactive",
+  "agent-interactive",
+  "password-interactive",
+] as const)(
   "mixes explicit %s with a saved leaf, uses the original token and clears answers",
   async (method) => {
     const answers = ["synthetic joint answer"],
@@ -196,7 +210,9 @@ it.each(["key-interactive", "agent-interactive"] as const)(
   },
 );
 it.each(
-  (["key-interactive", "agent-interactive"] as const).flatMap((method) =>
+  (
+    ["key-interactive", "agent-interactive", "password-interactive"] as const
+  ).flatMap((method) =>
     [
       "unavailable",
       "wrong-kind",
@@ -225,15 +241,22 @@ it.each(
             ...reply,
             prompt: {
               ...reply.prompt,
-              [method === "agent-interactive"
-                ? "agentInteractiveAvailable"
-                : "keyInteractiveAvailable"]: "yes",
+              [method === "password-interactive"
+                ? "passwordInteractiveAvailable"
+                : method === "agent-interactive"
+                  ? "agentInteractiveAvailable"
+                  : "keyInteractiveAvailable"]: "yes",
             },
           };
         if (variant === "both-kinds")
           return {
             ...reply,
-            prompt: { ...reply.prompt, interactiveAvailable: true },
+            prompt: {
+              ...reply.prompt,
+              ...(method === "password-interactive"
+                ? { keyInteractiveAvailable: true }
+                : { interactiveAvailable: true }),
+            },
           };
         if (variant === "both-keys")
           return {
