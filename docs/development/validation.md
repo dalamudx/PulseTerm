@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 未决原生关闭的增量验证
+
+生产构建的原流程锁定／解锁各12轮，两种新时序（取消后不等CLI回执、确认框未决时关窗）在锁定／解锁下也各12轮，共72个不同GUI PID。逐一核对72份实际waitpid退出文件均为0，零认证／签名、来源摘要不变、control.sock/control.token回收。新时序贡献48轮；原流程24轮另计。六组收据、72份退出文件和SHA256清单已单独保留在 `target/probes/native-close-pending-acceptance/962d5f04/`，汇总为该目录的 `summary.json`。
+
+修复的是探针回收顺序：先发Alt+F4，再收CLI拒绝回执，待GUI被subreaper收养后读取真实退出码，回执耗时计入原12秒关闭期限；未以进程消失代替成功，未修改生产关闭实现。正式mise任务在 `/data/temp` 隔离助手、前端、运行目录，允许显式复用CARGO_TARGET_DIR。Python／Shell语法、C严格编译和补丁检查通过；Pyright仍有4项既有路由快照分析问题，未将语法检查算作完整类型通过。
+
+首轮前9次取消后关闭通过，第10次初始页八秒未就绪（黑窗），原始失败在 `target/probes/native-close-attempts/ca91e775/`；另一次在窗口管理器就绪前退出，未启动产品。随后暴露的ChildProcessError来自探针提前waitpid，已按上述真实收养顺序修正。失败时的有界GDB选项已接通，但最终矩阵没有故障，未触发取栈。历史SIGSEGV仍未定位／未修复；启动黑窗也保留为未定位现象。
+
 ## 发布依赖阻断的升级边界核查
 
 沿原始 Rust 审计日志定位了8项许可拒绝：5项 `MPL-2.0`（cssparser、cssparser-macros、dtoa-short、option-ext、selectors）、2项 `0BSD`（doctest-file、recvmsg）及1项 `Apache-2.0 WITH LLVM-exception`（target-lexicon）。维持原 `deny.toml`；未把兼容性分析当作许可策略批准，实际发行内容及22项完整许可文本缺口也未闭合。

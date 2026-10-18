@@ -5,6 +5,11 @@ set -eu
 ulimit -c 0
 NATIVE_CLOSE_KIND=normal
 if [ "${PULSE_COLD_CLOSE_GDB:-0}" = 1 ]; then NATIVE_CLOSE_KIND=gdb; fi
+case "${PULSE_COLD_CLOSE_PHASE-settled}" in
+    settled) ;;
+    cancel-unobserved|pending-dialog) NATIVE_CLOSE_KIND="$NATIVE_CLOSE_KIND-$PULSE_COLD_CLOSE_PHASE" ;;
+    *) echo 'invalid owned close phase' >&2; exit 2 ;;
+esac
 for NATIVE_CLOSE_STATE in locked unlocked; do
     PULSE_SAVED_ALIAS=1 PULSE_SAVED_ALIAS_CASE= PULSE_SAVED_ALIAS_WARM=0 \
     PULSE_COLD_SSH_ROUTE=1 PULSE_COLD_SSH_AGENT=1 \

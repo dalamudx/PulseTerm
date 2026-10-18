@@ -845,7 +845,22 @@ run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features wo
 
 [tasks.probe-workspace-native-close]
 description = "Diagnose bounded locked/unlocked GUI cancellation-close cycles; exact exit0, zero authentication/signatures/writes and endpoint drain, optional owned gdb stacks"
-run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "sh scripts/probe-workspace-native-close.sh"]
+run = """
+set -eu
+mkdir -p /data/temp target/probes
+fixture_dir=$(mktemp -d /data/temp/pt-close.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)
+pnpm --filter ui exec vite build --outDir "$fixture_dir/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
+cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked
+export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
+export PULSE_SSH_FIXTURE_EXECUTABLE="$CARGO_TARGET_DIR/debug/xtask"
+sh scripts/probe-workspace-native-close.sh
+"""
 
 [tasks.audit]
 description = "Run both Rust and JavaScript audits; preserve failures and per-tool evidence"

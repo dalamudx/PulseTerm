@@ -179,7 +179,7 @@ mise run probe-workspace-cold-ssh-route # Linux冷password/Agent三peer已验：
 mise run probe-workspace-cold-split # Linux六模式已验：双明确确认、首步取消零PTY、次步取消/断连/换页保留首个、左右/上下双pane原文刷新同PID及native/端点退出；56份SHA见cold-split-acceptance.json
 mise run probe-workspace-cli-chain # Linux七链+六coldsplit兼容已验：整链预检、同实例各步确认、原页呈现ACK、失败保留前缀、双PTY原文刷新与退出；111份SHA见cli-chain-acceptance.json；默认1050Rust/1204前端、7忽略不计；清理20.5GiB，审计/历史关闭仍阻断
 mise run probe-workspace-saved-ssh-alias # Linux八模式功能验收：open --host精确保存入口/default身份、冷暖密码/Agent/三跳、同名/缺默认拒绝与原文刷新；305份SHA已归档，历史SIGSEGV/非零关闭仍待定位
-mise run probe-workspace-native-close # Linux累计88正常+8 GDB关闭观测、3项真实退出屏障通过，254份SHA保留前批129份；历史SIGSEGV未定位不计修复，默认各12轮，可选PULSE_COLD_CLOSE_CYCLES<=32／PULSE_COLD_CLOSE_GDB=1
+mise run probe-workspace-native-close # Linux累计88正常+8 GDB关闭观测、3项真实退出屏障通过，254份SHA保留前批129份；历史SIGSEGV未定位不计修复，新增72次（48次未决时序）正常，见native-close-pending-acceptance/962d5f04；默认各12轮，可选PULSE_COLD_CLOSE_CYCLES<=32／PULSE_COLD_CLOSE_GDB=1／PULSE_COLD_CLOSE_PHASE=cancel-unobserved或pending-dialog，失败取栈PULSE_COLD_CLOSE_FAILURE_GDB=1
 mise run probe-ssh-config # Host/Include/常见Match、7样本OpenSSH差分、Unix固定文件与显式Include集合/原实例源确认；不授予导入/身份读取/连接权限
 mise run probe-workspace-catalogue-batch # Linux真实三目录搜索/取消零写、一次CAS批量墓碑删除、Vault逻辑内容保持、刷新/进程重开及零启动
 mise run probe-ssh-config-page # 原页配置元数据/一次性源确认、旧票据/跨实例拒绝；取消后的真实阻塞I/O与退出屏障（Unix/可选SSH）

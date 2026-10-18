@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Production cold CLI saved-ID stimulus; unlock never substitutes for approval."""
 import ctypes
+from collections.abc import Callable
 import base64
 import hashlib
 import json
@@ -39,6 +40,11 @@ if scope_mode and (route_mode or agent_mode or interactive_mode or multiwindow_m
 if alias_case not in {"", "ambiguous", "missing-default"}: raise RuntimeError("invalid owned alias case")
 close_cycles = int(os.environ.get('PULSE_COLD_CLOSE_CYCLES', '0'))
 close_state = os.environ.get('PULSE_COLD_CLOSE_STATE', 'locked')
+close_phase = os.environ.get('PULSE_COLD_CLOSE_PHASE', 'settled')
+if close_phase not in {'settled', 'cancel-unobserved', 'pending-dialog'}:
+    raise RuntimeError('invalid owned close phase')
+if close_phase != 'settled' and not close_cycles:
+    raise RuntimeError('close phase requires bounded close cycles')
 if not 0 <= close_cycles <= 32 or close_state not in {'locked', 'unlocked'}:
     raise RuntimeError('invalid owned close diagnostic')
 if close_cycles and (alias_case or alias_warm): raise RuntimeError('close diagnostic cannot run alias cases')
@@ -218,6 +224,7 @@ def launch(tag):
     return app
 
 def client_result(tag, accepted):
+    assert client is not None, 'cold.cli_client_missing'
     output,error = client.communicate(timeout=30 if accepted else 10)
     (evidence / (prefix+'-'+tag+'-client.log')).write_text(output+error)
     assert (client.returncode == 0) == accepted
@@ -226,7 +233,25 @@ def client_result(tag, accepted):
     else:
         assert not output
 
-def close_gui(app):
+def capture_owned_close_failure():
+    for app in guis():
+        log = evidence/('native-close-'+close_state+'-'+close_phase+'-'+str(app)+'-failure.gdb.log')
+        with log.open('wb') as stream:
+            debugger = subprocess.Popen(['/usr/bin/gdb', '--batch', '--nx',
+                '-iex', 'set debuginfod enabled off', '-iex', 'set print frame-arguments none',
+                '-iex', 'set print thread-events off',
+                '-ex', 'echo OWNED_GUI_STACK_CAPTURE_BEGIN\\n',
+                '-ex', 'thread apply all bt 12', '-ex', 'info sharedlibrary',
+                '-ex', 'detach', '-ex', 'echo OWNED_GUI_STACK_CAPTURE_END\\n',
+                '-p', str(app)], env=env, stdin=subprocess.DEVNULL,
+                stdout=stream, stderr=subprocess.STDOUT)
+            diagnostic_children.append((debugger,stream))
+            try:
+                debugger.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                debugger.kill(); debugger.wait(timeout=5)
+
+def close_gui(app, before_reap: Callable[[], None] | None = None):
     if os.environ.get('PULSE_COLD_CLOSE_GDB') == '1':
         log = evidence/(prefix+'-gui-close-'+str(app)+'.gdb.log')
         stream = log.open('wb')
@@ -236,6 +261,9 @@ def close_gui(app):
         assert debugger.poll() is None, log.read_text(errors='replace')
     xdo("windowactivate", "--sync", xid)
     xdo("key", "--clearmodifiers", "alt+F4")
+    deadline = time.monotonic() + 12
+    if before_reap is not None:
+        before_reap()
     def exited():
         waited,status = os.waitpid(app,os.WNOHANG)
         if waited:
@@ -244,10 +272,11 @@ def close_gui(app):
             assert code == 0, ('gui_native_exit', app, code)
             return True
         return False
-    wait(exited,'gui_native_exit',12)
+    wait(exited,'gui_native_exit',max(0, deadline-time.monotonic()))
     assert not guis() and not (runtime/'control.sock').exists() and not (runtime/'control.token').exists()
 
 def unlock_without_confirming():
+    assert client is not None, 'cold.cli_client_missing'
     before = (auth_count(), signature_count())
     click('解锁保险库')
     wait(lambda: accessible('主密码').returncode == 0, 'master_password_field')
@@ -327,17 +356,28 @@ try:
         sys.exit(0)
     if close_cycles:
         cycle_receipts = []
-        diagnostic_kind = 'gdb' if os.environ.get('PULSE_COLD_CLOSE_GDB') == '1' else 'normal'
+        debugger_requested = os.environ.get('PULSE_COLD_CLOSE_GDB') == '1'
+        diagnostic_kind = 'gdb' if debugger_requested else 'normal'
+        if close_phase != 'settled': diagnostic_kind += '-' + close_phase
         receipt_path = evidence/('native-close-'+close_state+'-'+diagnostic_kind+'-result.json')
+        def save_close_receipt():
+            receipt_path.write_text(json.dumps({'version':1,'scope':'Linux actual owned GUI cancellation-close diagnostic','state':close_state,'close_phase':close_phase,'gdb_attached':debugger_requested,'planned_cycles':close_cycles,'completed_cycles':len(cycle_receipts),'passed':len(cycle_receipts)==close_cycles,'historical_sigsegv_resolved':False,'cycles':cycle_receipts},indent=2)+'\n')
+        save_close_receipt()
         for cycle in range(close_cycles):
             tag = 'native-close-'+close_state+'-'+diagnostic_kind+'-'+str(cycle+1)
             app = launch(tag)
             if close_state == 'unlocked': unlock_without_confirming()
-            click('取消'); client_result(tag, False)
-            assert quiet() and source_hashes() == initial
-            close_gui(app)
+            assert client is not None and client.poll() is None and quiet() and source_hashes() == initial
+            if close_phase == 'settled':
+                click('取消'); client_result(tag, False)
+                assert quiet() and source_hashes() == initial
+                close_gui(app)
+            else:
+                if close_phase == 'cancel-unobserved': click('取消')
+                close_gui(app, lambda: client_result(tag, False))
+                assert quiet() and source_hashes() == initial
             cycle_receipts.append({'cycle':cycle+1,'pid':app,'zero_auth_and_signatures':True,'source_hashes_unchanged':True,'gui_exit':0,'endpoints_drained':True})
-            receipt_path.write_text(json.dumps({'version':1,'scope':'Linux actual owned GUI cancellation-close diagnostic','state':close_state,'gdb_attached':diagnostic_kind=='gdb','planned_cycles':close_cycles,'completed_cycles':len(cycle_receipts),'passed':len(cycle_receipts)==close_cycles,'historical_sigsegv_resolved':False,'cycles':cycle_receipts},indent=2)+'\n')
+            save_close_receipt()
             print('workspace.native_close_cycle.'+tag+'.exit0_zero_auth_zero_write',flush=True)
         sys.exit(0)
     app = launch('cancel');click('取消');client_result('cancel',False)
@@ -426,6 +466,11 @@ try:
     print('workspace.cli_cold_ssh_unlock_distinct_click_target_approval_refresh_native_exit_confirmed')
 finally:
     if xid and guis():
+        if close_cycles and os.environ.get('PULSE_COLD_CLOSE_FAILURE_GDB') == '1':
+            try:
+                capture_owned_close_failure()
+            except (subprocess.TimeoutExpired, OSError):
+                pass # Stack capture failure must not bypass owned process cleanup.
         try:
             run(["/usr/bin/import","-window",xid,evidence/(prefix+"-failure.png")],check=False)
         except (subprocess.TimeoutExpired, OSError):
