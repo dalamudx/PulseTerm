@@ -140,6 +140,11 @@ export interface V2Sink {
   ready?(boundary: V2Boundary, signal: AbortSignal): Promise<void>;
   reset(boundary: V2Boundary, signal: AbortSignal): Promise<void>;
   write(bytes: Uint8Array, signal: AbortSignal): Promise<void>;
+  /** Optional bounded live-data batching; resolves only after the shared draw. */
+  writeBatch?(
+    chunks: readonly Uint8Array[],
+    signal: AbortSignal,
+  ): Promise<void>;
   repair?(
     boundary: V2Boundary,
     bytes: Uint8Array,
@@ -169,7 +174,7 @@ export class AttachmentV2Consumer {
   private readonly receiver: AttachmentV2Receiver;
   private readonly abort = new AbortController();
   private readonly queue: Job[] = [];
-  private active: Job | undefined;
+  private active: Job[] = [];
   private running = false;
   private frames = 0;
   private bytes = 0;
@@ -222,7 +227,7 @@ export class AttachmentV2Consumer {
   cancel(error = new Error("attach2.cancelled")) {
     if (this.abort.signal.aborted) return;
     this.abort.abort(error);
-    this.active?.reject(error);
+    for (const job of this.active) job.reject(error);
     for (const job of this.queue.splice(0)) {
       this.frames--;
       this.bytes -= job.wire.length;
@@ -267,7 +272,7 @@ export class AttachmentV2Consumer {
       while (!this.abort.signal.aborted) {
         const job = this.queue.shift();
         if (!job) break;
-        this.active = job;
+        this.active = [job];
         try {
           const receipt = this.receiver.accept(job.wire);
           if (receipt) {
@@ -279,6 +284,41 @@ export class AttachmentV2Consumer {
                 await this.wait(this.sink.write(e.history, s));
               await this.wait(this.sink.write(e.restore, s));
             } else if (e.kind === "data") {
+              if (this.sink.writeBatch) {
+                const receipts = [receipt],
+                  chunks = [e.bytes];
+                // Peek only to select adjacent live data. The receiver still
+                // validates every sequence, source/display cursor and envelope.
+                while (
+                  this.queue[0]?.wire[0] === 8 &&
+                  this.queue[0]?.wire[6] === 2 &&
+                  this.queue[0]?.wire[7] === 5 &&
+                  new DataView(this.queue[0].wire.buffer).getBigUint64(
+                    10,
+                    true,
+                  ) === receipt.generation
+                ) {
+                  const next = this.queue.shift();
+                  if (!next) break;
+                  this.active.push(next);
+                  const following = this.receiver.accept(next.wire);
+                  if (following?.event.kind !== "data")
+                    throw new Error("attach2.batch_data");
+                  receipts.push(following);
+                  chunks.push(following.event.bytes);
+                }
+                await this.wait(this.sink.writeBatch(chunks, s));
+                for (const [index, owned] of this.active.entries()) {
+                  const drawn = receipts[index];
+                  if (!drawn) throw new Error("attach2.batch_receipt");
+                  this.releaseWire(owned);
+                  await this.wait(
+                    Promise.resolve(this.ack(drawn.generation, drawn.sequence)),
+                  );
+                  owned.resolve(drawn);
+                }
+                continue;
+              }
               await this.wait(this.sink.write(e.bytes, s));
             } else if (e.kind === "repair") {
               if (!this.sink.repair)
@@ -308,8 +348,8 @@ export class AttachmentV2Consumer {
           job.reject(e);
           this.cancel(e);
         } finally {
-          this.releaseWire(job);
-          this.active = undefined;
+          for (const owned of this.active) this.releaseWire(owned);
+          this.active = [];
         }
       }
     } finally {

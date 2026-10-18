@@ -71,10 +71,12 @@ impl StartupAction {
                     .map_err(|_| Error)?;
             }
             "workspace.ssh" => {
-                if params
-                    .get("authentication")
-                    .is_some_and(|v| !matches!(v.as_str(), Some("interactive" | "key-interactive")))
-                {
+                if params.get("authentication").is_some_and(|v| {
+                    !matches!(
+                        v.as_str(),
+                        Some("interactive" | "key-interactive" | "agent-interactive")
+                    )
+                }) {
                     return Err(Error);
                 }
                 for key in ["host", "identity"] {

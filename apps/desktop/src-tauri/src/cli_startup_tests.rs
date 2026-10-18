@@ -33,6 +33,21 @@ fn saved_alias_closed_roundtrip_rejects_mixed_ids_unbounded_or_invisible_names()
     Ok(())
 }
 #[test]
+fn agent_joint_cold_metadata_is_closed_and_roundtrips() -> Result<(), Error> {
+    let params = json!({"host":HOST,"identity":IDENTITY,"authentication":"agent-interactive"});
+    let action = StartupAction::new("workspace.ssh", &params)?;
+    let restored = StartupAction::parse(&action.encode()?)?;
+    assert_eq!(restored.params(), params.as_object().ok_or(Error)?);
+    for params in [
+        json!({"alias":"Saved","authentication":"agent-interactive"}),
+        json!({"host":HOST,"identity":IDENTITY,"authentication":"agent-interactive","agent":true}),
+        json!({"host":HOST,"identity":IDENTITY,"authentication":"agent-interactive","answers":[]}),
+    ] {
+        assert!(StartupAction::new("workspace.ssh", &params).is_err());
+    }
+    Ok(())
+}
+#[test]
 fn closed_actions_roundtrip_without_changing_correlation() -> Result<(), Error> {
     for (method, params) in [
         ("workspace.focus", json!({})),

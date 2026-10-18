@@ -19,6 +19,7 @@ struct Entry {
     input_enabled: std::sync::atomic::AtomicBool,
     input_displayed: std::sync::atomic::AtomicBool,
     resize_started: std::sync::atomic::AtomicBool,
+    completed: std::sync::atomic::AtomicBool,
     admission: Mutex<()>,
     input_credit: Arc<Semaphore>,
     binding: Arc<TerminalViewBinding>,
@@ -104,9 +105,14 @@ impl TerminalBank {
             .clone()
             .try_acquire_owned()
             .map_err(|_| "workspace.busy")?;
-        let view = TerminalViewBinding::attach_v2(registry, page, id, AttachmentConfig::default())
-            .await
-            .map_err(|_| "workspace.denied")?;
+        let view = TerminalViewBinding::attach_v2_retaining_ended(
+            registry,
+            page,
+            id,
+            AttachmentConfig::default(),
+        )
+        .await
+        .map_err(|_| "workspace.denied")?;
         let capture = view
             .captured_palette()
             .map_err(|_| "workspace.denied")?
@@ -129,6 +135,7 @@ impl TerminalBank {
             input_enabled: std::sync::atomic::AtomicBool::new(false),
             input_displayed: std::sync::atomic::AtomicBool::new(false),
             resize_started: std::sync::atomic::AtomicBool::new(false),
+            completed: std::sync::atomic::AtomicBool::new(false),
             admission: Mutex::new(()),
             input_credit: Arc::new(Semaphore::new(1)),
             binding,
@@ -180,23 +187,43 @@ impl TerminalBank {
                 .forward(|bytes| channel.send(RawFrame(bytes)).is_ok())
                 .await
                 .map_err(|_| ())?;
-            if receipt.boundary.lifecycle == pulse_term::session::Lifecycle::Ended {
+            let ended = receipt.boundary.lifecycle == pulse_term::session::Lifecycle::Ended;
+            if ended {
                 eprintln!("workspace.terminal_eof_acked");
             }
-            Ok::<_, ()>(())
+            Ok::<_, ()>(ended)
         };
-        tokio::select! {
+        let completed = tokio::select! {
             biased;
-            _ = async { if !*cancelled.borrow_and_update() { let _ = cancelled.changed().await; } } => {},
-            _ = work => {},
-        }
-        // Dropping work revokes only this generation, including unpolled delivery.
-        if let Ok(mut entries) = self.entries.lock() {
+            _ = async { if !*cancelled.borrow_and_update() { let _ = cancelled.changed().await; } } => false,
+            result = work => result.unwrap_or(false),
+        };
+        if completed {
+            // Keep only the bounded source-fixed control. No forwarding task or native
+            // lease survives End ACK; ordinary operations reject this completed entry.
+            if let Ok(_admission) = entry.admission.lock() {
+                entry
+                    .input_enabled
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                entry
+                    .completed
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            } else if let Ok(mut entries) = self.entries.lock() {
+                entries.remove(&ticket);
+            }
+        } else if let Ok(mut entries) = self.entries.lock() {
             entries.remove(&ticket);
         }
-        drop(entry); // No reservation release before actual forwarding exits.
+        drop(entry); // Retained entries remain charged until explicit view/page retirement.
     }
     fn entry(&self, nonce: Uuid, ticket: Uuid) -> Result<Arc<Entry>> {
+        let entry = self.retained_entry(nonce, ticket)?;
+        if entry.completed.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("workspace.denied");
+        }
+        Ok(entry)
+    }
+    fn retained_entry(&self, nonce: Uuid, ticket: Uuid) -> Result<Arc<Entry>> {
         let entry = self
             .entries
             .lock()
@@ -300,6 +327,9 @@ impl TerminalBank {
             .admission
             .lock()
             .map_err(|_| "workspace.unavailable")?;
+        if entry.completed.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("workspace.denied");
+        }
         if entry
             .resize_started
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -337,6 +367,9 @@ impl TerminalBank {
                 .admission
                 .lock()
                 .map_err(|_| "workspace.unavailable")?;
+            if entry.completed.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("workspace.denied");
+            }
             if entry
                 .resize_started
                 .load(std::sync::atomic::Ordering::SeqCst)
@@ -392,6 +425,9 @@ impl TerminalBank {
                 .admission
                 .lock()
                 .map_err(|_| "workspace.unavailable")?;
+            if entry.completed.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("workspace.denied");
+            }
             if entry
                 .resize_started
                 .swap(true, std::sync::atomic::Ordering::SeqCst)
@@ -427,7 +463,7 @@ impl TerminalBank {
             .map_err(|_| "workspace.denied")
     }
     fn detach(&self, nonce: Uuid, ticket: Uuid) -> Result<()> {
-        let entry = self.entry(nonce, ticket)?;
+        let entry = self.retained_entry(nonce, ticket)?;
         entry.cancel.send_replace(true);
         self.entries
             .lock()

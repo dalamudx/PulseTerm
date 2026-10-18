@@ -1,5 +1,7 @@
 //! Permission checks only; real peer and signing evidence comes from the window probe.
 use super::*;
+#[path = "vault_agent_route_joint_tests.rs"]
+mod joint;
 use crate::vault_owner::RouteHopGesture;
 use pulse_store::{ssh_profiles::ProfileEdit, ssh_route_source::SshRouteIdentity};
 
@@ -78,6 +80,7 @@ fn agent_route_intermediate_cannot_open_terminal_cancel_keeps_slot_and_reunlock_
                 Arc::new(|| true),
             )
             .await?;
+        joint::check(&f, agent, &source).await?;
         let original = || {
             f.owner.begin_routed_session_gesture_authorized(
                 f.page.scope.clone(),

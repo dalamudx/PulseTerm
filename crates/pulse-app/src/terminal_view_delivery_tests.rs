@@ -134,3 +134,122 @@ async fn admitted_sends_never_supply_ack_credit_or_hide_ack_timeout() -> TestRes
     assert_eq!(f.h.state.borrow().lifecycle, Lifecycle::Running);
     f.finish().await
 }
+
+async fn retaining_delivery(
+    f: &Fixture,
+) -> Result<TerminalViewDelivery, Box<dyn std::error::Error>> {
+    Ok(TerminalViewDelivery::new(
+        TerminalViewBinding::attach_v2_retaining_ended(
+            &f.r,
+            f.page.clone(),
+            f.id,
+            AttachmentConfig::default(),
+        )
+        .await?,
+    )?)
+}
+#[tokio::test]
+async fn retaining_ended_request_still_revokes_on_drop_or_failed_send() -> TestResult {
+    for fail_send in [false, true] {
+        let f = Fixture::new()?;
+        let delivery = retaining_delivery(&f).await?;
+        let control = delivery.binding();
+        if fail_send {
+            let result = timeout(Duration::from_secs(2), delivery.forward(|_| false)).await?;
+            assert!(matches!(result, Err(TerminalDeliveryError::Send)));
+        } else {
+            drop(delivery.forward(|_| true));
+        }
+        assert!(control.check_current().is_err());
+        assert_eq!(f.h.state.borrow().lifecycle, Lifecycle::Running);
+        f.finish().await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn retaining_ended_request_cancelled_while_active_revokes_control() -> TestResult {
+    let f = Fixture::new()?;
+    let delivery = retaining_delivery(&f).await?;
+    let control = delivery.binding();
+    let (sent, entered) = tokio::sync::oneshot::channel();
+    let mut sent = Some(sent);
+    let task = tokio::spawn(delivery.forward(move |_| {
+        if let Some(sent) = sent.take() {
+            let _ = sent.send(());
+        }
+        true
+    }));
+    timeout(Duration::from_secs(2), entered).await??;
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    assert!(control.check_current().is_err());
+    assert_eq!(f.h.state.borrow().lifecycle, Lifecycle::Running);
+    f.finish().await
+}
+
+#[tokio::test]
+async fn completed_delivery_retains_read_scope_only_when_capture_explicitly_opts_in() -> TestResult
+{
+    for retain in [false, true] {
+        let f = Fixture::new()?;
+        let delivery = if retain {
+            retaining_delivery(&f).await?
+        } else {
+            TerminalViewDelivery::new(f.attach().await?)?
+        };
+        let control = delivery.binding();
+        f.driver.output.send(b"EOF needle".to_vec()).await?;
+        drop(f.driver.output);
+        assert_eq!(
+            f.task.join_with_receipt().await?.state.lifecycle,
+            Lifecycle::Ended
+        );
+        let receipt = timeout(
+            Duration::from_secs(2),
+            delivery.forward(|wire| {
+                let frame = pulse_ipc::decode(&wire).unwrap();
+                control.acknowledge(frame.sequence).unwrap();
+                true
+            }),
+        )
+        .await??;
+        assert_eq!(receipt.boundary.lifecycle, Lifecycle::Ended);
+        assert_eq!(control.check_current().is_ok(), retain);
+        if retain {
+            assert!(control.wait_bootstrap_ready().await.is_err());
+            assert!(control.input(b"never".to_vec()).await.is_err());
+            assert!(control.resize(TermSize::new(40, 10)?).await.is_err());
+            let request = pulse_term::HistorySearchRequest {
+                query: "EOF needle".into(),
+                match_case: false,
+                regex: false,
+                whole_word: false,
+                backwards: false,
+                alternate: false,
+                cursor: None,
+                revision: None,
+            };
+            assert!(
+                f.r.history_search(&f.page, f.id, request.clone())
+                    .await?
+                    .matched_row
+                    .is_some()
+            );
+            let replacement = f.r.activate_launch_page(f.owner)?;
+            assert!(control.check_current().is_err());
+            assert!(
+                f.r.history_search(&f.page, f.id, request.clone())
+                    .await
+                    .is_err()
+            );
+            assert!(
+                f.r.history_search(&replacement, f.id, request)
+                    .await
+                    .is_err()
+            );
+        }
+        f.r.close_window(f.owner)?;
+    }
+    Ok(())
+}

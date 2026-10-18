@@ -129,15 +129,24 @@ impl NativeWatcher {
         )
     }
     pub(crate) async fn sample(&self, window: WebviewWindow) -> Result<NativeVisibilitySample> {
+        self.sample_read(move || {
+            window
+                .is_visible()
+                .and_then(|v| window.is_minimized().map(|m| (v, m)))
+                .ok()
+        })
+        .await
+    }
+    async fn sample_read(
+        &self,
+        read: impl FnOnce() -> Option<(bool, bool)> + Send + 'static,
+    ) -> Result<NativeVisibilitySample> {
         let _sampling = self.sampling.lock().await;
-        let state = self
-            .query(move || {
-                window
-                    .is_visible()
-                    .and_then(|v| window.is_minimized().map(|m| (v, m)))
-                    .ok()
-            })
-            .await?;
+        let state = match self.query(read).await {
+            Ok(state) => state,
+            Err(error) if error == "native.busy" => None,
+            Err(error) => return Err(error),
+        };
         self.commit(state)?;
         self.ledger
             .lock()
@@ -198,7 +207,8 @@ impl NativeWatcher {
                         continue;
                     }
                     last_emitted = sample.revision;
-                    if !emit(&window, &sample) || !sample.valid {
+                    // Invalid samples revoke views, but later event-hinted reads can recover.
+                    if !emit(&window, &sample) {
                         observer.close();
                         return;
                     }
@@ -275,6 +285,38 @@ mod tests {
             w.commit(Some((true, true)))
                 .is_ok_and(|s| s.is_some_and(|s| s.revision == 2 && s.minimized))
         );
+    }
+    #[tokio::test]
+    async fn failed_or_busy_sample_keeps_window_available_for_a_fresh_read() {
+        let w = NativeWatcher::new();
+        let Ok(unknown) = w.sample_read(|| None).await else {
+            panic!("a failed native read must publish an unknown projection");
+        };
+        assert!(!unknown.valid && !unknown.visible && !unknown.minimized);
+        assert!(!w.closed());
+        let Ok(permit) = w.query.clone().try_acquire_owned() else {
+            panic!("failed native read must release its own capacity");
+        };
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = called.clone();
+        let busy = w
+            .sample_read(move || {
+                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                Some((true, false))
+            })
+            .await;
+        assert!(busy.is_ok_and(|sample| !sample.valid && sample.revision == unknown.revision));
+        assert!(!called.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!w.closed());
+        drop(permit);
+        let Ok(recovered) = w.sample_read(|| Some((true, false))).await else {
+            panic!("a new native read must remain possible after temporary failure");
+        };
+        assert!(recovered.valid && recovered.visible && !recovered.minimized);
+        assert_eq!(recovered.incarnation, unknown.incarnation);
+        assert!(recovered.revision > unknown.revision);
+        w.close();
+        assert!(w.sample_read(|| Some((true, false))).await.is_err());
     }
     #[test]
     fn close_rejects_late_results_and_does_not_reopen_old_incarnation() {

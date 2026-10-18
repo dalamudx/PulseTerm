@@ -1,4 +1,8 @@
 export const connectionEnglish = {
+  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\nAgent + MFA（两种因素均须成功）":
+    "{0} · {1}:{2}\n{3} · {4}\nHost {5}\nIdentity {6}\nAgent + MFA (both factors must succeed)",
+  "主机 {0}\n身份 {1}\n认证方式：Agent + MFA（两种因素均须成功）":
+    "Host {0}\nIdentity {1}\nAuthentication: Agent + MFA (both factors must succeed)",
   "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n私钥 + MFA（两种因素均须成功）":
     "{0} · {1}:{2}\n{3} · {4}\nHost {5}\nIdentity {6}\nPrivate key + MFA (both factors must succeed)",
   "主机 {0}\n身份 {1}\n认证方式：私钥 + MFA（两种因素均须成功）":
@@ -6,6 +10,8 @@ export const connectionEnglish = {
   "{0} · {1} · 私钥 + MFA（直连）": "{0} · {1} · Private key + MFA (direct)",
   保存的密码: "Saved password",
   保存的私钥: "Saved private key",
+  "保存的 Agent": "Saved Agent",
+  "Agent + MFA": "Agent + MFA",
   "私钥 + MFA": "Private key + MFA",
   "{0} · {1} · 私钥 + MFA": "{0} · {1} · Private key + MFA",
   "{0} · {1} · Agent + MFA": "{0} · {1} · Agent + MFA",

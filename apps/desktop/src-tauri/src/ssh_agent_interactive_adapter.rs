@@ -32,6 +32,9 @@ impl JointSessionSink {
     pub(crate) fn set_palette(&mut self, config: pulse_app::TerminalStartConfig) {
         self.inner.set_palette(config);
     }
+    pub(crate) fn attach_parents(&mut self, parents: pulse_ssh::peer::RouteTransports) {
+        self.inner.attach_parents(parents);
+    }
     pub(crate) fn observe_native_admission(&self) -> Guard {
         self.inner.observe_native_admission()
     }

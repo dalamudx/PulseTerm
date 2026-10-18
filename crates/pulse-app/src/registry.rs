@@ -734,7 +734,8 @@ impl SessionRegistry {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<RegisteredAttachment, RegistryError> {
-        self.attach_version(owner, id, config, false, None).await
+        self.attach_version(owner, id, config, false, None, false)
+            .await
     }
     /// Explicit dual-coordinate codec; identical trusted-owner and generation admission.
     pub async fn attach_v2(
@@ -743,7 +744,8 @@ impl SessionRegistry {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<RegisteredAttachment, RegistryError> {
-        self.attach_version(owner, id, config, true, None).await
+        self.attach_version(owner, id, config, true, None, false)
+            .await
     }
     /// Product-document capture: check the backend page scope before admission and
     /// atomically with binding installation after capture. Not a frontend capability.
@@ -753,7 +755,7 @@ impl SessionRegistry {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<RegisteredAttachment, RegistryError> {
-        self.attach_version(page.owner, id, config, false, Some(page))
+        self.attach_version(page.owner, id, config, false, Some(page), false)
             .await
     }
     /// Dual-coordinate version of `attach_page`; does not accept a page-supplied owner.
@@ -763,7 +765,16 @@ impl SessionRegistry {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<RegisteredAttachment, RegistryError> {
-        self.attach_version(page.owner, id, config, true, Some(page))
+        self.attach_version(page.owner, id, config, true, Some(page), false)
+            .await
+    }
+    pub(crate) async fn attach_page_v2_retaining_ended(
+        &self,
+        page: &PageLaunchScope,
+        id: SessionId,
+        config: AttachmentConfig,
+    ) -> Result<RegisteredAttachment, RegistryError> {
+        self.attach_version(page.owner, id, config, true, Some(page), true)
             .await
     }
     async fn attach_version(
@@ -773,6 +784,7 @@ impl SessionRegistry {
         config: AttachmentConfig,
         v2: bool,
         page: Option<&PageLaunchScope>,
+        retain_ended: bool,
     ) -> Result<RegisteredAttachment, RegistryError> {
         let entry = {
             let state = self.lock()?;
@@ -845,6 +857,10 @@ impl SessionRegistry {
                     .bindings
                     .get(&id)
                     .is_some_and(|b| b.generation == generation)
+                && !(retain_ended
+                    && result.as_ref().is_ok_and(|r| {
+                        r.boundary.lifecycle == pulse_term::session::Lifecycle::Ended
+                    }))
             {
                 state.bindings.remove(&id);
             }

@@ -27,8 +27,8 @@ pub use agent::{
     AgentForwardSink, AgentSessionAction, AgentSessionGesture, AgentSessionIntent, AgentSessionSink,
 };
 pub use agent_interactive::{
-    AgentInteractiveSessionAction, AgentInteractiveSessionGesture, AgentInteractiveSessionIntent,
-    AgentInteractiveSessionSink,
+    AgentInteractiveForwardSink, AgentInteractiveSessionAction, AgentInteractiveSessionGesture,
+    AgentInteractiveSessionIntent, AgentInteractiveSessionSink,
 };
 
 #[path = "vault_interactive_session.rs"]

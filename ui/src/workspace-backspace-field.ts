@@ -40,9 +40,19 @@ export function backspaceField(options: {
   const save = doc.createElement("button");
   save.type = "submit";
   uiText(save, "保存");
+  uiAttribute(
+    save,
+    "aria-label",
+    message("保存{0}", message("Backspace 发送")),
+  );
   const reset = doc.createElement("button");
   reset.type = "button";
   uiText(reset, "恢复继承");
+  uiAttribute(
+    reset,
+    "aria-label",
+    message("{0}恢复继承", message("Backspace 发送")),
+  );
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (

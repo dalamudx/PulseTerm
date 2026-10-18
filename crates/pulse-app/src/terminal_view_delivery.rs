@@ -33,6 +33,8 @@ pub enum TerminalDeliveryError {
 pub struct TerminalViewDelivery {
     binding: Arc<TerminalViewBinding>,
     transport: Option<RegisteredAttachment>,
+    detach_on_drop: bool,
+    retain_ended: bool,
 }
 impl TerminalViewDelivery {
     /// Consume the opaque capture without permitting a caller to replace its source.
@@ -44,6 +46,8 @@ impl TerminalViewDelivery {
         Ok(Self {
             binding: Arc::new(view.binding),
             transport: Some(view.transport),
+            detach_on_drop: true,
+            retain_ended: view.retain_ended,
         })
     }
     /// Native adapters must authenticate window, origin and nonce before using
@@ -75,18 +79,26 @@ impl TerminalViewDelivery {
                 return Err(TerminalDeliveryError::Send);
             }
         }
-        transport
+        let receipt = transport
             .completion
             .await
             .map_err(|_| TerminalDeliveryError::Supervisor)?
-            .map_err(TerminalDeliveryError::Attachment)
+            .map_err(TerminalDeliveryError::Attachment)?;
+        if self.retain_ended && receipt.boundary.lifecycle == pulse_term::session::Lifecycle::Ended
+        {
+            self.binding.check_current()?;
+            self.detach_on_drop = false;
+        }
+        Ok(receipt)
     }
 }
 impl Drop for TerminalViewDelivery {
     fn drop(&mut self) {
-        let binding = &self.binding;
-        let _ = binding
-            .registry
-            .detach_page(&binding.page, binding.id, binding.generation);
+        if self.detach_on_drop {
+            let binding = &self.binding;
+            let _ = binding
+                .registry
+                .detach_page(&binding.page, binding.id, binding.generation);
+        }
     }
 }

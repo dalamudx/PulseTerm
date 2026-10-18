@@ -18,11 +18,11 @@ settings-probe = ["desktop", "dep:pulse-store", "dep:tempfile"]
 cli-window-probe = ["desktop", "dep:tempfile", "dep:zeroize", "tokio/io-util", "tokio/process"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
 # A distinct, native-only workspace entry. No validation command table is registered.
-workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep:gtk"]
+workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep:gtk", "dep:tokio-util", "dep:zeroize"]
 # Opt-in Linux CLI; single-instance/startup foundation never enters default/probe builds.
-workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tokio-util", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix"]
+workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix"]
 # Opt-in saved-host/identity SSH trust and supervised session entry; default stays network-free.
-workspace-ssh = ["workspace", "dep:pulse-ssh", "dep:russh", "dep:pkcs8", "dep:zeroize", "pulse-ssh/managed-store", "pulse-store/ssh-trust", "pulse-app/ssh-use"]
+workspace-ssh = ["workspace", "dep:pulse-ssh", "dep:russh", "dep:pkcs8", "pulse-ssh/managed-store", "pulse-store/ssh-trust", "pulse-app/ssh-use"]
 # Fixed public-canvas observer only; never part of default or production builds.
 validation-probe-webgl = ["workspace"]
 

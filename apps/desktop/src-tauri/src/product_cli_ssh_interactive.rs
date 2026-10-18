@@ -11,6 +11,7 @@ use uuid::Uuid;
 pub(super) enum Gesture {
     Interactive(InteractiveSessionGesture),
     PrivateKey(pulse_app::vault_owner::PrivateKeyInteractiveSessionGesture),
+    Agent(pulse_app::vault_owner::AgentInteractiveSessionGesture),
 }
 pub(super) fn begin(
     window: WebviewWindow,
@@ -40,6 +41,14 @@ pub(super) fn begin(
             broker,
         ),
         Gesture::PrivateKey(gesture) => requests.begin_key_interactive_gesture(
+            page.clone(),
+            selected.0,
+            selected.1,
+            vault,
+            gesture,
+            broker,
+        ),
+        Gesture::Agent(gesture) => requests.begin_agent_interactive_gesture(
             page.clone(),
             selected.0,
             selected.1,

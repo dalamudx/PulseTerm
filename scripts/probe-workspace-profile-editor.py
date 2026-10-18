@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Actual Linux WebView Profile editing, immutable session appearance and native options."""
-import hashlib
+import runpy
 import json
 import os
 from pathlib import Path
@@ -11,6 +11,9 @@ import sys
 import time
 
 fixture = Path(sys.argv[1])
+binaries = Path(os.environ.get('CARGO_TARGET_DIR', 'target')) / 'debug'
+(fixture/'settings-query.py').write_text(runpy.run_path(str(Path(__file__).with_name('probe-workspace-settings-contract.py')))['QUERY'])
+global_document = (Path(os.environ['XDG_CONFIG_HOME'])/'dev.pulseterm.workspace-preview/settings.toml').read_bytes()
 evidence = Path('target/probes')
 app = None
 xid = ''
@@ -64,6 +67,40 @@ def fill(label, value):
     key('ctrl+a')
     run(['/usr/bin/xdotool', 'type', '--clearmodifiers', '--delay', '4', value])
 
+def select_option(caption, index):
+    reveal(caption, 'focus')
+    key('space')
+    def expanded(value):
+        found = run([str(evidence/'x11-status'), str(app.pid), caption, 'inspect-combo'], check=False)
+        return found.returncode == 0 and f'expanded={value}'.encode() in found.stdout
+    wait(lambda: expanded(1), 'expanded_' + caption)
+    key('Home')
+    for _ in range(index): key('Down')
+    key('Return')
+    wait(lambda: expanded(0), 'committed_' + caption)
+
+def query(tag, pid, keys=None):
+    base = fixture / (tag + '-' + str(pid))
+    run(['/usr/bin/xdotool', 'mousemove', '--window', xid, '400', '300', 'click', '1'])
+    run(['/usr/bin/xdotool', 'type', '--clearmodifiers', '--delay', '1', tag])
+    key('Return')
+    if keys:
+        wait(base.with_suffix('.ready').exists, 'raw_' + tag)
+        key(*keys)
+    receipt = None
+    def read():
+        nonlocal receipt
+        try: receipt = json.loads(base.with_suffix('.json').read_text())
+        except (FileNotFoundError, json.JSONDecodeError): return False
+        return True
+    wait(read, tag)
+    return bytes.fromhex(receipt['hex'])
+
+def verify_scope(marker, pid, overridden):
+    assert query('ALPHA_KEYS_' + marker, pid, ['BackSpace', 'Delete']) == (b'\x08\x7f' if overridden else b'\x7f\x1b[3~')
+    color = query('ALPHA_COLORS_' + marker, pid)
+    assert (b'rgb:e2e2/e8e8/f0f0' if overridden else b'rgb:ffff/ffff/ffff') in color
+
 def database():
     files = list((fixture/'data').rglob('state.db'))
     if len(files) != 1:
@@ -85,7 +122,7 @@ def other_tables():
             rows = db.execute(f'SELECT * FROM "{quoted}"').fetchall()
             if table == 'app_state':
                 rows = [r for r in rows if not r[0].startswith('profiles.editor.') and r[0] != 'profiles.default.unix.v1']
-            result[table] = hashlib.sha256(repr(sorted(rows, key=repr)).encode()).hexdigest()
+            result[table] = sorted(rows, key=repr)
         return result
 
 def launch():
@@ -93,7 +130,7 @@ def launch():
     phase += 1
     log = evidence/f'workspace-profile-editor-{phase}-native.log'
     with log.open('wb') as output:
-        app = subprocess.Popen(['target/debug/pulseterm-workspace'], stdout=output, stderr=output)
+        app = subprocess.Popen([str(binaries/'pulseterm-workspace')], stdout=output, stderr=output)
     process = app
     wait(lambda: count('sessions_listed') == 1, 'first_page')
     def window():
@@ -163,6 +200,7 @@ try:
     children = pids(); first = children[0]
     wait(lambda: size(first)[1] > 80,'initial_layout')
     original_size = size(first)
+    verify_scope('GLOBAL', first, False)
     checks.append(stage)
     stage = 'invalid_reserved_environment_is_rejected_without_write'
     edit(); click('添加环境变量'); fill('环境变量 1 名称','PULSE_SOCKET'); fill('环境变量 1 值','caller')
@@ -175,11 +213,19 @@ try:
     fill('工作目录（留空继承；填写绝对路径）',str(fixture/'work'))
     click('添加环境变量'); fill('环境变量 1 名称','PROFILE_VALUE'); fill('环境变量 1 值','exact = value')
     click('添加环境变量'); fill('环境变量 2 名称','EDITOR_REMOVE'); click('环境变量 2 移除继承值')
-    fill('字体大小（留空继承；6–72）','18'); screenshot('workspace-profile-editor-form.png'); save()
+    fill('字体大小（留空继承；6–72）','18')
+    select_option('Backspace 发送编码', 2)
+    select_option('Delete 发送编码', 2)
+    select_option('终端配色', 2)
+    screenshot('workspace-profile-editor-form.png'); save()
     saved = editor_record()
     assert saved['config']['args'] == [' ; $(literal) ',''] and saved['config']['envRemove'] == ['EDITOR_REMOVE']
     assert saved['config']['appearance']['fontSize'] == 18
     assert pids() == children and count('session_opened') == 1 and size(first) == original_size
+    assert saved['config']['appearance']['backspaceSend'] == 'bs'
+    assert saved['config']['appearance']['deleteSend'] == 'del'
+    assert saved['config']['appearance']['colorPreset'] == 'midnight'
+    verify_scope('OLD_AFTER_SAVE', first, False)
     checks.append(stage)
     stage = 'new_native_session_exact_bytes_and_larger_font_geometry'
     click('POSIX sh'); wait(lambda: count('terminal_input_ready') == 2 and len(pids()) == 2,'configured_terminal')
@@ -189,11 +235,13 @@ try:
     assert (fixture/f'receipt.{second}').read_bytes() == expected
     wait(lambda: 0 < size(second)[1] < original_size[1],'font_geometry')
     configured_size = size(second)
+    verify_scope('NEW_GUI', second, True)
     screenshot('workspace-profile-editor-terminal.png')
     checks.append(stage)
     stage = 'refresh_keeps_same_native_and_appearance_snapshot'
     refresh(); wait(lambda: count('terminal_input_ready') == 3,'configured_recapture')
     assert pids() == children and editor_record() == saved and size(second) == configured_size
+    verify_scope('REFRESH', second, True)
     edit(); fill('字体大小（留空继承；6–72）','13'); save()
     assert pids() == children and size(second) == configured_size and editor_record()['revision'] > saved['revision']
     checks.append(stage)
@@ -208,9 +256,48 @@ try:
     children = pids(); third = children[2]
     assert (fixture/f'receipt.{third}').read_bytes() == expected
     wait(lambda: size(third) == original_size,'restored_font_geometry')
+    verify_scope('REOPEN', third, True)
+    checks.append(stage)
+    stage = 'cli_inherits_explicit_profile_override_only_after_original_window_approval'
+    ready = count('terminal_input_ready')
+    with subprocess.Popen([str(binaries/'pulse'), 'new-tab', 'sh'], stdout=subprocess.PIPE, stderr=subprocess.PIPE) as client:
+        try:
+            wait(lambda: accessible('创建终端') or client.poll() is not None, 'cli_confirm')
+            assert client.poll() is None and pids() == children
+            click('创建终端')
+            stdout, stderr = client.communicate(timeout=10)
+            assert client.returncode == 0, stderr.decode(errors='replace')
+        finally:
+            if client.poll() is None:
+                client.terminate(); client.wait(timeout=3)
+    wait(lambda: count('terminal_input_ready') > ready and len(pids()) == 4, 'cli_profile')
+    children = pids()
+    assert (fixture/f'receipt.{children[-1]}').read_bytes() == expected
+    verify_scope('CLI_SCOPE', children[-1], True)
     assert other_tables() == original
+    assert (Path(os.environ['XDG_CONFIG_HOME'])/'dev.pulseterm.workspace-preview/settings.toml').read_bytes() == global_document
+    checks.append(stage)
+    stage = 'clearing_profile_overrides_restores_global_only_for_new_sessions'
+    edit()
+    select_option('Backspace 发送编码', 0)
+    select_option('Delete 发送编码', 0)
+    select_option('终端配色', 0)
+    save()
+    latest = editor_record()
+    for field in ['backspaceSend', 'deleteSend', 'colorPreset']:
+        assert latest['config']['appearance'].get(field) is None
+    assert pids() == children
+    verify_scope('CLI_FROZEN_AFTER_CLEAR', children[-1], True)
+    ready = count('terminal_input_ready')
+    click('POSIX sh')
+    wait(lambda: count('terminal_input_ready') > ready and len(pids()) == 5, 'restored_inheritance')
+    children = pids()
+    verify_scope('RESTORED_INHERITANCE', children[-1], False)
+    assert (fixture/f'receipt.{children[-1]}').read_bytes() == expected
+    assert other_tables() == original
+    assert (Path(os.environ['XDG_CONFIG_HOME'])/'dev.pulseterm.workspace-preview/settings.toml').read_bytes() == global_document
     close_app(); checks.append(stage)
-    (evidence/'workspace-profile-editor-result.json').write_text(json.dumps({'checks':checks,'literal_native_bytes':len(expected),'original_size':original_size,'configured_size':configured_size,'record_revision':latest['revision'],'other_tables':original},indent=2)+'\n')
+    (evidence/'workspace-profile-editor-result.json').write_text(json.dumps({'version':2,'checks':checks,'literal_native_bytes':len(expected),'original_size':original_size,'configured_size':configured_size,'record_revision':latest['revision'],'otherTablesUnchanged':True,'globalSettingsUnchanged':True,'profileKeyAndForegroundScope':True,'nativeStarts':len(pids()),'nativeExitConfirmed':True},indent=2)+chr(10))
     print('workspace.profile_editor_cancel_navigation_bounds_save_no_launch_literal_native_options_appearance_refresh_reopen_native_exit_confirmed')
 except BaseException as error:
     (evidence/'workspace-profile-editor-failure.json').write_text(json.dumps({'stage':stage,'error':str(error),'checks':checks},indent=2)+'\n')

@@ -169,10 +169,6 @@ export class WorkspaceSshDialog {
   private applyProfile(): void {
     const host = this.hosts.find((h) => h.id === this.options.host.value),
       profile = host?.profile;
-    for (const option of this.options.identity.options) {
-      if (option.value.startsWith("agent-joint:"))
-        option.disabled = !!this.temporary || !!profile?.via;
-    }
     if (!profile) return;
     const id = profile.identityId;
     const choices = id
@@ -370,7 +366,6 @@ export class WorkspaceSshDialog {
         firstAgent ??= option.value;
         const joint = doc.createElement("option");
         joint.value = `agent-joint:${identity.id}`;
-        joint.disabled = !!this.temporary;
         uiText(
           joint,
           message("{0} · {1} · Agent + MFA", identity.label, identity.username),
@@ -486,7 +481,11 @@ export class WorkspaceSshDialog {
     );
     let method: HTMLSelectElement | undefined;
     const label = this.options.dialog.ownerDocument.createElement("label");
-    if (prompt.interactiveAvailable || prompt.keyInteractiveAvailable) {
+    if (
+      prompt.interactiveAvailable ||
+      prompt.keyInteractiveAvailable ||
+      prompt.agentInteractiveAvailable
+    ) {
       const doc = label.ownerDocument,
         caption = doc.createElement("span");
       method = doc.createElement("select");
@@ -497,25 +496,41 @@ export class WorkspaceSshDialog {
       saved.value = "saved";
       uiText(
         saved,
-        prompt.keyInteractiveAvailable ? "保存的私钥" : "保存的密码",
+        prompt.agentInteractiveAvailable
+          ? "保存的 Agent"
+          : prompt.keyInteractiveAvailable
+            ? "保存的私钥"
+            : "保存的密码",
       );
-      mfa.value = prompt.keyInteractiveAvailable
-        ? "key-interactive"
-        : "interactive";
+      mfa.value = prompt.agentInteractiveAvailable
+        ? "agent-interactive"
+        : prompt.keyInteractiveAvailable
+          ? "key-interactive"
+          : "interactive";
       uiText(
         mfa,
-        prompt.keyInteractiveAvailable ? "私钥 + MFA" : "交互认证 / MFA",
+        prompt.agentInteractiveAvailable
+          ? "Agent + MFA"
+          : prompt.keyInteractiveAvailable
+            ? "私钥 + MFA"
+            : "交互认证 / MFA",
       );
       method.append(saved, mfa);
       method.value =
+        prompt.agentInteractiveAvailable &&
         prompt.index + 1 === prompt.count &&
-        this.jointChoices.get(this.options.identity.value) === prompt.identity
-          ? "key-interactive"
+        this.agentJointChoices.get(this.options.identity.value) ===
+          prompt.identity
+          ? "agent-interactive"
           : prompt.index + 1 === prompt.count &&
-              this.interactiveChoices.get(this.options.identity.value) ===
+              this.jointChoices.get(this.options.identity.value) ===
                 prompt.identity
-            ? "interactive"
-            : "saved";
+            ? "key-interactive"
+            : prompt.index + 1 === prompt.count &&
+                this.interactiveChoices.get(this.options.identity.value) ===
+                  prompt.identity
+              ? "interactive"
+              : "saved";
       label.append(caption, method);
       this.options.status.before(label);
     }
@@ -534,11 +549,13 @@ export class WorkspaceSshDialog {
       this.routeAnswer = () =>
         finish(
           this.current(epoch) && !signal.aborted
-            ? method?.value === "key-interactive"
-              ? "key-interactive"
-              : method?.value === "interactive"
-                ? "interactive"
-                : true
+            ? method?.value === "agent-interactive"
+              ? "agent-interactive"
+              : method?.value === "key-interactive"
+                ? "key-interactive"
+                : method?.value === "interactive"
+                  ? "interactive"
+                  : true
             : false,
         );
       signal.addEventListener("abort", abort, { once: true });
@@ -591,8 +608,6 @@ export class WorkspaceSshDialog {
         (host) => host.id === this.options.host.value,
       );
       const route = selectedHost?.profile?.via;
-      if (agentJointIdentity && (route || this.temporary))
-        throw Error("ssh.session_denied");
       const id =
         (interactiveIdentity || jointIdentity || agentJointIdentity) && !route
           ? await (async () => {
@@ -623,13 +638,16 @@ export class WorkspaceSshDialog {
                 {
                   host: selectedHost.id,
                   identity:
+                    agentJointIdentity ??
                     agentIdentity ??
                     keyIdentity ??
                     interactiveIdentity ??
                     this.options.identity.value,
                   profile: selectedHost.profile.id,
                   privateKey: keyIdentity !== undefined,
-                  ...(agentIdentity ? { agent: true } : {}),
+                  ...(agentIdentity || agentJointIdentity
+                    ? { agent: true }
+                    : {}),
                 },
                 controller.signal,
                 () => this.current(epoch),

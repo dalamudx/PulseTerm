@@ -1,6 +1,18 @@
-# 终端重连事务 v1（已实现的基础，非生产 attach）
+# 终端重连事务与生产显示
 
-后端仍唯一权威；xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区/滚动/链接状态须允许重建。已实现窗口无关的原子诊断lease和有界输出背压；窗口无关的协议额度/ACK监督已在pulse-app贯通；注册层已有可信window token、owner授权和generation撤销；真实Tauri window事件/权限适配已通过fixed-helper验证；任意用户会话生产接口与多视图策略仍待实现。
+后端仍是唯一状态权威，xterm 是可丢弃的显示缓存。需要准确原始内容的搜索、复制、导出应读取后端，前端选区／滚动／链接状态允许重建。生产工作区已接通窗口／页／代际绑定的原子捕获、有界输出及绘制后 ACK；输入仍需 Commit 与捕获确认。本文保留 v1 固定诊断链及 v2 双坐标合同；布局尺寸与输入的不同授权见 [布局授权](./terminal-layout-authorization.md)。
+
+## 自然结束后的只读视图
+
+生产工作区使用 `TerminalViewBinding::attach_v2_retaining_ended` 显式捕获：只有真正自然 EOF、最终 actor 状态为 `Ended` 且 End 帧已收到有效 ACK，注册监督与交付层才保留原页、原代际的绑定。转发任务随完成退出；保留的控制仅供历史分页及主／备用屏查找，仍占用原有的有界视图容量，不保留 actor 控制 lease 或原生线程。desktop 将该票据标为完成，拒绝后续连接、确认、输入及布局操作；结束终端不会重新获得输入权限。
+
+显式关闭视图、换页、窗口关闭、会话移除或新代际会撤销原读取权限。发送失败、取消、ACK 超时及 `Closed`／`Failed` 状态不保留绑定；默认 `attach_v2` 及既有注册入口仍在交付完成后撤销。旧完成或旧票据的释放不能撤销替换它的新绑定。
+
+## 滚动期间的绘制确认
+
+用户滚轮可在解析结束后的双帧等待中改变xterm视口。Surface为每次请求绘制记录公有buffer对象、baseY／viewportY、格子尺寸及滚动事件身份；即使视口移开后回到相同行号，也会使旧绘制失效。屏障检测到变化后重新请求完整绘制，再等待两次动画机会，继续使用原一秒总期限。稳定后仍逐行验证实际DOM投影，或使用原WebGL绘制证据；只有这些检查完成才释放输出信用。持续变化不续期，取消、不可见、断连、尺寸暂停及真实投影错误继续拒绝。
+
+该修复由 `mise run probe-workspace-settings-contract` 版本2的真实Linux WebView／PTY滚轮操作复现并验证。保持输入授权、捕获确认与有序ACK合同；帧机会仍不代表桌面合成器确认。
 
 ## 一个流，一个事务
 
@@ -13,12 +25,13 @@
 
 ## v2双坐标（ADR-029，明确选择而非隐式升级）
 
-`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；注册层提供显式SessionRegistry::attach_v2，共用owner/generation/capture锁/monitor额度与晚完成隔离；默认Tauri窗口仍v1；仅--probe-v2固定UTF8样例明确选择v2，resize/resume沿用同codec，无自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
+`pulse-ipc::attach_v2`/`ui/src/ipc/attachment-v2.ts`定义version2，保留同part IDs和FrameKind8；v1/v2互相拒绝，generation不能跨版本混流。`pulse-app::attachment::attach_v2`显式选择，复用同一ACK/timeout/撤销监督；注册层提供显式SessionRegistry::attach_v2，共用owner/generation/capture锁/monitor额度与晚完成隔离；默认固定验证窗口保留v1；生产工作区明确选择v2，--probe-v2固定UTF8样例也明确选择v2，resize/resume沿用同codec，无自动fallback。v1在捕获前拒绝source_is_utf8=false，哪怕初始两计数均0，失败不替换旧lease。
 
 - envelope28字节：version:u8=2、part:u8、reserved:u16=0、generation:u64、offset:u64、source_after:u64。Begin body36：columns:u16、rows:u16、revision:u64、source:u64、UTF8:u64、history_len:u32、restore_len:u32；Begin source需与envelope一致。全部小端，JS仍bigint。
 - Data.offset是normalized UTF8游标，按body真实长度连续递增，source_after独立单调（可不增加）。一份normalized record分片时，前片保留previous source边界，最后一片提交该record source endpoint，不能推算每个UTF8字节映射到哪个source byte。完整raw chunk展开超过64KiB时，actor把source consumed计入第一份显示record，后续显示record不再增加source。两种分段都不声明raw↔display逐字节映射。
 - 无显示输出的decoder pending消费以同队列Marker发布source增量，UTF8不动，不feed VT/flush sync。Checkpoint/End要求source和UTF8都与当前stream一致，revision不回退。RepairBegin/Bytes/Commit保持两个游标，source变化或一个游标不符均拒；History/Restore/RepairBytes的offset仍section-local。
 - Begin/history/restore/repair staging界限不变；credit按实际v2 envelope+body（outer6byte header独立），不以raw或UTF8累计量释放。NoCredit不能变任何游标/阶段；旧generation ACK拒绝。Consumer先有界staging，完整Commit后render，write/marker/repair/EOF callback完成后ACK，取消或迟到callback不ACK。
+- 生产显示可实现可选 `writeBatch`：只合并已在同一有界队列中的相邻同代际 Data，每帧仍独立校验 sequence、source 和 UTF-8 游标。Begin／Commit、Marker、Checkpoint、Repair 和 End 均是不可跨越的屏障。合并缓冲最多等于当前组的 body 总字节，原默认八帧及 `maxBytes` 额度不增加；解析、实际绘制和布局核验全部完成后，才按原顺序逐帧 ACK，且每帧先退本地拥有额度再调用 ACK，以允许同步补包。取消／绘制失败／非法帧拒绝整个未确认组，晚到完成不能返还信用；只有单帧 `write` 的旧 sink 保持原行为。
 - actor SessionState保留parsed_bytes=原始source，再加utf8_bytes/source_is_utf8；完整状态比较天然同时包括两坐标与encoding mode，不能只依据source一致清除风险。validation-only spawn_gbk_text_session使用已分类GBK文本，decoder跨detach/lease存活、input和query反向编码。raw≤64KiB，单次UTF8展开≤3×64KiB+4工作buffer，再≤64KiBrecords，满队列阻止继续解析和transport读取；多出的decoder scratch/pending内存须计入预算。
 - 当前strict GBK策略：非法bytes/不完整EOF明确Failed，不写U+FFFD；不可表示input明确Encoding错误且不发送替代实体。普通UTF8原EOF行为保持。不开放production GBK入口：binary/Zmodem预分类、临时encoding切换、真实GBK设备/生产预分类仍待完成；固定UTF8-v2已通过Linux2headless/2DOM/resize3/pause2组合，显式encoding-probe已通过两轮GBK actor→真实Channel→DOM半字符跨重绑/历史/反向输入/纯状态Marker/EOF，不能称远端SSH/PTY GBK验收。
 
@@ -41,7 +54,7 @@
 
 - opt-in Linux `probe-window`在新Xvfb/Openbox下运行，CLI-only mode保持普通probe-channel不需要WM。native cycle仍要求current paused generation单次准入，mode=true改调用runtime.minimize，必须观察is_minimized=true而非!visible/Focused(false)；后台输出推进后unminimize/show，观察visible&&!minimized才finish receipt。NativeVisibility的Visible/Hidden/Minimized状态矩阵明确区分，restore guard仅同incarnation尝试unminimize/show不resume。nativeMinimizeChecked只能由mode&&成功backend gate得到，要求同时nativeWindowChecked与pauseCount=1；server及xtask把请求mode与DOM flag对照、headless总false，防hide报告冒充minimize。受控native调用不证明用户手动最小化的自动事件adapter。
 
-- `NativeWatcher`按runtime登记的每window incarnation启动一个任务；Focused/Resized/ScaleFactorChanged只是hint，经watch合并后最多50/50/100ms有限采样，不持续idle polling。runtime getters在spawn_blocking中执行，单window一份owned semaphore permit随实际job存活；500ms观测timeout不取消GUI job、不释放其额度，后续query不能堆积blocking任务。query invalid/忙/异常发布invalid并终止observer，而非默默继续沿用旧visible；Destroyed/shutdown关闭observer，late commit拒绝。重复state不推进revision、重复revision不再次emit。
+- `NativeWatcher`按runtime登记的每window incarnation启动一个任务；Focused/Resized/ScaleFactorChanged只是hint，经watch合并后最多50/50/100ms有限采样，不持续idle polling。runtime getters在spawn_blocking中执行，单window一份owned semaphore permit随实际job存活；500ms观测timeout不取消GUI job、不释放其额度，后续query不能堆积blocking任务。query invalid/忙发布invalid，使前端退役当前view；观察器保留后续事件hint或新页snapshot的只读采样能力，不以旧visible恢复输入。metadata poison、发射失败或revision耗尽关闭observer；Destroyed/shutdown关闭observer，late commit拒绝。重复state不推进revision、重复revision不再次emit。
 - typed `NativeVisibilitySample`只定向同webview_window label，incarnation随机独立UUID与u32递增revision是投影metadata、非控制capability。`probe_session_native_snapshot`按runtime caller+owner nonce验证，采样后再验证WindowToken。前端先typed listen再snapshot，最多4个身份的最新revision缓冲（不可被旧/foreign样例覆盖，满则fail closed），之后NativeVisibilityFilter忽略旧身份/重复/倒序；invalid样例作废view，不fabricate可见。实际native-only probe不先隐藏host，也不绑定页面hidden来源：原生false独立驱动controller pause，原生restore驱动resume；窗口动作仍由受控command发起，不声称人工点击标题栏按钮或全平台事件覆盖完成。
 
 - finite `probe_session_native_cycle`先runtime owner+nonce+SessionRegistry.check_binding只读核对current generation，再gate.reserve_external单次预留（不是pause/lease reservation/capability）。command只hide/minimize并最长2秒等event-driven frontend pause收据，绝不自己detach。gate.pause必须generation匹配且registry.detach成功才发布票据，external预留使native_inflight同时为true，early resume拒绝；watch订阅后再看状态防早pause丢失。close唤醒未pause的等待者并永久拒绝后续动作，失败不自动rollback/retry。check_binding不消费信用/发输入，也不保证未来仍current；后续pause/actor仍各自验证。

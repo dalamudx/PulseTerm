@@ -18,10 +18,14 @@
 
 追加直接验证：3 项生命周期用例及相关输出滚动／响铃共 15 项前端行为、TypeScript、局部 Biome 和产品构建通过。真实 Chrome／xterm 验证默认／关闭／开启自动输出回底、鼠标与键盘返回、窗格隔离、焦点恢复、零输入及撤销清理；720px 界面无横向溢出。既有 CI 的前端测试、类型与构建覆盖新增文件，无新验收矩阵。证据在 `target/probes/scroll-return-development/`，不计作原生 WebView、PTY／SSH、性能或跨平台验收。
 
+## Linux 原生补充验收
+
+`mise run probe-workspace-settings-contract` 版本2通过生产WebView／真实PTY的默认输出回底关闭、回看期间新输出保留位置、鼠标及键盘返回最新输出，并确认默认输入回底开启时仅明确输入的 `k` 到达PTY。过程中修复滚轮在双帧等待内改变视口导致的投影误判：变化后重绘并重新等待两帧，总期限不续期，稳定后仍逐行核验。三条会话和GUI全部退出，收据及两张交互截图见 `target/probes/`。
+
 ## 开发检查
 
 直接检查覆盖默认与显式开关、继承及保存恢复、旧页撤销、v8 严格解码、表单交互、解析完成顺序、UTF-8、取消／释放迟到回调及滚动失败。沿用现有 Store、桌面库、Vitest、TypeScript、构建和 settings-schema CI，不增加 SSH／多窗口验收矩阵。
 
 4项后端（含输入偏好兼容2项）、26项前端行为、TypeScript、格式、settings-schema、Store／桌面库严格Clippy和产品构建通过，Store诊断Exact零问题。真实Chrome组件通过实际Surface和xterm公开buffer坐标确认三种行为：默认及关闭均保留viewportY=4；开启时随新输出定位到baseY=73，输入仍禁用且没有输入事件。该检查没有PTY或IPC，不计为原生WebView、性能或跨平台验收。未运行完整回归。
 
-原生 WebView、真实 PTY／SSH、跨平台及滚动性能仍需后续验收。开发收据保存在 `target/probes/output-scroll-development/`。
+显式滚动开关切换、SSH、跨平台及滚动性能仍需后续验收。既有浏览器开发收据保存在 `target/probes/output-scroll-development/`。

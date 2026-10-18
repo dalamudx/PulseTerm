@@ -12,6 +12,7 @@ static gboolean action_mode;
 static gboolean focus_mode;
 static gboolean bounds_mode;
 static gboolean inspect_mode;
+static gboolean combo_inspect_mode;
 static gboolean description_mode;
 static gboolean readonly_text_mode;
 static gint selection_index = -1;
@@ -72,6 +73,7 @@ static gboolean activate_match(AtspiAccessible *node) {
     }
     if (selection_index >= 0) return select_visible(node, 0);
     if (inspect_mode) {
+        if (combo_inspect_mode && atspi_accessible_get_role(node, NULL) != ATSPI_ROLE_COMBO_BOX) return FALSE;
         AtspiStateSet *states = atspi_accessible_get_state_set(node);
         printf("showing=%d enabled=%d focusable=%d selected=%d checked=%d expanded=%d\n", states && atspi_state_set_contains(states, ATSPI_STATE_SHOWING), states && atspi_state_set_contains(states, ATSPI_STATE_ENABLED), states && atspi_state_set_contains(states, ATSPI_STATE_FOCUSABLE), states && atspi_state_set_contains(states, ATSPI_STATE_SELECTED), states && atspi_state_set_contains(states, ATSPI_STATE_CHECKED), states && atspi_state_set_contains(states, ATSPI_STATE_EXPANDED));
         if (states) g_object_unref(states);
@@ -188,11 +190,12 @@ static gboolean matches_frame(AtspiAccessible *node, const char *frame, const ch
 }
 
 int main(int argc, char **argv) {
-    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
+    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "inspect-combo") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
     action_mode = argc == 4 && strcmp(argv[3], "activate") == 0;
     focus_mode = argc == 4 && strcmp(argv[3], "focus") == 0;
     bounds_mode = argc == 4 && strcmp(argv[3], "bounds") == 0;
-    inspect_mode = argc == 4 && strcmp(argv[3], "inspect") == 0;
+    combo_inspect_mode = argc == 4 && strcmp(argv[3], "inspect-combo") == 0;
+    inspect_mode = combo_inspect_mode || (argc == 4 && strcmp(argv[3], "inspect") == 0);
     description_mode = argc == 4 && strcmp(argv[3], "description") == 0;
     readonly_text_mode = argc == 4 && strcmp(argv[3], "readonly-text") == 0;
     char *end = NULL;

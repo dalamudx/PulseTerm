@@ -610,3 +610,6 @@ fn malformed_or_noncanonical_ticket_is_rejected() {
 
 #[path = "product_terminal_clipboard_tests.rs"]
 mod clipboard_tests;
+
+#[path = "product_terminal_completed_tests.rs"]
+mod completed_tests;

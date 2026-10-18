@@ -33,6 +33,7 @@ pub struct AttachedTerminalView {
     transport: RegisteredAttachment,
     /// Base palette at this capture; validate authority again before later use.
     palette: CapturedQueryPalette,
+    retain_ended: bool,
 }
 impl AttachedTerminalView {
     /// Read drawing data captured at this boundary after rechecking authority.
@@ -51,7 +52,33 @@ impl TerminalViewBinding {
         id: SessionId,
         config: AttachmentConfig,
     ) -> Result<AttachedTerminalView, RegistryError> {
-        let transport = registry.attach_page_v2(&page, id, config).await?;
+        Self::attach(registry, page, id, config, false).await
+    }
+    /// Explicitly retain source-bound read access after genuine End and validated End ACK.
+    /// An owned control must survive delivery; dropping it, replacing its generation or
+    /// retiring its page revokes access. Failure/cancellation never retains the binding.
+    pub async fn attach_v2_retaining_ended(
+        registry: &SessionRegistry,
+        page: Arc<PageLaunchScope>,
+        id: SessionId,
+        config: AttachmentConfig,
+    ) -> Result<AttachedTerminalView, RegistryError> {
+        Self::attach(registry, page, id, config, true).await
+    }
+    async fn attach(
+        registry: &SessionRegistry,
+        page: Arc<PageLaunchScope>,
+        id: SessionId,
+        config: AttachmentConfig,
+        retain_ended: bool,
+    ) -> Result<AttachedTerminalView, RegistryError> {
+        let transport = if retain_ended {
+            registry
+                .attach_page_v2_retaining_ended(&page, id, config)
+                .await?
+        } else {
+            registry.attach_page_v2(&page, id, config).await?
+        };
         let binding = Self {
             registry: registry.clone(),
             page,
@@ -64,6 +91,7 @@ impl TerminalViewBinding {
             binding,
             transport,
             palette,
+            retain_ended,
         })
     }
     /// Registry-assigned generation. This integer by itself grants no permission.

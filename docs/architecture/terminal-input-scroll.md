@@ -13,4 +13,8 @@
 存储检查覆盖默认开启、明确关闭、来源继承、恢复以及非法值；原生检查覆盖文件保存、重读、恢复和旧页撤销。前端检查覆盖 v7 封闭解码、旧版兼容、表单保存/恢复、Profile 显示合并、SDK 选项及保持初始输入禁用。
 存储与原生共2项、受影响前端共30项直接行为通过；TypeScript、格式、settings-schema、Store／桌面库严格Clippy和产品构建通过，Store按需诊断Exact零问题。未运行完整回归，不将选项映射验证计为真实WebView或PTY/SSH滚动验收。
 
-沿用现有 Rust、Vitest、TypeScript、前端构建和 settings-schema CI；不新增回归矩阵。实际 WebView、PTY/SSH 交互、跨平台与滚动性能另行验收。开发收据保存在 `target/probes/input-scroll-development/`。
+## Linux 原生补充验收
+
+`mise run probe-workspace-settings-contract` 版本2已验证默认开启的输入回底：真实PTY输出并向上回看后，明确输入 `k` 触发返回最新，原始接收记录恰为 `6b`；鼠标／键盘返回、响铃清除和刷新均未增加字节。三条原生会话和GUI全部退出。显式关闭／恢复的实窗链、SSH、跨平台与滚动性能仍待验收；收据 `target/probes/workspace-settings-contract-result.json`。
+
+沿用现有 Rust、Vitest、TypeScript、前端构建和 settings-schema CI；不新增回归矩阵。显式开关的实际 WebView、SSH 交互、跨平台与滚动性能另行验收。开发收据保存在 `target/probes/input-scroll-development/`。

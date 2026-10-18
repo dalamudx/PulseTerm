@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Production WebView, selected synthetic Agent key, explicit Agent+MFA and real SSH."""
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -84,7 +83,7 @@ def snapshot():
             rows = db.execute('SELECT * FROM "' + table.replace('"', '""') + '"').fetchall()
             if table == 'app_state':
                 rows = [row for row in rows if row[0] != 'catalogue.recent-ssh-hosts.v1']
-            result[table] = hashlib.sha256(repr(sorted(rows, key=repr)).encode()).hexdigest()
+            result[table] = sorted(rows, key=repr)
         return result
 failure = '连接未成功，请检查已解锁的保险库、身份凭据和主机；未自动重试。'
 def connect(joint=True):
@@ -126,7 +125,6 @@ try:
     wait(lambda: remote('ssh_gui_seeded_listening') == 1, 'seeded', 30)
     with app_log.open('wb') as output:
         app = subprocess.Popen([str(binaries / 'pulseterm-workspace')], stdout=output, stderr=output, start_new_session=True)
-    wait(lambda: native('sessions_listed') == 1, 'page')
     def window():
         global xid
         windows = run(['xdotool', 'search', '--onlyvisible', '--all', '--pid', str(app.pid),
@@ -135,7 +133,8 @@ try:
             return False
         xid = windows[0].decode()
         return run(['xdotool', 'getwindowpid', xid]).stdout.strip() == str(app.pid).encode()
-    wait(window, 'owned_window')
+    wait(window, 'owned_window', 30)
+    wait(lambda: native('sessions_listed') == 1, 'page', 30)
     run(['xdotool', 'windowactivate', '--sync', xid])
     run(['xdotool', 'windowsize', '--sync', xid, '1280', '800'])
     stage = 'unlock_is_not_joint_authentication_authority'
@@ -229,21 +228,65 @@ try:
     assert remote('ssh_key_joint_premature_mfa_rejected') == 0
     run(['import', '-window', xid, str(evidence / 'workspace-agent-interactive.png')])
     checks.append(stage)
-    stage = 'close_waits_for_all_eight_real_connections_and_native_workers'
+    def temporary_connect():
+        click('快速连接')
+        fill('快速连接地址', address)
+        click('核对地址')
+        click('临时连接')
+        wait(lambda: accessible('选择保存的SSH身份', 'focus'), 'temporary_identity')
+        key('End')
+        click('连接')
+        questions()
+
+    stage = 'temporary_agent_joint_cancel_revokes_and_drains_without_write'
+    before_cancel_exit = remote('ssh_key_joint_stream_exited')
+    before_success_exit = remote('ssh_authenticated_stream_exited')
+    temporary_connect()
+    key('Escape')
+    wait(lambda: remote('ssh_key_joint_stream_exited') == before_cancel_exit + 1, 'temporary_cancel_drained')
+    assert remote('ssh_authenticated_stream_exited') == before_success_exit
+    assert native('ssh_session_opened') == 2 and snapshot() == baseline
+    assert remote('ssh_interactive_authenticated') == 2
+    checks.append(stage)
+    stage = 'temporary_agent_two_factors_skip_save_and_refresh_without_reauthentication'
+    temporary_connect()
+    authenticate()
+    wait(lambda: native('ssh_session_opened') == 3, 'temporary_registered')
+    click('暂不保存')
+    assert snapshot() == baseline
+    input_line('JOINT_TEMPORARY', 4)
+    key('ctrl+shift+r')
+    wait(lambda: native('document_confirmed') == 3, 'temporary_refreshed')
+    input_line('JOINT_TEMPORARY_REFRESH', 5)
+    assert remote('ssh_interactive_authenticated') == 3
+    checks.append(stage)
+    stage = 'temporary_agent_joint_explicit_save_reuses_exact_target'
+    temporary_connect()
+    authenticate()
+    wait(lambda: native('ssh_session_opened') == 4, 'temporary_second_registered')
+    assert snapshot() == baseline
+    click('保存此主机')
+    wait(lambda: not accessible('暂不保存'), 'explicit_save_finished')
+    assert snapshot() == baseline
+    input_line('JOINT_TEMPORARY_SAVED', 6)
+    assert remote('ssh_password_auth_attempt_rejected') == 0
+    run(['import', '-window', xid, str(evidence / 'workspace-temporary-agent-interactive.png')])
+    checks.append(stage)
+    stage = 'close_waits_for_all_eleven_real_connections_and_native_workers'
     key('alt+F4')
     assert app.wait(timeout=8) == 0
-    wait(lambda: remote('ssh_key_joint_stream_exited') == 8, 'all_streams_drained', 3)
+    wait(lambda: remote('ssh_key_joint_stream_exited') == 11, 'all_streams_drained', 3)
     assert native('native_drained') == 1 and native('exited') == 1
-    assert remote('ssh_interactive_authenticated') == 2
-    assert remote('agent_selected_signed_once') == 8
+    assert remote('ssh_interactive_authenticated') == 4
+    assert remote('agent_selected_signed_once') == 11
     assert remote('agent_connection_failed') == 0
     assert 'workspace.terminal_failure.' not in app_log.read_text()
     checks.append(stage)
     (evidence / 'workspace-agent-interactive-result.json').write_text(json.dumps({
         'kind': 'production-linux-webview-explicit-agent-and-mfa-real-loopback-ssh',
-        'passed': True, 'checks': checks, 'successful_joint_sessions': 2, 'native_streams_exited': 8,
+        'passed': True, 'checks': checks, 'successful_joint_sessions': 4, 'native_streams_exited': 11,
         'limitations': ['synthetic software Agent with two advertised keys; no external enterprise MFA',
-            'saved direct Agent targets only; no CLI, jump, temporary or password joint flow',
+            'saved and temporary direct Agent targets; no CLI, jump or password joint flow',
             'no Windows, macOS or assistive technology acceptance']}, indent=2) + '\n')
 except BaseException as error:
     (evidence / 'workspace-agent-interactive-failure.json').write_text(json.dumps({

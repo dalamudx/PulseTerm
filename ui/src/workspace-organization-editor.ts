@@ -265,7 +265,7 @@ export class WorkspaceOrganizationEditor {
     groupForm.append(saveGroup);
     if (existing)
       button(
-        "终端配色与行为",
+        "分组终端配色与行为",
         () => {
           if (current())
             this.behavior("group", existing.metadata.id, existing.name);
@@ -411,7 +411,7 @@ export class WorkspaceOrganizationEditor {
       assignment.append(save);
       if (item.kind === "host")
         button(
-          "终端配色与行为",
+          "SSH 入口终端配色与行为",
           () => {
             if (current() && itemEpoch === itemGeneration)
               this.behavior("host", item.id, item.label);

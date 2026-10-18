@@ -20,7 +20,7 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick openssh-client openssh-server vim less htop tmux strace
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr openssh-client openssh-server vim less htop tmux strace
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -186,7 +186,7 @@ jobs:
       - name: Verify three-hop private key plus MFA, explicit methods, source revocation and complete drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-route-key-interactive
-      - name: Verify explicit selected Agent plus MFA, source revocation and complete native drain
+      - name: Verify saved and temporary Agent plus MFA, post-success save, source revocation and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-agent-interactive
       - name: Verify temporary SSH MFA explicit selection, cancellation, separate saving and native drain
@@ -198,6 +198,18 @@ jobs:
       - name: Verify CLI private key plus MFA, cold and warm consent, cancellation and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-cli-key-interactive
+      - name: Verify CLI saved Agent plus MFA, cold and warm approval, selected signatures and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-agent-interactive
+      - name: Verify selected Agent MFA route hops, terminal recovery and native drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-route-agent-interactive
+      - name: Verify settings, PTY interaction, links, GTK clipboard, GIO browser handoff and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-settings-contract
+      - name: Verify SSH scopes, remote TERM and keys, Unicode soft-wrap and EOF history search
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-ssh-settings
       - name: Verify saved encrypted Ed25519 SSH signatures in actual TermView across refresh resize EOF cancelled handshake and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-ssh-private-key-session
@@ -327,7 +339,7 @@ jobs:
       - name: Verify default Profile persistence, unavailable identities and explicit startup
         if: runner.os == 'Linux'
         run: mise run probe-workspace-profile-default
-      - name: Verify Profile editor literal native options, immutable appearance and original-page cancellation
+      - name: Verify Profile literal options, GUI/CLI overrides, frozen sessions and restored inheritance
         if: runner.os == 'Linux'
         run: mise run probe-workspace-profile-editor
       - name: Verify Profile tombstones, explicit restoration and surviving native terminal

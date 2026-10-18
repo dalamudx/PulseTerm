@@ -349,6 +349,95 @@ it("rejects missing, mistyped or mismatched whole-word modes", async () => {
     expect(finder.expired).toBe(true);
   }
 });
+
+it("stops between batches, retains the visible match and admits a fresh query only after the read exits", async () => {
+  let finish!: (value: unknown) => void;
+  const read = vi
+    .fn()
+    .mockResolvedValueOnce(result(2, 3, false, "7", 5000))
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(result(8, 9));
+  const { finder, found } = setup(read);
+  await finder.find("text", false, false);
+  const scan = finder.find("text", false, false);
+  finder.stop();
+  finder.stop();
+  expect(finder.busy).toBe(true);
+  expect(finder.stopping).toBe(true);
+  expect(finder.matchedRow).toBe(2);
+  await finder.find("new", false, false);
+  expect(read).toHaveBeenCalledTimes(2);
+  finish(result(null, 2051));
+  await scan;
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(found).toHaveBeenCalledTimes(1);
+  expect(finder.busy).toBe(false);
+  expect(finder.stopping).toBe(false);
+  expect(finder.message).toContain("已停止查找");
+  await finder.find("new", false, false);
+  expect(read.mock.calls[2]?.[0]).toMatchObject({
+    query: "new",
+    cursor: null,
+    revision: null,
+  });
+  expect(found).toHaveBeenCalledTimes(2);
+});
+
+it("does not publish a late match or error after stop, and idle stop preserves feedback", async () => {
+  for (const rejected of [false, true]) {
+    let finish!: (value: unknown) => void;
+    const read = vi.fn(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = rejected ? reject : resolve;
+        }),
+    );
+    const { finder, found } = setup(read);
+    finder.message = "kept";
+    finder.stop();
+    expect(finder.message).toBe("kept");
+    const scan = finder.find("text", false, false);
+    finder.stop();
+    finish(rejected ? new Error("workspace.history_changed") : result(0, 1));
+    await scan;
+    expect(found).not.toHaveBeenCalled();
+    expect(finder.expired).toBe(false);
+    expect(finder.message).toContain("已停止查找");
+  }
+});
+
+it("editing or closing during stop suppresses late publication without freeing an active read", async () => {
+  for (const closing of [false, true]) {
+    let finish!: (value: unknown) => void;
+    const changed = vi.fn(),
+      found = vi.fn();
+    const read = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const finder = new HistoryFinder(read, () => true, found, changed);
+    const scan = finder.find("text", false, false);
+    finder.stop();
+    if (closing) finder.dispose();
+    else finder.clear();
+    const count = changed.mock.calls.length;
+    await finder.find("again", false, false);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(finder.busy).toBe(true);
+    finish(result(0, 1));
+    await scan;
+    expect(found).not.toHaveBeenCalled();
+    if (closing) expect(changed).toHaveBeenCalledTimes(count);
+    else expect(finder.message).toBe("");
+  }
+});
 it("drops an in-flight whole-word reply when controls invalidate it", async () => {
   let deliver!: (value: unknown) => void;
   const { finder, found } = setup(

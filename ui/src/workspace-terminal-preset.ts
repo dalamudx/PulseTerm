@@ -176,8 +176,10 @@ export function terminalPresetField(options: {
   select.value = options.setting.value;
   save.type = "submit";
   uiText(save, "保存");
+  uiAttribute(save, "aria-label", message("保存{0}", message("终端配色")));
   reset.type = "button";
   uiText(reset, "恢复继承");
+  uiAttribute(reset, "aria-label", message("{0}恢复继承", message("终端配色")));
   uiText(
     source,
     message(

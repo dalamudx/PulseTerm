@@ -47,9 +47,9 @@ pub(super) fn respond(
         }
         (2, Some(mut answers)) => {
             eprintln!("fixture.ssh_interactive_second_answer_received");
-            if !answers
+            if answers
                 .next()
-                .is_some_and(|value| value.as_ref() == b"654321")
+                .is_none_or(|value| value.as_ref() != b"654321")
                 || answers.next().is_some()
             {
                 return Ok(server::Auth::reject());

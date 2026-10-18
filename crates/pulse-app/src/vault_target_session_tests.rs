@@ -10,6 +10,7 @@ struct SessionSink {
     setup_started: Arc<tokio::sync::Notify>,
     transferred: Arc<AtomicUsize>,
     native_release: Option<tokio::sync::oneshot::Receiver<()>>,
+    appearance: pulse_store::profile_editor::ProfileAppearance,
     actor_done: Arc<tokio::sync::Notify>,
 }
 impl PasswordTargetSink for SessionSink {
@@ -86,7 +87,8 @@ impl PasswordSessionSink for SessionSink {
                     .map_err(|_| ProtocolSessionError::NativeUnknown)?;
             }
             Ok(())
-        }))
+        })
+        .with_appearance(self.appearance.clone()))
     }
 }
 fn session_sink(
@@ -104,6 +106,7 @@ fn session_sink(
             transferred: Arc::new(AtomicUsize::new(0)),
             native_release: None,
             actor_done: Arc::new(tokio::sync::Notify::new()),
+            appearance: Default::default(),
         },
         seen,
         cleanup,
@@ -184,6 +187,11 @@ fn actual_ciphertext_session_role_original_epoch_page_cancel_lost_owner_and_nati
             .await?;
         let started = ProtocolSessionReservation::reserve(&p.registry, &p.scope)?.begin()?;
         let (mut adapter, seen, _) = session_sink(selected, false, false);
+        adapter.appearance = pulse_store::profile_editor::ProfileAppearance {
+            backspace_send: Some("bs".into()),
+            delete_send: Some("del".into()),
+            ..Default::default()
+        };
         let transferred = adapter.transferred.clone();
         let actor_done = adapter.actor_done.clone();
         let (release, pending_native) = tokio::sync::oneshot::channel();
@@ -193,6 +201,8 @@ fn actual_ciphertext_session_role_original_epoch_page_cancel_lost_owner_and_nati
         assert!(seen.exact.load(Ordering::Acquire));
         assert_eq!(transferred.load(Ordering::SeqCst), 1);
         assert!(owned.is_managed_by(&p.registry));
+        assert_eq!(owned.appearance().backspace_send.as_deref(), Some("bs"));
+        assert_eq!(owned.appearance().delete_send.as_deref(), Some("del"));
         // Credential-operation admission is free while root transport remains owned.
         drop(owner.begin(p.scope.clone())?);
         let id = owned.id();

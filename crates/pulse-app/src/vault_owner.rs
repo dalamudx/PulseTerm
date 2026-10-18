@@ -20,10 +20,10 @@ pub use key_preparation::{
 };
 #[cfg(feature = "ssh-use")]
 pub use session_gesture::{
-    AgentForwardSink, AgentInteractiveSessionAction, AgentInteractiveSessionGesture,
-    AgentInteractiveSessionIntent, AgentInteractiveSessionSink, AgentSessionAction,
-    AgentSessionGesture, AgentSessionIntent, AgentSessionSink, ColdSavedAliasIntent,
-    ColdSavedSessionIntent, InteractiveForwardSink, InteractiveSessionAction,
+    AgentForwardSink, AgentInteractiveForwardSink, AgentInteractiveSessionAction,
+    AgentInteractiveSessionGesture, AgentInteractiveSessionIntent, AgentInteractiveSessionSink,
+    AgentSessionAction, AgentSessionGesture, AgentSessionIntent, AgentSessionSink,
+    ColdSavedAliasIntent, ColdSavedSessionIntent, InteractiveForwardSink, InteractiveSessionAction,
     InteractiveSessionGesture, InteractiveSessionIntent, InteractiveSessionSink,
     PasswordSessionGesture, PrivateKeySessionGesture, RouteHopGesture, RouteHopSelection,
     RoutedSessionGesture, SavedAliasGesture, SavedSessionGesture, SavedSessionSelection,

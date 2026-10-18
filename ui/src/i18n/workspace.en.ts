@@ -114,6 +114,20 @@ export const workspaceEnglish = {
   会话输出已结束: "Session output ended",
   "终端连接失败 · 会话仍保留，可重新选择恢复":
     "Terminal connection failed · Session retained; select it again to restore",
+  "输入结果未确认 · 请先检查终端状态，不要重复发送刚才的输入。":
+    "Input result unconfirmed. Check the terminal state before sending anything again; do not resend the last input.",
+  "无法确认窗口显示状态 · 已暂停输入，请重新加载工作区。":
+    "Cannot confirm window visibility. Input is paused; reload the workspace.",
+  "终端字体未就绪 · 请在设置中选择可用字体，再重新选择会话。":
+    "Terminal font unavailable. Choose an available font in Settings, then select the session again.",
+  "终端显示尺寸无法确认 · 请调整窗口大小后重新选择会话。":
+    "Cannot confirm terminal dimensions. Resize the window, then select the session again.",
+  "恢复终端显示超时 · 会话仍保留，请重新选择会话。":
+    "Terminal restore timed out. Session retained; select it again.",
+  "终端绘制已中断 · 会话仍保留，请重新选择会话。":
+    "Terminal rendering interrupted. Session retained; select it again.",
+  "终端输出处理已超出上限 · 请重新选择会话恢复显示。":
+    "Terminal output exceeded the processing limit. Select the session again to restore the display.",
   "无法分屏 · 请选尚未显示的会话或直接相邻窗格":
     "Cannot split. Choose a session not currently shown or a directly adjacent pane.",
   "分屏视图已暂停 · 会话已保留": "Split view paused · Session retained",

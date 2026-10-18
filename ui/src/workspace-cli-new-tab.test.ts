@@ -201,7 +201,8 @@ it("rejected local presentation admission cannot show the registered session", a
 });
 it("layout or input failure supplies false completion once", async () => {
   const f = await acceptedFixture();
-  f.opened.mockRejectedValue(Error("input not ready"));
+  const failure = Error("input.uncertain");
+  f.opened.mockRejectedValue(failure);
   await f.controller.opened(presented);
   expect(f.completePresentation).toHaveBeenCalledExactlyOnceWith(
     nonce,
@@ -209,6 +210,7 @@ it("layout or input failure supplies false completion once", async () => {
     "2",
     false,
   );
+  expect(f.failed).toHaveBeenCalledExactlyOnceWith(failure);
 });
 it("navigation while showing cannot publish the old-page ACK", async () => {
   const f = await acceptedFixture();

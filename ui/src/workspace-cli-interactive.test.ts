@@ -1,79 +1,88 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { CliNewTabController, decodeCliNewTab } from "./workspace-cli-new-tab";
 
-it("keeps private-key plus MFA explicit on cold and warm approvals", () => {
-  const selected = { ...ssh, authentication: "key-interactive" };
-  expect(
-    decodeCliNewTab({ ...request, ssh: selected }).ssh?.authentication,
-  ).toBe("key-interactive");
-  expect(
-    decodeCliNewTab({
-      version: 3,
-      ticket,
-      intent: {
-        hostId: ssh.hostId,
-        identityId: ssh.identityId,
-        authentication: "key-interactive",
-      },
-    }).intent,
-  ).toEqual({
-    hostId: ssh.hostId,
-    identityId: ssh.identityId,
-    authentication: "key-interactive",
-  });
-  for (const intent of [
-    { alias: "Saved", authentication: "key-interactive" },
-    {
+it.each(["key-interactive", "agent-interactive"] as const)(
+  "keeps %s explicit on cold and warm approvals",
+  (authentication) => {
+    const selected = { ...ssh, authentication: authentication };
+    expect(
+      decodeCliNewTab({ ...request, ssh: selected }).ssh?.authentication,
+    ).toBe(authentication);
+    expect(
+      decodeCliNewTab({
+        version: 3,
+        ticket,
+        intent: {
+          hostId: ssh.hostId,
+          identityId: ssh.identityId,
+          authentication: authentication,
+        },
+      }).intent,
+    ).toEqual({
       hostId: ssh.hostId,
       identityId: ssh.identityId,
-      authentication: "key-interactive",
-      answers: [],
-    },
-    { hostId: ssh.hostId, identityId: ssh.identityId, authentication: null },
-  ])
-    expect(() => decodeCliNewTab({ version: 3, ticket, intent })).toThrow();
-});
-it("answers only the approved joint ticket and clears its one-round buffer", async () => {
-  const f = fixture();
-  await f.controller.challenge(challenge);
-  expect(f.interactive).not.toHaveBeenCalled();
-  await f.controller.request({
-    ...request,
-    ssh: { ...ssh, authentication: "key-interactive" },
-  });
-  await f.controller.challenge({ ...challenge, ticket: token });
-  expect(f.interactive).not.toHaveBeenCalled();
-  await f.controller.challenge(challenge);
-  expect(f.respondInteractive).toHaveBeenCalledWith(
-    nonce,
-    token,
-    round,
-    f.answers,
-  );
-  expect(f.answers).toEqual([""]);
-});
-it("cancels the real joint token when its original page retires before a late answer", async () => {
-  const f = fixture();
-  let finish!: (answers: string[]) => void;
-  f.interactive.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-  );
-  await f.controller.request({
-    ...request,
-    ssh: { ...ssh, authentication: "key-interactive" },
-  });
-  const waiting = f.controller.challenge(challenge);
-  f.retire();
-  f.life.abort();
-  finish(f.answers);
-  await waiting;
-  expect(f.respondInteractive).not.toHaveBeenCalled();
-  expect(f.cancelInteractive).toHaveBeenCalledWith(nonce, token);
-  expect(f.answers).toEqual([""]);
-});
+      authentication: authentication,
+    });
+    for (const intent of [
+      { alias: "Saved", authentication: authentication },
+      {
+        hostId: ssh.hostId,
+        identityId: ssh.identityId,
+        authentication: authentication,
+        answers: [],
+      },
+      { hostId: ssh.hostId, identityId: ssh.identityId, authentication: null },
+    ])
+      expect(() => decodeCliNewTab({ version: 3, ticket, intent })).toThrow();
+  },
+);
+it.each(["key-interactive", "agent-interactive"] as const)(
+  "answers only the approved %s ticket and clears its one-round buffer",
+  async (authentication) => {
+    const f = fixture();
+    await f.controller.challenge(challenge);
+    expect(f.interactive).not.toHaveBeenCalled();
+    await f.controller.request({
+      ...request,
+      ssh: { ...ssh, authentication },
+    });
+    await f.controller.challenge({ ...challenge, ticket: token });
+    expect(f.interactive).not.toHaveBeenCalled();
+    await f.controller.challenge(challenge);
+    expect(f.respondInteractive).toHaveBeenCalledWith(
+      nonce,
+      token,
+      round,
+      f.answers,
+    );
+    expect(f.answers).toEqual([""]);
+  },
+);
+it.each(["key-interactive", "agent-interactive"] as const)(
+  "cancels the real %s token when its original page retires before a late answer",
+  async (authentication) => {
+    const f = fixture();
+    let finish!: (answers: string[]) => void;
+    f.interactive.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await f.controller.request({
+      ...request,
+      ssh: { ...ssh, authentication },
+    });
+    const waiting = f.controller.challenge(challenge);
+    f.retire();
+    f.life.abort();
+    finish(f.answers);
+    await waiting;
+    expect(f.respondInteractive).not.toHaveBeenCalled();
+    expect(f.cancelInteractive).toHaveBeenCalledWith(nonce, token);
+    expect(f.answers).toEqual([""]);
+  },
+);
 const ticket = "11111111-1111-4111-8111-111111111111";
 const nonce = "22222222-2222-4222-8222-222222222222";
 const token = "33333333-3333-4333-8333-333333333333";

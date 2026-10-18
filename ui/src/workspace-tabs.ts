@@ -98,6 +98,11 @@ export class WorkspaceTabs {
       "aria-labelledby",
       this.active ? `workspace-tab-${this.active}` : "workspace-title",
     );
+    const reveal = focused ?? this.active;
+    if (reveal)
+      this.element
+        .querySelector<HTMLElement>(`#workspace-tab-${reveal}`)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
     if (focused && !disabled)
       this.element
         .querySelector<HTMLButtonElement>(`#workspace-tab-${focused}`)

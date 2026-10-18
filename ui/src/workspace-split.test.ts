@@ -7,7 +7,7 @@ const mock = vi.hoisted(() => ({
   panes: new Map<
     string,
     {
-      phase: (state: string) => void;
+      phase: (state: string, error?: Error) => void;
       focus: ReturnType<typeof vi.fn>;
       disposed: boolean;
     }
@@ -20,7 +20,10 @@ vi.mock("./features/terminal/workspace-pane", () => ({
   WorkspacePane: class {
     readonly entry;
     constructor(
-      readonly options: { session: string; phase: (state: string) => void },
+      readonly options: {
+        session: string;
+        phase: (state: string, error?: Error) => void;
+      },
     ) {
       this.entry = {
         phase: options.phase,
@@ -252,5 +255,31 @@ it("maximum remains restorable while hidden leaves await their first visible att
   expect(split.canChangeLayout).toBe(false);
   mock.panes.get("2")!.phase("ready");
   expect(split.state).toBe("ready");
+  split.dispose();
+});
+
+it("keeps a visible failed pane's reason through sibling updates and focus, then clears it on recovery", async () => {
+  const { split, changed } = fixture();
+  await split.mount();
+  const failure = Error("input.uncertain");
+  mock.panes.get("2")!.phase("failed", failure);
+  expect(changed).toHaveBeenLastCalledWith("failed", "1", failure);
+  mock.panes.get("1")!.phase("ready");
+  expect(split.focusSession("1")).toBe(true);
+  expect(changed).toHaveBeenLastCalledWith("failed", "1", failure);
+  mock.panes.get("2")!.phase("ready");
+  expect(changed).toHaveBeenLastCalledWith("ready", "1", undefined);
+  split.dispose();
+});
+
+it("does not show a hidden pane's failure while maximized, and restores its reason when visible", async () => {
+  const { split, changed } = fixture();
+  await split.mount();
+  await split.toggleMaximized();
+  const failure = Error("terminal.font_timeout");
+  mock.panes.get("2")!.phase("failed", failure);
+  expect(changed).toHaveBeenLastCalledWith("ready", "1", undefined);
+  await split.toggleMaximized();
+  expect(changed).toHaveBeenLastCalledWith("failed", "1", failure);
   split.dispose();
 });

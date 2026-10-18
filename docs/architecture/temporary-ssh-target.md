@@ -17,9 +17,15 @@
 Linux 生产 WebView 与受控真实 SSH 已通过六段临时 MFA 验收：取消、错误回答零回退、两轮认证、暂不保存、刷新不重认证、精确已有目标保存复用与四条连接退出。该实窗保存分支未覆盖新建主机；完整范围见[验证记录](../development/validation.md)，原始收据位于 `target/probes/workspace-temporary-interactive-result.json`。
 
 
+## 临时目标的 Agent＋MFA
+
+临时身份选择器允许明确选择保存的 Agent 身份进行联合认证，普通 Agent 仍是默认选项。Agent 准备命令仅从原页请求槽的目标 ID 解析临时票据，不接收新地址；`AgentInteractiveSessionAction::prepare_temporary` 只接受临时直连来源，保存目标的 `prepare` 继续拒绝临时来源，路由沿独立准备入口。三者共用原页、原 Vault epoch、原身份选择及原截止，不续期，不回退其他方法。
+
+真实指纹、所选公钥签名、服务器 partial_success 和两轮问答仍由原联合认证适配器处理。撤销临时句柄会使待认证意图失效，不能签名或借用后来解锁；Root 实际注册后才标记可保存，暂不保存不关闭已注册终端。10 项 Agent 后端回归与 50 项前端对话框／连接回归、类型检查及 App／桌面生产组合严格 Clippy 已通过；AFT 诊断 Unknown 未计通过。`mise run probe-workspace-agent-interactive` 的扩展原生链已通过临时取消、两轮认证后暂不保存、刷新不重认证及明确保存精确已有目标；完整十四项检查、四条成功会话和十一条连接退出收据见 `target/probes/workspace-agent-interactive-result.json`。本次保存分支复用精确已有目标，新建主机、外部 Agent 和跨平台仍待验。
+
 ## 原页账本与保存
 
-`workspace_quick_target_prepare` 校验目标并由后台发行元数据和取消票据；`workspace_quick_target_cancel`、替换、换页和退出撤销旧句柄。单槽账本绑定原页面、WindowToken 和 reader。原指纹读取及密码、私钥与交互认证三类 Session prepare 根据原请求槽的目标 ID 解析账本，不接受页面追加启动地址、密码或指纹批准状态。发行回调保留原 reader／页面检查，不保留 SQL 读信用。
+`workspace_quick_target_prepare` 校验目标并由后台发行元数据和取消票据；`workspace_quick_target_cancel`、替换、换页和退出撤销旧句柄。单槽账本绑定原页面、WindowToken 和 reader。原指纹读取及密码、私钥、Agent（含明确联合）及交互认证的 Session prepare 根据原请求槽的目标 ID 解析账本，不接受页面追加启动地址、密码或指纹批准状态。发行回调保留原 reader／页面检查，不保留 SQL 读信用。
 
 只有 Root 实际注册会话后，后台才标记该临时目标可保存。`workspace_quick_target_save` 只接受原票据和显示名称，从后台句柄取地址、端口和用户名。保存票据单次消费，并在 SQL 最终提交检查当前页面与取消状态；未知、过期、未注册、重复和已撤销目标拒绝，不自动重试。保存走原 Host CAS 事务，成功后才把新保存 ID 加入本机最近列表。临时虚拟 ID 不写 saved MRU。
 

@@ -1,4 +1,6 @@
 //! Local Agent authentication for an intermediate, exact-target SSH hop. No remote Agent forwarding.
+#[path = "ssh_agent_interactive_forward.rs"]
+pub(crate) mod joint;
 use super::*;
 use pulse_app::vault_owner::AgentForwardSink;
 use pulse_core::ssh_target::SshTarget;

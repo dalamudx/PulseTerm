@@ -75,6 +75,7 @@ function decode(value: unknown): SearchResult {
 /** One authorized literal pass; busy/errors never retry or change the source revision. */
 export class HistoryFinder {
   busy = false;
+  stopping = false;
   expired = false;
   private messageValue: string | UiMessage = "";
   get message(): string {
@@ -104,8 +105,17 @@ export class HistoryFinder {
     private readonly found: (page: HistoryPage) => void,
     private readonly changed: () => void,
   ) {}
+  /** Stop scheduling batches; retain admission until the current native read returns. */
+  stop(): void {
+    if (this.disposed || !this.busy || this.stopping) return;
+    this.operation++;
+    this.stopping = true;
+    this.message = "正在停止查找，当前页已保留。";
+    this.changed();
+  }
   clear(): void {
     this.operation++;
+    this.stopping = false;
     this.revision = undefined;
     this.matchedRow = this.matchedEnd = undefined;
     this.expired = false;
@@ -264,6 +274,10 @@ export class HistoryFinder {
               : "查找未完成，当前页已保留。请稍后重新查找。";
     } finally {
       this.busy = false;
+      if (this.stopping) {
+        this.stopping = false;
+        this.message = "已停止查找，当前页已保留。";
+      }
       if (!this.disposed) this.changed();
     }
   }

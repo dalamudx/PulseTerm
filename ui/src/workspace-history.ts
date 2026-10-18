@@ -204,6 +204,7 @@ export function showWorkspaceHistory(options: {
   };
   const previous = makeButton("上一个"),
     next = makeButton("下一个");
+  const stop = makeButton("停止查找");
   uiAttribute(previous, "title", "较早的匹配（Shift+Enter）");
   uiAttribute(next, "title", "较新的匹配（Enter）");
   search.append(
@@ -215,6 +216,7 @@ export function showWorkspaceHistory(options: {
     wordLabel,
     previous,
     next,
+    stop,
   );
   const content = doc.createElement("pre");
   content.className = "workspace-history-content";
@@ -223,6 +225,7 @@ export function showWorkspaceHistory(options: {
   uiAttribute(content, "aria-label", "当前页历史文本");
   const status = doc.createElement("p");
   status.setAttribute("role", "status");
+  uiAttribute(status, "aria-label", "历史分页状态");
   status.setAttribute("aria-live", "polite");
   const actions = doc.createElement("div");
   actions.className = "terminal-paste-actions";
@@ -243,6 +246,8 @@ export function showWorkspaceHistory(options: {
     latest.disabled = busy || !current();
     searchScope.disabled = regex.disabled = busy || !current();
     previous.disabled = next.disabled = busy || !query.value || !current();
+    stop.hidden = !finder.busy;
+    stop.disabled = finder.stopping || !current();
     content.setAttribute("aria-busy", String(busy));
     const page = searchPage ?? pager.page;
     if (
@@ -333,6 +338,7 @@ export function showWorkspaceHistory(options: {
   };
   previous.addEventListener("click", () => find(true));
   next.addEventListener("click", () => find(false));
+  stop.addEventListener("click", () => finder.stop());
   query.addEventListener("input", () => finder.clear());
   matchCase.addEventListener("change", () => finder.clear());
   regex.addEventListener("change", () => finder.clear());

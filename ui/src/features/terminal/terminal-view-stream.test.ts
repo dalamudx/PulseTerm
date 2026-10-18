@@ -48,7 +48,7 @@ function fixture(beforeDraw?: () => void) {
   };
   const renderer = {
     create: vi.fn(async () => surface),
-    draw: vi.fn(async () => {}),
+    draw: vi.fn(async (_current?: () => boolean) => {}),
   };
   const callbacks = {
     beforeDraw,
@@ -83,6 +83,33 @@ function fixture(beforeDraw?: () => void) {
     bootstrap,
   };
 }
+it("a viewport redraw holds live-output credit until stable drawing is verified", async () => {
+  const f = fixture();
+  await f.bootstrap();
+  await f.stream.enqueue(frame(3));
+  f.renderer.draw.mockClear();
+  f.surface.prepareDraw.mockClear();
+  f.surface.verifyDraw.mockClear();
+  const gate = deferred();
+  const current = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+  Object.assign(f.surface, { drawIsCurrent: current });
+  f.renderer.draw.mockImplementation(async (check?: () => boolean) => {
+    expect(check?.()).toBe(false);
+    expect(f.surface.prepareDraw).toHaveBeenCalledTimes(2);
+    expect(f.surface.verifyDraw).not.toHaveBeenCalled();
+    expect(f.ack).toEqual([0, 1, 2, 3]);
+    await gate.promise;
+    expect(check?.()).toBe(true);
+  });
+  const pending = f.stream.enqueue(frame(4));
+  await vi.waitFor(() => expect(f.renderer.draw).toHaveBeenCalledOnce());
+  expect(f.ack).toEqual([0, 1, 2, 3]);
+  gate.resolve();
+  await pending;
+  expect(f.surface.verifyDraw).toHaveBeenCalledOnce();
+  expect(f.ack).toEqual([0, 1, 2, 3, 4]);
+  f.stream.cancel();
+});
 it("resize pause cancels pending frame without ACK or releasing the native-bound scope", async () => {
   const f = fixture();
   await f.bootstrap();

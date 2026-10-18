@@ -13,7 +13,9 @@ def verify(context):
     evidence, prefix = context['evidence'], context['prefix']
 
     key_joint = context.get("key_interactive_mode", False)
-    flag = "--key-interactive" if key_joint else "--interactive"
+    agent_joint = context.get("agent_interactive_mode", False)
+    joint = key_joint or agent_joint
+    flag = "--agent-interactive" if agent_joint else "--key-interactive" if key_joint else "--interactive"
     def unchanged():
         assert hashes() == initial, 'cli.mfa.metadata_changed'
 
@@ -24,6 +26,8 @@ def verify(context):
         assert result.returncode == 0 and 'MFA' in text, 'cli.mfa.method_preview_missing'
         if key_joint:
             assert "私钥 + MFA" in text, "cli.key_mfa.explicit_method_preview_missing"
+        if agent_joint:
+            assert "Agent + MFA" in text, "cli.agent_mfa.explicit_method_preview_missing"
         if locked:
             assert context['host'] in text and context['identity'] in text
         else:
@@ -37,6 +41,10 @@ def verify(context):
         click('连接')
         wait(lambda: accessible('Account <literal>').returncode == 0, 'cli_mfa_round_one')
         assert context['auth_count']() == before
+        if agent_joint:
+            assert count('fixture.agent_selected_signed_once') == count('fixture.ssh_key_joint_partial_success')
+            assert count('fixture.ssh_key_joint_partial_success') > 0
+            assert count('fixture.ssh_key_joint_premature_mfa_rejected') == 0
 
     def warm():
         context['client'] = subprocess.Popen(
@@ -95,13 +103,19 @@ def verify(context):
     xdo('key', '--clearmodifiers', 'Escape')
     client_result('cold-round-cancel', False)
     wait(lambda: count('fixture.ssh_interactive_stream_exited') == 1, 'cold_round_native_exit')
-    assert quiet(); unchanged()
+    assert context['auth_count']() == 0
+    if agent_joint: assert count('fixture.agent_selected_signed_once') == 1
+    else: assert quiet()
+    unchanged()
 
     warm()
     context['client'].terminate(); client_result('warm-disconnect', False)
     wait(lambda: accessible('Account <literal>').returncode != 0, 'disconnected_question_closed')
     wait(lambda: count('fixture.ssh_interactive_stream_exited') == 2, 'disconnect_native_exit')
-    assert quiet(); unchanged()
+    assert context['auth_count']() == 0
+    if agent_joint: assert count('fixture.agent_selected_signed_once') == 2
+    else: assert quiet()
+    unchanged()
 
     close_gui(app)
     app = launch('cold-approved')
@@ -112,6 +126,13 @@ def verify(context):
     unchanged(); close_gui(app)
     wait(lambda: count('fixture.ssh_interactive_stream_exited') == 4 and count('fixture.ssh_authenticated_stream_exited') == 2, 'all_native_streams_exited')
     assert context['auth_count']() == 2
+    if agent_joint:
+        assert count('fixture.agent_selected_signed_once') == 4
+        assert count('fixture.ssh_key_joint_partial_success') == 4
+        assert count('fixture.agent_unexpected_sign_request') == 0
+        assert count('fixture.ssh_password_auth_attempt_rejected') == 0
+        assert count('fixture.ssh_public_key_authenticated') == 0
+        assert count('fixture.ssh_key_joint_shell_requested') == 2
     receipt = {
         'version': 1, 'passed': True, 'scope': 'Linux production WebView with real CLI and two-round russh fixture',
         'cold_locked_cancel_zero_auth': True, 'unlock_not_approval': True,
@@ -122,9 +143,11 @@ def verify(context):
         'original_gui_exit_zero': True, 'endpoints_drained': True,
         'cancelled_native_streams': 2, 'authenticated_native_streams': 2,
         'external_mfa_provider_checked': False, 'cross_platform_checked': False,
-        "authentication": "key-interactive" if key_joint else "interactive",
-        "joint_policy_requires_both_factors": key_joint,
-        "fixture_only_partial_success_correction": key_joint,
+        "authentication": "agent-interactive" if agent_joint else "key-interactive" if key_joint else "interactive",
+        "joint_policy_requires_both_factors": joint,
+        "fixture_only_partial_success_correction": joint,
+        "selected_agent_signatures": count('fixture.agent_selected_signed_once') if agent_joint else 0,
+        "nonselected_agent_signatures": count('fixture.agent_unexpected_sign_request'),
     }
     (evidence / (prefix + '-result.json')).write_text(json.dumps(receipt, indent=2) + '\n')
     print('workspace.cli_interactive_cold_warm_two_rounds_cancellation_refresh_native_exit_confirmed')

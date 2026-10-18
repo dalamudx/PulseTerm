@@ -492,6 +492,11 @@ pub(super) async fn workspace_ssh_agent_session_prepare(
         let token = canonical(&token, 4)?;
         let requests = state.0.ssh_sessions.requests.clone();
         let guard = requests.authorization(&page, token)?;
+        let temporary = state.0.quick_targets.resolve(
+            &state.0.registry,
+            &page,
+            requests.selected_host(&page, token)?,
+        )?;
         let directory = window
             .app_handle()
             .path()
@@ -503,7 +508,7 @@ pub(super) async fn workspace_ssh_agent_session_prepare(
         requests
             .prepare_agent(page.clone(), token, async move {
                 reader
-                    .ssh_key_source(registry, source_page, directory, guard, None)
+                    .ssh_key_source(registry, source_page, directory, guard, temporary)
                     .await
             })
             .await?;

@@ -19,6 +19,7 @@ export function renderFence(
   signal: AbortSignal,
   connected: () => boolean,
   clock: FrameClock = browser,
+  current: () => boolean = () => true,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let frame: number | undefined;
@@ -58,8 +59,20 @@ export function renderFence(
         timeout();
         return;
       }
-      if (++count === 2) {
-        finish();
+      try {
+        if (!current()) {
+          // Repaint a moved viewport without extending the original deadline.
+          count = 0;
+        } else if (++count === 2) {
+          finish();
+          return;
+        }
+      } catch (error) {
+        finish(
+          error instanceof Error
+            ? error
+            : new Error("terminal.render_unavailable"),
+        );
         return;
       }
       frame = clock.request(step);

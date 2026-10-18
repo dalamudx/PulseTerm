@@ -130,68 +130,87 @@ it.each(["unsolicited", "repeat", "cancel", "unavailable"])(
   },
 );
 
-function jointHop(index = 0) {
+type JointMethod = "key-interactive" | "agent-interactive";
+function jointHop(index = 0, method: JointMethod = "key-interactive") {
   const reply = hop(index, false);
   return {
     ...reply,
-    prompt: { ...reply.prompt, keyInteractiveAvailable: true },
+    prompt: {
+      ...reply.prompt,
+      [method === "agent-interactive"
+        ? "agentInteractiveAvailable"
+        : "keyInteractiveAvailable"]: true,
+    },
   };
 }
-it("mixes explicit private-key MFA with a saved leaf, uses the original token and clears answers", async () => {
-  const answers = ["synthetic joint answer"],
-    sent: unknown[] = [];
-  let hopIndex = 0;
-  const rpc = vi.fn(async (command: string, args: unknown) => {
-    if (command.endsWith("begin")) return { version: 1, token };
-    if (command.endsWith("wait")) return jointHop();
-    if (command.endsWith("confirm")) {
-      expect((args as { approved: RouteDecision }).approved).toBe(
-        hopIndex ? true : "key-interactive",
-      );
-      return hopIndex
-        ? { version: 1, state: "connected", session: "9" }
-        : question();
-    }
-    if (command.endsWith("answer")) {
-      sent.push({
-        ...(args as object),
-        answers: [...(args as { answers: string[] }).answers],
-      });
-      hopIndex = 1;
-      return jointHop(1);
-    }
-    return { version: 1 };
-  });
-  await expect(
-    connectSshRoute(
-      nonce,
-      { ...selection, privateKey: true },
-      new AbortController().signal,
-      () => true,
-      async (p) => (p.index ? true : "key-interactive"),
-      rpc as HostRpc,
-      async () => answers,
-    ),
-  ).resolves.toBe("9");
-  expect(sent).toEqual([
-    { nonce, token, round: nonce, answers: ["synthetic joint answer"] },
-  ]);
-  expect(answers).toEqual([]);
-  expect(rpc.mock.calls.some(([command]) => command.endsWith("cancel"))).toBe(
-    false,
-  );
-});
-it.each([
-  "unavailable",
-  "wrong-kind",
-  "repeat",
-  "cancel",
-  "unsolicited",
-  "bad-capability",
-  "both-kinds",
-])(
-  "rejects %s private-key MFA without another answer or authentication fallback",
-  async (variant) => {
+function jointSelection(method: JointMethod) {
+  return method === "agent-interactive"
+    ? { ...selection, agent: true }
+    : { ...selection, privateKey: true };
+}
+it.each(["key-interactive", "agent-interactive"] as const)(
+  "mixes explicit %s with a saved leaf, uses the original token and clears answers",
+  async (method) => {
+    const answers = ["synthetic joint answer"],
+      sent: unknown[] = [];
+    let hopIndex = 0;
+    const rpc = vi.fn(async (command: string, args: unknown) => {
+      if (command.endsWith("begin")) return { version: 1, token };
+      if (command.endsWith("wait")) return jointHop(0, method);
+      if (command.endsWith("confirm")) {
+        expect((args as { approved: RouteDecision }).approved).toBe(
+          hopIndex ? true : method,
+        );
+        return hopIndex
+          ? { version: 1, state: "connected", session: "9" }
+          : question();
+      }
+      if (command.endsWith("answer")) {
+        sent.push({
+          ...(args as object),
+          answers: [...(args as { answers: string[] }).answers],
+        });
+        hopIndex = 1;
+        return jointHop(1, method);
+      }
+      return { version: 1 };
+    });
+    await expect(
+      connectSshRoute(
+        nonce,
+        jointSelection(method),
+        new AbortController().signal,
+        () => true,
+        async (p) => (p.index ? true : method),
+        rpc as HostRpc,
+        async () => answers,
+      ),
+    ).resolves.toBe("9");
+    expect(sent).toEqual([
+      { nonce, token, round: nonce, answers: ["synthetic joint answer"] },
+    ]);
+    expect(answers).toEqual([]);
+    expect(rpc.mock.calls.some(([command]) => command.endsWith("cancel"))).toBe(
+      false,
+    );
+  },
+);
+it.each(
+  (["key-interactive", "agent-interactive"] as const).flatMap((method) =>
+    [
+      "unavailable",
+      "wrong-kind",
+      "repeat",
+      "cancel",
+      "unsolicited",
+      "bad-capability",
+      "both-kinds",
+      "both-keys",
+    ].map((variant) => ({ method, variant })),
+  ),
+)(
+  "rejects $variant $method without another answer or authentication fallback",
+  async ({ method, variant }) => {
     let submitted = 0;
     const answers = ["synthetic joint answer"];
     const rpc = vi.fn(async (command: string) => {
@@ -200,16 +219,30 @@ it.each([
         if (variant === "unsolicited") return question();
         if (variant === "unavailable") return hop(0, false);
         if (variant === "wrong-kind") return hop(0, true);
-        const reply = jointHop();
+        const reply = jointHop(0, method);
         if (variant === "bad-capability")
           return {
             ...reply,
-            prompt: { ...reply.prompt, keyInteractiveAvailable: "yes" },
+            prompt: {
+              ...reply.prompt,
+              [method === "agent-interactive"
+                ? "agentInteractiveAvailable"
+                : "keyInteractiveAvailable"]: "yes",
+            },
           };
         if (variant === "both-kinds")
           return {
             ...reply,
             prompt: { ...reply.prompt, interactiveAvailable: true },
+          };
+        if (variant === "both-keys")
+          return {
+            ...reply,
+            prompt: {
+              ...reply.prompt,
+              keyInteractiveAvailable: true,
+              agentInteractiveAvailable: true,
+            },
           };
         return reply;
       }
@@ -224,10 +257,10 @@ it.each([
     await expect(
       connectSshRoute(
         nonce,
-        { ...selection, privateKey: true },
+        jointSelection(method),
         new AbortController().signal,
         () => true,
-        async () => "key-interactive",
+        async () => method,
         rpc as HostRpc,
         ask,
       ),

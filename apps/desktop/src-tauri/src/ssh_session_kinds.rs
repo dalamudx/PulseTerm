@@ -126,10 +126,14 @@ impl Action {
                 .await
                 .map(|v| Intent::KeyInteractive(v, broker)),
             (Self::Agent(v), Source::Agent(s)) => v.prepare(store, s).await.map(Intent::Agent),
-            (Self::AgentInteractive(v, broker), Source::Agent(s)) => v
-                .prepare(store, s)
-                .await
-                .map(|v| Intent::AgentInteractive(v, broker)),
+            (Self::AgentInteractive(v, broker), Source::Agent(s)) => {
+                let intent = if s.is_temporary() {
+                    v.prepare_temporary(store, s).await?
+                } else {
+                    v.prepare(store, s).await?
+                };
+                Ok(Intent::AgentInteractive(intent, broker))
+            }
             (Self::Interactive(v, broker), Source::Interactive(s)) => v
                 .prepare(store, s)
                 .await

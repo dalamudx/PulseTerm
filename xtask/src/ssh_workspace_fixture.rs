@@ -162,8 +162,13 @@ impl server::Handler for GuiPeer {
         _: &[(Pty, u32)],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        self.pty =
-            term == "xterm-256color" && (2..=160).contains(&cols) && (2..=60).contains(&rows);
+        let scope_probe = std::env::var_os("PULSE_SSH_SCOPE_PROBE").is_some();
+        let allowed_term =
+            term == "xterm-256color" || (scope_probe && matches!(term, "xterm" | "vt100"));
+        self.pty = allowed_term && (2..=160).contains(&cols) && (2..=60).contains(&rows);
+        if self.pty && scope_probe {
+            eprintln!("fixture.ssh_scope_term.{term}");
+        }
         if self.pty {
             session.channel_success(channel)?;
         } else {
@@ -211,7 +216,23 @@ impl server::Handler for GuiPeer {
         if !self.pty || self.line.len().saturating_add(data.len()) > 512 {
             return Err(russh::Error::Disconnect);
         }
+        let scope_probe = std::env::var_os("PULSE_SSH_SCOPE_PROBE").is_some();
+        if scope_probe {
+            eprintln!("fixture.ssh_scope_input_received");
+        }
         for byte in data {
+            if scope_probe && *byte == 7 && self.line.starts_with(b"\x1b]10;rgb:") {
+                let preset = match self.line.as_slice() {
+                    b"\x1b]10;rgb:ffff/ffff/ffff" => "classic",
+                    b"\x1b]10;rgb:e2e2/e8e8/f0f0" => "midnight",
+                    b"\x1b]10;rgb:1f1f/2929/3737" => "paper",
+                    _ => return Err(russh::Error::Disconnect),
+                };
+                eprintln!("fixture.ssh_scope_color.{preset}");
+                self.line.clear();
+                session.data(channel, b"GUI_SCOPE_COLOR_OK\r\n".to_vec())?;
+                continue;
+            }
             if *byte == b'\r' || *byte == b'\n' {
                 if self.line.is_empty() {
                     continue;
@@ -223,6 +244,28 @@ impl server::Handler for GuiPeer {
                     session.eof(channel)?;
                     session.close(channel)?;
                     self.line.clear();
+                } else if scope_probe && self.line == b"SCOPE_QUERY" {
+                    self.line.clear();
+                    session.data(channel, b"\x1b]10;?\x07".to_vec())?;
+                } else if scope_probe && self.line == b"SCOPE_HISTORY" {
+                    self.line.clear();
+                    let mut output = format!(
+                        "SOFT{}中éNEEDLE\r\nHARD_BREAK_A\r\nHARD_BREAK_B\r\n",
+                        "0123456789".repeat(20)
+                    );
+                    for row in 0..120 {
+                        output.push_str(&format!("HISTORY_ROW_{row:03}\r\n"));
+                    }
+                    session.data(channel, output.into_bytes())?;
+                    eprintln!("fixture.ssh_scope_history_sent");
+                } else if scope_probe && self.line == b"\x08\x7f" {
+                    self.line.clear();
+                    eprintln!("fixture.ssh_scope_keys.bs_del");
+                    session.data(channel, b"GUI_SCOPE_KEYS_OK\r\n".to_vec())?;
+                } else if scope_probe && self.line == b"\x7f\x1b[3~" {
+                    self.line.clear();
+                    eprintln!("fixture.ssh_scope_keys.del_csi");
+                    session.data(channel, b"GUI_SCOPE_KEYS_OK\r\n".to_vec())?;
                 } else {
                     if std::env::var_os("PULSE_SSH_ROUTE").is_some() && self.line == b"R" {
                         eprintln!("fixture.route_input_R_confirmed");
@@ -435,7 +478,10 @@ pub(crate) fn run() -> Result<()> {
                     Arc::new(|| true),
                 )
                 .await?;
-            let agent_route = std::env::args().nth(3).as_deref() == Some("agent-route");
+            let agent_route = matches!(
+                std::env::args().nth(3).as_deref(),
+                Some("agent-route" | "agent-interactive-route")
+            );
             let private_public = if agent_route {
                 Some(
                     russh::keys::PrivateKey::new(
@@ -450,7 +496,13 @@ pub(crate) fn run() -> Result<()> {
             };
             let route_servers = if matches!(
                 std::env::args().nth(3).as_deref(),
-                Some("route" | "agent-route" | "interactive-route" | "key-interactive-route")
+                Some(
+                    "route"
+                        | "agent-route"
+                        | "interactive-route"
+                        | "key-interactive-route"
+                        | "agent-interactive-route"
+                )
             ) {
                 Some(
                     route_fixture::seed(
@@ -460,7 +512,11 @@ pub(crate) fn run() -> Result<()> {
                         agent_route,
                         matches!(
                             std::env::args().nth(3).as_deref(),
-                            Some("interactive-route" | "key-interactive-route")
+                            Some(
+                                "interactive-route"
+                                    | "key-interactive-route"
+                                    | "agent-interactive-route"
+                            )
                         ),
                     )
                     .await?,
@@ -548,6 +604,7 @@ pub(crate) fn run() -> Result<()> {
                             | "key-interactive"
                             | "key-interactive-route"
                             | "agent-interactive"
+                            | "agent-interactive-route"
                     )
                 )
                 .then_some(0),
@@ -594,7 +651,13 @@ pub(crate) fn run() -> Result<()> {
             let _route_servers = route_servers;
             let _agent = if matches!(
                 std::env::args().nth(3).as_deref(),
-                Some("agent" | "agent-route" | "cold-agent" | "agent-interactive")
+                Some(
+                    "agent"
+                        | "agent-route"
+                        | "cold-agent"
+                        | "agent-interactive"
+                        | "agent-interactive-route"
+                )
             ) {
                 Some(agent_fixture::start(seed_root(&dir)?.join("agent.sock"))?)
             } else {

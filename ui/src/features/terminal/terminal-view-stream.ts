@@ -45,7 +45,10 @@ type PaintSurface = Pick<
   | "dispose"
 > &
   Partial<
-    Pick<TerminalSurface, "enableInput" | "measuredDimensions" | "focusOutput">
+    Pick<
+      TerminalSurface,
+      "enableInput" | "measuredDimensions" | "focusOutput" | "drawIsCurrent"
+    >
   >;
 export interface TerminalStreamRenderer {
   create(
@@ -54,7 +57,7 @@ export interface TerminalStreamRenderer {
     palette: string,
     geometry: SurfaceGeometry,
   ): Promise<PaintSurface>;
-  draw(): Promise<void>;
+  draw(current?: () => boolean): Promise<void>;
 }
 class SurfaceSink implements V2Sink {
   private surface: PaintSurface | undefined;
@@ -109,7 +112,25 @@ class SurfaceSink implements V2Sink {
     signal: AbortSignal,
     notifyBell = this.live,
   ): Promise<void> {
+    return this.writeBatch([bytes], signal, notifyBell);
+  }
+  async writeBatch(
+    chunks: readonly Uint8Array[],
+    signal: AbortSignal,
+    notifyBell = this.live,
+  ): Promise<void> {
     const surface = this.get(signal);
+    let bytes = chunks[0] ?? new Uint8Array(0);
+    if (chunks.length > 1) {
+      bytes = new Uint8Array(
+        chunks.reduce((size, chunk) => size + chunk.length, 0),
+      );
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+    }
     for (let offset = 0; offset < bytes.length; offset += 65536) {
       this.check(signal);
       await surface.writeParsed(
@@ -124,7 +145,12 @@ class SurfaceSink implements V2Sink {
     this.beforeDraw?.();
     const surface = this.get(signal);
     surface.prepareDraw();
-    await this.renderer.draw();
+    await this.renderer.draw(() => {
+      this.check(signal);
+      if (surface.drawIsCurrent?.() !== false) return true;
+      surface.prepareDraw();
+      return false;
+    });
     this.beforeDraw?.();
     this.check(signal);
     await surface.verifyDraw();
@@ -228,10 +254,12 @@ export class TerminalViewStream implements ViewResource {
     private readonly callbacks: TerminalStreamCallbacks,
     renderer: TerminalStreamRenderer = {
       create: createTerminalSurface,
-      draw: () =>
+      draw: (current) =>
         renderFence(
           scope.signal,
           () => scope.isCurrent() && element.isConnected,
+          undefined,
+          current,
         ),
     },
     display?: DisplayPreferences,

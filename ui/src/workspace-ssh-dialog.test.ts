@@ -926,20 +926,86 @@ it("Agent plus MFA is explicit and submits only the saved identity to its own fl
   expect(f.dependencies.connectInteractive).not.toHaveBeenCalled();
   expect(f.dependencies.connect).not.toHaveBeenCalled();
 });
-it("Agent plus MFA stays disabled for saved routes and cannot bypass routing", async () => {
+it("Agent plus MFA uses the exact saved route and cannot bypass it through a direct flow", async () => {
   const f = agentJointFixture(true);
   await f.controller.open();
   expect(
     Array.from(f.identity.options).find(
       (o) => o.value === `agent-joint:${identityId}`,
     )?.disabled,
-  ).toBe(true);
+  ).toBe(false);
   f.identity.value = `agent-joint:${identityId}`;
+  f.identity.dispatchEvent(new Event("change"));
   f.connect.dispatchEvent(new Event("click"));
-  await Promise.resolve();
-  expect(f.connect.disabled).toBe(true);
+  await vi.waitFor(() => expect(f.connected).toHaveBeenCalledWith(nonce, "3"));
+  expect(f.dependencies.connectRoute).toHaveBeenCalledWith(
+    nonce,
+    expect.objectContaining({
+      host: hostId,
+      identity: identityId,
+      privateKey: false,
+      agent: true,
+    }),
+    expect.any(AbortSignal),
+    expect.any(Function),
+    expect.any(Function),
+  );
   expect(f.dependencies.connectAgentInteractive).not.toHaveBeenCalled();
   expect(f.dependencies.connectAgent).not.toHaveBeenCalled();
-  expect(f.dependencies.connectRoute).not.toHaveBeenCalled();
+  expect(f.dependencies.connectKeyInteractive).not.toHaveBeenCalled();
   expect(f.dependencies.connect).not.toHaveBeenCalled();
+});
+
+it("temporary Agent plus MFA stays explicit, publishes save only after registration and never falls back", async () => {
+  for (const reject of [false, true]) {
+    const f = agentJointFixture();
+    const target = {
+      version: 1 as const,
+      token: nonce,
+      target: {
+        id: hostId,
+        label: "Temporary Agent MFA",
+        host: "127.0.0.1",
+        port: 22,
+        username: "user",
+      },
+    };
+    const pending = deferred<string>();
+    f.dependencies.connectAgentInteractive.mockImplementation(
+      () => pending.promise,
+    );
+    await f.controller.open(hostId, target);
+    expect(f.identity.value).toBe(`agent:${identityId}`);
+    expect(
+      f.identity.options.find(
+        (option) => option.value === `agent-joint:${identityId}`,
+      )?.disabled,
+    ).toBe(false);
+    f.identity.value = `agent-joint:${identityId}`;
+    f.identity.dispatchEvent(new Event("change"));
+    f.connect.dispatchEvent(new Event("click"));
+    await vi.waitFor(() =>
+      expect(f.dependencies.connectAgentInteractive).toHaveBeenCalledTimes(1),
+    );
+    expect(f.temporaryConnected).not.toHaveBeenCalled();
+    expect(
+      f.dependencies.connectAgentInteractive.mock.calls[0]?.slice(0, 2),
+    ).toEqual([nonce, { host: hostId, identity: identityId }]);
+    if (reject) f.controller.close();
+    pending.resolve("11");
+    if (reject) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(f.connected).not.toHaveBeenCalled();
+      expect(f.temporaryConnected).not.toHaveBeenCalled();
+    } else {
+      await vi.waitFor(() =>
+        expect(f.temporaryConnected).toHaveBeenCalledWith(nonce, target),
+      );
+      expect(f.connected).toHaveBeenCalledWith(nonce, "11");
+    }
+    expect(f.dependencies.connectAgent).not.toHaveBeenCalled();
+    expect(f.dependencies.connect).not.toHaveBeenCalled();
+    expect(f.dependencies.connectKeyInteractive).not.toHaveBeenCalled();
+    expect(f.dependencies.connectInteractive).not.toHaveBeenCalled();
+  }
 });

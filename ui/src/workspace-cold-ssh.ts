@@ -24,23 +24,29 @@ export async function confirmColdSsh(
         preview:
           selection.alias !== undefined
             ? message("保存的 SSH 入口：{0}", selection.alias)
-            : selection.authentication === "key-interactive"
+            : selection.authentication === "agent-interactive"
               ? message(
-                  "主机 {0}\n身份 {1}\n认证方式：私钥 + MFA（两种因素均须成功）",
+                  "主机 {0}\n身份 {1}\n认证方式：Agent + MFA（两种因素均须成功）",
                   selection.hostId,
                   selection.identityId,
                 )
-              : selection.authentication === "interactive"
+              : selection.authentication === "key-interactive"
                 ? message(
-                    "主机 {0}\n身份 {1}\n认证方式：交互认证 / MFA",
+                    "主机 {0}\n身份 {1}\n认证方式：私钥 + MFA（两种因素均须成功）",
                     selection.hostId,
                     selection.identityId,
                   )
-                : message(
-                    "主机 {0}\n身份 {1}",
-                    selection.hostId,
-                    selection.identityId,
-                  ),
+                : selection.authentication === "interactive"
+                  ? message(
+                      "主机 {0}\n身份 {1}\n认证方式：交互认证 / MFA",
+                      selection.hostId,
+                      selection.identityId,
+                    )
+                  : message(
+                      "主机 {0}\n身份 {1}",
+                      selection.hostId,
+                      selection.identityId,
+                    ),
         previewLabel: "请求的保存记录",
         accept: unlocked ? "查看目标" : "解锁保险库",
         cancel: "取消",

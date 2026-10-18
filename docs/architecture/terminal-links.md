@@ -1,6 +1,6 @@
 # 终端链接识别、检查与系统浏览器交接
 
-TERM-10／SEC-08 已接通链接识别、目标检查、显式复制和 Linux 受限系统打开。Windows／macOS、真实系统浏览器与原生 WebView 验收仍未完成，不能据此关闭完整链接安全验收。
+TERM-10／SEC-08 已接通链接识别、目标检查、显式复制和 Linux 受限系统打开。Linux生产WebView／真实PTY的链接检查、Unix文件路径、系统剪贴板回读，以及GIO经隔离默认处理器打开实际图形Chrome本机HTTP页面均已通过。其他默认浏览器、HTTPS／代理／外网、SSH和Windows／macOS等完整验收继续开放。
 
 - 普通 HTTP／HTTPS 文本通过 xterm 公共 `registerLinkProvider` 与 buffer 单元格识别；OSC 8 通过显式 `linkHandler` 进入同一检查窗口，首次创建时即替换默认打开行为。
 - 严格 IPv4:端口与 `[IPv6]:端口`（可带路径、查询和片段）也通过同一 provider 识别，转换为完整 `http://` 候选后才进入检查窗口。界面明确提示按 HTTP 网页地址解释，端口不证明服务支持 HTTP；不推断 HTTPS、SSH 或其他协议，不支持主机名端口、IPv4 缩写、前导零、IPv6 zone ID 或无方括号 IPv6。端口范围 1～65535，拒绝前导零。
@@ -22,6 +22,18 @@ Linux 使用已锁定 GTK／GIO 的默认 URI 异步接口，不拼接命令行�
 每窗口最多一个未完成打开任务。信用随原生回调存活，等待方取消不能提前释放；窗口关闭及应用退出等待实际回调完成。确认后已经提交给系统的动作不能撤回，视图撤销只阻止后续请求及旧结果发布。完成收据仅表示 GIO 接受分发，不证明浏览器窗口出现、页面加载、网络成功或浏览器退出；应用也不等待浏览器进程结束。
 
 该动作只离开终端交给系统浏览器；不会导航 WebView、发送终端输入或重建输出订阅。只注册受限的 Tauri 命令，工作区 CSP 保持现有严格策略，不新增通用系统启动权限。
+
+## Linux 原生链接检查与复制验收
+
+`mise run probe-workspace-settings-contract` 版本3使用生产WebView、真实PTY和可信鼠标事件，覆盖普通网页、IPv4:端口、OSC8实际目标、带空格及行列后缀的Unix路径，以及含账号目标的拒绝。有效目标通过只读地址框逐字核对；点击复制后，由独立GTK进程读回私有Xvfb的系统剪贴板，确认OSC8复制真实目标、路径复制不含引号或行列。拒绝目标不显示地址且不能复制／打开，文件检查不显示浏览器按钮。
+
+Escape关闭与所有按钮操作没有额外PTY输入或工作区导航；三条会话、worker和GUI全部退出，既有设置／历史／滚动／响铃链继续通过。收据 `target/probes/workspace-settings-contract-result.json` 版本3和OSC8／文件路径实窗截图已归档。GIO到图形Chrome的补充范围见下节；其他浏览器、HTTPS／外网、SSH、Windows路径原生交互、系统IME／辅助技术及跨平台继续验收。
+
+## Linux GIO 到图形浏览器的补充验收
+
+版本4集中任务已验证真实工作区按钮→Tauri→GIO→独立XDG默认处理器→实际图形Chrome→本机HTTP页面。批准前无启动／请求；批准后核对GIO成功状态、实际目标、HTTP路径与User-Agent、浏览器窗口PID／标题及可见页面文字。成功后重复点击不再启动，正常关闭后浏览器进程组退出。原始PTY无额外输入，三条会话、HTTP服务与GUI全部退出。
+
+默认处理器是任务私有监督器，用精确URL限制为实际Chrome建立独立资料目录；`.desktop`、`mimeapps.list`和HTTP服务在夹具退出时移除。root／软件渲染测试中的Chrome使用`--no-sandbox`和`--disable-gpu`，不替代实际用户沙箱或性能验收。其他默认浏览器、HTTPS／代理／外网、SSH和跨平台继续开放。最终收据版本4及两张浏览器交接截图位于`target/probes/`，复用 `mise run probe-workspace-settings-contract`，需已有Chrome／Chromium。
 
 ## 开发验证
 

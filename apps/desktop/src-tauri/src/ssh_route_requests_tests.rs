@@ -29,6 +29,7 @@ pub(crate) async fn verify_bank(
         first_use: true,
         interactive_available: false,
         key_interactive_available: false,
+        agent_interactive_available: false,
     };
     issued.launch(&runtime, move |_, confirm| async move {
         let answer = confirm(prompt).await;

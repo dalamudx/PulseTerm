@@ -78,6 +78,8 @@ enum SshAuthentication {
     Interactive,
     #[serde(rename = "key-interactive")]
     KeyInteractive,
+    #[serde(rename = "agent-interactive")]
+    AgentInteractive,
 }
 #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
 impl SshAuthentication {
@@ -113,7 +115,7 @@ fn closed_saved_ssh_schema(schema: &mut schemars::Schema) {
         serde_json::json!({
             "host": {"type": "string"},
             "identity": {"type": "string"},
-            "authentication": {"type": "string", "enum": ["interactive", "key-interactive"]},
+            "authentication": {"type": "string", "enum": ["interactive", "key-interactive", "agent-interactive"]},
             "alias": {"type": "string"},
         }),
     );
@@ -129,7 +131,11 @@ impl ActionArgs for SavedSshArgs {
             } => {
                 if !matches!(
                     authentication,
-                    None | Some(SshAuthentication::Interactive | SshAuthentication::KeyInteractive)
+                    None | Some(
+                        SshAuthentication::Interactive
+                            | SshAuthentication::KeyInteractive
+                            | SshAuthentication::AgentInteractive
+                    )
                 ) {
                     return Err(pulse_cap::Error::Args);
                 }
@@ -557,6 +563,10 @@ mod tests {
             "workspace.ssh",
             Surface::Cli,
             serde_json::json!({"host":host,"identity":identity,"authentication":"key-interactive"}),
+        )?;
+        catalogue.validate_args(
+            "workspace.ssh", Surface::Cli,
+            serde_json::json!({"host":host,"identity":identity,"authentication":"agent-interactive"}),
         )?;
         for args in [
             serde_json::json!({"alias":"GUI_HOST","authentication":"key-interactive"}),

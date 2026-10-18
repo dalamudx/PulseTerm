@@ -97,10 +97,12 @@ pub(super) async fn run(
         None => None,
         Some(Value::String(method)) if method == "interactive" => Some("interactive"),
         Some(Value::String(method)) if method == "key-interactive" => Some("key-interactive"),
+        Some(Value::String(method)) if method == "agent-interactive" => Some("agent-interactive"),
         _ => return Err(cli_control::Error),
     };
     let interactive = authentication == Some("interactive");
     let key_interactive = authentication == Some("key-interactive");
+    let agent_interactive = authentication == Some("agent-interactive");
     let root = Arc::downgrade(&state.0);
     let owner = state.0.owner;
     let page = original.clone();
@@ -232,6 +234,19 @@ pub(super) async fn run(
             )),
             true,
             false,
+        )
+    } else if agent_interactive {
+        if routed.is_some() || resolved_alias || !source.supports_agent_selection(host, identity) {
+            return Err(cli_control::Error);
+        }
+        (
+            PreparedSelection::Interactive(mfa::Gesture::Agent(
+                gesture
+                    .into_agent_interactive()
+                    .map_err(|_| cli_control::Error)?,
+            )),
+            false,
+            true,
         )
     } else if interactive {
         if routed.is_some()

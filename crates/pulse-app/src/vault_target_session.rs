@@ -329,10 +329,8 @@ impl PasswordSessionIntent {
             .map_err(|_| VaultOwnerError::Denied)?;
         let source_registry = started_ref.source_registry().clone();
         let parts = sink.take_authenticated_root_parts()?;
-        let owner = started
-            .take()
-            .ok_or(VaultOwnerError::Denied)?
-            .commit(parts.handle, parts.native_join)
+        let owner = parts
+            .commit(started.take().ok_or(VaultOwnerError::Denied)?)
             .map_err(|_| VaultOwnerError::Denied)?;
         // Source confirmation is a point check, NOT an atomic SQL-to-network transaction.
         // A provisional owner cannot be published after a retired epoch/page/source result.

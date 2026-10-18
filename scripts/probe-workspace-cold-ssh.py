@@ -20,17 +20,22 @@ assert root.is_relative_to(Path('/data/temp'))
 root.chmod(0o700)
 evidence = Path('target/probes')
 env = os.environ.copy()
+agent_interactive_mode = os.environ.get("PULSE_CLI_AGENT_INTERACTIVE") == "1"
 key_interactive_mode = os.environ.get("PULSE_CLI_KEY_INTERACTIVE") == "1"
-interactive_mode = key_interactive_mode or os.environ.get("PULSE_CLI_INTERACTIVE") == "1"
+interactive_mode = key_interactive_mode or agent_interactive_mode or os.environ.get("PULSE_CLI_INTERACTIVE") == "1"
 binaries = Path(os.environ.get("CARGO_TARGET_DIR", "target")) / "debug"
+route_agent_interactive_mode = os.environ.get("PULSE_ROUTE_AGENT_INTERACTIVE") == "1"
 route_key_interactive_mode = os.environ.get("PULSE_ROUTE_KEY_INTERACTIVE") == "1"
-route_interactive_mode = route_key_interactive_mode or os.environ.get("PULSE_ROUTE_INTERACTIVE") == "1"
+route_interactive_mode = route_key_interactive_mode or route_agent_interactive_mode or os.environ.get("PULSE_ROUTE_INTERACTIVE") == "1"
 route_mode = route_interactive_mode or os.environ.get("PULSE_COLD_SSH_ROUTE") == "1"
-agent_mode = (route_mode and not route_interactive_mode) or os.environ.get("PULSE_COLD_SSH_AGENT") == "1"
+agent_mode = route_agent_interactive_mode or (route_mode and not route_interactive_mode) or os.environ.get("PULSE_COLD_SSH_AGENT") == "1"
 multiwindow_mode = os.environ.get("PULSE_SSH_MULTIWINDOW") == "1"
 alias_mode = os.environ.get("PULSE_SAVED_ALIAS") == "1"
 alias_case = os.environ.get("PULSE_SAVED_ALIAS_CASE", "")
 alias_warm = os.environ.get("PULSE_SAVED_ALIAS_WARM") == "1"
+scope_mode = os.environ.get("PULSE_SSH_SCOPE_PROBE") == "1"
+if scope_mode and (route_mode or agent_mode or interactive_mode or multiwindow_mode or alias_mode):
+    raise RuntimeError("SSH settings fixture cannot mix authentication modes")
 if alias_case not in {"", "ambiguous", "missing-default"}: raise RuntimeError("invalid owned alias case")
 close_cycles = int(os.environ.get('PULSE_COLD_CLOSE_CYCLES', '0'))
 close_state = os.environ.get('PULSE_COLD_CLOSE_STATE', 'locked')
@@ -44,11 +49,12 @@ if multiwindow_mode:
 if interactive_mode:
     if route_mode or agent_mode or multiwindow_mode or alias_mode or close_cycles:
         raise RuntimeError("interactive fixture cannot mix authentication modes")
-    prefix = "cli-key-interactive" if key_interactive_mode else "cli-interactive"
+    prefix = "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
 if route_interactive_mode:
     if interactive_mode or multiwindow_mode or alias_mode or close_cycles:
         raise RuntimeError("route MFA fixture cannot mix other diagnostic modes")
-    prefix = "route-key-interactive" if route_key_interactive_mode else "route-interactive"
+    prefix = "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
+if scope_mode: prefix = "workspace-ssh-settings"
 for name, sub in [('HOME','home'),('XDG_DATA_HOME','data'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache'),('XDG_RUNTIME_DIR','runtime')]:
     path = root / sub
     path.mkdir(mode=0o700)
@@ -124,6 +130,12 @@ def signature_count():
 def quiet():
     return signature_count() == 0 and all(event_count(name) == 0 for name in ("fixture.ssh_interactive_authenticated", "fixture.ssh_password_authenticated", "fixture.ssh_public_key_authenticated", "fixture.route.outer.authenticated", "fixture.route.middle.authenticated"))
 
+def pending_is_quiet(before):
+    if not agent_interactive_mode:
+        return quiet()
+    return (auth_count(), signature_count()) == before and all(event_count(name) == 0 for name in (
+        'fixture.agent_unexpected_sign_request', 'fixture.ssh_password_authenticated', 'fixture.ssh_public_key_authenticated'))
+
 def source_hashes():
     with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
         result = {}
@@ -174,8 +186,10 @@ def verify_route_pins():
 def launch(tag):
     global client, xid
     assert not guis() and not (runtime / 'control.sock').exists()
+    auth_before = auth_count()
+    signatures_before = event_count('fixture.agent_selected_signed_once')
     arguments = [str(pulse), 'open', '--host', 'GUI_HOST'] if alias_mode else [str(pulse), 'ssh', host, '--identity', identity]
-    if interactive_mode: arguments.append("--key-interactive" if key_interactive_mode else "--interactive")
+    if interactive_mode: arguments.append("--agent-interactive" if agent_interactive_mode else "--key-interactive" if key_interactive_mode else "--interactive")
     client = subprocess.Popen(arguments,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     app = wait(lambda: (guis() or [None])[0], 'cold_spawn')
     assert guis() == [app]
@@ -193,7 +207,13 @@ def launch(tag):
         except (subprocess.TimeoutExpired,OSError):
             pass
         raise
-    assert client.poll() is None and quiet()
+    assert client.poll() is None
+    if agent_interactive_mode:
+        assert auth_count() == auth_before
+        assert event_count('fixture.agent_selected_signed_once') == signatures_before
+        assert event_count('fixture.agent_unexpected_sign_request') == 0
+    else:
+        assert quiet()
     shot(tag+'-locked')
     return app
 
@@ -228,6 +248,7 @@ def close_gui(app):
     assert not guis() and not (runtime/'control.sock').exists() and not (runtime/'control.token').exists()
 
 def unlock_without_confirming():
+    before = (auth_count(), signature_count())
     click('解锁保险库')
     wait(lambda: accessible('主密码').returncode == 0, 'master_password_field')
     value = accessible('主密码','focus')
@@ -236,10 +257,10 @@ def unlock_without_confirming():
     xdo('type','--clearmodifiers','fixed-target-master')
     click('解锁保险库')
     wait(lambda: accessible('已解锁 · 不代表允许 SSH 使用凭据').returncode == 0, 'vault_available')
-    assert quiet() and client.poll() is None
+    assert pending_is_quiet(before) and client.poll() is None
     click('关闭')
     wait(lambda: accessible('查看目标').returncode == 0,'distinct_click')
-    assert quiet() and client.poll() is None
+    assert pending_is_quiet(before) and client.poll() is None
     shot('unlocked-still-unapproved')
 
 try:
@@ -248,18 +269,18 @@ try:
     marker.write_bytes(b'owned-fixture-v1'); marker.chmod(0o600)
     data = seed_root / 'data'; data.mkdir(mode=0o700)
     env['XDG_DATA_HOME'] = str(data)
-    if agent_mode:
+    if agent_mode or agent_interactive_mode:
         env["SSH_AUTH_SOCK"] = str(seed_root / "agent.sock")
     directory = data / 'dev.pulseterm.workspace-preview'
     database = directory / 'state.db'
-    if key_interactive_mode or route_key_interactive_mode:
+    if key_interactive_mode or agent_interactive_mode or route_key_interactive_mode or route_agent_interactive_mode:
         policy = seed_root / "owned-joint-policy"
         policy.write_text("partial")
         env["PULSE_SSH_KEY_MFA_POLICY"] = str(policy)
-        if route_key_interactive_mode:
+        if route_key_interactive_mode or route_agent_interactive_mode:
             for hop in ("outer", "middle"):
                 policy.with_suffix("."+hop).write_text("partial")
-    mode = "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
+    mode = "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
     peer = subprocess.Popen([os.environ.get("PULSE_SSH_FIXTURE_EXECUTABLE", str(binaries / "xtask")),"serve-workspace-ssh-fixture",str(directory),mode],env=env,stdout=peer_output,stderr=subprocess.STDOUT,start_new_session=True)
     wait(lambda:'fixture.ssh_gui_seeded_listening' in peer_log.read_text(),'fixture',30)
     def descriptor(prefix):
@@ -273,7 +294,7 @@ try:
             identity = rows[0][0]
     if route_mode:
         with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
-            if not route_interactive_mode:
+            if not route_interactive_mode or route_agent_interactive_mode:
                 rows = db.execute("SELECT id FROM agent_identities WHERE deleted=0 AND label='GUI_ROUTE_AGENT'").fetchall()
                 assert len(rows) == 1
                 identity = rows[0][0]
@@ -284,14 +305,18 @@ try:
             catalogue = next(doc for doc in documents if isinstance(doc,dict) and any(row.get('id')==host for row in doc.get('hosts',[])))
             route_targets = {row['label']:row for row in catalogue['hosts']}
         original_pins,original_pin_state = route_pins()
-    initial = source_hashes()
+    initial = None if scope_mode else source_hashes()
+    if scope_mode:
+        import runpy
+        runpy.run_path("scripts/probe-workspace-ssh-settings.py")["verify"](globals())
+        sys.exit(0)
     if route_interactive_mode:
-        prefix = "route-key-interactive" if route_key_interactive_mode else "route-interactive"
+        prefix = "route-agent-interactive" if route_agent_interactive_mode else "route-key-interactive" if route_key_interactive_mode else "route-interactive"
         import runpy
         runpy.run_path("scripts/probe-workspace-route-interactive.py")["verify"](globals())
         sys.exit(0)
     if interactive_mode:
-        prefix = "cli-key-interactive" if key_interactive_mode else "cli-interactive"
+        prefix = "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
         import runpy
         runpy.run_path("scripts/probe-workspace-cli-interactive.py")["verify"](globals())
         sys.exit(0)

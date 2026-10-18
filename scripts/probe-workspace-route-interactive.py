@@ -39,6 +39,9 @@ def verify(c):
         xdo('key','--clearmodifiers','Home')
         if interactive: xdo('key','Down')
         xdo('key','Return')
+        if agent_joint:
+            assert event("fixture.agent_selected_signed_once") == agent_signatures_before + max(0, index-1)
+            assert event("fixture.agent_connection_failed") == 0
         click(button)
     def answer(wrong=False, first_only=False):
         fill('Account <literal>', 'user')
@@ -56,7 +59,12 @@ def verify(c):
         c['client'] = subprocess.Popen(args,env=c['env'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         c['clients'].append(c['client'])
         wait(lambda: accessible("允许 CLI 连接保存的 SSH 主机？").returncode == 0,"warm_"+tag)
-        assert accessible("保存的主机与身份","readonly-text").returncode == 0
+        def exact_preview():
+            result = accessible("保存的主机与身份", "readonly-text")
+            if result.returncode != 0: return False
+            assert c["host"] in result.stdout and c["identity"] in result.stdout, "warm_wrong_saved_target"
+            return True
+        wait(exact_preview, "warm_exact_readonly_saved_target")
         click("连接")
     def result(tag, accepted):
         c['client_result'](tag,accepted)
@@ -68,25 +76,62 @@ def verify(c):
         xdo('type','--clearmodifiers','echo GUI_SSH_GUI')
         xdo('key','Return')
         wait(lambda:event("fixture.ssh_input_line_echoed") == expected,"real_terminal_input")
+    agent_joint = c.get("route_agent_interactive_mode", False)
+    agent_signatures_before = 0
     c['app'] = c['launch']('mixed-cold')
     c['unlock_without_confirming']()
     click('查看目标')
     wait(lambda: accessible('允许 CLI 连接保存的 SSH 主机？').returncode == 0,'cold_approval')
     assert event('fixture.route.outer.authenticated') == event('fixture.route.middle.authenticated') == event('fixture.ssh_interactive_authenticated') == 0
     click('连接')
-    complete(0)
-    complete(1,False)
+    complete(0, not agent_joint)
+    complete(1, agent_joint)
     complete(2)
     result('mixed-cold',True)
-    assert event('fixture.route.outer.interactive_authenticated') == 1
-    assert event('fixture.route.middle.authenticated') == 1 and event('fixture.route.middle.interactive_authenticated') == 0
+    assert event("fixture.route.outer.interactive_authenticated") == (0 if agent_joint else 1)
+    assert event("fixture.route.middle.authenticated") == 1 and event("fixture.route.middle.interactive_authenticated") == (1 if agent_joint else 0)
     assert event('fixture.ssh_interactive_authenticated') == 1
-    record("cold_mixed_explicit_key_mfa_saved_key_key_mfa_exact_peers" if joint else "cold_mixed_explicit_mfa_password_mfa_exact_peers")
+    record("cold_saved_password_agent_mfa_forward_agent_mfa_leaf_exact_peers" if agent_joint else "cold_mixed_explicit_key_mfa_saved_key_key_mfa_exact_peers" if joint else "cold_mixed_explicit_mfa_password_mfa_exact_peers")
     terminal_input(1)
     xdo('key','ctrl+r')
     terminal_input(2)
     assert event('fixture.ssh_interactive_authenticated') == 1
     record('real_terminal_input_and_refresh_without_reauthentication')
+    if agent_joint:
+        assert event("fixture.agent_selected_signed_once") == 2
+        assert event("fixture.agent_connection_failed") == 0
+        record("selected_agent_signed_only_after_each_exact_peer_approval")
+        agent_signatures_before = 2
+        warm("cancel-agent-leaf")
+        complete(0, False)
+        complete(1)
+        prompt(2)
+        wait(lambda: accessible("First verification code").returncode == 0, "agent_leaf_question_before_cancel")
+        assert event("fixture.agent_selected_signed_once") == 4
+        wait(lambda: all(event("fixture.route."+hop+".connection_opened")-event("fixture.route."+hop+".connection_exited") == 2 for hop in ("outer", "middle")), "cancel_route_has_only_two_live_attempts")
+        exits_before_cancel = {hop:event("fixture.route."+hop+".connection_exited") for hop in ("outer", "middle")}
+        leaf_exits_before_cancel = event("fixture.ssh_interactive_stream_exited")
+        xdo("key", "Escape")
+        result("cancel-agent-leaf", False)
+        wait(lambda: all(event("fixture.route."+hop+".connection_exited") == count+1 for hop,count in exits_before_cancel.items()) and event("fixture.ssh_interactive_stream_exited") == leaf_exits_before_cancel+1, "cancelled_agent_route_drained")
+        assert event("fixture.ssh_interactive_authenticated") == 1
+        record("pending_leaf_cancel_denied_without_fallback_and_parents_drained")
+        c["verify_route_pins"]()
+        current = c["source_hashes"]()
+        assert {key:value for key,value in current.items() if key not in ("known_hosts","known_hosts_state")} == {key:value for key,value in c["initial"].items() if key not in ("known_hosts","known_hosts_state")}
+        record("saved_agent_metadata_and_ciphertexts_unchanged")
+        c["shot"]("verified-agent-route-terminal")
+        c["close_gui"](c["app"])
+        for hop in ("outer", "middle"):
+            base = "fixture.route."+hop
+            wait(lambda: event(base+".connection_exited") == event(base+".connection_opened"), "all_"+hop+"_connections_exited")
+            wait(lambda: event(base+".forward_exited") == event(base+".forwarded"), "all_"+hop+"_forward_channels_exited")
+            assert event(base+".terminal_requested") == 0
+        wait(lambda: event("fixture.ssh_interactive_stream_exited") == 2, "all_agent_leaf_streams_exited")
+        assert event("fixture.agent_selected_signed_once") == 4 and event("fixture.agent_connection_failed") == 0
+        record("all_forward_and_leaf_resources_exited_and_no_intermediate_terminal")
+        (c["evidence"]/(c["prefix"]+"-result.json")).write_text(json.dumps({"checks":checks,"count":len(checks),"authentication":"password-forward+agent-mfa-forward+agent-mfa-terminal","selectedKeySignatures":4,"agentProtocolFailures":0,"realWebView":True,"realLoopbackSsh":True,"originalSavedTargets":True,"syntheticAnswersOnly":True,"externalServersChecked":False,"crossPlatformChecked":False},indent=2)+chr(10))
+        return
     if joint:
         policies["middle"].write_text("partial")
         for tag, policy_value, selected in (("ordinary-key-partial", "partial", False), ("key-rejected", "reject", True), ("key-only-success", "complete", True)):

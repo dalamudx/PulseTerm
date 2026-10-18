@@ -209,6 +209,17 @@ export class TerminalSurface implements ViewResource {
   private webgl: WebglRenderEvidence | undefined;
   private disposed = false;
   private writing = false;
+  private scrollToken: object = {};
+  private requestedViewport:
+    | Readonly<{
+        buffer: SurfaceDriver["buffer"]["active"];
+        viewportY: number;
+        baseY: number;
+        columns: number;
+        rows: number;
+        scrollToken: object;
+      }>
+    | undefined;
   private decoder = new Utf8Stream();
   private bellSignal: AbortSignal | undefined;
   private refreshScrollReturn: (() => void) | undefined;
@@ -283,7 +294,10 @@ export class TerminalSurface implements ViewResource {
       notice.dispose();
     });
     const listener = terminal.onScroll(() => {
-      if (!this.disposed && this.scope.isCurrent()) notice.refresh();
+      if (!this.disposed && this.scope.isCurrent()) {
+        this.scrollToken = {};
+        notice.refresh();
+      }
     });
     this.cleanup.push(() => listener.dispose());
     notice.refresh();
@@ -398,7 +412,31 @@ export class TerminalSurface implements ViewResource {
     this.check();
     if (this.writing) throw new Error("terminal.write_busy");
     this.webgl?.prepare();
+    const buffer = this.terminal.buffer.active;
+    this.requestedViewport = {
+      buffer,
+      viewportY: buffer.viewportY,
+      baseY: buffer.baseY,
+      columns: this.terminal.cols,
+      rows: this.terminal.rows,
+      scrollToken: this.scrollToken,
+    };
     this.terminal.refresh(0, this.terminal.rows - 1);
+  }
+  /** A scroll can invalidate a pending paint even when it returns to the same row. */
+  drawIsCurrent(): boolean {
+    this.check();
+    const requested = this.requestedViewport;
+    const buffer = this.terminal.buffer.active;
+    return (
+      !!requested &&
+      requested.buffer === buffer &&
+      requested.viewportY === buffer.viewportY &&
+      requested.baseY === buffer.baseY &&
+      requested.columns === this.terminal.cols &&
+      requested.rows === this.terminal.rows &&
+      requested.scrollToken === this.scrollToken
+    );
   }
   /** Called AFTER the two-rAF fence; DOM text/layout or completed GPU drawing
    * evidence. Neither is a desktop compositor acknowledgement. */

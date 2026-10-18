@@ -6,8 +6,8 @@ mkdir -p /data/temp target/probes
 fixture=$(mktemp -d /data/temp/pt-workspace-profile-editor.XXXXXX)
 trap 'rm -rf "$fixture"; test ! -e "$fixture"' EXIT
 export TMPDIR="$fixture" TMP="$fixture" TEMP="$fixture" PYTHONDONTWRITEBYTECODE=1
-export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
-mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$fixture/bin" "$fixture/work"
+export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache" XDG_RUNTIME_DIR="$fixture/runtime"
+mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR" "$fixture/bin" "$fixture/work"
 mkdir -m 700 "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview"
 printf '[terminal]\nfont_size = 13\n' > "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
 cat > "$fixture/bin/sh" <<'SHELL'
@@ -22,6 +22,9 @@ while :; do
   IFS= read -r line || continue
   printf '%s\n' "$line" >> "$PULSETERM_EDITOR_FIXTURE/input.$$"
   printf 'ECHO:%s\r\n' "$line"
+  case "$line" in
+    ALPHA_KEYS_*|ALPHA_COLORS_*) /usr/bin/python3 "$PULSETERM_EDITOR_FIXTURE/settings-query.py" "$line" "$$";;
+  esac
 done
 SHELL
 chmod 700 "$fixture/bin/sh"

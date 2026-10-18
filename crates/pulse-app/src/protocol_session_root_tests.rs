@@ -42,6 +42,47 @@ async fn same_root_protocol_owner_survives_page_change_and_keeps_both_quotas_unt
 }
 
 #[tokio::test]
+async fn protocol_behavior_survives_collection_and_page_refresh_until_native_reap() {
+    let registry = SessionRegistry::new();
+    let (window, original) = page_and_window(&registry);
+    let started = ProtocolSessionReservation::reserve(&registry, &original)
+        .unwrap()
+        .begin()
+        .unwrap();
+    let (handle, task, driver) = actor();
+    let (join, ended, release) = held_join(task, driver);
+    let mut owner = started.commit(handle, join).unwrap();
+    owner.appearance.backspace_send = Some("bs".into());
+    let id = owner.id();
+    let mut root = SessionRoot::new(registry.clone(), tokio::runtime::Handle::current());
+    root.adopt_protocol(owner).unwrap();
+    root.preflight_protocol(&registry).unwrap();
+    assert_eq!(
+        root.profile_appearance(id).backspace_send.as_deref(),
+        Some("bs")
+    );
+    let _current = registry.activate_launch_page(window).unwrap();
+    assert_eq!(root.collect_reaped(), 0);
+    assert_eq!(
+        root.profile_appearance(id).backspace_send.as_deref(),
+        Some("bs")
+    );
+    ended.await.unwrap();
+    let cleanup = root.close_protocol(id).unwrap();
+    assert_eq!(root.collect_reaped(), 0);
+    assert_eq!(
+        root.profile_appearance(id).backspace_send.as_deref(),
+        Some("bs")
+    );
+    let mut cleanup = Box::pin(cleanup.join());
+    pending(cleanup.as_mut());
+    release.send(()).unwrap();
+    cleanup.await.unwrap();
+    assert_eq!(root.collect_reaped(), 1);
+    assert!(root.profile_appearance(id).backspace_send.is_none());
+    root.shutdown().join().await.unwrap();
+}
+#[tokio::test]
 async fn foreign_registry_same_numeric_id_cannot_adopt_or_reclaim_root_session() {
     let a = SessionRegistry::new();
     let b = SessionRegistry::new();

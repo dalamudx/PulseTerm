@@ -62,7 +62,7 @@
 | LOCAL-05 | 管理员权限 profile | 在独立的提权窗口中打开，窗口有明显的视觉标识；**同一窗口内不混放管理员和普通标签**（W） | P1 |
 | LOCAL-06 | “在此处打开” | 资源管理器 / Finder / 文件管理器的右键菜单入口 | P1 |
 
-当前交付边界：Linux 自动 Unix Shell 的默认选择、隐藏、删除／显式恢复及参数／cwd／环境／稀疏外观编辑已限定验收。使用“本地 Profile → 管理 → 编辑”，参数按顺序填写并保留空值，cwd 留空继承或填写绝对路径，环境可覆盖或移除继承值；外观留空继承设置。保存不启动进程，下一次明确打开时应用，已有会话保留启动快照。任意命令／自定义 Profile、macOS 启动文件、Windows／WSL 与系统环境刷新仍是本表的未交付要求。详见 [编辑器边界](../architecture/profile-editor.md) 和 [当前进度](../development/plan.md)。
+当前交付边界：Linux 自动 Unix Shell 的默认选择、隐藏、删除／显式恢复及参数／cwd／环境／稀疏外观编辑已限定验收。独立 UUID 的自定义 Profile 已接通创建、复制、编辑、隐藏、删除／恢复、统一默认与 GUI／CLI 原窗口批准启动，Linux 实窗及独立进程重开通过。使用“本地 Profile → 管理”选择自动 Shell 或自定义项目；参数按顺序填写并保留空值，cwd 留空继承或填写绝对路径，环境可覆盖或移除继承值，外观留空继承设置。保存不启动进程，下一次明确打开时应用，已有会话保留启动快照。macOS 启动文件、Windows／WSL 与系统环境刷新仍未交付。详见 [编辑器边界](../architecture/profile-editor.md)、[自定义 Profile](../architecture/custom-profiles.md) 和 [当前进度](../development/plan.md)。
 
 ## 4. SSH
 

@@ -1,5 +1,9 @@
 import { invoke as nativeInvoke } from "@tauri-apps/api/core";
-import { message as uiMessage, uiText } from "./workspace-language";
+import {
+  uiAttribute,
+  message as uiMessage,
+  uiText,
+} from "./workspace-language";
 import { terminalPresetLabels } from "./workspace-terminal-preset";
 export type BehaviorApi = (
   command: string,
@@ -226,6 +230,7 @@ export class OrganizationBehaviorEditor {
       const label = document.createElement("label");
       uiText(label, labels[key]);
       const select = document.createElement("select");
+      uiAttribute(select, "aria-label", labels[key]);
       select.dataset.behavior = key;
       select.dataset.requiresView = "true";
       const inherit = document.createElement("option");
@@ -242,6 +247,8 @@ export class OrganizationBehaviorEditor {
       select.value = own === null || own === undefined ? "" : String(own);
       label.append(select);
       const hint = document.createElement("small");
+      hint.id = `organization-behavior-${target.kind}-${target.id}-${key}-source`;
+      select.setAttribute("aria-describedby", hint.id);
       const row = this.view?.values[key];
       uiText(
         hint,

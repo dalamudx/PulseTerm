@@ -7,11 +7,29 @@ mkdir -p /data/temp
 fixture=$(mktemp -d /data/temp/workspace-settings.XXXXXX)
 export HOME="$fixture/home" XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$HOME" "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+app=""; browser_service=""
+cleanup(){
+  cleanup_status=$?
+  trap - EXIT
+  if [ -n "$app" ]; then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi
+  if [ -n "$browser_service" ]; then
+    /usr/bin/python3 "$fixture/link-browser.py" stop "$fixture"
+    wait "$browser_service"
+  fi
+  rm -rf "$fixture"
+  exit "$cleanup_status"
+}
+trap cleanup EXIT
+if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
+  export XDG_RUNTIME_DIR="$fixture/runtime"
+  mkdir -m 700 "$XDG_RUNTIME_DIR"
+fi
 mkdir -m 700 "$fixture/bin"
 cat > "$fixture/bin/sh" <<'SHELL'
 #!/bin/sh
 : "${PULSETERM_SETTINGS_FIXTURE:?}"
 printf '%s\n' "$$" > "$PULSETERM_SETTINGS_FIXTURE/native.pid"
+printf '%s\n' "$$" >> "$PULSETERM_SETTINGS_FIXTURE/native-pids"
 printf 'Settings terminal fixed fixture\r\n'
 while :; do
   if IFS= read -r text; then :; else result=$?; [ "$result" -gt 128 ] && continue; break; fi
@@ -20,16 +38,35 @@ while :; do
   printf 'echo:%s\r\n' "$text"
   case "$text" in
     FONT_*) printf "font-sample: -> => != === 中文 😀\r\n";;
+    ALPHA_TERM_*) printf '{"term":"%s"}\n' "$TERM" > "$PULSETERM_SETTINGS_FIXTURE/$text-$$.json";;
+    ALPHA_KEYS_*|ALPHA_COLORS_*) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/settings-query.py" "$text" "$$";;
+    ALPHA_HISTORY) n=0;while [ "$n" -lt 1100 ];do printf 'alpha-history-%04d\r\n' "$n";n=$((n+1));done;;
+    ALPHA_INTERACTION) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/terminal-interaction.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
+    ALPHA_ALT) printf '\033[?1049hALPHA-ALT-needle\r\n';;
+    ALPHA_PRIMARY) printf '\033[?1049l';;
+    ALPHA_FINISH) printf 'ALPHA-ENDED-needle\r\n';exit 0;;
     LIGATURES*) printf "ligature-sample: 中😀é => !== === -> != <= >= <=> && || :: := ...\r\n";;
   esac
 done
 SHELL
 chmod 700 "$fixture/bin/sh"
+if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
+  cp scripts/probe-workspace-terminal-interaction.py "$fixture/terminal-interaction.py"
+  cp scripts/probe-workspace-terminal-links.py "$fixture/terminal-links.py"
+  cp scripts/probe-workspace-link-browser.py "$fixture/link-browser.py"
+  /usr/bin/python3 "$fixture/link-browser.py" serve "$fixture" > target/probes/workspace-link-browser-service.log 2>&1 &
+  browser_service=$!
+  browser_attempt=0
+  while [ ! -f "$fixture/browser-config.json" ]; do
+    kill -0 "$browser_service"
+    [ "$browser_attempt" -lt 80 ] || { echo "workspace.browser_fixture_start_timeout.$fixture" >&2;exit 1; }
+    browser_attempt=$((browser_attempt+1));sleep .1
+  done
+fi
 log=target/probes/workspace-settings-native.log
-PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+workspace_bin="${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace"
+PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "$workspace_bin" > "$log" 2>&1 &
 app=$!
-cleanup(){ kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;rm -rf "$fixture"; }
-trap cleanup EXIT
 count(){ grep -c "^workspace.$1$" "$log"||true; }
 await_count(){ wait_key=$1;wait_goal=$2;wait_tries=0;while [ "$(count "$wait_key")" -lt "$wait_goal" ];do kill -0 "$app" 2>/dev/null||exit 1;[ "$wait_tries" -lt 80 ]||{ echo "workspace.settings_timeout.$wait_key" >&2; if [ -n "${xid:-}" ];then timeout 3s import -window "$xid" "target/probes/workspace-settings-failure-$wait_key.png" || true;fi;tail -18 "$log" >&2;exit 1;};wait_tries=$((wait_tries+1));sleep 0.1;done; }
 await_count profiles_listed 1
@@ -52,6 +89,13 @@ pid=$(cat "$fixture/native.pid")
 old_rows=$(head -1 "$fixture/size"|awk '{print $1}')
 old_cols=$(head -1 "$fixture/size"|awk '{print $2}')
 kill -0 "$pid"
+if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
+  python3 scripts/probe-workspace-settings-contract.py "$fixture" "$app" "$xid" "$file" "$log"
+  timeout 2s xdotool key --clearmodifiers alt+F4
+  await_count exited 1;wait "$app"
+  python3 scripts/probe-workspace-settings-contract.py finalize "$fixture"
+  exit 0
+fi
 timeout 2s xdotool mousemove --window "$xid" 904 22 click 1
 await_count settings_read_confirmed 2
 sleep 0.2
@@ -235,7 +279,7 @@ if [ "${PULSE_FONT_PRESET:-0}" = 1 ];then
   saved_hash=$(sha256sum "$file"|awk '{print $1}')
   font_grid=$(tail -1 "$fixture/size")
   log=target/probes/workspace-font-reopened-native.log
-  PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+  PULSETERM_SETTINGS_FIXTURE="$fixture" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "$workspace_bin" > "$log" 2>&1 &
   app=$!
   await_count profiles_listed 1
   xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true)

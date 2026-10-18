@@ -82,6 +82,7 @@ class TestNode {
   querySelectorAll() {
     return this.children;
   }
+  scrollIntoView() {}
   focus() {
     if (!this.disabled) this.ownerDocument.activeElement = this;
   }

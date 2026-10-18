@@ -102,6 +102,11 @@ impl SavedSessionGesture {
     pub fn into_key_interactive(self) -> Result<super::PrivateKeyInteractiveSessionGesture> {
         super::PrivateKeyInteractiveSessionGesture::from_saved_capture(self.capture)
     }
+    /// Consume an explicit saved-Agent plus MFA choice without renewing its original authority.
+    /// Agent-only gestures cannot be converted into a joint authentication choice.
+    pub fn into_agent_interactive(self) -> Result<super::AgentInteractiveSessionGesture> {
+        super::AgentInteractiveSessionGesture::from_saved_capture(self.capture)
+    }
     /// Choose only the unique active saved identity in a single bounded transaction capture.
     /// A snapshot is not a source-verification receipt or credential-use authority.
     pub fn select_source(self, source: &SshKeyTargetSource) -> Result<SavedSessionSelection> {

@@ -7,9 +7,16 @@ import {
   type InteractivePrompt,
 } from "./workspace-ssh-interactive";
 
-export type CliSshAuthentication = "interactive" | "key-interactive";
+export type CliSshAuthentication =
+  | "interactive"
+  | "key-interactive"
+  | "agent-interactive";
 function isCliSshAuthentication(value: unknown): value is CliSshAuthentication {
-  return value === "interactive" || value === "key-interactive";
+  return (
+    value === "interactive" ||
+    value === "key-interactive" ||
+    value === "agent-interactive"
+  );
 }
 export interface CliSshPrompt {
   hostId: string;
@@ -293,7 +300,7 @@ export interface CliNewTabOptions {
     answers: string[],
   ) => Promise<void>;
   cancelInteractive?: (nonce: string, token: string) => Promise<void>;
-  failed: () => void;
+  failed: (error?: unknown) => void;
 }
 interface Pending {
   nonce: string;
@@ -577,7 +584,7 @@ export class CliNewTabController {
         answered = true;
         await completePresentation(pending.nonce, presentation, session, true);
       }
-    } catch {
+    } catch (error) {
       if (this.pending === pending && pending.presenting) this.clear();
       if (
         presentation &&
@@ -599,7 +606,7 @@ export class CliNewTabController {
           /* No uncertain completion is retried. */
         }
       }
-      if (current()) options.failed();
+      if (current()) options.failed(error);
     }
   }
 }

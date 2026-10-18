@@ -311,7 +311,9 @@ pub(super) async fn seed(
                 connection: false,
                 agent_key,
                 interactive_round: interactive_route.then_some(0),
-                key_joint: key_interactive_route,
+                key_joint: key_interactive_route
+                    || (std::env::args().nth(3).as_deref() == Some("agent-interactive-route")
+                        && label == "middle"),
                 key_factor_complete: false,
             };
             eprintln!("fixture.route.{label}.listening.{}", target.port());

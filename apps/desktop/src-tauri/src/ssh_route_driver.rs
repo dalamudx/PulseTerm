@@ -47,6 +47,7 @@ pub(crate) struct Prompt {
     pub first_use: bool,
     pub interactive_available: bool,
     pub key_interactive_available: bool,
+    pub agent_interactive_available: bool,
 }
 #[derive(serde::Deserialize)]
 #[serde(untagged)]
@@ -60,12 +61,15 @@ pub(crate) enum InteractiveChoice {
     Interactive,
     #[serde(rename = "key-interactive")]
     KeyInteractive,
+    #[serde(rename = "agent-interactive")]
+    AgentInteractive,
 }
 #[derive(Clone, Copy)]
 enum Authentication {
     Saved,
     Interactive,
     KeyInteractive,
+    AgentInteractive,
 }
 impl From<bool> for Decision {
     fn from(value: bool) -> Self {
@@ -79,6 +83,9 @@ impl Decision {
             Self::Interactive(InteractiveChoice::Interactive) => Ok(Authentication::Interactive),
             Self::Interactive(InteractiveChoice::KeyInteractive) => {
                 Ok(Authentication::KeyInteractive)
+            }
+            Self::Interactive(InteractiveChoice::AgentInteractive) => {
+                Ok(Authentication::AgentInteractive)
             }
             Self::Approved(false) => Err("workspace.denied"),
         }
@@ -163,10 +170,8 @@ pub(crate) async fn run(
     let mut cleanup_known = true;
     let outcome = async {
         for (index, hop) in hops.iter().enumerate() {
-            let (selection, mut source) = route
-                .take_next_selection()
-                .map_err(|_| "workspace.denied")?
-                .into_parts();
+            let selection = route.take_next_selection().map_err(|_| "workspace.denied")?;
+            let mut source = selection.source().clone();
             let target = HostTarget::new(
                 hop.endpoint().target().host(),
                 hop.endpoint().target().port(),
@@ -201,10 +206,12 @@ pub(crate) async fn run(
             let interactive_available =
                 source.supports_route_interactive_selection(hop.entrance_id(), identity);
             let key_interactive_available = source.supports_private_key_selection(hop.entrance_id(), identity);
+            let agent_interactive_available = source.supports_agent_selection(hop.entrance_id(), identity);
             let mut authentication = Authentication::Saved;
             let make_prompt = |key: &russh::keys::PublicKey, first_use| Prompt {
                 interactive_available,
                 key_interactive_available,
+                agent_interactive_available,
                 index,
                 count: hops.len(),
                 entrance: hop.entrance_id().to_string(),
@@ -308,9 +315,16 @@ pub(crate) async fn run(
                     Authentication::Saved => selection,
                     Authentication::Interactive if interactive_available && context.broker.is_some() => selection.into_interactive().map_err(|_| "workspace.denied")?,
                     Authentication::KeyInteractive if key_interactive_available && context.broker.is_some() => selection.into_key_interactive().map_err(|_| "workspace.denied")?,
+                    Authentication::AgentInteractive if agent_interactive_available && context.broker.is_some() => selection.into_agent_interactive().map_err(|_| "workspace.denied")?,
                     _ => return Err("workspace.denied"),
                 };
+                let (selection, _) = selection.into_parts();
                 Ok(match selection {
+                    RouteHopGesture::AgentInteractive(gesture) => Prepared::AgentJoint(Box::new(
+                        gesture.begin_session_authorized(&context.owner, &context.page, guard.clone())
+                            .map_err(|_| "workspace.denied")?
+                            .prepare_route(&context.store, source.clone()).await.map_err(|_| "workspace.denied")?,
+                    )),
                     RouteHopGesture::PrivateKeyInteractive(gesture) => Prepared::Joint(Box::new(
                         gesture.begin_session_authorized(&context.owner, &context.page, guard.clone())
                             .map_err(|_| "workspace.denied")?
@@ -363,6 +377,21 @@ pub(crate) async fn run(
             let selected = (hop.entrance_id(), identity);
             if index + 1 < hops.len() {
                 let result = match prepared {
+                    Prepared::AgentJoint(intent) => {
+                        let mut sink = match super::agent::forward::joint::JointForwardSink::new(
+                            transport, selected, context.size,
+                            context.broker.as_ref().ok_or("workspace.denied")?.clone(),
+                            context.store.clone(), intent.selected_source().0.clone(),
+                        ).await {
+                            Ok(sink) => sink,
+                            Err(known) => { cleanup_known &= known; return Err("workspace.denied"); }
+                        };
+                        let result = guarded(&guard, deadline, async {
+                            intent.authenticate_forward(&context.store, &mut sink).await.map_err(|_| "workspace.ssh_auth_failed")
+                        }).await;
+                        if result.is_err() && sink.close_and_drain().await.is_err() { cleanup_known = false; }
+                        result
+                    }
                     Prepared::Joint(intent) => {
                         let mut sink = match ssh_private_key_adapter::interactive::forward::JointForwardSink::new(
                             transport, selected, context.broker.as_ref().ok_or("workspace.denied")?.clone(),
@@ -509,6 +538,23 @@ pub(crate) async fn run(
                 }
             };
             let owner = match prepared {
+                Prepared::AgentJoint(intent) => {
+                    let mut sink = match super::agent::interactive::JointSessionSink::new(
+                        transport, selected, context.size, context.history_rows,
+                        context.broker.as_ref().ok_or("workspace.denied")?.clone(),
+                        context.store.clone(), intent.selected_source().0.clone(),
+                    ).await {
+                        Ok(sink) => sink,
+                        Err(known) => { cleanup_known &= known; cleanup_known &= owned.begin_close().wait().await.is_ok(); return Err("workspace.denied"); }
+                    };
+                    sink.set_palette(context.palette.clone());
+                    sink.attach_parents(owned);
+                    let result = guarded(&guard, deadline, async {
+                        intent.authenticate_route_terminal(&context.store, &mut sink, &mut started).await.map_err(|_| "workspace.ssh_auth_failed")
+                    }).await;
+                    if result.is_err() && sink.close_and_drain().await.is_err() { cleanup_known = false; }
+                    result
+                }
                 Prepared::Joint(intent) => {
                     let mut sink = match ssh_private_key_adapter::interactive::JointSessionSink::new_route(
                         transport, selected, context.size, context.history_rows,
@@ -691,6 +737,7 @@ pub(crate) async fn run(
     outcome
 }
 enum Prepared {
+    AgentJoint(Box<pulse_app::vault_owner::AgentInteractiveSessionIntent>),
     Joint(Box<pulse_app::vault_owner::PrivateKeyInteractiveSessionIntent>),
     Interactive(Box<pulse_app::vault_owner::InteractiveSessionIntent>),
     Agent(Box<pulse_app::vault_owner::AgentSessionIntent>),

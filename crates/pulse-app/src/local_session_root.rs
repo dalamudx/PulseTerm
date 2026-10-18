@@ -191,8 +191,11 @@ impl LocalSessionRoot {
         let previous = self.retiring.len();
         self.retiring
             .retain(|_, observer| *observer.borrow() != CleanupState::Reaped);
-        self.appearances
-            .retain(|id, _| self.owners.contains_key(id) || self.retiring.contains_key(id));
+        self.appearances.retain(|id, _| {
+            self.owners.contains_key(id)
+                || self.protocols.contains_key(id)
+                || self.retiring.contains_key(id)
+        });
         self.closing_handles
             .retain(|id, _| self.retiring.contains_key(id));
         previous - self.retiring.len()

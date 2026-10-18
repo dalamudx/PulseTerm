@@ -1,4 +1,9 @@
 export const terminalEnglish = {
+  停止查找: "Stop search",
+  "正在停止查找，当前页已保留。":
+    "Stopping search. The current page is preserved.",
+  "已停止查找，当前页已保留。":
+    "Search stopped. The current page is preserved.",
   确认终端粘贴: "Review terminal paste",
   "{0} 行，{1} UTF-8 字节。换行可能执行命令；Tab 和隐形字符可能改变含义。":
     "{0} lines, {1} UTF-8 bytes. Newlines can execute commands; tabs and invisible characters can change their meaning.",
@@ -71,6 +76,7 @@ export const terminalEnglish = {
   "较早的匹配（Shift+Enter）": "Earlier match (Shift+Enter)",
   "较新的匹配（Enter）": "Later match (Enter)",
   当前页历史文本: "History text on this page",
+  历史分页状态: "History page status",
   更早: "Older",
   较新: "Newer",
   最新历史: "Latest history",

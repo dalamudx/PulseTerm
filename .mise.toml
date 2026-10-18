@@ -548,8 +548,8 @@ run = [
 ]
 
 [tasks.probe-workspace-profile-editor]
-description = "Validate actual Profile editor cancellation/navigation, literal native arguments/cwd/env, immutable appearance, refresh/reopen and native exit"
-depends = ["workspace-preview-build"]
+description = "Validate Profile literal options, GUI/CLI key and foreground overrides, inherited/frozen sessions, refresh/reopen and native exit"
+depends = ["workspace-cli-build"]
 run = [
   "mkdir -p target/probes",
   "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
@@ -989,7 +989,7 @@ timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-ses
 """
 
 [tasks.probe-workspace-agent-interactive]
-description = "Verify explicitly selected saved Agent plus MFA, source revocation, one selected signature and complete native drain"
+description = "Verify explicitly selected saved and temporary Agent plus MFA, source revocation, one selected signature and complete native drain"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
 run = """
 set -eu
@@ -1002,4 +1002,102 @@ export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/agent-interactive-test-server.json
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/agent-interactive-wm.log sh scripts/probe-workspace-agent-interactive.sh
+"""
+
+
+[tasks.probe-workspace-cli-agent-interactive]
+description = "Verify explicit CLI saved Agent plus MFA, cold and warm approvals, selected signatures, cancellation and native drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-cli-agent-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-agent-interactive-test-server.json
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-agent-interactive-wm.log sh scripts/probe-workspace-cli-agent-interactive.sh
+"""
+
+
+[tasks.probe-workspace-route-agent-interactive]
+description = "Verify mixed saved password and selected Agent MFA hops, terminal recovery, cancellation and complete route drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_ROUTE_AGENT_INTERACTIVE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-route-agent-joint.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/route-agent-interactive-test-server.json
+mkdir -p target/probes
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gobject-2.0 glib-2.0)
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-agent-interactive-wm.log python3 scripts/probe-workspace-cold-ssh.py
+"""
+
+[tasks.probe-workspace-performance]
+description = "Record Linux production WebView process-tree PSS/RSS for one terminal, 100000 retained rows and 20 tabs"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp
+fixture_dir=$(mktemp -d /data/temp/pulseterm-performance-build.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+profile="${PULSE_PERFORMANCE_PROFILE:-dev}"
+case "$profile" in dev|release) ;; *) echo "Unsupported performance build profile: $profile" >&2; exit 1 ;; esac
+export PULSE_PERFORMANCE_PROFILE="$profile"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --profile "$profile" --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+mkdir -p target/probes/workspace-performance
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-performance/wm.log python3 scripts/probe-workspace-performance.py
+"""
+
+[tasks.probe-workspace-performance-release]
+description = "Measure the optimized Linux production WebView with the same process-tree scenarios"
+run = "PULSE_PERFORMANCE_PROFILE=release PULSE_PERFORMANCE_OUTPUT=release.json mise run probe-workspace-performance"
+
+[tasks.probe-workspace-settings-contract]
+description = "Verify explicit settings save and reopen, raw key bytes, frozen TERM/palette/history, GUI/CLI startup, PTY scrolling/bells, trusted link review and GTK clipboard readback, real GIO/Chrome handoff and native exit"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_ALPHA_SETTINGS = "1" }
+run = """
+set -eu
+mkdir -p /data/temp target/probes
+fixture_dir=$(mktemp -d /data/temp/pulseterm-settings-contract.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+command -v google-chrome >/dev/null || command -v chromium >/dev/null || command -v chromium-browser >/dev/null || { echo "Chrome/Chromium required for the isolated GIO browser probe" >&2; exit 1; }
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gobject-2.0 glib-2.0)
+cc -Wall -Wextra -Werror scripts/probe-x11-clipboard.c -o target/probes/x11-clipboard $(pkg-config --cflags --libs gtk+-3.0)
+timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-settings-contract-wm.log sh scripts/probe-workspace-settings.sh
+"""
+
+
+[tasks.probe-workspace-ssh-settings]
+description = "Verify global/direct-group/saved-SSH overrides and restored inheritance through remote PTY TERM, raw keys, remote OSC10, refresh, SSH soft-wrap/EOF search and physical exit"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_SSH_SCOPE_PROBE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp target/probes
+fixture_dir=$(mktemp -d /data/temp/pulseterm-ssh-settings.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+cargo build -p xtask --features ssh-target-probe --locked
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
+export PULSE_SSH_TEST_SERVER="$CARGO_TARGET_DIR/debug/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-settings-wm.log python3 scripts/probe-workspace-cold-ssh.py
 """

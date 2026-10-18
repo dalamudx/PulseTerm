@@ -127,7 +127,8 @@ export const profileOrganizationEnglish = {
   根分组: "Root group",
   保存分组: "Save group",
   创建分组: "Create group",
-  终端配色与行为: "Terminal colors and behavior",
+  分组终端配色与行为: "Group terminal colors and behavior",
+  "SSH 入口终端配色与行为": "SSH entry terminal colors and behavior",
   删除分组: "Delete group",
   "删除分组“{0}”？成员将移至未分组；含子分组时请先整理子分组。":
     "Delete group “{0}”? Members will become ungrouped. Move any child groups first.",

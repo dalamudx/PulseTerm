@@ -40,6 +40,7 @@ export class WorkspaceSplit {
   private readonly life = new AbortController();
   private readonly layout: WorkspaceLayoutView;
   private readonly phases = new Map<string, PanePhase>();
+  private readonly failures = new Map<string, Error>();
   private readonly abort = () => this.dispose();
   private disposed = false;
   private focused: string;
@@ -105,7 +106,9 @@ export class WorkspaceSplit {
             if (this.disposed || phase === "disposed") return;
             element.dataset.state = phase;
             this.phases.set(leaf.view.sessionId, phase);
-            this.notify(error);
+            if (error) this.failures.set(leaf.view.sessionId, error);
+            else this.failures.delete(leaf.view.sessionId);
+            this.notify();
             this.restoreDisplayFocus();
           },
         });
@@ -121,6 +124,7 @@ export class WorkspaceSplit {
             if (this.panes.get(leaf.id) === controller)
               this.panes.delete(leaf.id);
             this.phases.delete(leaf.view.sessionId);
+            this.failures.delete(leaf.view.sessionId);
           },
         };
       },
@@ -310,7 +314,10 @@ export class WorkspaceSplit {
   private notify(error?: Error) {
     if (this.disposed) return;
     try {
-      this.options.changed(this.state, this.focused, error);
+      const failed = this.maximized
+        ? this.failures.get(this.maximized)
+        : this.failures.values().next().value;
+      this.options.changed(this.state, this.focused, error ?? failed);
     } catch {
       /* Feedback does not authorize native operations. */
     }
@@ -343,5 +350,6 @@ export class WorkspaceSplit {
     this.layout.dispose();
     this.tree = undefined;
     this.panes.clear();
+    this.failures.clear();
   }
 }

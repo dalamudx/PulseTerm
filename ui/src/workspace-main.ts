@@ -5,7 +5,10 @@ import {
   displayPreferences,
 } from "./features/terminal/display-preferences";
 import { confirmTerminalPaste } from "./features/terminal/paste-dialog";
-import { workspaceTerminalError } from "./features/terminal/workspace-error";
+import {
+  workspaceTerminalError,
+  workspaceTerminalFailure,
+} from "./features/terminal/workspace-error";
 import { WorkspacePane } from "./features/terminal/workspace-pane";
 import { prepareWorkspaceVisibility } from "./features/terminal/workspace-visibility";
 import { formatChordSequence } from "./keybindings/chords";
@@ -240,9 +243,9 @@ installCliNewTab(window, {
         description:
           "仅使用请求时已确认的 Vault 密钥和保存目标。仍须通过该连接的指纹验证；取消不会认证或创建会话。",
         preview:
-          selection.authentication === "key-interactive"
+          selection.authentication === "agent-interactive"
             ? message(
-                "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n私钥 + MFA（两种因素均须成功）",
+                "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\nAgent + MFA（两种因素均须成功）",
                 selection.hostLabel,
                 selection.address,
                 selection.port,
@@ -251,9 +254,9 @@ installCliNewTab(window, {
                 selection.hostId,
                 selection.identityId,
               )
-            : selection.authentication === "interactive"
+            : selection.authentication === "key-interactive"
               ? message(
-                  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n交互认证 / MFA（不读取保存密码）",
+                  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n私钥 + MFA（两种因素均须成功）",
                   selection.hostLabel,
                   selection.address,
                   selection.port,
@@ -262,16 +265,27 @@ installCliNewTab(window, {
                   selection.hostId,
                   selection.identityId,
                 )
-              : message(
-                  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}",
-                  selection.hostLabel,
-                  selection.address,
-                  selection.port,
-                  selection.identityLabel,
-                  selection.username,
-                  selection.hostId,
-                  selection.identityId,
-                ),
+              : selection.authentication === "interactive"
+                ? message(
+                    "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n交互认证 / MFA（不读取保存密码）",
+                    selection.hostLabel,
+                    selection.address,
+                    selection.port,
+                    selection.identityLabel,
+                    selection.username,
+                    selection.hostId,
+                    selection.identityId,
+                  )
+                : message(
+                    "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}",
+                    selection.hostLabel,
+                    selection.address,
+                    selection.port,
+                    selection.identityLabel,
+                    selection.username,
+                    selection.hostId,
+                    selection.identityId,
+                  ),
         previewLabel: "保存的主机与身份",
         accept: "连接",
         cancel: "取消",
@@ -332,8 +346,14 @@ installCliNewTab(window, {
     });
     if (result !== null) throw Error("workspace.cli_selection_unconfirmed");
   },
-  failed: () => {
-    uiText(state, "CLI 启动或显示未确认 · 未重试，请刷新检查保留的会话");
+  failed: (error) => {
+    uiText(
+      state,
+      workspaceTerminalFailure(
+        error,
+        "CLI 启动或显示未确认 · 未重试，请刷新检查保留的会话",
+      ),
+    );
   },
 });
 installCliSelection(window, {
@@ -845,9 +865,15 @@ const sshDialog = new WorkspaceSshDialog({
       await refreshRecentHosts(nonce);
       if (!life.signal.aborted && window.__PULSE_WORKSPACE_NONCE__ === nonce)
         await attach(nonce, id);
-    } catch {
+    } catch (error) {
       if (!life.signal.aborted && window.__PULSE_WORKSPACE_NONCE__ === nonce)
-        uiText(state, "SSH 会话显示未确认 · 会话保留，请刷新检查，未重复连接");
+        uiText(
+          state,
+          workspaceTerminalFailure(
+            error,
+            "SSH 会话显示未确认 · 会话保留，请刷新检查，未重复连接",
+          ),
+        );
     } finally {
       if (!life.signal.aborted && window.__PULSE_WORKSPACE_NONCE__ === nonce) {
         busy = false;
@@ -1142,7 +1168,12 @@ async function attach(nonce: string, id: string): Promise<void> {
         ended: "会话输出已结束",
         failed: "终端连接失败 · 会话仍保留，可重新选择恢复",
       };
-      uiText(state, text[phase] ?? "");
+      uiText(
+        state,
+        error
+          ? workspaceTerminalFailure(error, text[phase] ?? "")
+          : (text[phase] ?? ""),
+      );
       if (error) {
         const code = workspaceTerminalError(error);
         terminal.dataset.failure = code;
@@ -1252,7 +1283,10 @@ async function showSplit(
         if (error) {
           const code = workspaceTerminalError(error);
           terminal.dataset.failure = code;
-          uiText(state, "分屏显示失败 · 原会话仍保留");
+          uiText(
+            state,
+            workspaceTerminalFailure(error, "分屏显示失败 · 原会话仍保留"),
+          );
           void invoke("workspace_terminal_report_failure", {
             nonce,
             code,
@@ -1264,9 +1298,15 @@ async function showSplit(
     view = next;
     await next.mount();
     return true;
-  } catch {
+  } catch (error) {
     if (!life.signal.aborted)
-      uiText(state, "无法显示分屏 · 原会话仍保留，可重新选择");
+      uiText(
+        state,
+        workspaceTerminalFailure(
+          error,
+          "无法显示分屏 · 原会话仍保留，可重新选择",
+        ),
+      );
     return false;
   } finally {
     busy = false;
@@ -1314,9 +1354,15 @@ async function selectSession(
     )
       return false;
     return view.focusOutput();
-  } catch {
+  } catch (error) {
     if (!life.signal.aborted)
-      uiText(state, "无法恢复显示 · 会话仍保留，可重新选择");
+      uiText(
+        state,
+        workspaceTerminalFailure(
+          error,
+          "无法恢复显示 · 会话仍保留，可重新选择",
+        ),
+      );
     return false;
   } finally {
     busy = false;
@@ -1350,9 +1396,15 @@ async function startLocalProfile(
     if (life.signal.aborted) return;
     await listSessions(nonce);
     await attach(nonce, id);
-  } catch {
+  } catch (error) {
     if (!life.signal.aborted) {
-      uiText(state, "启动或显示未确认 · 未重试，请刷新检查保留的会话");
+      uiText(
+        state,
+        workspaceTerminalFailure(
+          error,
+          "启动或显示未确认 · 未重试，请刷新检查保留的会话",
+        ),
+      );
       try {
         await listSessions(nonce);
       } catch {
@@ -2104,8 +2156,12 @@ element("workspace-pane-single").addEventListener(
     busy = true;
     controls();
     void attach(nonce, current.focusedSession)
-      .catch(() => {
-        if (!life.signal.aborted) uiText(state, "显示未确认 · 原会话仍保留");
+      .catch((error: unknown) => {
+        if (!life.signal.aborted)
+          uiText(
+            state,
+            workspaceTerminalFailure(error, "显示未确认 · 原会话仍保留"),
+          );
       })
       .finally(() => {
         busy = false;

@@ -149,4 +149,76 @@ describe("DOM frame fence", () => {
     await rejection;
     expect(c.callbacks.size).toBe(0);
   });
+  it("requires two fresh animation opportunities after viewport invalidation", async () => {
+    const c = clock();
+    let stable = true;
+    let completed = false;
+    const pending = renderFence(
+      new AbortController().signal,
+      () => true,
+      c,
+      () => stable,
+    ).then(() => {
+      completed = true;
+    });
+    c.tick();
+    stable = false;
+    c.tick();
+    stable = true;
+    c.tick();
+    await Promise.resolve();
+    expect(completed).toBe(false);
+    c.tick();
+    await pending;
+    expect(completed).toBe(true);
+    expect(c.callbacks.size).toBe(0);
+  });
+  it("viewport invalidation never extends the original deadline", async () => {
+    vi.useFakeTimers();
+    const c = clock();
+    let now = 0;
+    const pending = renderFence(
+      new AbortController().signal,
+      () => true,
+      { ...c, now: () => now },
+      () => false,
+    );
+    const rejected = expect(pending).rejects.toThrow(
+      "terminal.render_timeout.frames=0",
+    );
+    c.tick();
+    now = 999;
+    c.tick();
+    now = 1000;
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejected;
+    expect(c.callbacks.size).toBe(0);
+  });
+  it("cancels a viewport redraw and rejects failures in its validity check", async () => {
+    const c = clock();
+    const abort = new AbortController();
+    const pending = renderFence(
+      abort.signal,
+      () => true,
+      c,
+      () => false,
+    );
+    const rejected = expect(pending).rejects.toThrow("cancelled");
+    c.tick();
+    abort.abort();
+    await rejected;
+    expect(c.callbacks.size).toBe(0);
+    const failed = renderFence(
+      new AbortController().signal,
+      () => true,
+      c,
+      () => {
+        throw Error("view.retired");
+      },
+    );
+    const failure = expect(failed).rejects.toThrow("view.retired");
+    c.tick();
+    await failure;
+    expect(c.callbacks.size).toBe(0);
+  });
 });

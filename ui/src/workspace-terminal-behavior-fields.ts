@@ -1,4 +1,4 @@
-import { message, uiAttribute, uiText } from "./workspace-language";
+import { message, translate, uiAttribute, uiText } from "./workspace-language";
 import {
   type DisplaySetting,
   type SettingsChange,
@@ -53,8 +53,10 @@ export function terminalBehaviorField(options: {
   );
   save.type = "submit";
   uiText(save, "保存");
+  uiAttribute(save, "aria-label", message("保存{0}", message(caption)));
   reset.type = "button";
   uiText(reset, "恢复继承");
+  uiAttribute(reset, "aria-label", message("{0}恢复继承", message(caption)));
   reset.disabled = setting.source !== "user";
   form.append(label, source, save, reset);
   form.addEventListener(
@@ -65,7 +67,7 @@ export function terminalBehaviorField(options: {
       try {
         options.save(validateSettingsChange({ field, value: select.value }));
       } catch {
-        select.setCustomValidity("请选择支持的值。");
+        select.setCustomValidity(translate(doc, "请选择支持的值。"));
         select.reportValidity();
       }
     },
