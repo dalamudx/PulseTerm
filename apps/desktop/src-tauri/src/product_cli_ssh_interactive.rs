@@ -12,6 +12,7 @@ pub(super) enum Gesture {
     Interactive(InteractiveSessionGesture),
     PrivateKey(pulse_app::vault_owner::PrivateKeyInteractiveSessionGesture),
     Agent(pulse_app::vault_owner::AgentInteractiveSessionGesture),
+    Password(pulse_app::vault_owner::PasswordInteractiveSessionGesture),
 }
 pub(super) fn begin(
     window: WebviewWindow,
@@ -41,6 +42,14 @@ pub(super) fn begin(
             broker,
         ),
         Gesture::PrivateKey(gesture) => requests.begin_key_interactive_gesture(
+            page.clone(),
+            selected.0,
+            selected.1,
+            vault,
+            gesture,
+            broker,
+        ),
+        Gesture::Password(gesture) => requests.begin_password_interactive_gesture(
             page.clone(),
             selected.0,
             selected.1,

@@ -29,6 +29,75 @@ async fn password_identity(f: &Fixture) -> std::result::Result<Uuid, Box<dyn std
         .await?;
     Ok(identities.records().last().ok_or("fixture.identity")?.id())
 }
+
+#[test]
+fn cli_password_joint_preserves_original_capture_and_never_renews_authority() -> TestResult {
+    let _serial = crate::VAULT_CRYPTO_TEST_LOCK
+        .lock()
+        .map_err(|_| "fixture.poison")?;
+    runtime()?.block_on(async {
+        let f = Fixture::new().await?;
+        let id = password_identity(&f).await?;
+        let capture = || {
+            f.owner.begin_routed_session_gesture_authorized(
+                f.page.scope.clone(),
+                f.host,
+                id,
+                Arc::new(|| true),
+            )
+        };
+        assert!(
+            capture()?
+                .tighten_deadline(std::time::Instant::now() - std::time::Duration::from_secs(1))
+                .into_password_interactive()
+                .is_err()
+        );
+        let allowed = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let original = allowed.clone();
+        let revoked = f.owner.begin_saved_session_gesture_authorized(
+            f.page.scope.clone(),
+            f.host,
+            id,
+            Arc::new(move || original.load(std::sync::atomic::Ordering::Acquire)),
+        )?;
+        allowed.store(false, std::sync::atomic::Ordering::Release);
+        assert!(revoked.into_password_interactive().is_err());
+        let old = capture()?.into_password_interactive()?;
+        restore_same_dek(&f).await?;
+        assert!(
+            old.begin_session_authorized(&f.owner, &f.page.scope, Arc::new(|| true))
+                .is_err()
+        );
+        let foreign = page()?;
+        assert!(
+            capture()?
+                .into_password_interactive()?
+                .begin_session_authorized(&f.owner, &foreign.scope, Arc::new(|| true))
+                .is_err()
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let gesture = capture()?
+            .tighten_deadline(deadline)
+            .into_password_interactive()?;
+        assert!(gesture.matches_selection(f.host, id));
+        let intent = gesture
+            .begin_session_authorized(&f.owner, &f.page.scope, Arc::new(|| true))?
+            .prepare(
+                &f.store,
+                f.store.load_ssh_target_source(Arc::new(|| true)).await?,
+            )
+            .await?;
+        assert_eq!(intent.deadline(), deadline);
+        let guard = intent.authorization();
+        assert!(guard());
+        intent.cancellation().cancel();
+        assert!(!guard());
+        drop(guard);
+        drop(intent);
+        foreign.registry.shutdown()?;
+        f.finish().await
+    })
+}
 #[test]
 fn password_joint_original_page_owner_epoch_and_approval_cannot_be_replaced() -> TestResult {
     let _serial = crate::VAULT_CRYPTO_TEST_LOCK

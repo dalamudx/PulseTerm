@@ -27,7 +27,12 @@ pub(super) fn parse(args: impl IntoIterator<Item = OsString>) -> Option<Vec<Step
                 if args.get(cursor + prefix + 4).is_some_and(|arg| {
                     matches!(
                         arg.to_str(),
-                        Some("--interactive" | "--key-interactive" | "--agent-interactive")
+                        Some(
+                            "--interactive"
+                                | "--key-interactive"
+                                | "--agent-interactive"
+                                | "--password-interactive"
+                        )
                     )
                 }) =>
             {

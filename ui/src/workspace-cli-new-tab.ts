@@ -10,12 +10,14 @@ import {
 export type CliSshAuthentication =
   | "interactive"
   | "key-interactive"
-  | "agent-interactive";
+  | "agent-interactive"
+  | "password-interactive";
 function isCliSshAuthentication(value: unknown): value is CliSshAuthentication {
   return (
     value === "interactive" ||
     value === "key-interactive" ||
-    value === "agent-interactive"
+    value === "agent-interactive" ||
+    value === "password-interactive"
   );
 }
 export interface CliSshPrompt {

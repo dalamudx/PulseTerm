@@ -10,6 +10,8 @@ mod pulse_cold;
 #[cfg(test)]
 mod pulse_agent_interactive_tests;
 mod pulse_chain;
+#[cfg(test)]
+mod pulse_password_interactive_tests;
 fn method(args: impl IntoIterator<Item = std::ffi::OsString>) -> Option<&'static str> {
     let mut args = args.into_iter();
     let action = args.next()?;
@@ -103,6 +105,7 @@ fn base_request(args: Vec<std::ffi::OsString>) -> Option<(&'static str, serde_js
             Some("--interactive") => Some("interactive"),
             Some("--key-interactive") => Some("key-interactive"),
             Some("--agent-interactive") => Some("agent-interactive"),
+            Some("--password-interactive") => Some("password-interactive"),
             _ => None,
         };
         if (authentication.is_none() && args.len() != 4)
@@ -256,7 +259,7 @@ async fn main() -> ExitCode {
     // Validate every step before touching endpoints, spawning a window, or authenticating.
     let Some(steps) = pulse_chain::parse(std::env::args_os().skip(1)) else {
         eprintln!(
-            "usage: pulse [-w <window-label>] <action> [ . | ';' <action> ] (up to 8 actions); actions: windows, focus, profiles, new-window (running GUI), focus-tab <id>, new-tab|open <profile>, open --host <saved-entry-name>, split|split-pane <-v|-h> <profile>, ssh <saved-host-id> --identity <saved-identity-id> [--interactive|--key-interactive|--agent-interactive]"
+            "usage: pulse [-w <window-label>] <action> [ . | ';' <action> ] (up to 8 actions); actions: windows, focus, profiles, new-window (running GUI), focus-tab <id>, new-tab|open <profile>, open --host <saved-entry-name>, split|split-pane <-v|-h> <profile>, ssh <saved-host-id> --identity <saved-identity-id> [--interactive|--key-interactive|--agent-interactive|--password-interactive]"
         );
         return ExitCode::from(2);
     };

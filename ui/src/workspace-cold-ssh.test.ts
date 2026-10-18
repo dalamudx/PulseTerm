@@ -100,3 +100,32 @@ it("saved alias shows exact entry metadata and still requires an explicit decisi
   );
   expect(unlock).not.toHaveBeenCalled();
 });
+
+it("password plus MFA stays explicit on both sides of unlock without target approval", async () => {
+  vi.mocked(workspaceDecision)
+    .mockReset()
+    .mockResolvedValueOnce(true)
+    .mockResolvedValueOnce(false);
+  const unlock = vi.fn(async () => {});
+  const result = await confirmColdSsh(
+    document,
+    { ...selection, authentication: "password-interactive" as const },
+    new AbortController().signal,
+    {
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ version: 1, state: "locked" })
+        .mockResolvedValueOnce({ version: 1, state: "available" }),
+      unlock,
+    },
+  );
+  expect(result).toBe(false);
+  expect(unlock).toHaveBeenCalledTimes(1);
+  for (const call of vi.mocked(workspaceDecision).mock.calls) {
+    const preview = call[1].preview;
+    if (preview === undefined || typeof preview === "string")
+      throw Error("fixture.expected_message");
+    expect(renderUiMessage("zh-CN", preview)).toContain("密码 + MFA");
+    expect(renderUiMessage("en", preview)).toContain("Password + MFA");
+  }
+});

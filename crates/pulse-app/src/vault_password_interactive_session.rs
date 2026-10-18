@@ -44,6 +44,12 @@ impl PageVaultOwner {
     }
 }
 impl PasswordInteractiveSessionGesture {
+    pub(crate) fn from_saved_capture(capture: PasswordSessionGesture) -> Result<Self> {
+        if !capture.current() || Instant::now() >= capture.expires {
+            return Err(VaultOwnerError::Denied);
+        }
+        Ok(Self { capture })
+    }
     /// Check the exact identifiers captured by the original click.
     pub fn matches_selection(&self, host: Uuid, identity: Uuid) -> bool {
         self.capture.matches_selection(host, identity)

@@ -243,9 +243,9 @@ installCliNewTab(window, {
         description:
           "仅使用请求时已确认的 Vault 密钥和保存目标。仍须通过该连接的指纹验证；取消不会认证或创建会话。",
         preview:
-          selection.authentication === "agent-interactive"
+          selection.authentication === "password-interactive"
             ? message(
-                "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\nAgent + MFA（两种因素均须成功）",
+                "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n密码 + MFA（两种因素均须成功）",
                 selection.hostLabel,
                 selection.address,
                 selection.port,
@@ -254,9 +254,9 @@ installCliNewTab(window, {
                 selection.hostId,
                 selection.identityId,
               )
-            : selection.authentication === "key-interactive"
+            : selection.authentication === "agent-interactive"
               ? message(
-                  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n私钥 + MFA（两种因素均须成功）",
+                  "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\nAgent + MFA（两种因素均须成功）",
                   selection.hostLabel,
                   selection.address,
                   selection.port,
@@ -265,9 +265,9 @@ installCliNewTab(window, {
                   selection.hostId,
                   selection.identityId,
                 )
-              : selection.authentication === "interactive"
+              : selection.authentication === "key-interactive"
                 ? message(
-                    "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n交互认证 / MFA（不读取保存密码）",
+                    "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n私钥 + MFA（两种因素均须成功）",
                     selection.hostLabel,
                     selection.address,
                     selection.port,
@@ -276,16 +276,27 @@ installCliNewTab(window, {
                     selection.hostId,
                     selection.identityId,
                   )
-                : message(
-                    "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}",
-                    selection.hostLabel,
-                    selection.address,
-                    selection.port,
-                    selection.identityLabel,
-                    selection.username,
-                    selection.hostId,
-                    selection.identityId,
-                  ),
+                : selection.authentication === "interactive"
+                  ? message(
+                      "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}\n交互认证 / MFA（不读取保存密码）",
+                      selection.hostLabel,
+                      selection.address,
+                      selection.port,
+                      selection.identityLabel,
+                      selection.username,
+                      selection.hostId,
+                      selection.identityId,
+                    )
+                  : message(
+                      "{0} · {1}:{2}\n{3} · {4}\n主机 {5}\n身份 {6}",
+                      selection.hostLabel,
+                      selection.address,
+                      selection.port,
+                      selection.identityLabel,
+                      selection.username,
+                      selection.hostId,
+                      selection.identityId,
+                    ),
         previewLabel: "保存的主机与身份",
         accept: "连接",
         cancel: "取消",

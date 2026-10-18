@@ -21,9 +21,10 @@ assert root.is_relative_to(Path('/data/temp'))
 root.chmod(0o700)
 evidence = Path('target/probes')
 env = os.environ.copy()
+password_interactive_mode = os.environ.get("PULSE_CLI_PASSWORD_INTERACTIVE") == "1"
 agent_interactive_mode = os.environ.get("PULSE_CLI_AGENT_INTERACTIVE") == "1"
 key_interactive_mode = os.environ.get("PULSE_CLI_KEY_INTERACTIVE") == "1"
-interactive_mode = key_interactive_mode or agent_interactive_mode or os.environ.get("PULSE_CLI_INTERACTIVE") == "1"
+interactive_mode = password_interactive_mode or key_interactive_mode or agent_interactive_mode or os.environ.get("PULSE_CLI_INTERACTIVE") == "1"
 binaries = Path(os.environ.get("CARGO_TARGET_DIR", "target")) / "debug"
 route_agent_interactive_mode = os.environ.get("PULSE_ROUTE_AGENT_INTERACTIVE") == "1"
 route_key_interactive_mode = os.environ.get("PULSE_ROUTE_KEY_INTERACTIVE") == "1"
@@ -55,7 +56,7 @@ if multiwindow_mode:
 if interactive_mode:
     if route_mode or agent_mode or multiwindow_mode or alias_mode or close_cycles:
         raise RuntimeError("interactive fixture cannot mix authentication modes")
-    prefix = "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
+    prefix = "cli-password-interactive" if password_interactive_mode else "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
 if route_interactive_mode:
     if interactive_mode or multiwindow_mode or alias_mode or close_cycles:
         raise RuntimeError("route MFA fixture cannot mix other diagnostic modes")
@@ -195,14 +196,37 @@ def launch(tag):
     auth_before = auth_count()
     signatures_before = event_count('fixture.agent_selected_signed_once')
     arguments = [str(pulse), 'open', '--host', 'GUI_HOST'] if alias_mode else [str(pulse), 'ssh', host, '--identity', identity]
-    if interactive_mode: arguments.append("--agent-interactive" if agent_interactive_mode else "--key-interactive" if key_interactive_mode else "--interactive")
+    if interactive_mode: arguments.append("--password-interactive" if password_interactive_mode else "--agent-interactive" if agent_interactive_mode else "--key-interactive" if key_interactive_mode else "--interactive")
     client = subprocess.Popen(arguments,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     app = wait(lambda: (guis() or [None])[0], 'cold_spawn')
     assert guis() == [app]
     def window():
         found = run(['/usr/bin/xdotool','search','--onlyvisible','--pid',app],check=False).stdout.splitlines()
         return next((value for value in found if xdo('getwindowname',value)=='PulseTerm · 工作区预览'),None)
-    xid = wait(window,'window')
+    try:
+        xid = wait(window, 'window')
+    except AssertionError:
+        owned_windows = run(['/usr/bin/xdotool', 'search', '--pid', app], check=False).stdout.splitlines()
+        names = {value: run(['/usr/bin/xdotool', 'getwindowname', value], check=False).stdout.strip() for value in owned_windows}
+        (evidence / (prefix + '-window-failure.json')).write_text(json.dumps({
+            'stage': 'cold_window_before_invitation', 'tag': tag, 'owned_gui_pid': app,
+            'cli_exit_code': client.poll(), 'owned_windows': names,
+            'control_endpoint_present': (runtime / 'control.sock').exists(),
+        }, indent=2) + '\n')
+        run(['/usr/bin/import', '-window', 'root', evidence / (prefix + '-window-failure.png')], check=False)
+        if shutil.which('gdb') and app in guis():
+            with (evidence / (prefix + '-window-failure.gdb.log')).open('wb') as stream:
+                debugger = subprocess.Popen(['gdb', '--batch', '--nx',
+                    '-iex', 'set debuginfod enabled off', '-iex', 'set print frame-arguments none',
+                    '-iex', 'set print thread-events off', '-ex', 'thread apply all bt 12', '-ex', 'detach',
+                    '-p', str(app)], env=env, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT)
+                diagnostic_children.append((debugger, stream))
+                try:
+                    debugger.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    debugger.kill()
+                    debugger.wait(timeout=3)
+        raise
     xdo('windowactivate','--sync',xid)
     try:
         wait(lambda: accessible('解锁保险库').returncode == 0, 'locked_invitation')
@@ -309,7 +333,11 @@ try:
         if route_key_interactive_mode or route_agent_interactive_mode:
             for hop in ("outer", "middle"):
                 policy.with_suffix("."+hop).write_text("partial")
-    mode = "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
+    if password_interactive_mode:
+        policy = seed_root / "owned-password-policy"
+        policy.write_text("partial")
+        env["PULSE_SSH_PASSWORD_MFA_POLICY"] = str(policy)
+    mode = "password-interactive" if password_interactive_mode else "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
     peer = subprocess.Popen([os.environ.get("PULSE_SSH_FIXTURE_EXECUTABLE", str(binaries / "xtask")),"serve-workspace-ssh-fixture",str(directory),mode],env=env,stdout=peer_output,stderr=subprocess.STDOUT,start_new_session=True)
     wait(lambda:'fixture.ssh_gui_seeded_listening' in peer_log.read_text(),'fixture',30)
     def descriptor(prefix):
@@ -345,7 +373,7 @@ try:
         runpy.run_path("scripts/probe-workspace-route-interactive.py")["verify"](globals())
         sys.exit(0)
     if interactive_mode:
-        prefix = "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
+        prefix = "cli-password-interactive" if password_interactive_mode else "cli-agent-interactive" if agent_interactive_mode else "cli-key-interactive" if key_interactive_mode else "cli-interactive"
         import runpy
         runpy.run_path("scripts/probe-workspace-cli-interactive.py")["verify"](globals())
         sys.exit(0)

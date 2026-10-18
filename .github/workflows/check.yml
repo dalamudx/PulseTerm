@@ -207,6 +207,9 @@ jobs:
       - name: Verify CLI saved Agent plus MFA, cold and warm approval, selected signatures and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-cli-agent-interactive
+      - name: Verify CLI password plus MFA, original approval, zero use before consent and physical drain
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-cli-password-interactive
       - name: Verify selected Agent MFA route hops, terminal recovery and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-route-agent-interactive

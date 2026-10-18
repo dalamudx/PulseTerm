@@ -1,10 +1,10 @@
 # CLI SSH 交互认证
 
-`pulse ssh <保存的入口 ID> --identity <保存的账号 ID> --interactive` 明确选择账号 keyboard-interactive／MFA；`--key-interactive` 选择保存私钥与 MFA，`--agent-interactive` 选择保存 Agent 身份与 MFA。三个标志互斥。省略标志继续使用既有保存身份分派，不自动尝试 MFA。命令只接受保存的目标与身份 ID，不接受原始地址、口令、远端命令或自动解锁。原生参数校验只接受封闭的方法值，拒绝未知值和显式 null。命令链沿用八步／64 argv 的整体预检与逐步确认。
+`pulse ssh <保存的入口 ID> --identity <保存的账号 ID>` 支持四个互斥的明确方法：`--interactive` 选择账号 keyboard-interactive／MFA，`--key-interactive` 选择保存私钥与 MFA，`--agent-interactive` 选择保存 Agent 身份与 MFA，`--password-interactive` 选择保存密码与 MFA。省略标志继续使用既有保存身份分派。命令只接受保存的目标与身份 ID；原生参数只接受封闭的方法值，拒绝未知值、显式 null、原始地址、口令、回答和远端命令。命令链沿用八步／64 argv 的整体预检与逐步确认。
 
-三个 CLI 交互标志仅用于保存主机直连：账号 MFA 只用账号元数据，私钥联合必须匹配保存私钥来源，Agent 联合必须匹配保存算法、指纹与用户名。配置跳板、别名或不匹配身份均拒绝。普通保存路线仍走原逐跳批准；GUI 已独立提供临时目标私钥联合及保存路线逐跳私钥联合，不能借 CLI 直连标志绕过保存路线。Agent 临时目标和逐跳联合仍未交付。
+四个 CLI 交互标志仅用于保存主机直连：账号 MFA 只用账号元数据，私钥联合必须匹配保存私钥来源，Agent 联合必须匹配保存算法／指纹／用户名，密码联合必须匹配保存密码来源。配置跳板、别名或不匹配身份均拒绝。普通保存路线仍走原逐跳批准，GUI 临时目标和逐跳联合的当前接受范围见对应认证文档及动态计划；CLI直连标志不改变保存路线。
 
-暖启动消费最初请求捕获的 `SavedSessionGesture`，收紧为独立 `InteractiveSessionGesture`、`PrivateKeyInteractiveSessionGesture` 或 `AgentInteractiveSessionGesture`，保留原页、Vault epoch、截止和取消条件，不重新捕获后续解锁。转换不读取密码、私钥或 passphrase，也不发现 Agent 或签名。Agent 的普通专用手势没有联合转换入口。冷启动先保留无 epoch 的原页元数据意图；原窗口解锁后仍需单独查看目标，再批准明确方法的精确目标。批准银行消费原意图、捕获当次 epoch，并保留原截止与取消条件。后续锁定、换页、源变更或过期继续拒绝，不延长授权期限。
+暖启动消费最初请求捕获的 `SavedSessionGesture`，收紧为独立 `InteractiveSessionGesture`、`PrivateKeyInteractiveSessionGesture` 、`AgentInteractiveSessionGesture` 或 `PasswordInteractiveSessionGesture`，保留原页、Vault epoch、截止和取消条件，不重新捕获后续解锁。转换不读取密码、私钥或 passphrase，也不发现 Agent 或签名。Agent 的普通专用手势没有联合转换入口。冷启动先保留无 epoch 的原页元数据意图；原窗口解锁后仍需单独查看目标，再批准明确方法的精确目标。批准银行消费原意图、捕获当次 epoch，并保留原截止与取消条件。后续锁定、换页、源变更或过期继续拒绝，不延长授权期限。
 
 实际 peer 指纹固定后才发行问题。服务器文字作为序列化数据通过 `emit_to` 定向发送原窗口，绑定原批准 ticket、原生启动 token 和一次性 round，不嵌入脚本。监听在原目标批准前安装；未批准、跨 ticket／token、重复／并发轮次、超过八轮和旧页面数据均不进入回答链。应用标题与操作跟随语言，服务器问题保持原文且按回显标志选择普通／隐藏输入；回答只经既有受限 IPC 提交，提交、取消和关闭后清除，不进入配置或日志。
 
@@ -17,3 +17,5 @@ Esc、CLI 断开、退页或截止会撤销原请求。显式取消通知只携�
 
 
 `mise run probe-workspace-cli-agent-interactive` 使用保存 `GUI_AGENT_IDENTITY`，仅调用保存指纹对应公钥的签名。原窗口的锁定和目标确认都显示 Agent + MFA；只有同一连接接受实际签名并返回部分成功，才进入两轮问题。结果写 `target/probes/cli-agent-interactive-result.json`，独立服务端来源写 `target/probes/cli-agent-interactive-test-server.json`。收据记录四次所选签名、两次成功、两次取消及四条物理连接退出；未选公钥不得签名，失败不改用密码或其他钥匙。
+
+`pulse ssh <保存入口 ID> --identity <保存密码身份 ID> --password-interactive` 已通过 Linux 生产 WebView／真实 CLI／loopback SSH 的冷暖验收。四次实际密码部分成功、两次两轮MFA成功和四条连接退出；锁定／目标取消及目标批准前零密码使用，Esc和CLI断连各物理退出一条连接，刷新前后四条测试输入均被peer收到且不重认证。四个GUI实际退出0，控制端点排空，保存元数据与密文摘要不变。58项前端、28项CLI、9项许可、5项密码授权回归及生产严格Clippy通过。正式任务为 `mise run probe-workspace-cli-password-interactive`，最终证据为 `target/probes/cli-password-interactive/accepted/f1063366/`。测试服务端仅隔离修正密码部分成功分支并校验归档／源码／二进制摘要；生产依赖与仓库锁文件不改。首次原生任务在冷窗口定位期限内失败，日志保存在 `target/probes/cli-password-interactive-attempts/06aa2ca8/`，没有认证事件，本轮成功不建立该启动故障的原因或修复。企业认证和跨平台继续待验。

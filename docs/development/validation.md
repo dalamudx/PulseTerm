@@ -2,6 +2,20 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## CLI 保存密码与 MFA 联合认证
+
+新增 `--password-interactive`，与其余三种交互参数互斥。CLI解析、冷启动封闭元数据、Capability Schema／Serde／业务白名单、原窗口批准文案及问答ticket/token均已接通。暖启动一次性消费原 `SavedSessionGesture`，保持原页／Vault代际／期限／取消；密码单因素使用意图没有联合转换入口。来源分派只接受保存直连密码身份，别名、跳板及身份类型不匹配拒绝；连接仍必须实际返回密码部分成功并声明MFA，才进入既有问答／注册监督。
+
+正式 `mise run probe-workspace-cli-password-interactive` 的12项检查已通过Linux生产WebView／真实CLI／loopback SSH：锁定取消、解锁不批准和目标取消时零密码认证；冷暖确认均显示密码+MFA；Esc和CLI断连各使一条连接物理退出；冷暖各两轮MFA成功、刷新前后四条真实输入、刷新无重新认证，保存元数据及密文保持不变。四次密码尝试均实际部分成功，两次联合成功、四条SSH流退出；四个GUI退出0，worker及控制端点排空，未发生其他方法回退。
+
+类型／格式／双语检查、58项前端回归、全部28项CLI单测、9项Capability许可单测及5项密码授权生命周期回归通过，生产 `workspace-cli + workspace-ssh` 与 `pulse-app/ssh-use` 全目标严格Clippy零告警。AFT Rust诊断Unknown未计通过；Python诊断还存在原共享脚本的路由可空值／参数注解告警，语法和实际矩阵结果独立记录。首次补充许可组编译触及60秒命令期限，已通过足够且有限的300秒命令完成该组，未将零测试或中断记作通过。
+
+最终收据、四份GUI退出码、CLI输出、截图、服务端来源、源码差异和验证日志归档于 `target/probes/cli-password-interactive/accepted/f1063366/`。首轮冷窗口定位八秒超时的日志保存在 `target/probes/cli-password-interactive-attempts/06aa2ca8/`，当时未产生认证；本批增加仅针对自有GUI的窗口属性／截图／失败符号栈取证，未放宽期限。后续成功不证明启动黑窗／历史关闭故障已定位。测试服务端继续只在独立源码中修正russh密码部分成功位，归档、源码和二进制摘要受校验，产品依赖和锁文件不改。
+
+原生窗口、SSH流、worker、测试及构建进程退出后，已执行 `mise run clean-dev`，清除14.9GiB dev/test产物，并移除本任务目录 `/data/temp/alpha-cli-password.JFLz8u`；接受证据及首次启动失败记录保留在 `target/probes/`。
+
+当前范围为保存直连CLI、软件渲染、受控密码及回答。逐跳密码联合、企业PAM／MFA、其他平台和性能门禁继续开放。
+
 ## 临时目标密码与MFA联合认证
 
 `mise run probe-workspace-password-interactive` 的版本2通过Linux生产WebView／真实loopback SSH验收，共15项检查、四条成功联合会话及十二连接全部退出。新增临时取消不落盘、原保存会话继续存活、暂不保存后输入／刷新不重认证，以及成功后明确保存精确复用已有目标；服务端共观察到六条明确测试输入，GUI及native工作者正常退出。保存直连原接受证据保持不变。

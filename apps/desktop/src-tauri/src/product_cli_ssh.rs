@@ -98,11 +98,15 @@ pub(super) async fn run(
         Some(Value::String(method)) if method == "interactive" => Some("interactive"),
         Some(Value::String(method)) if method == "key-interactive" => Some("key-interactive"),
         Some(Value::String(method)) if method == "agent-interactive" => Some("agent-interactive"),
+        Some(Value::String(method)) if method == "password-interactive" => {
+            Some("password-interactive")
+        }
         _ => return Err(cli_control::Error),
     };
     let interactive = authentication == Some("interactive");
     let key_interactive = authentication == Some("key-interactive");
     let agent_interactive = authentication == Some("agent-interactive");
+    let password_interactive = authentication == Some("password-interactive");
     let root = Arc::downgrade(&state.0);
     let owner = state.0.owner;
     let page = original.clone();
@@ -247,6 +251,24 @@ pub(super) async fn run(
             )),
             false,
             true,
+        )
+    } else if password_interactive {
+        if routed.is_some()
+            || resolved_alias
+            || !source
+                .password_source()
+                .supports_password_selection(host, identity)
+        {
+            return Err(cli_control::Error);
+        }
+        (
+            PreparedSelection::Interactive(mfa::Gesture::Password(
+                gesture
+                    .into_password_interactive()
+                    .map_err(|_| cli_control::Error)?,
+            )),
+            false,
+            false,
         )
     } else if interactive {
         if routed.is_some()

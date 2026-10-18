@@ -1,6 +1,6 @@
 # 直连密码与 MFA 联合认证
 
-保存及临时目标的GUI直连已通过Linux原生验收。临时目标使用独立 `prepare_temporary`，保留原点击期限、原页／代际和临时票据活性；保存 `prepare` 继续拒绝临时来源。CLI和逐跳方法选择继续按后续工作包接入。
+保存及临时目标的GUI直连、保存直连CLI已通过Linux原生验收。临时目标使用独立 `prepare_temporary`，保留原点击期限、原页／代际和临时票据活性；保存 `prepare` 继续拒绝临时来源。逐跳方法选择继续按后续工作包接入。
 
 ## 授权与期限
 
@@ -20,4 +20,6 @@
 
 当前扩展通过类型／格式／双语检查、57项前端回归、4项授权生命周期回归、8项共享适配器回归及生产严格Clippy。正式任务版本2的15项实窗检查通过：保存链的普通密码不升级、异常方法拒绝、取消／错答／来源变化；临时目标取消不落盘且原成功会话继续存活、暂不保存后的输入／刷新、成功后明确保存精确复用已有目标。共四次两轮MFA成功，六条明确测试输入，十二条连接及原生工作者全部退出。收据、截图、源码与日志归档于 `target/probes/workspace-password-interactive/accepted/eab088ff/`；先前保存直连九连接收据保留在 `accepted/478d3e5c/`。
 
-锁定russh服务端会覆盖密码部分成功位；测试沿用独立解压、归档摘要验证及单分支修正，产品客户端、注册表缓存和仓库锁文件不改。运行前校验服务端二进制摘要及 `partialSuccessMethod=password`；首次未修正服务端的失败保存在 `attempts/c26892e1/`。生产客户端正确拒绝了实际false的部分成功位。企业PAM、CLI、逐跳、新建主机保存和其他平台继续待验。
+锁定russh服务端会覆盖密码部分成功位；测试沿用独立解压、归档摘要验证及单分支修正，产品客户端、注册表缓存和仓库锁文件不改。运行前校验服务端二进制摘要及 `partialSuccessMethod=password`；首次未修正服务端的失败保存在 `attempts/c26892e1/`。生产客户端正确拒绝了实际false的部分成功位。企业PAM、逐跳、新建主机保存和其他平台继续待验。
+
+`pulse ssh <保存入口 ID> --identity <保存密码身份 ID> --password-interactive` 已通过 Linux 生产 WebView／真实 CLI／loopback SSH 的冷暖验收。四次实际密码部分成功、两次两轮MFA成功和四条连接退出；锁定／目标取消及目标批准前零密码使用，Esc和CLI断连各物理退出一条连接，刷新前后四条测试输入均被peer收到且不重认证。四个GUI实际退出0，控制端点排空，保存元数据与密文摘要不变。58项前端、28项CLI、9项许可、5项密码授权回归及生产严格Clippy通过。正式任务为 `mise run probe-workspace-cli-password-interactive`，最终证据为 `target/probes/cli-password-interactive/accepted/f1063366/`。测试服务端仅隔离修正密码部分成功分支并校验归档／源码／二进制摘要；生产依赖与仓库锁文件不改。首次原生任务在冷窗口定位期限内失败，日志保存在 `target/probes/cli-password-interactive-attempts/06aa2ca8/`，没有认证事件，本轮成功不建立该启动故障的原因或修复。企业认证和跨平台继续待验。

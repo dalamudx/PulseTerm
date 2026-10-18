@@ -80,6 +80,8 @@ enum SshAuthentication {
     KeyInteractive,
     #[serde(rename = "agent-interactive")]
     AgentInteractive,
+    #[serde(rename = "password-interactive")]
+    PasswordInteractive,
 }
 #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
 impl SshAuthentication {
@@ -115,7 +117,7 @@ fn closed_saved_ssh_schema(schema: &mut schemars::Schema) {
         serde_json::json!({
             "host": {"type": "string"},
             "identity": {"type": "string"},
-            "authentication": {"type": "string", "enum": ["interactive", "key-interactive", "agent-interactive"]},
+            "authentication": {"type": "string", "enum": ["interactive", "key-interactive", "agent-interactive", "password-interactive"]},
             "alias": {"type": "string"},
         }),
     );
@@ -135,6 +137,7 @@ impl ActionArgs for SavedSshArgs {
                         SshAuthentication::Interactive
                             | SshAuthentication::KeyInteractive
                             | SshAuthentication::AgentInteractive
+                            | SshAuthentication::PasswordInteractive
                     )
                 ) {
                     return Err(pulse_cap::Error::Args);
@@ -564,11 +567,16 @@ mod tests {
             Surface::Cli,
             serde_json::json!({"host":host,"identity":identity,"authentication":"key-interactive"}),
         )?;
-        catalogue.validate_args(
-            "workspace.ssh", Surface::Cli,
-            serde_json::json!({"host":host,"identity":identity,"authentication":"agent-interactive"}),
-        )?;
+        for authentication in ["agent-interactive", "password-interactive"] {
+            catalogue.validate_args(
+                "workspace.ssh", Surface::Cli,
+                serde_json::json!({"host":host,"identity":identity,"authentication":authentication}),
+            )?;
+        }
         for args in [
+            serde_json::json!({"alias":"GUI_HOST","authentication":"password-interactive"}),
+            serde_json::json!({"host":host,"identity":identity,"authentication":"password-interactive","password":"x"}),
+            serde_json::json!({"host":host,"identity":identity,"authentication":"password-interactive","answers":[]}),
             serde_json::json!({"alias":"GUI_HOST","authentication":"key-interactive"}),
             serde_json::json!({"host":host,"identity":identity,"authentication":"key-interactive","privateKey":true}),
             serde_json::json!({"host":host,"identity":identity,"authentication":"key-interactive","answers":["synthetic"]}),

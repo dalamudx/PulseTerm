@@ -1098,6 +1098,23 @@ export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-agent-interactive-wm.log sh scripts/probe-workspace-cli-agent-interactive.sh
 """
 
+[tasks.probe-workspace-cli-password-interactive]
+description = "Verify explicit CLI password plus MFA, cold and warm approvals, zero use before approval, refresh and physical drain"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp target/probes
+fixture_dir=$(mktemp -d /data/temp/pulseterm-cli-password-joint-server.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-password-interactive-test-server.json password
+export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-password-interactive-wm.log sh scripts/probe-workspace-cli-password-interactive.sh
+"""
+
 
 [tasks.probe-workspace-route-agent-interactive]
 description = "Verify mixed saved password and selected Agent MFA hops, terminal recovery, cancellation and complete route drain"

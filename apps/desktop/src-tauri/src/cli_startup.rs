@@ -74,7 +74,12 @@ impl StartupAction {
                 if params.get("authentication").is_some_and(|v| {
                     !matches!(
                         v.as_str(),
-                        Some("interactive" | "key-interactive" | "agent-interactive")
+                        Some(
+                            "interactive"
+                                | "key-interactive"
+                                | "agent-interactive"
+                                | "password-interactive"
+                        )
                     )
                 }) {
                     return Err(Error);

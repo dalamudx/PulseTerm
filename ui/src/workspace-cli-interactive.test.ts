@@ -1,7 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { CliNewTabController, decodeCliNewTab } from "./workspace-cli-new-tab";
 
-it.each(["key-interactive", "agent-interactive"] as const)(
+it.each([
+  "key-interactive",
+  "agent-interactive",
+  "password-interactive",
+] as const)(
   "keeps %s explicit on cold and warm approvals",
   (authentication) => {
     const selected = { ...ssh, authentication: authentication };
@@ -36,7 +40,11 @@ it.each(["key-interactive", "agent-interactive"] as const)(
       expect(() => decodeCliNewTab({ version: 3, ticket, intent })).toThrow();
   },
 );
-it.each(["key-interactive", "agent-interactive"] as const)(
+it.each([
+  "key-interactive",
+  "agent-interactive",
+  "password-interactive",
+] as const)(
   "answers only the approved %s ticket and clears its one-round buffer",
   async (authentication) => {
     const f = fixture();
@@ -58,7 +66,11 @@ it.each(["key-interactive", "agent-interactive"] as const)(
     expect(f.answers).toEqual([""]);
   },
 );
-it.each(["key-interactive", "agent-interactive"] as const)(
+it.each([
+  "key-interactive",
+  "agent-interactive",
+  "password-interactive",
+] as const)(
   "cancels the real %s token when its original page retires before a late answer",
   async (authentication) => {
     const f = fixture();

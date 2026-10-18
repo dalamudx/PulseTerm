@@ -12,13 +12,18 @@ def verify(context):
     initial = context['initial']
     evidence, prefix = context['evidence'], context['prefix']
 
+    password_joint = context.get("password_interactive_mode", False)
     key_joint = context.get("key_interactive_mode", False)
     agent_joint = context.get("agent_interactive_mode", False)
-    joint = key_joint or agent_joint
-    flag = "--agent-interactive" if agent_joint else "--key-interactive" if key_joint else "--interactive"
+    joint = password_joint or key_joint or agent_joint
+    flag = "--password-interactive" if password_joint else "--agent-interactive" if agent_joint else "--key-interactive" if key_joint else "--interactive"
     def unchanged():
         assert hashes() == initial, 'cli.mfa.metadata_changed'
 
+    def password_idle():
+        if password_joint:
+            assert count('fixture.ssh_password_joint_auth_attempt') == 0
+            assert count('fixture.ssh_password_joint_partial_success') == 0
     def preview(locked=False):
         name = '请求的保存记录' if locked else '保存的主机与身份'
         result = accessible(name, 'readonly-text')
@@ -28,16 +33,21 @@ def verify(context):
             assert "私钥 + MFA" in text, "cli.key_mfa.explicit_method_preview_missing"
         if agent_joint:
             assert "Agent + MFA" in text, "cli.agent_mfa.explicit_method_preview_missing"
+        if password_joint:
+            assert "密码 + MFA" in text, "cli.password_mfa.explicit_method_preview_missing"
         if locked:
             assert context['host'] in text and context['identity'] in text
         else:
             assert '127.0.0.1' in text and 'GUI_HOST' in text
 
-    def target():
+    def target(expected_password_attempts=None):
         before = context['auth_count']()
         wait(lambda: accessible('允许 CLI 连接保存的 SSH 主机？').returncode == 0, 'cli_mfa_target')
         preview()
         assert context['auth_count']() == before
+        if password_joint:
+            assert expected_password_attempts is not None
+            assert count('fixture.ssh_password_joint_auth_attempt') == expected_password_attempts
         click('连接')
         wait(lambda: accessible('Account <literal>').returncode == 0, 'cli_mfa_round_one')
         assert context['auth_count']() == before
@@ -45,12 +55,16 @@ def verify(context):
             assert count('fixture.agent_selected_signed_once') == count('fixture.ssh_key_joint_partial_success')
             assert count('fixture.ssh_key_joint_partial_success') > 0
             assert count('fixture.ssh_key_joint_premature_mfa_rejected') == 0
+        if password_joint:
+            assert count('fixture.ssh_password_joint_auth_attempt') == count('fixture.ssh_password_joint_partial_success')
+            assert count('fixture.ssh_password_joint_premature_mfa_rejected') == 0
 
     def warm():
+        expected = count("fixture.ssh_password_joint_auth_attempt")
         context['client'] = subprocess.Popen(
             [str(context['pulse']), 'ssh', context['host'], '--identity', context['identity'], flag],
             env=context['env'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        target()
+        target(expected)
 
     def field(name, value):
         assert accessible(name, 'focus').returncode == 0
@@ -89,16 +103,16 @@ def verify(context):
     app = launch('cold-cancel')
     preview(True)
     click('取消'); client_result('cold-cancel', False)
-    assert quiet(); unchanged(); close_gui(app)
+    assert quiet(); password_idle(); unchanged(); close_gui(app)
 
     app = launch('cold-target-cancel')
     context['unlock_without_confirming'](); click('查看目标')
     wait(lambda: accessible('允许 CLI 连接保存的 SSH 主机？').returncode == 0, 'cold_target_cancel')
     preview(); click('取消'); client_result('cold-target-cancel', False)
-    assert quiet(); unchanged(); close_gui(app)
+    assert quiet(); password_idle(); unchanged(); close_gui(app)
 
     app = launch('cold-round-cancel')
-    context['unlock_without_confirming'](); click('查看目标'); target()
+    context['unlock_without_confirming'](); click('查看目标'); target(0)
     field('Account <literal>', 'discard-this-owned-draft')
     xdo('key', '--clearmodifiers', 'Escape')
     client_result('cold-round-cancel', False)
@@ -119,7 +133,7 @@ def verify(context):
 
     close_gui(app)
     app = launch('cold-approved')
-    context['unlock_without_confirming'](); click('查看目标'); target()
+    context['unlock_without_confirming'](); click('查看目标'); target(2)
     answer('cold-approved'); terminal('cold-approved', 1)
     unchanged()
     warm(); answer('warm-approved'); terminal('warm-approved', 3)
@@ -133,6 +147,15 @@ def verify(context):
         assert count('fixture.ssh_password_auth_attempt_rejected') == 0
         assert count('fixture.ssh_public_key_authenticated') == 0
         assert count('fixture.ssh_key_joint_shell_requested') == 2
+    if password_joint:
+        assert count('fixture.ssh_password_joint_auth_attempt') == 4
+        assert count('fixture.ssh_password_joint_partial_success') == 4
+        assert count('fixture.ssh_password_joint_shell_requested') == 2
+        assert count('fixture.ssh_password_joint_stream_exited') == 4
+        assert count('fixture.ssh_password_joint_premature_mfa_rejected') == 0
+        assert count('fixture.ssh_password_authenticated') == 0
+        assert count('fixture.ssh_public_key_authenticated') == 0
+        assert count('fixture.agent_selected_signed_once') == 0
     receipt = {
         'version': 1, 'passed': True, 'scope': 'Linux production WebView with real CLI and two-round russh fixture',
         'cold_locked_cancel_zero_auth': True, 'unlock_not_approval': True,
@@ -143,8 +166,10 @@ def verify(context):
         'original_gui_exit_zero': True, 'endpoints_drained': True,
         'cancelled_native_streams': 2, 'authenticated_native_streams': 2,
         'external_mfa_provider_checked': False, 'cross_platform_checked': False,
-        "authentication": "agent-interactive" if agent_joint else "key-interactive" if key_joint else "interactive",
+        "authentication": "password-interactive" if password_joint else "agent-interactive" if agent_joint else "key-interactive" if key_joint else "interactive",
         "joint_policy_requires_both_factors": joint,
+        "password_authentication_attempts": count("fixture.ssh_password_joint_auth_attempt") if password_joint else 0,
+        "password_native_streams_exited": count("fixture.ssh_password_joint_stream_exited") if password_joint else 0,
         "fixture_only_partial_success_correction": joint,
         "selected_agent_signatures": count('fixture.agent_selected_signed_once') if agent_joint else 0,
         "nonselected_agent_signatures": count('fixture.agent_unexpected_sign_request'),
