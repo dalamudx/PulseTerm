@@ -69,3 +69,6 @@ PULSE_STARTUP_DIAGNOSTICS=1 PULSE_WORKSPACE_STARTUP_TRACE_DIR="$owned_trace_dir"
 页面确认失败或超时显示“页面验证未完成 · 请刷新工作区重试”及对应英文；使用现有重新加载按钮。超时不继续加载 Profile 或启动终端，迟到成功／拒绝均不能改变该结果。CLI展示元数据沿用现有未确认提示，刷新后使用新文档生命周期。后端窗口／来源／nonce／Vault检查和原八秒启动、十二秒关闭期限不变；其他初始化步骤与原生窗口构建故障不在此修复范围。
 
 新增五项反例在旧实现上实际失败；修复后62项Readiness／冷SSH／CLI新标签／可见性回归、TypeScript、Biome、双语检查及生产前端构建通过。独立Chrome载入实际工作区并受控阻塞确认RPC，约5秒显示刷新建议，中英文状态提示在800px窗口内未溢出；迟到回执未触发Profile或后续原生调用，真实点击重新加载后只发一次新确认，Chrome与Vite退出。该检查不是原生WebView故障注入、系统输入法或辅助技术验收；启动黑窗与SIGSEGV根因继续开放。沿用现有前端CI，不新增认证矩阵。
+
+
+原生迟到回执复验通过：显式Linux `workspace-readiness-probe` 验证feature复用同一原生确认和CLI展示授权实现，检查通过后只延迟第一个指定回执6500ms；普通构建不含该注入入口。正式 `mise run probe-workspace-page-readiness` 已通过生产WebView／真实AT-SPI／PTY两场景：文档确认约5091ms、CLI展示约5041ms观察到超时提示（含可访问性观测）；迟到回执后状态保持、不启动终端，明确点击刷新后新页只初始化一次，真实输入最终快照逐字匹配，两个GUI退出0、PTY与WebView进程树全部回收。阶段记录按GUI PID核对，两次页面加载／确认和最终退出完整，未把已完成原生确认或展示元数据当作回滚。首次输入控件焦点未就绪导致的失败保留，夹具补上固定首屏输出及有期限聚焦等待后通过。故障门禁2项单测、生产／验证两种严格Clippy、Python类型诊断与任务解析已通过；原页确认4项和CLI展示4项回归已实际通过，零命中命令不计通过。原八秒启动及十二秒关闭规则不变，历史黑窗／SIGSEGV根因仍开放。接受证据将独立归档于 `target/probes/workspace-page-readiness-native/accepted/698c3c0e/`。

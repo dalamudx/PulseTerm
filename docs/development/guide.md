@@ -68,6 +68,8 @@ Option／Meta偏好见[macOS Option作为Meta键](../architecture/terminal-optio
 
 页面确认和CLI展示回执的有界等待见[启动调查](native-window-close-investigation.md#页面确认的有限等待与恢复)：前端只等待五秒，页面撤销立即结束等待，迟到结果不推进流程；不取消原生工作或自动重发。超时使用现有刷新入口，后端授权与原生启动／关闭期限不变。仅运行受影响Readiness／冷SSH／CLI新标签／可见性回归、类型／双语／格式和产品前端构建，沿用现有CI；受控Chrome检查不算原生WebView故障注入。
 
+原生恢复专项使用 `mise run probe-workspace-page-readiness`：仅Linux验证构建的 `workspace-readiness-probe` 按固定模式延迟第一个文档或CLI展示回执6500ms，再通过真实AT-SPI刷新、PTY输入与实际进程回收检查恢复。普通生产构建不含故障注入；相同前端、原授权实现及原期限保留。Linux两个场景及两GUI／PTY退出已通过，不代替历史黑窗／SIGSEGV定位。
+
 工具版本只修改 `.mise.toml`，不另建 `rust-toolchain.toml`、`.nvmrc` 或其他版本文件。库依赖仍在 Cargo / package manifests 中声明，提交 `Cargo.lock` 和 `pnpm-lock.yaml`；mise 管理执行这些依赖的工具。配置尚未信任前不要执行任务。
 
 **当前可执行：**

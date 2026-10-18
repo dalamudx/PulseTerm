@@ -364,6 +364,9 @@ jobs:
       - name: Verify fixed settings edits, source provenance and same-PTY font geometry
         if: runner.os == 'Linux'
         run: mise run probe-workspace-settings
+      - name: Verify bounded native page replies, late receipts and explicit reload recovery
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-page-readiness
       - name: Verify 1x/2x native font grids, physical scale, saved presets, fallback and native exit
         if: runner.os == 'Linux'
         run: mise run probe-workspace-dpi

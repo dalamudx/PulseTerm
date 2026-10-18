@@ -50,6 +50,9 @@ mod organization;
 mod organization_behavior;
 #[path = "product_quick_targets.rs"]
 mod quick_targets;
+#[cfg(all(feature = "workspace-readiness-probe", target_os = "linux"))]
+#[path = "product_readiness_probe.rs"]
+mod readiness_probe;
 #[path = "product_session.rs"]
 mod session;
 #[path = "product_settings.rs"]
@@ -303,8 +306,48 @@ fn current_document(
         .map_err(|_| "workspace.denied")?;
     Ok((nonce, scope))
 }
+#[cfg(not(all(feature = "workspace-readiness-probe", target_os = "linux")))]
 #[tauri::command]
 fn workspace_confirm(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+) -> Result<()> {
+    workspace_confirm_impl(window, state, nonce)
+}
+#[cfg(all(feature = "workspace-readiness-probe", target_os = "linux"))]
+#[tauri::command]
+async fn workspace_confirm(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+) -> Result<()> {
+    workspace_confirm_impl(window, state, nonce)?;
+    readiness_probe::delay(readiness_probe::Receipt::Document).await;
+    Ok(())
+}
+#[cfg(not(all(feature = "workspace-readiness-probe", target_os = "linux")))]
+#[tauri::command]
+fn workspace_cli_ready(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+) -> Result<()> {
+    workspace_cli_ready_impl(window, state, nonce)
+}
+#[cfg(all(feature = "workspace-readiness-probe", target_os = "linux"))]
+#[tauri::command]
+async fn workspace_cli_ready(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+) -> Result<()> {
+    workspace_cli_ready_impl(window, state, nonce)?;
+    readiness_probe::delay(readiness_probe::Receipt::Presentation).await;
+    Ok(())
+}
+
+fn workspace_confirm_impl(
     window: WebviewWindow,
     state: State<'_, Workspace>,
     nonce: String,
@@ -321,8 +364,7 @@ fn workspace_confirm(
 }
 
 /// Metadata only. It does not confirm a page or admit a CLI action.
-#[tauri::command]
-fn workspace_cli_ready(
+fn workspace_cli_ready_impl(
     window: WebviewWindow,
     state: State<'_, Workspace>,
     nonce: String,
