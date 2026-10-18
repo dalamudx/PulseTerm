@@ -9,6 +9,8 @@ import sys
 import tempfile
 import time
 
+KIND = os.environ.get('PULSE_LOAD_KIND', 'load')
+assert KIND in ('load', 'echo'), 'load.invalid_kind'
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/probes/workspace-load'
 label = os.environ.get('PULSE_LOAD_RUN')
@@ -111,64 +113,69 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
             wait(lambda: count('terminal_input_ready') == 1, 'input_ready', 30)
             owned.update(tree(app.pid))
             assert accessible('Terminal input', 'focus').returncode == 0
-            xdo('type', '--clearmodifiers', '--delay', '0', 'I')
-            interruption = wait(lambda: read('interrupt-running'), 'interrupt_running')
-            owned.update(tree(app.pid))
-            time.sleep(.15)
-            assert identity(interruption['pid']) is not None, 'load.cat_not_running_before_interrupt'
-            sent = time.monotonic_ns()
-            xdo('key', '--clearmodifiers', '--delay', '0', 'ctrl+c')
-            interrupted = wait(lambda: read('interrupt-finished'), 'interrupt_finished', 5)
-            assert interrupted['signal'] == signal.SIGINT and interrupted['signalNs'] >= sent
-            latency_ms = (interrupted['exitedNs'] - sent) / 1000000
-            report.update(interruptChildExitMs=latency_ms, interruptSignalMs=(interrupted['signalNs']-sent)/1000000,
-                          interruptUnder100Ms=latency_ms < 100, interruptedCatSignal=interrupted['signal'])
-            xdo('type', '--clearmodifiers', '--delay', '0', 'F')
-            complete_running = wait(lambda: read('full-running'), 'full_running')
-            owned.update(tree(app.pid))
-            full_seconds = int(os.environ.get('PULSE_LOAD_DIAGNOSTIC_SECONDS', '600'))
-            assert 1 <= full_seconds <= 600
-            report['diagnosticOnly'] = full_seconds != 600
-            progress = []
+            if KIND == 'echo':
+                import runpy
+                runpy.run_path(str(ROOT / 'scripts/probe-workspace-echo.py'))['verify'](globals())
+            else:
+                xdo('type', '--clearmodifiers', '--delay', '0', 'I')
+                interruption = wait(lambda: read('interrupt-running'), 'interrupt_running')
+                owned.update(tree(app.pid))
+                time.sleep(.15)
+                assert identity(interruption['pid']) is not None, 'load.cat_not_running_before_interrupt'
+                sent = time.monotonic_ns()
+                xdo('key', '--clearmodifiers', '--delay', '0', 'ctrl+c')
+                interrupted = wait(lambda: read('interrupt-finished'), 'interrupt_finished', 5)
+                assert interrupted['signal'] == signal.SIGINT and interrupted['signalNs'] >= sent
+                latency_ms = (interrupted['exitedNs'] - sent) / 1000000
+                report.update(interruptChildExitMs=latency_ms, interruptSignalMs=(interrupted['signalNs']-sent)/1000000,
+                              interruptUnder100Ms=latency_ms < 100, interruptedCatSignal=interrupted['signal'])
+                xdo('type', '--clearmodifiers', '--delay', '0', 'F')
+                complete_running = wait(lambda: read('full-running'), 'full_running')
+                owned.update(tree(app.pid))
+                full_seconds = int(os.environ.get('PULSE_LOAD_DIAGNOSTIC_SECONDS', '600'))
+                assert 1 <= full_seconds <= 600
+                report['diagnosticOnly'] = full_seconds != 600
+                progress = []
 
-            def full_progress():
-                now = time.monotonic()
-                # One sample per second; the key/exit latency above has already been measured.
-                if not progress or now - progress[-1]['observedSeconds'] >= 1:
-                    snapshot = {'observedSeconds': now, 'processCpuSeconds': {}}
-                    try:
-                        io = (Path('/proc') / str(complete_running['pid']) / 'io').read_text()
-                        snapshot['catIo'] = {key: int(value) for key, value in (line.split(':', 1) for line in io.splitlines())}
-                    except (FileNotFoundError, ProcessLookupError): pass
-                    for pid in tree(app_pid):
+                def full_progress():
+                    now = time.monotonic()
+                    # One sample per second; the key/exit latency above has already been measured.
+                    if not progress or now - progress[-1]['observedSeconds'] >= 1:
+                        snapshot = {'observedSeconds': now, 'processCpuSeconds': {}}
                         try:
-                            stat = (Path('/proc') / str(pid) / 'stat').read_text()
-                            fields = stat.rsplit(')', 1)[1].split()
-                            snapshot['processCpuSeconds'][str(pid)] = {
-                                'name': stat.split('(', 1)[1].rsplit(')', 1)[0],
-                                'seconds': (int(fields[11]) + int(fields[12])) / os.sysconf('SC_CLK_TCK')}
+                            io = (Path('/proc') / str(complete_running['pid']) / 'io').read_text()
+                            snapshot['catIo'] = {key: int(value) for key, value in (line.split(':', 1) for line in io.splitlines())}
                         except (FileNotFoundError, ProcessLookupError): pass
-                    progress.append(snapshot)
-                return read('full-finished')
+                        for pid in tree(app_pid):
+                            try:
+                                stat = (Path('/proc') / str(pid) / 'stat').read_text()
+                                fields = stat.rsplit(')', 1)[1].split()
+                                snapshot['processCpuSeconds'][str(pid)] = {
+                                    'name': stat.split('(', 1)[1].rsplit(')', 1)[0],
+                                    'seconds': (int(fields[11]) + int(fields[12])) / os.sysconf('SC_CLK_TCK')}
+                            except (FileNotFoundError, ProcessLookupError): pass
+                        progress.append(snapshot)
+                    return read('full-finished')
 
-            report['fullOutputProgress'] = progress
-            complete = wait(full_progress, 'full_1gib', full_seconds)
-            assert complete['exitCode'] == 0 and complete['signal'] == 0
-            assert complete_running['pid'] == complete['pid']
-            report['fullCatElapsedMs'] = (complete['exitedNs'] - complete['startedNs']) / 1000000
-            image = OUT / 'complete.png'
-            text = fixture / 'complete-ocr'
+                report['fullOutputProgress'] = progress
+                complete = wait(full_progress, 'full_1gib', full_seconds)
+                assert complete['exitCode'] == 0 and complete['signal'] == 0
+                assert complete_running['pid'] == complete['pid']
+                report['fullCatElapsedMs'] = (complete['exitedNs'] - complete['startedNs']) / 1000000
+                image = OUT / 'complete.png'
+                text = fixture / 'complete-ocr'
 
-            def painted():
-                run('/usr/bin/import', '-window', xid, image)
-                run('/usr/bin/env', 'OMP_THREAD_LIMIT=1', '/usr/bin/tesseract', image, text, '--psm', '6')
-                return 'load complete' in text.with_suffix('.txt').read_text().lower()
+                def painted():
+                    run('/usr/bin/import', '-window', xid, image)
+                    run('/usr/bin/env', 'OMP_THREAD_LIMIT=1', '/usr/bin/tesseract', image, text, '--psm', '6')
+                    return 'load complete' in text.with_suffix('.txt').read_text().lower()
 
-            wait(painted, 'painted_completion', 30)
-            report.update(measurementsComplete=True, full1GiBCatExitedNormally=True, finalMarkerPainted=True)
+                wait(painted, 'painted_completion', 30)
+                report.update(measurementsComplete=True, full1GiBCatExitedNormally=True, finalMarkerPainted=True)
             xdo('key', '--clearmodifiers', 'alt+F4')
             app.wait(timeout=15)
             assert app.returncode == 0 and count('exited') == 1
+            report['normalAppExit'] = True
         except Exception:
             if xid is not None: run('/usr/bin/import', '-window', xid, OUT / 'failure.png', check=False)
             raise
@@ -196,7 +203,8 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
                         if identity(pid) == value: os.kill(pid, signal.SIGKILL)
                     report['forcedNativeCleanup'] = True
                 report['nativeProcessesDrained'] = not remaining
-            report['passed'] = bool(report['measurementsComplete'] and report.get('interruptUnder100Ms') and report.get('nativeProcessesDrained') and not report.get('forcedAppCleanup'))
+            target_met = report.get('echoP95Under16Ms') if KIND == 'echo' else report.get('interruptUnder100Ms')
+            report['passed'] = bool(report['measurementsComplete'] and target_met and report.get('nativeProcessesDrained') and report.get('normalAppExit') and not report.get('forcedAppCleanup'))
             RESULT.write_text(json.dumps(report, indent=2) + '\n')
     assert report['passed'], 'load.performance_gate_failed'
     print('workspace.real_cat_1gib_sigint_latency_and_native_exit_confirmed')

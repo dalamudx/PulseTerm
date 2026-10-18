@@ -60,6 +60,31 @@ int main(void) {
         ssize_t length = read(STDIN_FILENO, &command, 1);
         if (length < 0 && errno == EINTR) continue;
         if (length != 1) return 0;
+        if (command == 'E') {
+            printf("\033[2J\033[HECHO READY\r\nECHO REFERENCE\r\nX");
+            char samples[32768] = "[";
+            size_t used = 1;
+            for (unsigned i = 0; i < 256; i++) {
+                unsigned char key;
+                ssize_t n = read(STDIN_FILENO, &key, 1);
+                uint64_t received = nanos();
+                if (n < 0 && errno == EINTR) { i--; continue; }
+                if (n != 1) return 83;
+                if (key == 'Q') {
+                    samples[used++] = ']'; samples[used] = 0;
+                    publish(directory, "echo-native", samples);
+                    printf("\r\nECHO COMPLETE\r\n"); return 0;
+                }
+                if (key != 'x' && key != 'o') return 84;
+                printf("\033[3;1H%c", key == 'x' ? 'X' : 'O');
+                uint64_t written = nanos();
+                int added = snprintf(samples + used, sizeof(samples) - used,
+                    "%s{\"receivedNs\":%" PRIu64 ",\"writtenNs\":%" PRIu64 "}", i ? "," : "", received, written);
+                if (added < 0 || (size_t)added >= sizeof(samples) - used - 2) return 86;
+                used += (size_t)added;
+            }
+            return 85;
+        }
         if (command != 'I' && command != 'F') return 78;
         const char *stage = command == 'I' ? "interrupt" : "full";
         char running[32], finished[32];

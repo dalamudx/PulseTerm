@@ -16,6 +16,12 @@
 
 Linux CI新增独立`terminal-load`作业，复用正式mise任务与原600秒原生期限、上传完整负载收据和截图；与现有审计失败独立执行，不改变发布审计门禁。当前仅确认本机结果及CI配置，尚无远端执行收据。
 
+吞吐优化已签名提交 `d9fdc40`，`git verify-commit`通过。新 `mise run probe-workspace-echo` 使用原生XTest、固定PTY回显和X11字形像素观察（0.5ms采样）。首轮100次p95为65.860ms，`workspace-load/echo/result.json`保留未达16ms结果；两阶段关联采样 `echo-phases/result.json` 为整体60.275ms／输入7.415ms／输出54.260ms。独立禁合成对照 `echo-no-compositing/result.json` 为57.581ms／7.036ms／49.283ms，仍未达标，产品配置保持不变。
+
+最终 `echo-final/result.json` 100次采样：整体p95 **58.746ms**、按键注入至PTY接收5.716ms、PTY写出至字形更新54.273ms；100次均满足“注入≤原生接收≤原生写出≤像素变化”，排除先于对应输出的无关像素变化。已审阅 `echo-final/echo-complete.png`；测量／EOF／正常App退出／全部原生进程回收均完成，但因性能目标未达，任务和收据保持失败。各分段p95来自各自排序，不能相加推导整体p95。固定PTY小回显不代表大量输出下的交互、真实显示器呈现或硬件／跨平台验收，原始样本和限制均归档。C严格编译、Python语法／诊断、TOML／CI YAML配置及补丁格式检查通过；正式回显入口依赖X11/XTest开发库。
+本批1GiB／回显原生窗口、PTY、原生工作者和构建进程全部退出后，已执行 `mise run clean-dev`，清除6.4GiB dev/test产物；本任务目录 `/data/temp/alpha-convergence.cuhc4O`及自建`target/probes/load-shell`／`echo-pixels`可执行文件已移除。release临时产物随任务目录删除。所有性能／负载收据、截图及原始回归／Clippy日志保留在 `target/probes/`，清理后已检查存在。
+
+
 ## 可复现源码基线与 Alpha 收敛
 
 已按依赖拆分签名实现提交：`110aa9e`（冷历史块索引与封存容量）、`008661b`（工作区／SSH联合认证、终端交付与Linux集中原生夹具），两者 `git verify-commit` 均通过。开发进度与本节记录单独提交；沿用已有签名配置，未推送。后续实施优先级及明确退出条件已整理到 `plan.md §15.2`。
