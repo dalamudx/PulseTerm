@@ -2,6 +2,12 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 发布依赖阻断的升级边界核查
+
+沿原始 Rust 审计日志定位了8项许可拒绝：5项 `MPL-2.0`（cssparser、cssparser-macros、dtoa-short、option-ext、selectors）、2项 `0BSD`（doctest-file、recvmsg）及1项 `Apache-2.0 WITH LLVM-exception`（target-lexicon）。维持原 `deny.toml`；未把兼容性分析当作许可策略批准，实际发行内容及22项完整许可文本缺口也未闭合。
+
+三项维护公告来自 `zbus_names`／`zvariant`／`zvariant_derive`。注册表 `cargo info tauri-plugin-single-instance@2 --verbose` 仍解析到2.5.3，并声明Tauri2.12及zbus5.9；项目直接升级zbus6仍会留下插件的zbus5链。Specta检索仍返回已锁定的2.0.0-rc.25，对应paste依赖；GTK检索虽已有0.19，但锁定Tauri链使用0.18，proc-macro-error的移除需要配套迁移，尚未验证。未更改manifest、lockfile、公告忽略或准入策略，5项维护公告继续阻断。直接HTTP元数据请求403，版本结论来自Cargo注册表命令。核查收据见 `target/probes/release-adapter-review/result.json`。
+
 ## 系统外观的生产 WebView 原生验收
 
 正式入口 `mise run probe-workspace-system-appearance` 已在 Linux 独立 Xvfb／D-Bus 会话通过。固定桌面 Settings 门户提供方发送真实 `SettingChanged` 信号，锁定 Tao 经原生 D-Bus 接收后驱动 GTK／生产 WebView；未注入 DOM、执行页面脚本或模拟媒体查询。门户仅发布浅／深色固定值，拒绝替换已有拥有者；先独立核对旧版嵌套 `Read`、`ReadAll` 命名空间过滤及浅→深→浅状态。
