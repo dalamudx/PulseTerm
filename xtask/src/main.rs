@@ -46,6 +46,10 @@ mod ssh_private_key_decode;
 mod ssh_probe;
 #[cfg(all(feature = "ssh-target-probe", unix))]
 #[path = "../../apps/desktop/src-tauri/src/ssh_session_adapter.rs"]
+#[expect(
+    dead_code,
+    reason = "The probe reuses production session adapters without routed/interactive workspace callers; check-ssh-adapters checks production separately."
+)]
 mod ssh_session_adapter;
 #[cfg(feature = "ssh-probe")]
 mod ssh_system_probe;

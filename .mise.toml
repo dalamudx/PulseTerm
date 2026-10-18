@@ -12,6 +12,10 @@ run = "pnpm install --frozen-lockfile"
 description = "Check Rust and TypeScript code"
 run = ["cargo xtask check", "pnpm --filter ui check"]
 
+[tasks.check-ssh-adapters]
+description = "Strictly check standalone SSH probes and the complete production SSH workspace adapter"
+run = ["cargo clippy -p xtask --features ssh-target-probe --all-targets --locked -- -D warnings", "cargo clippy -p pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets --locked -- -D warnings"]
+
 [tasks.test]
 description = "Run unit and shared-fixture tests"
 run = ["cargo test --workspace --locked", "pnpm --filter ui test"]

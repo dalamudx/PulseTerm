@@ -90,7 +90,7 @@ jobs:
           mise exec -- cargo test -p pulse-store --features ssh-trust --locked
           mise exec -- cargo test -p pulse-ssh --all-features --locked
           mise exec -- cargo test -p pulse-app --features ssh-use --locked
-          mise exec -- cargo clippy -p xtask --features ssh-target-probe --all-targets --locked -- -D warnings
+          mise run check-ssh-adapters
           sudo mkdir -p /run/sshd
           mise run probe-ssh-system
           mise run probe-ssh-jump

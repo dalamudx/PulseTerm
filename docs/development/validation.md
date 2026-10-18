@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## SSH 探针与生产适配器配对严格检查
+
+复现了 `cargo clippy -p xtask --all-features --all-targets --locked -- -D warnings` 的54项 `dead_code` 错误。它们来自独立直连探针复用整套生产SSH会话适配器时，缺少桌面路由／交互入口调用者；不是新发现的54处生产功能故障。已在 `xtask/src/main.rs` 的单个 `ssh_session_adapter` 导入项使用带原因的 `#[expect(dead_code)]`。私钥导入项的独立预期被编译器以“未满足预期”拒绝后已移除；`unfulfilled_lint_expectations` 和其他告警仍由 `-D warnings` 阻断。
+
+新增正式任务 `mise run check-ssh-adapters`，先检查 `xtask --features ssh-target-probe --all-targets`，再检查 `pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets`，两者均保持 `--locked -- -D warnings`。生产适配器没有此探针专属例外。Linux CI原SSH专项严格检查已改用配对任务，开发指南同步入口；其余SSH测试／探针不变。
+
+本机Rust格式、xtask全特性／全目标严格Clippy及正式配对任务全部通过，三个检查均零告警。未更改生产认证／路由／会话逻辑，测试目标已参与严格编译，未为lint配置改动重复运行原生认证矩阵。远端CI尚无本次执行收据。失败清单、通过日志和汇总见 `target/probes/ssh-adapter-check/`。发布审计8项许可证、5项维护公告及其他Alpha门禁继续开放。
+
+本批Clippy及构建进程退出后，已执行 `mise run clean-dev`，清除5670项、2.7GiB dev/test产物，随后移除唯一任务目录 `/data/temp/alpha-ssh-ci.3Z8CS1`；三份原始检查日志和汇总仍保留在 `target/probes/ssh-adapter-check/`。
+
 ## 回显转发阶段取证与 DOM 变更行候选
 
 以 `1c0ffb3` 为源码基线，隔离 release／Linux Xvfb／软件渲染的临时取证完成了四轮真实 XTest→PTY→字形像素测量，每轮100次。只记录原生发送／有效ACK的序号、长度和时间，未记录终端内容；C使用单调时间与实时时钟配对。原生发送到像素变化的分段为诊断值，受时钟采样偏差影响；各段p95独立排序，不能相加或相减。

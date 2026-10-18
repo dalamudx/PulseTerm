@@ -73,6 +73,7 @@ mise trust .mise.toml              # 先审阅配置，再信任
 mise install                      # 安装固定版本的工具
 mise run bootstrap                # 依据 pnpm-lock.yaml 安装依赖
 mise run check                    # Rust 格式/clippy/依赖分层 + TS 类型/Biome
+mise run check-ssh-adapters        # Linux探针复用边界 + 完整生产SSH工作区的严格Clippy
 mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
