@@ -13,11 +13,27 @@ export async function confirmWorkspaceDocument(
 ): Promise<"ready" | "cancelled" | "denied"> {
   if (signal.aborted) return "cancelled";
   if (!isWorkspaceNonce(nonce)) return "denied";
+  const deadline = performance.now() + 5000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop!: () => void;
+  const stopped = new Promise<"cancelled" | "denied">((resolve) => {
+    stop = () => resolve("cancelled");
+    signal.addEventListener("abort", stop, { once: true });
+    timer = setTimeout(() => resolve("denied"), 5000);
+  });
   try {
-    await send(nonce);
-    return signal.aborted ? "cancelled" : "ready";
+    // Ending the wait neither cancels native work nor accepts a late receipt.
+    const result = await Promise.race([
+      send(nonce).then(() => "ready" as const),
+      stopped,
+    ]);
+    if (signal.aborted) return "cancelled";
+    return performance.now() >= deadline ? "denied" : result;
   } catch {
     return signal.aborted ? "cancelled" : "denied";
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", stop);
   }
 }
 

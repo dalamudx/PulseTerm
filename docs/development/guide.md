@@ -66,6 +66,8 @@ Option／Meta偏好见[macOS Option作为Meta键](../architecture/terminal-optio
 
 启动／关闭故障阶段取证见[原生窗口调查](native-window-close-investigation.md)：显式 `workspace-startup-diagnostics` 诊断构建只向调用者已有的私有目录写固定阶段码，每进程64条。以 `PULSE_STARTUP_DIAGNOSTICS=1` 和 `PULSE_WORKSPACE_STARTUP_TRACE_DIR` 运行现有关闭任务，仍保留原启动／关闭期限；正常构建不读该目录变量。`mise run check-startup-diagnostics` 配对记录器回归、严格Clippy和收据拒绝检查，已接入Linux CI；Linux诊断构建24轮阶段／PID及实际退出已关联通过，不能以有限成功循环关闭历史故障。
 
+页面确认和CLI展示回执的有界等待见[启动调查](native-window-close-investigation.md#页面确认的有限等待与恢复)：前端只等待五秒，页面撤销立即结束等待，迟到结果不推进流程；不取消原生工作或自动重发。超时使用现有刷新入口，后端授权与原生启动／关闭期限不变。仅运行受影响Readiness／冷SSH／CLI新标签／可见性回归、类型／双语／格式和产品前端构建，沿用现有CI；受控Chrome检查不算原生WebView故障注入。
+
 工具版本只修改 `.mise.toml`，不另建 `rust-toolchain.toml`、`.nvmrc` 或其他版本文件。库依赖仍在 Cargo / package manifests 中声明，提交 `Cargo.lock` 和 `pnpm-lock.yaml`；mise 管理执行这些依赖的工具。配置尚未信任前不要执行任务。
 
 **当前可执行：**

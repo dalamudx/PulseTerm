@@ -141,7 +141,8 @@ export const workspaceEnglish = {
   "正在启动本地 Profile…": "Starting local Profile…",
   "启动或显示未确认 · 未重试，请刷新检查保留的会话":
     "Startup or display not confirmed. No retry; reload to inspect retained sessions.",
-  页面验证失败: "Page validation failed",
+  "页面验证未完成 · 请刷新工作区重试":
+    "Page verification did not complete. Reload the workspace to try again.",
   "窗口可见状态读取失败 · 请关闭并重新打开窗口":
     "Cannot read window visibility. Close and reopen the window.",
   "设置读取失败 · 未使用默认值替代配置，请检查配置后重新加载":

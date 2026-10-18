@@ -1439,7 +1439,7 @@ function confirmPage(): void {
     );
     if (result === "cancelled") return;
     if (result !== "ready") {
-      uiText(state, "页面验证失败");
+      uiText(state, "页面验证未完成 · 请刷新工作区重试");
       return;
     }
     try {

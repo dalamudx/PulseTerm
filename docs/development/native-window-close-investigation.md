@@ -61,3 +61,11 @@ PULSE_STARTUP_DIAGNOSTICS=1 PULSE_WORKSPACE_STARTUP_TRACE_DIR="$owned_trace_dir"
 为区分页面确认未到达与初始化后续等待，增加固定检查点DocumentConfirmEntered／DocumentConfirmed、VisibilityRead、ProfilesRequested／ProfilesListed及CliPageReady；仍不记录参数、nonce、配置和页面内容，不修改授权、加载顺序或期限。扩充后的四项Rust回归、两种严格构建及24轮原生矩阵通过。首轮定位为构建等待，其他轮为页面／初始化等待，均尚未取得根因或修复证据。
 
 接受与失败证据独立归档后，确认本任务构建、原生窗口、GDB及夹具均已退出，执行 `mise run clean-dev` 清除13.4GiB开发产物并移除 `/data/temp/alpha-startup-trace.NIJr5h`；保留target/probes全部接受和失败材料。正式轻量检查自建／回收独占TMPDIR，Linux以外显式拒绝执行，不以零测试通过。最终摘要清单随接受目录保存。
+
+## 页面确认的有限等待与恢复
+
+`confirmWorkspaceDocument` 与复用它的 CLI 展示回执曾直接等待原生 Promise，后端不返回时不会结束，页面撤销也不能立即完成该等待。现限定每次等待五秒，从调用时的单调时钟起算；结果到达时再次检查期限，避免阻塞事件循环后把过期结果当成成功。页面撤销立即返回取消，成功、拒绝、取消或超时均清理本次监听和定时器。原生调用仍自行完成，不自动重发、不回滚已完成工作，也不提前归还后端资源。
+
+页面确认失败或超时显示“页面验证未完成 · 请刷新工作区重试”及对应英文；使用现有重新加载按钮。超时不继续加载 Profile 或启动终端，迟到成功／拒绝均不能改变该结果。CLI展示元数据沿用现有未确认提示，刷新后使用新文档生命周期。后端窗口／来源／nonce／Vault检查和原八秒启动、十二秒关闭期限不变；其他初始化步骤与原生窗口构建故障不在此修复范围。
+
+新增五项反例在旧实现上实际失败；修复后62项Readiness／冷SSH／CLI新标签／可见性回归、TypeScript、Biome、双语检查及生产前端构建通过。独立Chrome载入实际工作区并受控阻塞确认RPC，约5秒显示刷新建议，中英文状态提示在800px窗口内未溢出；迟到回执未触发Profile或后续原生调用，真实点击重新加载后只发一次新确认，Chrome与Vite退出。该检查不是原生WebView故障注入、系统输入法或辅助技术验收；启动黑窗与SIGSEGV根因继续开放。沿用现有前端CI，不新增认证矩阵。

@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmWorkspaceDocument,
   reportWorkspacePresentation,
 } from "./workspace-readiness";
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 const valid = "eb8c9c2a-5ca5-42a7-91f3-2950e523719b";
 describe("workspace document receipt", () => {
   it("rejects missing or non-v4 nonce without invoking native", async () => {
@@ -52,6 +56,89 @@ describe("workspace document receipt", () => {
         new AbortController().signal,
       ),
     ).toBe("ready");
+  });
+  it.each(["success", "rejection"])(
+    "bounds a stalled receipt and ignores its late %s",
+    async (late) => {
+      vi.useFakeTimers();
+      let finish!: () => void;
+      let reject!: (error: Error) => void;
+      const send = vi.fn(
+        () =>
+          new Promise<void>((resolve, failure) => {
+            finish = resolve;
+            reject = failure;
+          }),
+      );
+      const result = confirmWorkspaceDocument(
+        valid,
+        send,
+        new AbortController().signal,
+      );
+      const observed = vi.fn();
+      void result.then(observed);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(observed).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(observed).toHaveBeenCalledExactlyOnceWith("denied");
+      if (late === "success") finish();
+      else reject(new Error("private native details"));
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(await result).toBe("denied");
+      expect(observed).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+  it("settles page cancellation without waiting for a native reply", async () => {
+    vi.useFakeTimers();
+    const life = new AbortController();
+    const remove = vi.spyOn(life.signal, "removeEventListener");
+    const send = vi.fn(() => new Promise<void>(() => {}));
+    const observed = vi.fn();
+    const result = confirmWorkspaceDocument(valid, send, life.signal);
+    void result.then(observed);
+    life.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(observed).toHaveBeenCalledExactlyOnceWith("cancelled");
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("rejects an overdue reply even before the timer callback can run", async () => {
+    vi.useFakeTimers();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+    let finish!: () => void;
+    const result = confirmWorkspaceDocument(
+      valid,
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      new AbortController().signal,
+    );
+    clock.mockReturnValue(5000);
+    finish();
+    expect(await result).toBe("denied");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("cleans its wait after timely success or a synchronous native failure", async () => {
+    vi.useFakeTimers();
+    const life = new AbortController();
+    const remove = vi.spyOn(life.signal, "removeEventListener");
+    expect(
+      await confirmWorkspaceDocument(valid, async () => undefined, life.signal),
+    ).toBe("ready");
+    expect(
+      await confirmWorkspaceDocument(
+        valid,
+        () => {
+          throw Error("private");
+        },
+        life.signal,
+      ),
+    ).toBe("denied");
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
