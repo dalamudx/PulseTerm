@@ -156,6 +156,28 @@ impl PasswordSessionAction {
             intent: self.action.prepare(store, source).await?,
         })
     }
+    pub(crate) async fn prepare_interactive(
+        self,
+        store: &StateStore,
+        source: SshTargetSource,
+        deadline: std::time::Instant,
+    ) -> Result<PasswordSessionIntent> {
+        let prepared = self
+            .action
+            .operation
+            .prepare_saved_password_use_pinned_at(
+                store,
+                source,
+                self.action.selected.0,
+                self.action.selected.1,
+                self.action.pinned_epoch,
+                deadline,
+            )
+            .await?;
+        Ok(PasswordSessionIntent {
+            intent: PasswordTargetUseIntent { prepared },
+        })
+    }
 }
 impl PasswordSessionIntent {
     /// Intermediate route use only. The trusted caller owns the sink and MUST drain it on failure

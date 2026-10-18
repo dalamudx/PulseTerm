@@ -30,6 +30,11 @@ pub use session_gesture::{
 };
 #[cfg(feature = "ssh-use")]
 pub use session_gesture::{
+    PasswordInteractiveSessionAction, PasswordInteractiveSessionGesture,
+    PasswordInteractiveSessionIntent, PasswordInteractiveSessionSink,
+};
+#[cfg(feature = "ssh-use")]
+pub use session_gesture::{
     PrivateKeyInteractiveForwardSink, PrivateKeyInteractiveSessionAction,
     PrivateKeyInteractiveSessionGesture, PrivateKeyInteractiveSessionIntent,
     PrivateKeyInteractiveSessionSink,

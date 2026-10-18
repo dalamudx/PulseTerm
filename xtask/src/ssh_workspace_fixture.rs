@@ -6,6 +6,8 @@ mod agent_fixture;
 mod interactive_fixture;
 #[path = "ssh_workspace_key_fixture.rs"]
 mod key_fixture;
+#[path = "ssh_workspace_password_fixture.rs"]
+mod password_fixture;
 #[path = "ssh_workspace_route_fixture.rs"]
 mod route_fixture;
 struct GuiPeer {
@@ -15,10 +17,14 @@ struct GuiPeer {
     accepted: bool,
     public_key: Option<russh::keys::PublicKey>,
     interactive_round: Option<u8>,
+    password_factor_complete: bool,
     key_factor_complete: bool,
 }
 impl Drop for GuiPeer {
     fn drop(&mut self) {
+        if std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY").is_some() {
+            eprintln!("fixture.ssh_password_joint_stream_exited");
+        }
         if std::env::var_os("PULSE_SSH_KEY_MFA_POLICY").is_some() {
             eprintln!("fixture.ssh_key_joint_stream_exited");
         }
@@ -43,6 +49,7 @@ impl Server for GuiPeer {
             accepted: false,
             public_key: self.public_key.clone(),
             interactive_round: self.interactive_round.map(|_| 0),
+            password_factor_complete: false,
             key_factor_complete: false,
         }
     }
@@ -64,6 +71,14 @@ impl server::Handler for GuiPeer {
         user: &str,
         password: &str,
     ) -> Result<server::Auth, Self::Error> {
+        if let Some(policy) = std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY") {
+            return Ok(password_fixture::authenticate(
+                self,
+                user,
+                password,
+                std::path::Path::new(&policy),
+            ));
+        }
         if self.public_key.is_some() || self.interactive_round.is_some() {
             eprintln!("fixture.ssh_password_auth_attempt_rejected");
             return Ok(server::Auth::Reject {
@@ -84,6 +99,12 @@ impl server::Handler for GuiPeer {
         _: &str,
         response: Option<server::Response<'a>>,
     ) -> Result<server::Auth, Self::Error> {
+        if std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY").is_some()
+            && !self.password_factor_complete
+        {
+            eprintln!("fixture.ssh_password_joint_premature_mfa_rejected");
+            return Ok(server::Auth::reject());
+        }
         if std::env::var_os("PULSE_SSH_KEY_MFA_POLICY").is_some() && !self.key_factor_complete {
             eprintln!("fixture.ssh_key_joint_premature_mfa_rejected");
             return Ok(server::Auth::reject());
@@ -197,6 +218,9 @@ impl server::Handler for GuiPeer {
         channel: ChannelId,
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY").is_some() {
+            eprintln!("fixture.ssh_password_joint_shell_requested");
+        }
         if std::env::var_os("PULSE_SSH_KEY_MFA_POLICY").is_some() {
             eprintln!("fixture.ssh_key_joint_shell_requested");
         }
@@ -603,11 +627,13 @@ pub(crate) fn run() -> Result<()> {
                             | "interactive-route"
                             | "key-interactive"
                             | "key-interactive-route"
+                            | "password-interactive"
                             | "agent-interactive"
                             | "agent-interactive-route"
                     )
                 )
                 .then_some(0),
+                password_factor_complete: false,
                 key_factor_complete: false,
             };
             eprintln!(

@@ -21,6 +21,7 @@ import {
   connectSavedAgentInteractiveSsh,
   connectSavedAgentSsh,
   connectSavedInteractiveSsh,
+  connectSavedPasswordInteractiveSsh,
   connectSavedPrivateKeyInteractiveSsh,
   connectSavedPrivateKeySsh,
   connectSavedSsh,
@@ -43,6 +44,7 @@ export class WorkspaceSshDialog {
   private readonly agentJointChoices = new Map<string, string>();
   private readonly interactiveChoices = new Map<string, string>();
   private readonly jointChoices = new Map<string, string>();
+  private readonly passwordJointChoices = new Map<string, string>();
   private readonly keyChoices = new Map<string, string>();
   private readonly choiceUsers = new Map<string, string>();
   private hosts: readonly Host[] = [];
@@ -80,6 +82,7 @@ export class WorkspaceSshDialog {
       connectAgentInteractive?: typeof connectSavedAgentInteractiveSsh;
       connectInteractive?: typeof connectSavedInteractiveSsh;
       connectKeyInteractive?: typeof connectSavedPrivateKeyInteractiveSsh;
+      connectPasswordInteractive?: typeof connectSavedPasswordInteractiveSsh;
       connectRoute?: typeof connectSshRoute;
       continueRoute?: typeof continueSshRoute;
       connectKey?(
@@ -103,6 +106,7 @@ export class WorkspaceSshDialog {
       connectAgent: connectSavedAgentSsh,
       connectInteractive: connectSavedInteractiveSsh,
       connectKeyInteractive: connectSavedPrivateKeyInteractiveSsh,
+      connectPasswordInteractive: connectSavedPasswordInteractiveSsh,
       connectRoute: connectSshRoute,
       connect: connectSavedSsh,
     },
@@ -169,6 +173,12 @@ export class WorkspaceSshDialog {
   private applyProfile(): void {
     const host = this.hosts.find((h) => h.id === this.options.host.value),
       profile = host?.profile;
+    for (const option of Array.from(this.options.identity.options)) {
+      if (!this.passwordJointChoices.has(option.value)) continue;
+      const unavailable = !!this.temporary || !!profile?.via;
+      option.disabled = unavailable;
+      option.hidden = unavailable;
+    }
     if (!profile) return;
     const id = profile.identityId;
     const choices = id
@@ -220,6 +230,7 @@ export class WorkspaceSshDialog {
     const focused = this.options.dialog.ownerDocument.activeElement;
     this.focus = focused instanceof HTMLElement ? focused : undefined;
     this.jointChoices.clear();
+    this.passwordJointChoices.clear();
     this.keyChoices.clear();
     this.agentChoices.clear();
     this.agentJointChoices.clear();
@@ -301,6 +312,21 @@ export class WorkspaceSshDialog {
         );
         option.disabled = !identity.secret.hasValue;
         this.options.identity.append(option);
+        if (identity.secret.hasValue) {
+          const joint = doc.createElement("option");
+          joint.value = `password-mfa:${identity.id}`;
+          uiText(
+            joint,
+            message(
+              "{0} · {1} · 密码 + MFA",
+              identity.label,
+              identity.username,
+            ),
+          );
+          this.passwordJointChoices.set(joint.value, identity.id);
+          this.choiceUsers.set(joint.value, identity.username);
+          this.options.identity.append(joint);
+        }
         const interactive = doc.createElement("option");
         interactive.value = `interactive:${identity.id}`;
         uiText(
@@ -577,6 +603,9 @@ export class WorkspaceSshDialog {
       !this.current(epoch)
     )
       return;
+    const passwordJointIdentity = this.passwordJointChoices.get(
+      this.options.identity.value,
+    );
     const jointIdentity = this.jointChoices.get(this.options.identity.value);
     const keyIdentity =
       this.keyChoices.get(this.options.identity.value) ?? jointIdentity;
@@ -608,23 +637,35 @@ export class WorkspaceSshDialog {
         (host) => host.id === this.options.host.value,
       );
       const route = selectedHost?.profile?.via;
+      if (passwordJointIdentity && (route || this.temporary))
+        throw Error("ssh.session_denied");
       const id =
-        (interactiveIdentity || jointIdentity || agentJointIdentity) && !route
+        (interactiveIdentity ||
+          jointIdentity ||
+          agentJointIdentity ||
+          passwordJointIdentity) &&
+        !route
           ? await (async () => {
               return (
-                agentJointIdentity
-                  ? (this.dependencies.connectAgentInteractive ??
+                passwordJointIdentity
+                  ? (this.dependencies.connectPasswordInteractive ??
+                      connectSavedPasswordInteractiveSsh)
+                  : agentJointIdentity
+                    ? (this.dependencies.connectAgentInteractive ??
                       connectSavedAgentInteractiveSsh)
-                  : jointIdentity
-                    ? (this.dependencies.connectKeyInteractive ??
-                      connectSavedPrivateKeyInteractiveSsh)
-                    : interactive
+                    : jointIdentity
+                      ? (this.dependencies.connectKeyInteractive ??
+                        connectSavedPrivateKeyInteractiveSsh)
+                      : interactive
               )(
                 nonce,
                 {
                   host: this.options.host.value,
                   identity:
-                    agentJointIdentity ?? jointIdentity ?? interactiveIdentity!,
+                    passwordJointIdentity ??
+                    agentJointIdentity ??
+                    jointIdentity ??
+                    interactiveIdentity!,
                 },
                 controller.signal,
                 () => this.current(epoch),
@@ -724,6 +765,7 @@ export class WorkspaceSshDialog {
     this.options.selectedHost.textContent = "";
     this.options.identity.replaceChildren();
     this.jointChoices.clear();
+    this.passwordJointChoices.clear();
     this.keyChoices.clear();
     this.agentChoices.clear();
     this.agentJointChoices.clear();

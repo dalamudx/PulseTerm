@@ -191,6 +191,57 @@ pub(super) fn workspace_ssh_agent_interactive_session_begin(
     }
 }
 #[tauri::command]
+pub(super) fn workspace_ssh_password_interactive_session_begin(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+    selection: SavedSelection,
+    challenges: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<Ticket> {
+    let (_, page) = session::page(&window, &state, &nonce)?;
+    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    {
+        let _ = (page, selection, challenges);
+        Err("workspace.ssh_disabled")
+    }
+    #[cfg(all(feature = "workspace-ssh", unix))]
+    {
+        let host = canonical(&selection.host, 7)?;
+        let identity = canonical(&selection.identity, 7)?;
+        let gesture = state
+            .0
+            .vault
+            .begin_password_interactive_session_gesture_authorized(
+                page.clone(),
+                host,
+                identity,
+                Arc::new(|| true),
+            )
+            .map_err(|_| "workspace.ssh_denied")?;
+        let broker = crate::ssh_session_adapter::interactive::Broker::new(move |prompt| {
+            challenges
+                .send(prompt)
+                .map_err(|_| pulse_app::vault_owner::VaultOwnerError::Denied)
+        });
+        let token = state
+            .0
+            .ssh_sessions
+            .requests
+            .begin_password_interactive_gesture(
+                page,
+                host,
+                identity,
+                &state.0.vault,
+                gesture,
+                broker,
+            )?;
+        Ok(Ticket {
+            version: 1,
+            token: token.to_string(),
+        })
+    }
+}
+#[tauri::command]
 pub(super) fn workspace_ssh_private_key_interactive_session_begin(
     window: WebviewWindow,
     state: State<'_, Workspace>,

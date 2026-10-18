@@ -2,6 +2,18 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 保存直连密码与MFA联合认证
+
+`mise run probe-workspace-password-interactive` 已通过Linux生产WebView与真实loopback SSH验收。明确选择“密码 + MFA”后，仅接受第一因子实际部分成功且下一方法包含keyboard-interactive；普通密码请求不升级，拒绝、密码单因素完整成功及缺少MFA均不发布会话。问答开始前原密码借用已结束；每轮复核原页、Vault代际、固定截止时间与密码来源。取消、错误回答和第二轮来源变化拒绝并排空，来源变化时服务端未收到第二轮回答。
+
+12项原生检查涵盖两次两轮MFA成功、真实终端输入、刷新不重复认证及全部九条连接退出，GUI与native worker均正常排空。截图已审阅；配置与密文除既有最近记录外不变。正式mise、Linux CI与开发指南已接线。收据、日志、截图及工具源码独立归档于 `target/probes/workspace-password-interactive/accepted/478d3e5c/`。
+
+锁定russh 0.63.3服务端在密码分支覆盖handler的partial_success位；首轮失败因此未进入问答，生产客户端正确拒绝。原日志／截图保存在 `attempts/c26892e1/`。测试服务端采用已有联合认证的隔离归档解压构建，仅修正密码分支；保留原归档／修正源码／二进制摘要并在运行前核对，产品客户端、缓存和仓库锁文件不改。该受控协议证据覆盖保存直连GUI；临时目标／CLI／逐跳密码联合、企业PAM和其他平台仍待验。
+
+类型与格式、静态双语检查（140模块／446条文案）、56项相关前端回归、3项授权边界回归、生产SSH及xtask探针严格Clippy通过。完整App SSH的369项单元测试与35项文档测试全部通过；同一生产源码经xtask测试目标的1项实际部分成功门禁单测通过。先前错误选择工作区可执行目标导致零项测试，原日志保留但不计通过；正确命令已加入正式任务。
+
+原生窗口、九条SSH连接、测试与构建进程全部退出后，已执行私有CARGO_TARGET_DIR下的 `mise run clean-dev`，清除13.5GiB dev/test产物；最终收据、服务端溯源、测试日志、截图与本次补丁仍保留在 `target/probes/`。
+
 ## 受控高DPI字体矩阵与CSS字距修复
 
 `mise run probe-workspace-dpi` 已通过Linux独立Xvfb／D-Bus和生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建。顺序运行GDK_SCALE=1／2，X11实测窗口960×640／1920×1280。四组内核PTY／后端网格为：默认14px均92×29；18px均67×22；150%行高67×15／67×14；增加2px字距56×15／56×14。列数一致、默认和18px行数一致；150%行高在本矩阵允许一行设备像素取整差异，依据锁定xterm的ceil／floor与DPR除法，原“全部行数完全相同”的探针假设已修正。每组内核／后端网格检查仍保留。

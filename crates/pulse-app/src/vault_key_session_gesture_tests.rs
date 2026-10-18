@@ -5,6 +5,8 @@ mod agent;
 mod interactive;
 #[path = "vault_key_interactive_session_tests.rs"]
 mod joint;
+#[path = "vault_password_interactive_session_tests.rs"]
+mod password_joint;
 #[test]
 fn temporary_private_key_intent_revocation_reaches_native_guard_after_prepare() -> TestResult {
     let _serial = crate::VAULT_CRYPTO_TEST_LOCK

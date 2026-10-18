@@ -161,6 +161,7 @@ function fixture() {
       ) => "3",
     ),
     connectKeyInteractive: vi.fn(async (..._args: unknown[]) => "10"),
+    connectPasswordInteractive: vi.fn(async (..._args: unknown[]) => "12"),
     connectKey: vi.fn(
       async (
         _nonce: string,
@@ -747,6 +748,38 @@ it("saved Agent default chooses the Agent branch and only passes canonical saved
   );
   expect(f.dependencies.connect).not.toHaveBeenCalled();
   expect(f.dependencies.connectKey).not.toHaveBeenCalled();
+});
+it("explicit saved password plus MFA uses only the joint connector", async () => {
+  const f = fixture();
+  await f.controller.open();
+  f.identity.value = `password-mfa:${identityId}`;
+  f.connect.dispatchEvent(new Event("click"));
+  await vi.waitFor(() => expect(f.connected).toHaveBeenCalledWith(nonce, "12"));
+  expect(f.dependencies.connectPasswordInteractive).toHaveBeenCalledWith(
+    nonce,
+    { host: hostId, identity: identityId },
+    expect.any(AbortSignal),
+    expect.any(Function),
+    expect.any(Function),
+  );
+  expect(f.dependencies.connect).not.toHaveBeenCalled();
+  expect(f.dependencies.connectInteractive).not.toHaveBeenCalled();
+  expect(f.dependencies.connectKey).not.toHaveBeenCalled();
+  expect(f.dependencies.connectRoute).not.toHaveBeenCalled();
+});
+it("password joint selection is unavailable on routes and never falls back to ordinary password", async () => {
+  const f = routeFixture();
+  await f.controller.open();
+  const option = f.identity.options.find(
+    (o) => o.value === `password-mfa:${identityId}`,
+  );
+  expect(option?.disabled).toBe(true);
+  f.identity.value = `password-mfa:${identityId}`;
+  f.connect.dispatchEvent(new Event("click"));
+  await vi.waitFor(() => expect(f.status.textContent).toContain("连接未成功"));
+  expect(f.dependencies.connectPasswordInteractive).not.toHaveBeenCalled();
+  expect(f.dependencies.connect).not.toHaveBeenCalled();
+  expect(f.dependencies.connectRoute).not.toHaveBeenCalled();
 });
 it("explicit private key plus MFA uses only its own connector and does not alter saved identities", async () => {
   const f = fixture();

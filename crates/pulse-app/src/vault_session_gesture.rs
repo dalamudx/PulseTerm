@@ -23,12 +23,18 @@ pub use key::PrivateKeySessionGesture;
 mod agent;
 #[path = "vault_agent_interactive_session.rs"]
 mod agent_interactive;
+#[path = "vault_password_interactive_session.rs"]
+mod password_interactive;
 pub use agent::{
     AgentForwardSink, AgentSessionAction, AgentSessionGesture, AgentSessionIntent, AgentSessionSink,
 };
 pub use agent_interactive::{
     AgentInteractiveForwardSink, AgentInteractiveSessionAction, AgentInteractiveSessionGesture,
     AgentInteractiveSessionIntent, AgentInteractiveSessionSink,
+};
+pub use password_interactive::{
+    PasswordInteractiveSessionAction, PasswordInteractiveSessionGesture,
+    PasswordInteractiveSessionIntent, PasswordInteractiveSessionSink,
 };
 
 #[path = "vault_interactive_session.rs"]

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build an isolated SSH test server that transmits real public-key partial success.
+"""Build an isolated SSH test server that transmits handler partial success.
 
-russh 0.63.3 overwrites the server handler's partial-success bit for signed public
-keys. Correct only that fixture path; the product, registry cache and repository
-lockfile remain untouched. The archive must match the repository's locked digest.
+russh 0.63.3 overwrites this bit for passwords and signed public keys. Correct
+only the selected fixture branch; product, registry cache and repository lockfile
+remain untouched. The archive must match the repository locked digest.
 """
 import hashlib
 import json
@@ -38,6 +38,20 @@ new = ('                                    auth_request.partial_success = parti
        '                                    auth_request.partial_success = false;\n'
        '                                }\n'
        '                                auth_user.clear();')
+assert len(sys.argv) in (2, 3, 4), 'expected binary, optional provenance, optional method'
+mode = sys.argv[3] if len(sys.argv) == 4 else 'public-key'
+assert mode in ('public-key', 'password'), 'unsupported partial-success method'
+correction = 'Preserve handler partial_success for a verified signed public key; reset on ordinary rejection.'
+if mode == 'password':
+    old = ('                    } else {\n'
+           '                        auth_request.methods.remove(MethodKind::Password);\n'
+           '                    }\n'
+           '                    auth_request.partial_success = false;\n')
+    new = ('                    } else {\n'
+           '                        auth_request.methods.remove(MethodKind::Password);\n'
+           '                        auth_request.partial_success = false;\n'
+           '                    }\n')
+    correction = 'Preserve handler partial_success for password; reset on ordinary rejection.'
 with tempfile.TemporaryDirectory(prefix='joint-server.', dir=temp_root) as directory:
     work = Path(directory)
     with tarfile.open(archive) as package:
@@ -45,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='joint-server.', dir=temp_root) as direc
     sdk = work / 'russh-0.63.3'
     server = sdk / 'src' / 'server' / 'encrypted.rs'
     original = server.read_text()
-    assert original.count(old) == 1, 'locked signed-public-key server branch changed'
+    assert original.count(old) == 1, 'locked partial-success server branch changed'
     corrected = original.replace(old, new, 1)
     server.write_text(corrected)
     manifest = (root / 'Cargo.toml').read_text()
@@ -74,10 +88,11 @@ with tempfile.TemporaryDirectory(prefix='joint-server.', dir=temp_root) as direc
         'archiveSha256': locked['checksum'],
         'originalServerSha256': hashlib.sha256(original.encode()).hexdigest(),
         'fixtureServerSha256': hashlib.sha256(corrected.encode()).hexdigest(),
-        'correction': 'Preserve handler partial_success for a verified signed public key; reset on ordinary rejection.',
+        'correction': correction,
+        'partialSuccessMethod': mode,
         'binarySha256': hashlib.sha256(output.read_bytes()).hexdigest(),
     }
-    evidence = Path(sys.argv[2]) if len(sys.argv) == 3 else root / 'target' / 'probes' / 'key-interactive-test-server.json'
+    evidence = Path(sys.argv[2]) if len(sys.argv) >= 3 else root / 'target' / 'probes' / 'key-interactive-test-server.json'
     assert evidence.resolve().is_relative_to(root / "target" / "probes") and not evidence.is_symlink()
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(provenance, indent=2) + '\n')

@@ -492,6 +492,7 @@ pub fn run() {
             ssh_connection::route::workspace_ssh_route_cancel,
             ssh_connection::workspace_ssh_session_begin,
             ssh_connection::workspace_ssh_agent_session_begin,
+            ssh_connection::workspace_ssh_password_interactive_session_begin,
             ssh_connection::workspace_ssh_private_key_interactive_session_begin,
             ssh_connection::workspace_ssh_agent_interactive_session_begin,
             ssh_connection::workspace_ssh_interactive_session_begin,

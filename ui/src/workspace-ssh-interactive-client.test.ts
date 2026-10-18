@@ -17,6 +17,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   connectSavedAgentInteractiveSsh,
   connectSavedInteractiveSsh,
+  connectSavedPasswordInteractiveSsh,
   connectSavedPrivateKeyInteractiveSsh,
 } from "./workspace-ssh-session";
 
@@ -98,6 +99,11 @@ describe.each([
     kind: "private key plus MFA",
     connect: connectSavedPrivateKeyInteractiveSsh,
     begin: "workspace_ssh_private_key_interactive_session_begin",
+  },
+  {
+    kind: "password plus MFA",
+    connect: connectSavedPasswordInteractiveSsh,
+    begin: "workspace_ssh_password_interactive_session_begin",
   },
   {
     kind: "Agent signature plus MFA",

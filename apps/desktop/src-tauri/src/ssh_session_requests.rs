@@ -198,6 +198,26 @@ impl SessionRequests {
             Some(Gesture::Interactive(gesture, broker)),
         )
     }
+    pub fn begin_password_interactive_gesture(
+        self: &Arc<Self>,
+        page: Arc<PageLaunchScope>,
+        host: Uuid,
+        identity: Uuid,
+        owner: &PageVaultOwner,
+        gesture: pulse_app::vault_owner::PasswordInteractiveSessionGesture,
+        broker: Arc<super::interactive::Broker>,
+    ) -> Result<Uuid> {
+        if !gesture.matches_selection(host, identity) {
+            return Err("workspace.denied");
+        }
+        self.begin_action(
+            page,
+            host,
+            identity,
+            owner,
+            Some(Gesture::PasswordInteractive(gesture, broker)),
+        )
+    }
     pub fn begin_key_interactive_gesture(
         self: &Arc<Self>,
         page: Arc<PageLaunchScope>,
@@ -248,6 +268,7 @@ impl SessionRequests {
     ) -> Result<Uuid> {
         let interactive = gesture.as_ref().and_then(|g| match g {
             Gesture::Interactive(_, broker)
+            | Gesture::PasswordInteractive(_, broker)
             | Gesture::KeyInteractive(_, broker)
             | Gesture::AgentInteractive(_, broker) => Some(broker.clone()),
             _ => None,
@@ -350,7 +371,7 @@ impl SessionRequests {
         let mut entry = self.entry.lock().map_err(|_| "workspace.ssh_failed")?;
         let e = self.checked(&mut entry, page, ticket)?;
         match (&e.stage, private_key) {
-            (Stage::Reserved(_, Action::Password(_)), false)
+            (Stage::Reserved(_, Action::Password(_) | Action::PasswordInteractive(..)), false)
             | (Stage::Reserved(_, Action::PrivateKey(_) | Action::KeyInteractive(..)), true) => {
                 Ok(())
             }

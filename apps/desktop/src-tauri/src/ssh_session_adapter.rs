@@ -20,6 +20,8 @@ pub(crate) mod agent;
 pub(crate) mod interactive;
 #[path = "ssh_session_kinds.rs"]
 mod kinds;
+#[path = "ssh_password_interactive_adapter.rs"]
+pub(crate) mod password_interactive;
 #[path = "ssh_session_requests.rs"]
 pub(crate) mod requests;
 #[path = "ssh_route_driver.rs"]

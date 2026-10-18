@@ -70,6 +70,28 @@ export function connectSavedPrivateKeyInteractiveSsh(
     questions,
   );
 }
+/** Explicit password partial success followed by MFA; never a retry or fallback. */
+export function connectSavedPasswordInteractiveSsh(
+  nonce: string,
+  selection: SavedSshSelection,
+  signal: AbortSignal,
+  current: () => boolean,
+  questions: (
+    prompt: InteractivePrompt,
+    signal: AbortSignal,
+  ) => Promise<string[] | undefined>,
+  rpc: HostRpc = invoke,
+): Promise<string> {
+  return connectSaved(
+    nonce,
+    selection,
+    signal,
+    current,
+    "password-interactive",
+    rpc,
+    questions,
+  );
+}
 async function connectSaved(
   nonce: string,
   selection: SavedSshSelection,
@@ -80,6 +102,7 @@ async function connectSaved(
     | "agent"
     | "interactive"
     | "key-interactive"
+    | "password-interactive"
     | "agent-interactive",
   rpc: HostRpc = invoke,
   questions?: (
@@ -101,6 +124,7 @@ async function connectSaved(
     identity: selection.identity,
   });
   const interactive =
+    privateKey === "password-interactive" ||
     privateKey === "interactive" ||
     privateKey === "key-interactive" ||
     privateKey === "agent-interactive";
@@ -193,17 +217,19 @@ async function connectSaved(
   try {
     check();
     const begin = rpc(
-      privateKey === "agent-interactive"
-        ? "workspace_ssh_agent_interactive_session_begin"
-        : privateKey === "agent"
-          ? "workspace_ssh_agent_session_begin"
-          : privateKey === "interactive"
-            ? "workspace_ssh_interactive_session_begin"
-            : privateKey === "key-interactive"
-              ? "workspace_ssh_private_key_interactive_session_begin"
-              : privateKey
-                ? "workspace_ssh_key_session_begin"
-                : "workspace_ssh_session_begin",
+      privateKey === "password-interactive"
+        ? "workspace_ssh_password_interactive_session_begin"
+        : privateKey === "agent-interactive"
+          ? "workspace_ssh_agent_interactive_session_begin"
+          : privateKey === "agent"
+            ? "workspace_ssh_agent_session_begin"
+            : privateKey === "interactive"
+              ? "workspace_ssh_interactive_session_begin"
+              : privateKey === "key-interactive"
+                ? "workspace_ssh_private_key_interactive_session_begin"
+                : privateKey
+                  ? "workspace_ssh_key_session_begin"
+                  : "workspace_ssh_session_begin",
       {
         nonce,
         selection: selected,
@@ -222,7 +248,7 @@ async function connectSaved(
           ? "workspace_ssh_agent_session_prepare"
           : privateKey === "interactive"
             ? "workspace_ssh_interactive_session_prepare"
-            : privateKey
+            : privateKey && privateKey !== "password-interactive"
               ? "workspace_ssh_key_session_prepare"
               : "workspace_ssh_session_prepare",
         { nonce, token },

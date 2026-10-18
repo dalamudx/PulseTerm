@@ -14,6 +14,7 @@ export const connectionEnglish = {
   "Agent + MFA": "Agent + MFA",
   "私钥 + MFA": "Private key + MFA",
   "{0} · {1} · 私钥 + MFA": "{0} · {1} · Private key + MFA",
+  "{0} · {1} · 密码 + MFA": "{0} · {1} · Password + MFA",
   "{0} · {1} · Agent + MFA": "{0} · {1} · Agent + MFA",
   认证方式: "Authentication method",
   "交互认证 / MFA": "Interactive / MFA",

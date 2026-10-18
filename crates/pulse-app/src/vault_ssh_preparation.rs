@@ -95,8 +95,30 @@ impl PageVaultOperation {
         identity: Uuid,
         pinned: Option<AvailableKeyEpoch>,
     ) -> Result<SavedPasswordUsePreparation> {
+        self.prepare_saved_password_use_pinned_at(
+            store,
+            source,
+            host,
+            identity,
+            pinned,
+            Instant::now() + Duration::from_secs(5),
+        )
+        .await
+    }
+    // Explicit joint actions supply their original deadline, never a fresh preparation lifetime.
+    pub(super) async fn prepare_saved_password_use_pinned_at(
+        self,
+        store: &StateStore,
+        source: SshTargetSource,
+        host: Uuid,
+        identity: Uuid,
+        pinned: Option<AvailableKeyEpoch>,
+        deadline: Instant,
+    ) -> Result<SavedPasswordUsePreparation> {
         let selected = (host, identity);
-        let deadline = Instant::now() + Duration::from_secs(5);
+        if Instant::now() >= deadline {
+            return Err(VaultOwnerError::Denied);
+        }
         self.current()?;
         if !source.supports_password_selection(host, identity) {
             return Err(VaultOwnerError::Denied);

@@ -23,6 +23,10 @@ type Guard = Arc<dyn Fn() -> bool + Send + Sync>;
 type Result<T> = std::result::Result<T, &'static str>;
 pub(crate) enum Gesture {
     Password(PasswordSessionGesture),
+    PasswordInteractive(
+        pulse_app::vault_owner::PasswordInteractiveSessionGesture,
+        Arc<super::interactive::Broker>,
+    ),
     KeyInteractive(
         pulse_app::vault_owner::PrivateKeyInteractiveSessionGesture,
         Arc<super::interactive::Broker>,
@@ -37,6 +41,10 @@ pub(crate) enum Gesture {
 }
 pub(crate) enum Action {
     Password(PasswordSessionAction),
+    PasswordInteractive(
+        pulse_app::vault_owner::PasswordInteractiveSessionAction,
+        Arc<super::interactive::Broker>,
+    ),
     KeyInteractive(
         pulse_app::vault_owner::PrivateKeyInteractiveSessionAction,
         Arc<super::interactive::Broker>,
@@ -57,6 +65,10 @@ pub(crate) enum Source {
 }
 pub(crate) enum Intent {
     Password(PasswordSessionIntent),
+    PasswordInteractive(
+        pulse_app::vault_owner::PasswordInteractiveSessionIntent,
+        Arc<super::interactive::Broker>,
+    ),
     KeyInteractive(
         pulse_app::vault_owner::PrivateKeyInteractiveSessionIntent,
         Arc<super::interactive::Broker>,
@@ -77,6 +89,9 @@ impl Gesture {
         guard: Guard,
     ) -> std::result::Result<Action, VaultOwnerError> {
         match self {
+            Self::PasswordInteractive(v, broker) => v
+                .begin_session_authorized(owner, page, guard)
+                .map(|v| Action::PasswordInteractive(v, broker)),
             Self::Password(v) => v
                 .begin_session_authorized(owner, page, guard)
                 .map(Action::Password),
@@ -101,6 +116,7 @@ impl Gesture {
 impl Action {
     pub fn cancellation(&self) -> PageVaultCancellation {
         match self {
+            Self::PasswordInteractive(v, _) => v.cancellation(),
             Self::Password(v) => v.cancellation(),
             Self::PrivateKey(v) => v.cancellation(),
             Self::KeyInteractive(v, _) => v.cancellation(),
@@ -115,6 +131,10 @@ impl Action {
         source: Source,
     ) -> std::result::Result<Intent, VaultOwnerError> {
         match (self, source) {
+            (Self::PasswordInteractive(v, broker), Source::Password(s)) => v
+                .prepare(store, s)
+                .await
+                .map(|v| Intent::PasswordInteractive(v, broker)),
             (Self::Password(v), Source::Password(s)) => {
                 v.prepare(store, s).await.map(Intent::Password)
             }
@@ -145,6 +165,7 @@ impl Action {
 impl Intent {
     pub fn is_temporary(&self) -> bool {
         match self {
+            Self::PasswordInteractive(v, _) => v.selected_source().0.is_temporary(),
             Self::Password(intent) => intent.selected_source().0.is_temporary(),
             Self::PrivateKey(intent) => intent.selected_source().0.is_temporary(),
             Self::KeyInteractive(v, _) => v.selected_source().0.is_temporary(),
@@ -156,6 +177,7 @@ impl Intent {
 
     pub fn cancellation(&self) -> PageVaultCancellation {
         match self {
+            Self::PasswordInteractive(v, _) => v.cancellation(),
             Self::Password(v) => v.cancellation(),
             Self::PrivateKey(v) => v.cancellation(),
             Self::KeyInteractive(v, _) => v.cancellation(),
@@ -166,6 +188,7 @@ impl Intent {
     }
     pub fn authorization(&self) -> Guard {
         match self {
+            Self::PasswordInteractive(v, _) => v.authorization(),
             Self::Password(v) => v.authorization(),
             Self::PrivateKey(v) => v.authorization(),
             Self::KeyInteractive(v, _) => v.authorization(),
@@ -176,6 +199,7 @@ impl Intent {
     }
     pub fn deadline(&self) -> std::time::Instant {
         match self {
+            Self::PasswordInteractive(v, _) => v.deadline(),
             Self::Password(v) => v.deadline(),
             Self::PrivateKey(v) => v.deadline(),
             Self::KeyInteractive(v, _) => v.deadline(),
@@ -203,6 +227,7 @@ impl Intent {
             }};
         }
         match self {
+            Self::PasswordInteractive(v, _) => target!(v),
             Self::Password(v) => target!(v),
             Self::PrivateKey(v) => target!(v),
             Self::KeyInteractive(v, _) => target!(v),
@@ -223,6 +248,7 @@ impl Intent {
         // leave their guards in the outer cleanup supervisor until physical I/O has exited.
         enum Sink {
             Password(super::SessionSink),
+            PasswordInteractive(super::password_interactive::JointSessionSink),
             PrivateKey(crate::ssh_private_key_adapter::session::SessionSink),
             KeyInteractive(crate::ssh_private_key_adapter::interactive::JointSessionSink),
             Agent(super::agent::SessionSink),
@@ -236,6 +262,18 @@ impl Intent {
             Self::Password(_) => Sink::Password(
                 super::SessionSink::new(connection, selected, context.size, context.history_rows)
                     .map_err(|_| "workspace.ssh_failed")?,
+            ),
+            Self::PasswordInteractive(v, broker) => Sink::PasswordInteractive(
+                super::password_interactive::JointSessionSink::new(
+                    connection,
+                    selected,
+                    context.size,
+                    context.history_rows,
+                    broker.clone(),
+                    context.store.clone(),
+                    v.selected_source().0.clone(),
+                )
+                .map_err(|_| "workspace.ssh_failed")?,
             ),
             Self::PrivateKey(_) => Sink::PrivateKey(
                 crate::ssh_private_key_adapter::session::SessionSink::new(
@@ -305,6 +343,7 @@ impl Intent {
             )),
         };
         match &mut sink {
+            Sink::PasswordInteractive(sink) => sink.set_palette(context.palette.clone()),
             Sink::Password(sink) => sink.set_palette(context.palette.clone()),
             Sink::PrivateKey(sink) => sink.set_palette(context.palette.clone()),
             Sink::KeyInteractive(sink) => sink.set_palette(context.palette.clone()),
@@ -314,6 +353,20 @@ impl Intent {
         }
         let taken = intent.take().ok_or("workspace.denied")?;
         let (outcome, alive): (_, Guard) = match (taken, sink) {
+            (Self::PasswordInteractive(intent, _), Sink::PasswordInteractive(sink)) => {
+                let alive = sink.observe_native_admission();
+                (
+                    intent
+                        .start(
+                            context.store.clone(),
+                            sink,
+                            started.take().ok_or("workspace.denied")?,
+                        )
+                        .wait()
+                        .await,
+                    alive,
+                )
+            }
             (Self::Password(intent), Sink::Password(sink)) => {
                 let admission = sink.observe_admission();
                 let alive = Arc::new(move || admission.upgrade().is_some()) as Guard;
