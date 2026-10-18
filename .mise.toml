@@ -1101,6 +1101,25 @@ export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-agent-interactive-wm.log python3 scripts/probe-workspace-cold-ssh.py
 """
 
+[tasks.probe-workspace-startup]
+description = "Measure release new-process startup to visible Profile, input readiness and real PTY input; Linux reference only"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp target/probes/workspace-startup
+printf '%s\\n' '{"version":1,"measurementsComplete":false,"nativeExitConfirmed":false,"productStartupGateEvaluated":false}' >target/probes/workspace-startup/result.json
+fixture_dir=$(mktemp -d /data/temp/pt-start-build.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/native-helper" $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)
+pnpm --filter ui exec vite build --outDir "$fixture_dir/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
+cargo build -p pulseterm-desktop --release --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+export PULSE_NATIVE_HELPER="$fixture_dir/native-helper"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-startup/wm.log python3 scripts/probe-workspace-startup.py
+"""
+
 [tasks.probe-workspace-performance]
 description = "Record Linux production WebView process-tree PSS/RSS for one terminal, 100000 retained rows and 20 tabs"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }

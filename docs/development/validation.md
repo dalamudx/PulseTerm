@@ -14,6 +14,18 @@
 
 类型和格式检查通过，最终相关绘制、拟合、Surface生命周期及DPR回归共69项通过。最终独立归档为 `target/probes/workspace-dpi/accepted/9f04d24c/`，33份文件SHA256校验全部通过。原生、PTY、构建与桌面助手均退出后，已按私有CARGO_TARGET_DIR执行 `mise run clean-dev` 清除6.5GiB dev/test产物，保留 `target/probes/` 证据。
 
+## Linux release 新进程输入就绪参考
+
+`mise run probe-workspace-startup` 已完成一次新配置首次启动与五次已有配置的新进程启动，使用当前生产release、独立Xvfb／D-Bus和固定sh夹具；每次明确选择后端发现的Profile并发送唯一ASCII行，关闭后再逐字核对该PTY最终输入文件。六个不同GUI与PTY PID均正常回收，实际GUI退出码均为0；首末截图已审阅，截图中的回显可能仍在逐帧呈现，不用于像素延迟或完整回显验收。
+
+增强最终字节核对后的新配置首次观测：Profile可访问1971.96ms，选择到终端可输入833.77ms，进程启动到可输入2805.73ms，首条真实输入观测3042.71ms。五次已有配置的新进程到可输入为1207.33–1453.10ms，中位数1288.07ms。首轮独立结果的新配置为1336.53ms、已有配置中位数1170.07ms，原文保存在 `target/probes/workspace-startup/attempts/dd344f10/`。保留两轮波动；两个首启样本与五次参考不用于推断p95或补丁回归。
+
+新计时排除了原内存探针的PSS采样等待，仍包含可访问性查询、明确选择Profile、观察轮询和按键工具开销；桌面／可访问性服务在同轮复用，未驱逐系统页缓存。规格启动目标为M系列Mac小于400ms、Windows小于700ms；收据明确 `productStartupGateEvaluated=false`，Linux样本不判定这两项，也不证明全屏绘制或首次安装体验达标。
+
+正式mise入口、开发指南及Linux release负载CI已接线；CI复用私有CARGO_TARGET_DIR依赖构建，串行执行1GiB负载与启动参考，并上传两组证据。编译前先把本轮收据置为未完成，防止构建／窗口管理器失败时沿用旧成功。严格C编译、Python语法、mise解析和Python零诊断通过，生产实现未改动。最终收据、六份实际输入、六次日志与截图在 `target/probes/workspace-startup/`。
+
+最终独立归档位于 `target/probes/workspace-startup/accepted/04920bf7/`，包含六份退出后核对的实际输入、六次日志／截图、测量工具源码、应用基线及构建／运行记录；25份SHA256校验全部通过。原生、PTY、Xvfb／D-Bus、助手与构建进程均已退出。已执行正式 `mise run clean-dev`（本批仅release构建，dev产物为0）并清除私有CARGO_TARGET_DIR中的release产物，保留 `target/probes/` 证据。
+
 ## 十万行历史停止的生产 WebView 原生验收
 
 `mise run probe-workspace-history-stop` 已在Linux独立Xvfb／D-Bus会话和当前生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建通过。真实PTY输出100100条固定短硬行，界面核对恰好保留100000行。先定位早期历史，再对无匹配查询分别向新／向旧扫描并明确停止；当前页逐字不变，停止提示稳定、停止按钮隐藏且下一次查询已可用，随后重新定位到较新历史。自然EOF及PTY物理回收后仍可读取相同会话的历史匹配，GUI正常退出。工作者最后一次输入快照也是空，覆盖停止后重新查询；未模拟IPC或注入后端延迟。
