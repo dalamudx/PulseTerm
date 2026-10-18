@@ -131,10 +131,14 @@ impl Action {
         source: Source,
     ) -> std::result::Result<Intent, VaultOwnerError> {
         match (self, source) {
-            (Self::PasswordInteractive(v, broker), Source::Password(s)) => v
-                .prepare(store, s)
-                .await
-                .map(|v| Intent::PasswordInteractive(v, broker)),
+            (Self::PasswordInteractive(v, broker), Source::Password(s)) => {
+                let intent = if s.is_temporary() {
+                    v.prepare_temporary(store, s).await?
+                } else {
+                    v.prepare(store, s).await?
+                };
+                Ok(Intent::PasswordInteractive(intent, broker))
+            }
             (Self::Password(v), Source::Password(s)) => {
                 v.prepare(store, s).await.map(Intent::Password)
             }

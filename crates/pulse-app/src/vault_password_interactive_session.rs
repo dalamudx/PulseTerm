@@ -1,4 +1,4 @@
-//! Explicit saved-password plus MFA; ordinary password intentions cannot be upgraded.
+//! Explicit saved or temporary direct password plus MFA; ordinary intentions cannot be upgraded.
 use crate::vault_owner::{
     Authorize, PageVaultCancellation, PageVaultOwner, PasswordSessionAction,
     PasswordSessionGesture, PasswordSessionIntent, PasswordSessionSink, PasswordSessionTask,
@@ -24,7 +24,7 @@ pub struct PasswordInteractiveSessionAction {
     action: PasswordSessionAction,
     deadline: Instant,
 }
-/// Prepared saved direct source, usable only with a trusted joint adapter.
+/// Prepared direct source, usable only with an explicitly selected trusted joint adapter.
 pub struct PasswordInteractiveSessionIntent {
     intent: PasswordSessionIntent,
 }
@@ -78,6 +78,22 @@ impl PasswordInteractiveSessionAction {
         source: SshTargetSource,
     ) -> Result<PasswordInteractiveSessionIntent> {
         if source.is_temporary() || source.is_route_bound() {
+            return Err(VaultOwnerError::Denied);
+        }
+        Ok(PasswordInteractiveSessionIntent {
+            intent: self
+                .action
+                .prepare_interactive(store, source, self.deadline)
+                .await?,
+        })
+    }
+    /// Prepare only an explicitly selected temporary direct target; saved and route sources are rejected.
+    pub async fn prepare_temporary(
+        self,
+        store: &StateStore,
+        source: SshTargetSource,
+    ) -> Result<PasswordInteractiveSessionIntent> {
+        if !source.is_temporary() || source.is_route_bound() {
             return Err(VaultOwnerError::Denied);
         }
         Ok(PasswordInteractiveSessionIntent {

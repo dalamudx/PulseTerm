@@ -64,10 +64,12 @@ class Node extends EventTarget {
 }
 function deferred<T>() {
   let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>((done) => {
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 function fixture() {
   vi.stubGlobal("HTMLElement", Node);
@@ -1040,5 +1042,67 @@ it("temporary Agent plus MFA stays explicit, publishes save only after registrat
     expect(f.dependencies.connect).not.toHaveBeenCalled();
     expect(f.dependencies.connectKeyInteractive).not.toHaveBeenCalled();
     expect(f.dependencies.connectInteractive).not.toHaveBeenCalled();
+  }
+});
+
+it("temporary password plus MFA stays explicit and publishes saving only after current registration", async () => {
+  for (const outcome of ["success", "failure", "cancel"] as const) {
+    const f = fixture();
+    const target = {
+      version: 1 as const,
+      token: nonce,
+      target: {
+        id: hostId,
+        label: "Temporary password MFA",
+        host: "127.0.0.1",
+        port: 22,
+        username: "user",
+      },
+    };
+    const pending = deferred<string>();
+    f.dependencies.connectPasswordInteractive.mockImplementation(
+      () => pending.promise,
+    );
+    await f.controller.open(hostId, target);
+    expect(f.identity.value).toBe(identityId);
+    expect(
+      f.identity.options.find(
+        (option) => option.value === `password-mfa:${identityId}`,
+      )?.disabled,
+    ).toBe(false);
+    f.identity.value = `password-mfa:${identityId}`;
+    f.identity.dispatchEvent(new Event("change"));
+    f.connect.dispatchEvent(new Event("click"));
+    await vi.waitFor(() =>
+      expect(f.dependencies.connectPasswordInteractive).toHaveBeenCalledTimes(
+        1,
+      ),
+    );
+    expect(
+      f.dependencies.connectPasswordInteractive.mock.calls[0]?.slice(0, 2),
+    ).toEqual([nonce, { host: hostId, identity: identityId }]);
+    expect(f.temporaryConnected).not.toHaveBeenCalled();
+    if (outcome === "cancel") f.controller.close();
+    if (outcome === "failure") pending.reject(Error("ssh.session_denied"));
+    else pending.resolve("12");
+    if (outcome === "success") {
+      await vi.waitFor(() =>
+        expect(f.temporaryConnected).toHaveBeenCalledWith(nonce, target),
+      );
+      expect(f.connected).toHaveBeenCalledWith(nonce, "12");
+    } else {
+      if (outcome === "failure")
+        await vi.waitFor(() =>
+          expect(f.status.textContent).toContain("连接未成功"),
+        );
+      else await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(f.connected).not.toHaveBeenCalled();
+      expect(f.temporaryConnected).not.toHaveBeenCalled();
+    }
+    expect(f.dependencies.connect).not.toHaveBeenCalled();
+    expect(f.dependencies.connectInteractive).not.toHaveBeenCalled();
+    expect(f.dependencies.connectKeyInteractive).not.toHaveBeenCalled();
+    expect(f.dependencies.connectAgentInteractive).not.toHaveBeenCalled();
+    expect(f.dependencies.connectRoute).not.toHaveBeenCalled();
   }
 });

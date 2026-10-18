@@ -32,7 +32,10 @@ impl JointSessionSink {
         store: StateStore,
         source: SshTargetSource,
     ) -> Result<Self> {
-        if source.is_temporary() || source.is_route_bound() {
+        if source.is_route_bound()
+            || !source.supports_password_selection(selected.0, selected.1)
+            || !source.target_liveness()()
+        {
             return Err(VaultOwnerError::Denied);
         }
         Ok(Self {
@@ -54,8 +57,9 @@ impl JointSessionSink {
 impl PasswordInteractiveSessionSink for JointSessionSink {}
 impl PasswordTargetSink for JointSessionSink {
     fn matches_target(&self, source: &SshTargetSource, host: Uuid, identity: Uuid) -> bool {
-        !source.is_temporary()
-            && !source.is_route_bound()
+        !source.is_route_bound()
+            && source.is_temporary() == self.source.is_temporary()
+            && self.source.target_liveness()()
             && self.inner.matches_target(source, host, identity)
     }
     fn retain_native_authorization(&mut self, guard: Guard) -> Result<()> {

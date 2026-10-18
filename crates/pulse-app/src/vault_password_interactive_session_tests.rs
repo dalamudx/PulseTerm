@@ -177,3 +177,150 @@ fn password_joint_rejects_temporary_stale_sources_and_later_unlocks() -> TestRes
         f.finish().await
     })
 }
+
+#[test]
+fn temporary_password_joint_keeps_source_epoch_deadline_and_zero_use_after_revocation() -> TestResult
+{
+    let _serial = crate::VAULT_CRYPTO_TEST_LOCK
+        .lock()
+        .map_err(|_| "fixture.poison")?;
+    runtime()?.block_on(async {
+        let f = Fixture::new().await?;
+        let identity = password_identity(&f).await?;
+        let target = f.store.temporary_ssh_target(
+            SshEndpoint::new("Temporary password MFA", "localhost", 2222, "user")?,
+            Arc::new(|| true),
+        );
+        let source = f
+            .store
+            .load_temporary_ssh_key_target_source(target.clone(), Arc::new(|| true))
+            .await?
+            .password_source()
+            .clone();
+        let action = || {
+            let gesture = f
+                .owner
+                .begin_password_interactive_session_gesture_authorized(
+                    f.page.scope.clone(),
+                    target.id(),
+                    identity,
+                    Arc::new(|| true),
+                )
+                .map_err(|error| format!("temporary.capture: {error}"))?;
+            gesture
+                .begin_session_authorized(&f.owner, &f.page.scope, Arc::new(|| true))
+                .map_err(|error| format!("temporary.approve: {error}"))
+        };
+        assert!(action()?.prepare(&f.store, source.clone()).await.is_err());
+        assert!(
+            action()?
+                .prepare_temporary(
+                    &f.store,
+                    f.store.load_ssh_target_source(Arc::new(|| true)).await?
+                )
+                .await
+                .is_err()
+        );
+        let wrong = joint(&f, identity)?.begin_session_authorized(
+            &f.owner,
+            &f.page.scope,
+            Arc::new(|| true),
+        )?;
+        assert!(
+            wrong
+                .prepare_temporary(&f.store, source.clone())
+                .await
+                .is_err()
+        );
+        let old = action()?;
+        restore_same_dek(&f).await?;
+        assert!(
+            old.prepare_temporary(&f.store, source.clone())
+                .await
+                .is_err()
+        );
+        let captured = action()?;
+        let clicked = std::time::Instant::now();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let cancelled = captured
+            .prepare_temporary(&f.store, source.clone())
+            .await
+            .map_err(|error| format!("temporary.cancel_prepare: {error}"))?;
+        assert!(cancelled.deadline() <= clicked + std::time::Duration::from_secs(300));
+        let allowed = cancelled.authorization();
+        assert!(allowed());
+        cancelled.cancellation().cancel();
+        assert!(!allowed());
+        drop(cancelled);
+        drop(allowed);
+        let intent = action()?
+            .prepare_temporary(&f.store, source.clone())
+            .await
+            .map_err(|error| format!("temporary.live_prepare: {error}"))?;
+        assert_eq!(intent.selected_source().1, (target.id(), identity));
+        assert!(intent.authorization()());
+        target.revoke();
+        assert!(!intent.authorization()());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let started = crate::protocol_session_owner::ProtocolSessionReservation::reserve(
+            &f.page.registry,
+            &f.page.scope,
+        )
+        .map_err(|error| format!("temporary.reserve: {error}"))?
+        .begin()
+        .map_err(|error| format!("temporary.start: {error}"))?;
+        assert!(
+            intent
+                .start(f.store.clone(), NoPasswordUse(calls.clone()), started)
+                .wait()
+                .await
+                .is_err()
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(action()?.prepare_temporary(&f.store, source).await.is_err());
+        f.finish()
+            .await
+            .map_err(|error| format!("temporary.finish: {error}").into())
+    })
+}
+struct NoPasswordUse(Arc<std::sync::atomic::AtomicUsize>);
+impl crate::vault_owner::PasswordTargetSink for NoPasswordUse {
+    fn matches_target(
+        &self,
+        _: &pulse_store::ssh_target_source::SshTargetSource,
+        _: Uuid,
+        _: Uuid,
+    ) -> bool {
+        true
+    }
+    fn retain_native_authorization(&mut self, _: crate::vault_owner::Authorize) -> Result<()> {
+        Ok(())
+    }
+    fn authenticate<'a>(
+        &'a mut self,
+        _: &'a str,
+        _: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool>> + Send + 'a>> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async { Err(VaultOwnerError::Denied) })
+    }
+    fn close_and_drain(
+        &mut self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+impl crate::vault_owner::PasswordSessionSink for NoPasswordUse {
+    fn prepare_authenticated_terminal(
+        &mut self,
+        _: crate::vault_owner::Authorize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async { Err(VaultOwnerError::Denied) })
+    }
+    fn take_authenticated_root_parts(
+        &mut self,
+    ) -> Result<crate::vault_owner::AuthenticatedProtocolParts> {
+        Err(VaultOwnerError::Denied)
+    }
+}
+impl crate::vault_owner::PasswordInteractiveSessionSink for NoPasswordUse {}

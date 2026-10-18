@@ -189,7 +189,7 @@ jobs:
       - name: Verify three-hop private key plus MFA, explicit methods, source revocation and complete drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-route-key-interactive
-      - name: Verify saved password plus MFA, actual partial success, source revocation and native drain
+      - name: Verify saved and temporary password plus MFA, optional save, revocation and native drain
         if: runner.os == 'Linux'
         run: mise run probe-workspace-password-interactive
       - name: Verify saved and temporary Agent plus MFA, post-success save, source revocation and native drain

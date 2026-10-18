@@ -1048,7 +1048,7 @@ timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-ses
 """
 
 [tasks.probe-workspace-password-interactive]
-description = "Verify explicit saved password plus MFA, actual partial success, source revocation, refresh and native drain"
+description = "Verify saved and temporary password plus MFA, explicit consent, source revocation, post-success save and native drain"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
 run = """
 set -eu

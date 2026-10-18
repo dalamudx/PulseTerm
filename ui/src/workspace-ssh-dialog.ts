@@ -175,7 +175,7 @@ export class WorkspaceSshDialog {
       profile = host?.profile;
     for (const option of Array.from(this.options.identity.options)) {
       if (!this.passwordJointChoices.has(option.value)) continue;
-      const unavailable = !!this.temporary || !!profile?.via;
+      const unavailable = !!profile?.via;
       option.disabled = unavailable;
       option.hidden = unavailable;
     }
@@ -637,8 +637,7 @@ export class WorkspaceSshDialog {
         (host) => host.id === this.options.host.value,
       );
       const route = selectedHost?.profile?.via;
-      if (passwordJointIdentity && (route || this.temporary))
-        throw Error("ssh.session_denied");
+      if (passwordJointIdentity && route) throw Error("ssh.session_denied");
       const id =
         (interactiveIdentity ||
           jointIdentity ||

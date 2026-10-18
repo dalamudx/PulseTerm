@@ -145,6 +145,17 @@ try:
     key('Escape')
     baseline = snapshot()
     with database() as db:
+        hosts = []
+        for _, raw in db.execute('SELECT key,value FROM app_state'):
+            try:
+                document = json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if isinstance(document, dict):
+                hosts.extend(document.get('hosts', []))
+    host = next(row for row in hosts if row.get('label') == 'GUI_HOST')
+    address = f"{host['username']}@{host['host']}:{host['port']}"
+    with database() as db:
         identity, label = db.execute('SELECT id,label FROM identities WHERE deleted=0').fetchone()
     assert remote('ssh_password_joint_auth_attempt') == 0
     checks.append(stage)
@@ -217,21 +228,65 @@ try:
     assert remote('ssh_password_joint_premature_mfa_rejected') == 0
     run(['import', '-window', xid, str(evidence / 'refreshed.png')])
     checks.append(stage)
-    stage = 'all_nine_connections_and_native_workers_exit'
+    def temporary_connect():
+        click('快速连接')
+        fill('快速连接地址', address)
+        click('核对地址')
+        click('临时连接')
+        wait(lambda: accessible('选择保存的SSH身份', 'focus'), 'temporary_identity')
+        key('Home')
+        key('Down')
+        click('连接')
+        questions()
+
+    stage = 'temporary_password_joint_cancel_drains_without_write'
+    before_cancel = remote('ssh_password_joint_stream_exited')
+    before_success_exit = remote('ssh_authenticated_stream_exited')
+    temporary_connect()
+    key('Escape')
+    wait(lambda: remote('ssh_password_joint_stream_exited') == before_cancel + 1, 'temporary_cancel_drained')
+    assert remote('ssh_authenticated_stream_exited') == before_success_exit
+    assert native('ssh_session_opened') == 2 and snapshot() == baseline
+    checks.append(stage)
+    stage = 'temporary_joint_skip_save_and_refresh_without_reauthentication'
+    temporary_connect()
+    authenticate()
+    wait(lambda: native('ssh_session_opened') == 3, 'temporary_registered')
+    click('暂不保存')
+    assert snapshot() == baseline
+    input_line('PASSWORD_TEMPORARY', 4)
+    key('ctrl+shift+r')
+    wait(lambda: native('document_confirmed') == 3, 'temporary_refresh')
+    input_line('PASSWORD_TEMPORARY_REFRESH', 5)
+    assert remote('ssh_interactive_authenticated') == 3
+    checks.append(stage)
+    stage = 'temporary_joint_explicit_save_reuses_exact_existing_target'
+    temporary_connect()
+    authenticate()
+    wait(lambda: native('ssh_session_opened') == 4, 'temporary_second_registered')
+    assert snapshot() == baseline
+    click('保存此主机')
+    wait(lambda: not accessible('暂不保存'), 'explicit_save_finished')
+    assert snapshot() == baseline
+    input_line('PASSWORD_TEMPORARY_SAVED', 6)
+    assert remote('ssh_interactive_authenticated') == 4
+    run(['import', '-window', xid, str(evidence / 'temporary.png')])
+    checks.append(stage)
+    stage = 'all_twelve_connections_and_native_workers_exit'
     key('alt+F4')
     assert app.wait(timeout=8) == 0
-    wait(lambda: remote('ssh_password_joint_stream_exited') == 9, 'all_streams', 3)
+    wait(lambda: remote('ssh_password_joint_stream_exited') == 12, 'all_streams', 3)
     assert native('native_drained') == native('exited') == 1
-    assert remote('ssh_interactive_authenticated') == 2
-    assert remote('ssh_password_joint_auth_attempt') == 9
-    assert remote('ssh_password_joint_shell_requested') == 2
+    assert remote('ssh_interactive_authenticated') == 4
+    assert remote('ssh_password_joint_auth_attempt') == 12
+    assert remote('ssh_password_joint_shell_requested') == 4
     assert 'workspace.terminal_failure.' not in app_log.read_text()
     checks.append(stage)
     (evidence / 'result.json').write_text(json.dumps({'kind': 'production-linux-webview-saved-password-and-mfa-real-ssh',
-        'version': 1, 'passed': True, 'checks': checks, 'successful_joint_sessions': 2, 'native_streams_exited': 9,
+        'version': 2, 'passed': True, 'checks': checks, 'successful_joint_sessions': 4, 'native_streams_exited': 12,
         'fixture_only_server_partial_success_correction': True, 'production_dependency_modified': False,
         'limitations': ['synthetic two-round MFA; no enterprise PAM',
-        'saved direct GUI only; temporary, CLI, routes and other platforms remain open']}, indent=2) + '\n')
+        'saved and temporary direct GUI only; CLI, routes and other platforms remain open']}, indent=2) + '\n')
 except BaseException as error:
     (evidence / 'failure.json').write_text(json.dumps({'stage': stage, 'error': type(error).__name__, 'checks': checks}, indent=2) + '\n')
     if xid and app is not None and app.poll() is None:
