@@ -88,7 +88,7 @@ diagnostic_children = []
 def run(args, check=True, timeout=3):
     return subprocess.run(list(map(str,args)), env=env, capture_output=True, text=True, check=check, timeout=timeout)
 
-def wait(predicate, tag, timeout=8):
+def wait(predicate, tag, timeout: float = 8):
     deadline = time.monotonic() + timeout
     while True:
         result = predicate()
@@ -177,6 +177,7 @@ def route_prompt(index):
     return button
 
 def verify_route_pins():
+    assert route_mode and original_pins is not None and original_pin_state is not None
     pins,state = route_pins()
     assert pins[:len(original_pins)] == original_pins and len(pins) == len(original_pins)+2
     assert state[:2] == original_pin_state[:2] and state[2] == original_pin_state[2]+2 and state[3] == original_pin_state[3] and state[4] != original_pin_state[4]
@@ -190,6 +191,22 @@ def verify_route_pins():
         fingerprint = 'SHA256:'+base64.b64encode(hashlib.sha256(base64.b64decode(words[1],validate=True)).digest()).decode().rstrip('=')
         description = (evidence/(prefix+'-peer-'+str(index)+'-description.txt')).read_text()
         assert fingerprint in description and fingerprint == descriptor('fixture.route.'+('outer','middle')[index]+'.fingerprint.')
+
+def startup_stack(app, suffix):
+    if not shutil.which('gdb') or app not in guis():
+        return
+    with (evidence / (prefix + '-' + suffix + '.gdb.log')).open('wb') as stream:
+        debugger = subprocess.Popen(['gdb', '--batch', '--nx',
+            '-iex', 'set debuginfod enabled off', '-iex', 'set print frame-arguments none',
+            '-iex', 'set print thread-events off', '-ex', 'thread apply all bt 12',
+            '-ex', 'thread 1', '-ex', 'bt 48', '-ex', 'detach', '-p', str(app)],
+            env=env, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT)
+        diagnostic_children.append((debugger, stream))
+        try:
+            debugger.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            debugger.kill()
+            debugger.wait(timeout=3)
 
 def launch(tag):
     global client, xid
@@ -215,18 +232,7 @@ def launch(tag):
             'control_endpoint_present': (runtime / 'control.sock').exists(),
         }, indent=2) + '\n')
         run(['/usr/bin/import', '-window', 'root', evidence / (prefix + '-window-failure.png')], check=False)
-        if shutil.which('gdb') and app in guis():
-            with (evidence / (prefix + '-window-failure.gdb.log')).open('wb') as stream:
-                debugger = subprocess.Popen(['gdb', '--batch', '--nx',
-                    '-iex', 'set debuginfod enabled off', '-iex', 'set print frame-arguments none',
-                    '-iex', 'set print thread-events off', '-ex', 'thread apply all bt 12', '-ex', 'detach',
-                    '-p', str(app)], env=env, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT)
-                diagnostic_children.append((debugger, stream))
-                try:
-                    debugger.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    debugger.kill()
-                    debugger.wait(timeout=3)
+        startup_stack(app, 'window-failure')
         raise
     xdo('windowactivate','--sync',xid)
     try:
@@ -237,6 +243,12 @@ def launch(tag):
             run(['/usr/bin/import','-window','root',evidence/(prefix+'-invitation-failure.png')],check=False)
         except (subprocess.TimeoutExpired,OSError):
             pass
+        (evidence / (prefix + '-invitation-failure.json')).write_text(json.dumps({
+            'stage': 'cold_invitation_not_ready', 'tag': tag, 'owned_gui_pid': app,
+            'cli_exit_code': client.poll(), 'owned_window': xid,
+            'control_endpoint_present': (runtime / 'control.sock').exists(),
+        }, indent=2) + '\n')
+        startup_stack(app, 'invitation-failure')
         raise
     assert client.poll() is None
     if agent_interactive_mode:
@@ -368,12 +380,13 @@ try:
                 except (ValueError,TypeError): continue
             catalogue = next(doc for doc in documents if isinstance(doc,dict) and any(row.get('id')==host for row in doc.get('hosts',[])))
             route_targets = {row['label']:row for row in catalogue['hosts']}
-        original_pins,original_pin_state = route_pins()
+    original_pins,original_pin_state = route_pins() if route_mode else (None,None)
     initial = None if scope_mode else source_hashes()
     if scope_mode:
         import runpy
         runpy.run_path("scripts/probe-workspace-ssh-settings.py")["verify"](globals())
         sys.exit(0)
+    assert initial is not None, "fixture.source_snapshot_required"
     if route_password_interactive_mode:
         import runpy
         runpy.run_path("scripts/probe-workspace-route-password-interactive.py")["verify"](globals())
@@ -445,6 +458,7 @@ try:
         app = launch('first-hop-cancel');unlock_without_confirming();click('查看目标')
         wait(lambda:accessible('允许 CLI 连接保存的 SSH 主机？').returncode==0,'exact_target_cancel')
         click('连接');route_prompt(0);shot('first-hop-cancel');click('取消');client_result('first-hop-cancel',False)
+        assert original_pins is not None and original_pin_state is not None
         assert quiet() and source_hashes()==initial and route_pins()==(original_pins,original_pin_state)
         close_gui(app)
     if alias_warm:

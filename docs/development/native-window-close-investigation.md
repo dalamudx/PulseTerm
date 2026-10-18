@@ -36,3 +36,28 @@ GDB 仅附加到本任务实际 GUI PID，禁止 debuginfod 自动下载；打�
 可选 `PULSE_COLD_CLOSE_FAILURE_GDB=1` 只在关闭诊断失败时附加本任务GUI，最多等待30秒，记录有限符号栈和库映射后分离；禁用debuginfod和参数打印，不输出局部变量、堆、寄存器或core。取栈失败继续执行原有进程清理，原失败不会因此变成通过。最终通过矩阵未触发失败取栈。
 
 两种新时序与锁定／解锁交叉各12轮，共48个GUI退出0；与本批原流程24轮合计72个不同PID，其实际waitpid退出文件已逐一核对。未决分支必须先发关窗、再取得CLI拒绝回执，使GUI可由subreaper读取真实退出状态；回执等待计入原12秒期限。未修改生产关闭代码。六组收据、72份退出文件及SHA256清单单独保存在 `target/probes/native-close-pending-acceptance/962d5f04/`，避免后续循环覆盖。窗口管理器准备失败和探针ChildProcessError分别定位，初始黑窗及历史SIGSEGV仍未定位，不据本批通过关闭问题。
+
+## 固定阶段启动取证（工具验收）
+
+历史认证前失败收据显示无可定位窗口／控制端点，主线程仍在GTK事件循环；现有符号栈不足以判断是窗口构建、页面撤销还是端点发布阶段。新增显式feature `workspace-startup-diagnostics`，仅Linux诊断构建读取 `PULSE_WORKSPACE_STARTUP_TRACE_DIR`。正常构建中的钩子为空操作，不读取该变量或创建文件。记录只含版本、GUI PID、相对微秒和固定阶段码，不记录URL、参数、页面nonce、账户、终端内容、密码或回答。
+
+目录须预先存在、绝对路径、通过既有Unix私有目录准入。每进程以0600独占新建 `startup-<pid>.jsonl`，拒绝已有文件／符号链接，最多64条；失败不改变应用启动决定。目录准入沿用既有路径检查边界，不声明完整TOCTOU保护。阶段覆盖服务初始化、主窗口构建、页面分类／拒绝、nonce注入、可见性、窗口／CLI端点发布、Ready与物理销毁／退出。记录时间从诊断记录器创建起算，不能替代启动性能基线，诊断I/O也会改变时序。
+
+```sh
+# 调用者创建并拥有/data/temp下的独占0700目录，结束后自行归档和回收。
+PULSE_STARTUP_DIAGNOSTICS=1 PULSE_WORKSPACE_STARTUP_TRACE_DIR="$owned_trace_dir" \
+  PULSE_COLD_CLOSE_PHASE=pending-dialog PULSE_COLD_CLOSE_FAILURE_GDB=1 \
+  mise run probe-workspace-native-close
+```
+
+正式关闭任务的八秒启动／十二秒关闭期限、零认证／签名、来源不变和实际退出要求保持原值；启用阶段记录后，成功矩阵还将调用 `scripts/check-workspace-startup-traces.py` 关联全部锁定／解锁GUI PID。校验器拒绝额外内容字段、非私有／链接文件、非单调或超限记录、缺失端点／退出、失败阶段和陈旧PID集合；默认当前收据位于 `target/probes/workspace-startup-trace/current/`，接受后另行不可变归档。失败矩阵的任务自有原始阶段文件和既有失败取栈仍须保留。这里的阶段取证只配对normal观测；原有GDB循环独立保留。
+
+`mise run check-startup-diagnostics` 的四项Rust记录器及五项收据回归通过；普通生产／诊断两组全目标严格Clippy通过，三项物理退出和一项原页拒绝回归实际命中通过。锁定／解锁未决关闭各12轮通过，24个不同GUI PID与648条固定阶段记录逐份关联；页面确认、可见性、Profile和CLI就绪完整，最后记录Exited，实际退出码全部0，零认证／签名、来源不变及端点回收均通过。收紧新增阶段为必需后，五项收据回归及同批原始轨迹再次通过。接受材料见 `target/probes/workspace-startup-trace/accepted/bd0768d4/`。失败记录独立保留，不将该批诊断通过计作历史启动黑窗或SIGSEGV修复。
+
+首轮实际取证：四项Rust记录器回归、普通生产／诊断两组全目标严格Clippy通过。锁定第一轮在原八秒窗口期限失败，GUI 928701的阶段记录停在约1.802秒 `window_build_started`；此前服务、单实例所有者和私有数据目录准备均完成，未到 `window_built`、页面加载或控制端点发布。对应主线程符号栈显示GDK的`XInternAtom`／`_XReply`／`xcb_wait_for_reply64`等待，尚不足以归因应用、GTK、X11服务端或WebKit。原始JSONL、失败画面及栈归档在 `target/probes/workspace-startup-trace/attempts/4dab7e6e/`。失败取栈新增主线程48帧，其他线程仍各12帧，参数／局部值仍关闭，15秒取证期限不变；后续独立观测及最终通过矩阵见下文。
+
+后续复测分开保存：GUI1012695约0.103秒进入构建、8.372秒建成并发布端点，17.357秒才出现PageStarted，初始邀请超时，未收集到该轮的新栈；旧928701栈不作为本轮证据。独立最小对照GUI1051030约0.292秒建窗、0.649秒发布端点、0.848秒开始加载、6.669秒完成本地页面／nonce注入，初始邀请仍未就绪；本轮截图实际显示初始化布局，主线程48帧栈在普通GTK循环，不能沿用X11等待结论。对应阶段／画面／实际失败分别归档于 `attempts/6b224af0/` 和 `attempts/control-third/`。
+
+为区分页面确认未到达与初始化后续等待，增加固定检查点DocumentConfirmEntered／DocumentConfirmed、VisibilityRead、ProfilesRequested／ProfilesListed及CliPageReady；仍不记录参数、nonce、配置和页面内容，不修改授权、加载顺序或期限。扩充后的四项Rust回归、两种严格构建及24轮原生矩阵通过。首轮定位为构建等待，其他轮为页面／初始化等待，均尚未取得根因或修复证据。
+
+接受与失败证据独立归档后，确认本任务构建、原生窗口、GDB及夹具均已退出，执行 `mise run clean-dev` 清除13.4GiB开发产物并移除 `/data/temp/alpha-startup-trace.NIJr5h`；保留target/probes全部接受和失败材料。正式轻量检查自建／回收独占TMPDIR，Linux以外显式拒绝执行，不以零测试通过。最终摘要清单随接受目录保存。

@@ -16,6 +16,20 @@ run = ["cargo xtask check", "pnpm --filter ui check"]
 description = "Strictly check standalone SSH probes and the complete production SSH workspace adapter"
 run = ["cargo clippy -p xtask --features ssh-target-probe --all-targets --locked -- -D warnings", "cargo clippy -p pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets --locked -- -D warnings"]
 
+[tasks.check-startup-diagnostics]
+description = "Check opt-in fixed-code startup traces and reject incomplete or content-bearing native receipts"
+run = """
+set -eu
+case "$(uname -s)" in Linux) ;; *) echo "startup diagnostics requires Linux" >&2; exit 2 ;; esac
+mkdir -p /data/temp
+startup_check_tmp=$(mktemp -d /data/temp/pt-startup-check.XXXXXX)
+trap 'rm -rf -- "$startup_check_tmp"' EXIT
+export TMPDIR="$startup_check_tmp" TMP="$startup_check_tmp" TEMP="$startup_check_tmp"
+cargo test -p pulseterm-desktop --lib --features workspace-startup-diagnostics,workspace-ssh --locked product_workspace::startup_diagnostics
+cargo clippy -p pulseterm-desktop --features workspace-startup-diagnostics,workspace-ssh --all-targets --locked -- -D warnings
+python3 scripts/test-workspace-startup-traces.py
+"""
+
 [tasks.test]
 description = "Run unit and shared-fixture tests"
 run = ["cargo test --workspace --locked", "pnpm --filter ui test"]
@@ -895,11 +909,22 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 pnpm --filter ui exec vite build --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
-cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
+case "${PULSE_STARTUP_DIAGNOSTICS:-0}" in
+    0) native_features=workspace-cli,workspace-ssh,tauri/custom-protocol ;;
+    1) native_features=workspace-cli,workspace-ssh,tauri/custom-protocol,workspace-startup-diagnostics
+       test -n "${PULSE_WORKSPACE_STARTUP_TRACE_DIR:-}"
+       mkdir -p target/probes/workspace-startup-trace/current
+       printf '%s' '{"version":1,"passed":false,"stage":"not_completed","historical_startup_or_sigsegv_resolved":false}' > target/probes/workspace-startup-trace/current/result.json ;;
+    *) echo 'invalid startup diagnostics mode' >&2; exit 2 ;;
+esac
+cargo build -p pulseterm-desktop --features "$native_features" --bin pulseterm-workspace --bin pulse --locked
 cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked
 export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 export PULSE_SSH_FIXTURE_EXECUTABLE="$CARGO_TARGET_DIR/debug/xtask"
 sh scripts/probe-workspace-native-close.sh
+if [ "${PULSE_STARTUP_DIAGNOSTICS:-0}" = 1 ]; then
+    python3 scripts/check-workspace-startup-traces.py "$PULSE_WORKSPACE_STARTUP_TRACE_DIR" target/probes/workspace-startup-trace/current --phase "${PULSE_COLD_CLOSE_PHASE:-settled}" --cycles "${PULSE_COLD_CLOSE_CYCLES:-12}"
+fi
 """
 
 [tasks.audit]

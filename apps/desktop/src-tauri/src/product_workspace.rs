@@ -63,10 +63,13 @@ mod ssh_connection;
 mod ssh_profiles;
 #[path = "product_ssh_trust.rs"]
 mod ssh_trust;
+#[path = "product_startup_diagnostics.rs"]
+mod startup_diagnostics;
 #[path = "product_terminal.rs"]
 mod terminal;
 #[path = "product_vault.rs"]
 mod vault;
+use startup_diagnostics::{Stage as StartupStage, record as record_startup};
 #[path = "product_visibility.rs"]
 mod visibility;
 use tauri::webview::PageLoadEvent;
@@ -177,6 +180,7 @@ impl Workspace {
         }
         match event {
             PageLoadEvent::Started => {
+                record_startup(StartupStage::PageStarted);
                 #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
                 self.0.bootstrap.started().map_err(|_| "workspace.denied")?;
                 self.0
@@ -230,6 +234,13 @@ impl Workspace {
                 Ok(())
             }
             PageLoadEvent::Finished => {
+                record_startup(if url.as_str() == "about:blank" {
+                    StartupStage::BlankPageFinished
+                } else if local_workspace_url(url) {
+                    StartupStage::LocalPageFinished
+                } else {
+                    StartupStage::OtherPageFinished
+                });
                 if !local_workspace_url(url) || !local_workspace(window) {
                     return Err("workspace.denied");
                 }
@@ -251,6 +262,7 @@ impl Workspace {
                     cfg!(all(feature = "workspace-ssh", unix))
                 );
                 window.eval(&script).map_err(|_| "workspace.denied")?;
+                record_startup(StartupStage::NonceInjected);
                 #[cfg(feature = "validation-probe-webgl")]
                 window
                     .eval(include_str!("validation_webgl_observer.js"))
@@ -297,12 +309,14 @@ fn workspace_confirm(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<()> {
+    record_startup(StartupStage::DocumentConfirmEntered);
     if state.native_label().ok() != Some(window.label()) {
         return Err("workspace.denied");
     }
     let url = window.url().map_err(|_| "workspace.denied")?;
     confirm_current_document(&state.0.documents, state.0.owner, &url, &nonce)?;
     eprintln!("workspace.document_confirmed");
+    record_startup(StartupStage::DocumentConfirmed);
     Ok(())
 }
 
@@ -327,6 +341,7 @@ fn workspace_cli_ready(
     #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
     drop(scope);
     eprintln!("workspace.cli_presentation_ready");
+    record_startup(StartupStage::CliPageReady);
     Ok(())
 }
 
@@ -362,6 +377,7 @@ async fn workspace_profiles(
         let path = std::env::var_os("PATH").ok_or("workspace.unavailable")?;
         let shell = std::env::var_os("SHELL").map(std::path::PathBuf::from);
         eprintln!("workspace.profiles_requested");
+        record_startup(StartupStage::ProfilesRequested);
         let offers = state
             .0
             .profiles
@@ -379,15 +395,18 @@ async fn workspace_profiles(
             return Err("workspace.denied");
         }
         eprintln!("workspace.profiles_listed");
+        record_startup(StartupStage::ProfilesListed);
         Ok(offers)
     }
 }
 
 /// Preview-only separate runner; none of the validation commands are mounted.
 pub fn run() {
+    record_startup(StartupStage::RunEntered);
     let context = tauri::generate_context!("workspace/tauri.conf.json");
     if !isolated_config(context.config()) {
         eprintln!("workspace.configuration_denied");
+        record_startup(StartupStage::ConfigurationDenied);
         std::process::exit(1);
     }
     let start = (|| -> Result<_> {
@@ -427,10 +446,12 @@ pub fn run() {
     let state = match start {
         Ok(state) => state,
         Err(_) => {
+            record_startup(StartupStage::ServicesFailed);
             eprintln!("workspace.start_failed");
             std::process::exit(1);
         }
     };
+    record_startup(StartupStage::ServicesReady);
     #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
     let unsupported_startup = match crate::cli_startup::from_args(std::env::args_os().skip(1)) {
         Ok(Some(action)) if action.supports_cold_transport() => {
@@ -459,6 +480,7 @@ pub fn run() {
     // The upstream plugin must run before workspace setup or endpoint creation.
     #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
     let builder = builder.plugin(single_instance::plugin());
+    record_startup(StartupStage::RuntimeBuildStarted);
     let result = builder
         .manage(state)
         .manage(window_contexts)
@@ -576,8 +598,10 @@ pub fn run() {
             terminal::workspace_terminal_detach
         ])
         .setup(move |app| {
+            record_startup(StartupStage::SetupEntered);
             #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
             single_instance::verify_owner(app.handle())?;
+            record_startup(StartupStage::InstanceVerified);
             #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
             if unsupported_startup {
                 return Err("workspace.startup_unavailable".into());
@@ -587,6 +611,8 @@ pub fn run() {
             // before constructing any WebView. Never chmod an existing directory.
             #[cfg(unix)]
             let _admitted_data = app_data::prepare(&app.path().app_data_dir()?)?;
+            record_startup(StartupStage::DataPrepared);
+            record_startup(StartupStage::WindowBuildStarted);
             let window =
                 WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("workspace.html".into()))
                     .title("PulseTerm · 工作区预览")
@@ -596,13 +622,16 @@ pub fn run() {
                             .on_page_load(&window, payload.event(), payload.url())
                             .is_err()
                         {
+                            record_startup(StartupStage::PageRejected);
                             let _ = window.close();
                         }
                     })
                     .build()?;
+            record_startup(StartupStage::WindowBuilt);
             window.on_window_event(move |event| {
                 if matches!(event, WindowEvent::Destroyed) {
                     if let Some(native) = on_close.0.native.as_ref() {
+                        record_startup(StartupStage::WindowDestroyed);
                         let _ = native.destroyed();
                     }
                     let _ = close_contexts.retire(LABEL);
@@ -611,32 +640,43 @@ pub fn run() {
             });
             let state = app.state::<Workspace>();
             visibility::install(&window, &state)?;
+            record_startup(StartupStage::VisibilityInstalled);
             state
                 .0
                 .native
                 .as_ref()
                 .ok_or("workspace.denied")?
                 .publish()?;
+            record_startup(StartupStage::WindowPublished);
             #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
             {
                 let server = cli::start(app.handle(), (*state).clone())?;
                 *state.0.cli.lock().map_err(|_| "workspace.cli_failed")? = Some(server);
+                record_startup(StartupStage::EndpointPublished);
             }
+            record_startup(StartupStage::SetupFinished);
             Ok(())
         })
         .build(context);
     match result {
-        Ok(app) => app.run(|handle, event| match event {
-            tauri::RunEvent::ExitRequested { api, code, .. } => {
-                exit::requested(handle, &api, code);
-            }
-            tauri::RunEvent::Exit => {
-                eprintln!("workspace.exited");
-            }
-            _ => {}
-        }),
+        Ok(app) => {
+            record_startup(StartupStage::RuntimeBuilt);
+            app.run(|handle, event| match event {
+                tauri::RunEvent::Ready => record_startup(StartupStage::Ready),
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    record_startup(StartupStage::ExitRequested);
+                    exit::requested(handle, &api, code);
+                }
+                tauri::RunEvent::Exit => {
+                    record_startup(StartupStage::Exited);
+                    eprintln!("workspace.exited");
+                }
+                _ => {}
+            });
+        }
         Err(_) => {
             eprintln!("workspace.start_failed");
+            record_startup(StartupStage::RuntimeBuildFailed);
             std::process::exit(1);
         }
     }

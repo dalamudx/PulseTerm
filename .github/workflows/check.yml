@@ -91,6 +91,7 @@ jobs:
           mise exec -- cargo test -p pulse-ssh --all-features --locked
           mise exec -- cargo test -p pulse-app --features ssh-use --locked
           mise run check-ssh-adapters
+          mise run check-startup-diagnostics
           sudo mkdir -p /run/sshd
           mise run probe-ssh-system
           mise run probe-ssh-jump

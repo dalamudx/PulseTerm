@@ -59,5 +59,6 @@ pub(super) async fn workspace_native_visibility(
     if !snapshot.valid {
         return Err("workspace.visibility_failed");
     }
+    record_startup(StartupStage::VisibilityRead);
     Ok(snapshot)
 }
