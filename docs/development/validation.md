@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 十万行历史停止的生产 WebView 原生验收
+
+`mise run probe-workspace-history-stop` 已在Linux独立Xvfb／D-Bus会话和当前生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建通过。真实PTY输出100100条固定短硬行，界面核对恰好保留100000行。先定位早期历史，再对无匹配查询分别向新／向旧扫描并明确停止；当前页逐字不变，停止提示稳定、停止按钮隐藏且下一次查询已可用，随后重新定位到较新历史。自然EOF及PTY物理回收后仍可读取相同会话的历史匹配，GUI正常退出。工作者最后一次输入快照也是空，覆盖停止后重新查询；未模拟IPC或注入后端延迟。
+
+最终两次停止观测为335.09ms／251.79ms，包含原生可访问动作、读取状态和调度开销，样本数为2，不能作为纯停止处理时间、p95或跨平台性能通过。首次完整场景观测298.34ms／263.01ms，保留在 `target/probes/workspace-history-stop/attempts/c58b74ac/`；增强末次字节核对后复用构建重验，最终收据、空字节快照和当前／EOF截图在 `target/probes/workspace-history-stop/`。单次有界读取的在途代际／信用边界仍由既有27项相关回归和Chrome受控IPC证据补充，不据正常实窗构造未发生的延迟竞态。
+
+新增正式mise任务与Linux CI步骤，私有前端／C助手／运行目录均在 `/data/temp`，显式CARGO_TARGET_DIR可复用构建；原有设置和字体路径保留。Python／Shell语法、mise解析及C严格编译通过，Python诊断为零。完整宽行／复杂查询延迟、内存、硬件GPU、系统IME和跨平台仍开放。
+GUI、PTY、工作者、Xvfb／D-Bus与构建进程退出后，已执行 `mise run clean-dev` 清除6.5GiB dev/test产物，移除本任务目录 `/data/temp/alpha-history-stop.b5HGDC`。最终独立归档位于 `target/probes/workspace-history-stop/accepted/6360d521/`，包含收据、空输入快照、本轮两张截图、原生日志及SHA256清单；首轮通过记录仍单独保留。
+
+
 ## 当前字体矩阵的生产 WebView 原生验收
 
 现有字号／行高／字距、预设／后备／连字范围仍按历史限定证据记录，本批复用该矩阵。`probe-workspace-font` 已改为私有TMPDIR、前端资产和C助手，并复用显式CARGO_TARGET_DIR；脚本独立重开使用同一生产二进制，通过当前设置搜索和ComboBox角色定位，保留默认14px、明确保存、实际PTY网格及三次原生退出要求。结构化字体收据在开始时写未通过，末尾才确认。

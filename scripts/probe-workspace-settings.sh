@@ -48,6 +48,7 @@ while :; do
     ALPHA_TERM_*) printf '{"term":"%s"}\n' "$TERM" > "$PULSETERM_SETTINGS_FIXTURE/$text-$$.json";;
     ALPHA_KEYS_*|ALPHA_COLORS_*) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/settings-query.py" "$text" "$$";;
     ALPHA_HISTORY) n=0;while [ "$n" -lt 1100 ];do printf 'alpha-history-%04d\r\n' "$n";n=$((n+1));done;;
+    ALPHA_STOP_HISTORY) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/history-stop.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
     ALPHA_INTERACTION) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/terminal-interaction.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
     ALPHA_ALT) printf '\033[?1049hALPHA-ALT-needle\r\n';;
     ALPHA_PRIMARY) printf '\033[?1049l';;
@@ -57,6 +58,9 @@ while :; do
 done
 SHELL
 chmod 700 "$fixture/bin/sh"
+if [ "${PULSE_HISTORY_STOP:-0}" = 1 ]; then
+  cp scripts/probe-workspace-history-stop.py "$fixture/history-stop.py"
+fi
 if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
   cp scripts/probe-workspace-terminal-interaction.py "$fixture/terminal-interaction.py"
   cp scripts/probe-workspace-terminal-links.py "$fixture/terminal-links.py"
@@ -115,6 +119,13 @@ pid=$(cat "$fixture/native.pid")
 old_rows=$(head -1 "$fixture/size"|awk '{print $1}')
 old_cols=$(head -1 "$fixture/size"|awk '{print $2}')
 kill -0 "$pid"
+if [ "${PULSE_HISTORY_STOP:-0}" = 1 ]; then
+  python3 scripts/probe-workspace-history-stop.py "$fixture" "$app" "$xid" "$log"
+  timeout 2s xdotool key --clearmodifiers alt+F4
+  await_count exited 1; wait "$app"
+  python3 scripts/probe-workspace-history-stop.py finalize "$fixture"
+  exit 0
+fi
 if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
   python3 scripts/probe-workspace-settings-contract.py "$fixture" "$app" "$xid" "$file" "$log"
   timeout 2s xdotool key --clearmodifiers alt+F4

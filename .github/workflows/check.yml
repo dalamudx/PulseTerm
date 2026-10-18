@@ -210,6 +210,9 @@ jobs:
       - name: Verify settings, PTY interaction, links, GTK clipboard, GIO browser handoff and native exit
         if: runner.os == 'Linux'
         run: mise run probe-workspace-settings-contract
+      - name: Verify real 100000-row history stop, fresh search, EOF and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-history-stop
       - name: Verify SSH scopes, remote TERM and keys, Unicode soft-wrap and EOF history search
         if: runner.os == 'Linux'
         run: mise run probe-workspace-ssh-settings
