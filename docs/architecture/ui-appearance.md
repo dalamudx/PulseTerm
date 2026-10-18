@@ -38,3 +38,9 @@ Astrolabe Rust 请求超时、TypeScript 服务不可用，均不计通过，也
 因 v12 更新影响既有设置版本断言，最后将原生范围限定为同一设置模块，16 项全部通过（包含上述 2 项）；Store／桌面库严格 Clippy 通过。
 
 41 项受影响前端行为与 TypeScript、Rust 格式、局部 Biome、schema 生成／漂移检查及产品构建通过。Chrome 受控适配器检查局部预览零写、保存／恢复后焦点与筛选、旧表单、失败重读、迟到回执、重新打开、真实 Tab 与 390px 布局。首次浏览器检查发现青色选中态 3.95:1、随后发现琥珀预览文字约 4.497:1；调整固定文字 token 后复核十种浅／深色组合，预览文字最低 11.09:1、选中态最低 9.70:1。轻量收据见 `target/probes/ui-accent-development/receipt.json`。不计原生 WebView、辅助技术、跨平台或真实终端验收。Astrolabe Rust 超时、TypeScript 初始化失败均不计通过。
+
+## Linux 原生门户增量验收
+
+`mise run probe-workspace-system-appearance` 在独立Xvfb／D-Bus会话运行完整生产WebView，固定桌面Settings门户发出真实配色信号，经Tao／GTK传播到WebView媒体查询。已核对双向跟随、明确浅／深色覆盖、草稿零写且不应用到工作区、保存后刷新、深色偏好下独立重开及恢复继承为内置浅色；两次GUI和门户提供方正常退出，全程未创建终端会话。界面操作使用AT-SPI定位和真实XTest输入，背景像素、保存的TOML及原生日志交叉验证，不注入页面脚本或模拟媒体查询。
+
+门户助手只提供固定浅／深色及只读设置接口，不替换已有总线拥有者；运行目录隔离且退出后清理。该结果覆盖原生门户协议集成，GNOME／KDE实际桌面会话、多窗口系统菜单、终端系统配色及其他平台继续待验。收据及图像见 `target/probes/workspace-system-appearance/result.json`。

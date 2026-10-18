@@ -165,6 +165,9 @@ jobs:
       - name: Test native workspace source and nonce authorization
         if: runner.os == 'Linux'
         run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked
+      - name: Verify native Settings portal appearance, explicit modes, refresh and independent reopen
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-system-appearance
       - name: Test original-page fingerprint approval tickets and native cancellation drain
         if: runner.os == 'Linux'
         run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked

@@ -2,6 +2,18 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 系统外观的生产 WebView 原生验收
+
+正式入口 `mise run probe-workspace-system-appearance` 已在 Linux 独立 Xvfb／D-Bus 会话通过。固定桌面 Settings 门户提供方发送真实 `SettingChanged` 信号，锁定 Tao 经原生 D-Bus 接收后驱动 GTK／生产 WebView；未注入 DOM、执行页面脚本或模拟媒体查询。门户仅发布浅／深色固定值，拒绝替换已有拥有者；先独立核对旧版嵌套 `Read`、`ReadAll` 命名空间过滤及浅→深→浅状态。
+
+五项实窗检查通过：系统浅深双向变化；明确浅／深色不随系统变动、草稿不写文件且不改变工作区；明确保存后刷新；深色系统偏好下独立退出重开读取已保存的跟随模式；移除覆盖后恢复内置浅色并忽略系统深色。通过真实 AT-SPI 目标、XTest 鼠标／按键、TOML 持久化值和窗口背景像素交叉核对。两个独立GUI及门户提供方正常退出，创建终端会话数为零。最终收据、窗口图像和两次原生日志在 `target/probes/workspace-system-appearance/`。
+
+生产 `workspace-cli,workspace-ssh,tauri/custom-protocol` 构建、两个 C 助手的 `-Wall -Wextra -Werror`、Python 语法及诊断通过。先前探针的 GObject 漏链接、临时 socket 路径过长、同名标签边界和中文注入丢字已修正；`failure.png` 保留为较早搜索定位失败的画面，不属于最终通过检查。AT-SPI 新增 `bounds-combo`，只在请求该动作时限定 ComboBox，原有动作语义保持；选择菜单改用真实下拉控件边界，检索使用现有 ASCII 词 `theme`。正式任务、Linux CI 和开发指南同步。
+
+原生窗口、门户及构建进程全部退出后，已执行 `mise run clean-dev`，清除6.5GiB dev/test产物并移除本任务目录 `/data/temp/alpha-system-appearance.BdWC1i`；最终收据和浅／深色、刷新／重开、恢复继承截图保留在 `target/probes/`。
+
+本批范围是受控原生门户→Tao／GTK→生产 WebView；GNOME／KDE实际桌面会话、其他平台、终端系统配色策略、IME／DPI及辅助技术仍开放。未更改产品外观实现或放宽CSP。
+
 ## SSH 探针与生产适配器配对严格检查
 
 复现了 `cargo clippy -p xtask --all-features --all-targets --locked -- -D warnings` 的54项 `dead_code` 错误。它们来自独立直连探针复用整套生产SSH会话适配器时，缺少桌面路由／交互入口调用者；不是新发现的54处生产功能故障。已在 `xtask/src/main.rs` 的单个 `ssh_session_adapter` 导入项使用带原因的 `#[expect(dead_code)]`。私钥导入项的独立预期被编译器以“未满足预期”拒绝后已移除；`unfulfilled_lint_expectations` 和其他告警仍由 `-D warnings` 阻断。
