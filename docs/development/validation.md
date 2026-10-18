@@ -2,6 +2,20 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 已提交基线的 release 整进程复测与负载门禁
+
+`a81b693` 基线的 `mise run probe-workspace-performance` release 复测已完成，独立收据为 `target/probes/workspace-performance/post-convergence.json`，旧 `release.json` 保留。Linux Xvfb／软件渲染下，空窗PSS 284.75MB、单会话335.53MB、十万行历史总进程树增量82.90MB、20标签471.99MB；十万行已完整留存，20个真实会话及原生进程全部退出。单会话<120MB／20标签<250MB／历史增量≤20MB三项仍未达标。单次观测高于旧基线，不能据此将变化归因于某项补丁；后端容器容量收益不直接代表WebView整进程收益。
+
+独立 `WEBKIT_DISABLE_COMPOSITING_MODE=1` 诊断已完成，收据 `no-compositing-diagnostic.json`：空窗286.40MB、单会话331.65MB、历史增量92.94MB、20标签452.62MB，三项内存目标仍未达标且全部原生进程退出。该单次对照未消除固定成本，不能将差异归因为稳定收益；产品渲染配置保持原值，也不作为硬件或默认模式验收。
+
+新 `mise run probe-workspace-load` 已完成首轮真实 `/bin/cat`／release WebView验收：Ctrl+C发起至cat实际SIGINT退出16.107ms（同组信号收到15.828ms），低于100ms，全部原生进程正常退出。但完整1GiB在600秒内未完成，`target/probes/workspace-load/result.json`明确`passed=false`；失败截图保留，未放宽期限。原生显示仍连接、未上报视图失败。独立15秒诊断 `before-batching/result.json` 再次测到7.622ms中断、进程排空，约14.26秒输出11.27MB（约0.79MB/s），WebKit占约12.4 CPU秒、后端约7.2 CPU秒，说明持续输出吞吐需优化。
+
+后端已保留已排队Data合并：最多八条／一个fragment，不等待、不跨控制屏障，原wire帧数／字节信用／ACK期限保持；明确计入单一前瞻内存和修复许可。17项附件边界／许可回归、1项真实actor→wire信用回归及严格Clippy通过；App完整SSH特性366项测试及35项文档测试全部通过。
+
+相同1GiB文本和原600秒期限，release生产WebView实窗 `after-batching/result.json` 通过：真实`/bin/cat`完整输出1073741824字节并正常退出，用时267628.180ms（约4.01MB/s）；Ctrl+C到cat实际SIGINT退出41.002ms（同组信号收到40.715ms），最终完成标记实际绘制，GUI／PTY及所有原生进程正常退出。已审阅 `after-batching/complete.png`。此前600秒失败和15秒约0.79MB/s诊断均保留；因原完整输出未结束，不声称有精确的全量加速倍数。终端总状态比对、回显p95、冷启动、硬件／IME／跨平台仍未验收，内存门禁继续阻断。
+
+Linux CI新增独立`terminal-load`作业，复用正式mise任务与原600秒原生期限、上传完整负载收据和截图；与现有审计失败独立执行，不改变发布审计门禁。当前仅确认本机结果及CI配置，尚无远端执行收据。
+
 ## 可复现源码基线与 Alpha 收敛
 
 已按依赖拆分签名实现提交：`110aa9e`（冷历史块索引与封存容量）、`008661b`（工作区／SSH联合认证、终端交付与Linux集中原生夹具），两者 `git verify-commit` 均通过。开发进度与本节记录单独提交；沿用已有签名配置，未推送。后续实施优先级及明确退出条件已整理到 `plan.md §15.2`。

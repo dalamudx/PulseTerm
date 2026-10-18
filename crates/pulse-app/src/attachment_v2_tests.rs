@@ -95,3 +95,73 @@ async fn v2_no_ack_stops_actor_and_timeout_releases_without_session_close() {
     drop(d);
     actor.join().await.unwrap();
 }
+
+#[tokio::test]
+async fn v2_queued_small_data_packs_one_frame_without_early_commit_or_end_credit() {
+    let (transport, driver) = ChannelTransport::bounded_driver();
+    let (session, actor) = spawn_session(TermSize::new(80, 24).unwrap(), 32, transport);
+    let (handle, mut wire, binding) = attach_v2(
+        &session,
+        42,
+        AttachmentConfig {
+            fragment: 65536,
+            frames: 1,
+            bytes: 65536 + 28,
+            ack_timeout: Duration::from_secs(2),
+        },
+    )
+    .await
+    .unwrap();
+    let commit = loop {
+        let raw = wire.recv().await.unwrap();
+        let frame = decode(&raw).unwrap();
+        if attach_v2::decode_fragment(frame.payload).unwrap().part
+            == pulse_ipc::attach::Part::Commit
+        {
+            break frame.sequence;
+        }
+        handle.acknowledge(42, frame.sequence).unwrap();
+    };
+    for _ in 0..8 {
+        driver.output.send(vec![b'x'; 4096]).await.unwrap();
+    }
+    let mut state = session.state.clone();
+    timeout(Duration::from_secs(1), async {
+        while state.borrow_and_update().utf8_bytes != 32768 {
+            state.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        timeout(Duration::from_millis(40), wire.recv())
+            .await
+            .is_err()
+    );
+    handle.acknowledge(42, commit).unwrap();
+    let raw = wire.recv().await.unwrap();
+    let frame = decode(&raw).unwrap();
+    let fragment = attach_v2::decode_fragment(frame.payload).unwrap();
+    assert_eq!(fragment.part, pulse_ipc::attach::Part::Data);
+    assert_eq!(fragment.offset, 0);
+    assert_eq!(fragment.source_bytes, 32768);
+    assert_eq!(fragment.body, vec![b'x'; 32768]);
+    drop(driver);
+    assert!(
+        timeout(Duration::from_millis(40), wire.recv())
+            .await
+            .is_err()
+    );
+    handle.acknowledge(42, frame.sequence).unwrap();
+    let raw = wire.recv().await.unwrap();
+    let frame = decode(&raw).unwrap();
+    let end = attach_v2::decode_fragment(frame.payload).unwrap();
+    assert_eq!(end.part, pulse_ipc::attach::Part::End);
+    assert_eq!(end.source_bytes, 32768);
+    handle.acknowledge(42, frame.sequence).unwrap();
+    let receipt = binding.join().await.unwrap();
+    assert_eq!(receipt.boundary.lifecycle, Lifecycle::Ended);
+    assert_eq!(receipt.boundary.utf8_bytes, 32768);
+    assert!(receipt.peak_credit_bytes <= 65536 + 28);
+    actor.join().await.unwrap();
+}

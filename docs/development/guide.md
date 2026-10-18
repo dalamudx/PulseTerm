@@ -133,6 +133,7 @@ mise run probe-workspace-settings-contract # 全局保存重开、刷新按键�
 mise run probe-workspace-ssh-settings # SSH全局/直属组/入口的远端PTY TERM、按键与OSC10前景色、清除覆盖恢复继承、旧会话冻结/刷新、SSH软换行/自然结束查找及五连接退出
 mise run probe-workspace-performance # Linux真实WebView整进程树PSS/RSS：单会话、十万行、20标签；采集完成与性能达标分别记录
 mise run probe-workspace-performance-release # 同场景release构建，记录原产品MB目标；软件渲染基线不能代替硬件/跨平台验收
+mise run probe-workspace-load # release真实cat 1GiB和Ctrl+C到cat物理退出延迟；不替代回显p95／完整屏幕状态／硬件验收
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-owned-session  # 显式会话动作：私库密文→真实SSH→根actor，换页/EOF/read取消与SDK+流join；合成PTY尺寸通知与显示应用，不冒充kernel ACK，非产品/SSH GUI/OS PTY
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证

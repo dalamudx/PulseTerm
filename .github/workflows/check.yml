@@ -506,3 +506,37 @@ jobs:
             THIRD_PARTY.md
             third-party/**
           if-no-files-found: error
+
+  terminal-load:
+    name: Linux release terminal load
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated temporary storage
+        run: |
+          sudo install -d -m 1777 /data/temp
+          load_tmp=$(mktemp -d /data/temp/pulseterm-load-ci.XXXXXX)
+          echo "TMPDIR=$load_tmp" >> "$GITHUB_ENV"
+          echo "TMP=$load_tmp" >> "$GITHUB_ENV"
+          echo "TEMP=$load_tmp" >> "$GITHUB_ENV"
+      - uses: jdx/mise-action@v3
+      - name: Install Linux native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr
+      - run: mise run bootstrap
+      - name: Verify real cat 1GiB, Ctrl+C under 100ms and physical exit
+        run: mise run probe-workspace-load
+      - name: Upload terminal load evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-load-linux
+          path: target/probes/workspace-load/**
+          if-no-files-found: warn
+      - name: Remove this job's temporary storage
+        if: always()
+        run: |
+          case "$TMPDIR" in
+            /data/temp/pulseterm-load-ci.*) rm -rf -- "$TMPDIR" ;;
+            *) exit 1 ;;
+          esac

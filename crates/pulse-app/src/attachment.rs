@@ -8,6 +8,8 @@ use pulse_term::session::{
     Lifecycle, SessionHandle, SessionRestoreError, SessionState, SessionStream, StreamEnd,
     StreamRecord,
 };
+#[path = "attachment_batch.rs"]
+mod batch;
 #[path = "attachment_sender.rs"]
 mod sender;
 use sender::Sender;
@@ -405,6 +407,7 @@ impl Driver {
         let mut drained = false;
         let mut ended = false;
         let mut status_open = true;
+        let mut lookahead: Option<StreamRecord> = None;
         loop {
             if *self.cancellation.borrow() {
                 return Err(AttachmentError::Detached);
@@ -445,6 +448,20 @@ impl Driver {
                 self.sender.start_repair(&state, bytes)?;
                 self.repair_hold = hold;
                 self.repair_sending = true;
+            }
+            if !bootstrap
+                && !self.repair_sending
+                && self.repair_acks == 0
+                && pending.is_none()
+                && at == 0
+                && let Some(value) = record.as_mut()
+            {
+                batch::coalesce(
+                    value,
+                    &mut self.stream.output,
+                    &mut lookahead,
+                    self.config.fragment,
+                )?;
             }
             if pending.is_none() && !ended {
                 let next = if bootstrap {
@@ -537,7 +554,9 @@ impl Driver {
                     && !self.repair_sending
                     && self.repair_acks == 0
                     && !drained
-                    && let Ok(value) = self.stream.output.try_recv()
+                    && let Some(value) = lookahead
+                        .take()
+                        .or_else(|| self.stream.output.try_recv().ok())
                 {
                     record = Some(value);
                     continue;

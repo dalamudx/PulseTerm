@@ -1101,3 +1101,20 @@ cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status 
 export PULSE_SSH_TEST_SERVER="$CARGO_TARGET_DIR/debug/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-settings-wm.log python3 scripts/probe-workspace-cold-ssh.py
 """
+
+[tasks.probe-workspace-load]
+description = "Verify release WebView with real cat 1GiB, tty Ctrl+C latency and native exit"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
+run = """
+set -eu
+mkdir -p /data/temp target/probes/workspace-load
+fixture_dir=$(mktemp -d /data/temp/pulseterm-load-build.XXXXXX)
+trap 'rm -rf -- "$fixture_dir"' EXIT
+export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+pnpm --filter ui build
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --release --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-load.c -o target/probes/load-shell
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gobject-2.0 glib-2.0)
+timeout --kill-after=25s 720s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-load/wm.log python3 scripts/probe-workspace-load.py
+"""
