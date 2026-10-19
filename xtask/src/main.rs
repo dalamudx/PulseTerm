@@ -359,6 +359,7 @@ fn check_deps() -> Result<()> {
                 bail!("{name} must not depend on {dep}");
             }
             let allowed: &[&str] = match name {
+                "pulse-platform" => &[],
                 "pulse-core" => &[],
                 "pulse-cap" => &["pulse-core"],
                 "pulse-ipc" => &["pulse-core"],

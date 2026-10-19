@@ -286,6 +286,7 @@ pnpm tauri build                   # 本地打包
 ### Rust
 - edition 2024；代码格式必须符合 `rustfmt`；clippy 开启 `-D warnings`，并额外启用一部分 pedantic 规则（在 `[workspace.lints]` 中统一配置）。
 - 除 `pulse-platform` 外，所有 crate 都开启 `#![forbid(unsafe_code)]`。写 `unsafe` 代码时必须附上 `// SAFETY:` 注释说明理由。
+- Windows 私有目录基础能力放在 `pulse-platform`，仅私有 `windows::sys` 允许带 SAFETY 说明的 FFI；`mise run check-platform` 在当前宿主做严格检查和策略测试，Windows 另外注册原生目录测试。交叉编译及其他平台的策略测试不算 Windows ACL 验收，生产存储入口在文件权限／原子替换和实机验证完成前保持关闭。边界见 [Windows 私有目录](../architecture/windows-private-directory.md)。
 - 库 crate 用 `thiserror` 定义错误；`anyhow` 只能用在可执行程序和 xtask 中。除测试外禁止 `unwrap` / `expect`（`clippy::unwrap_used`）。
 - 异步代码中禁止执行阻塞操作。PTY、解码等阻塞任务放到专用线程或 `spawn_blocking` 中。长期运行的任务必须持有 `CancellationToken`。
 - 日志使用 `tracing`，禁止用 `println!`。会话相关的代码必须在会话的 span 内执行。**禁止记录密码、密钥和终端内容**；敏感字段使用 `Redacted<T>` 类型包装。

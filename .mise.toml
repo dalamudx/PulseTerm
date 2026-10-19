@@ -13,8 +13,12 @@ description = "Check Rust and TypeScript code"
 run = ["cargo xtask check", "pnpm --filter ui check"]
 
 [tasks.check-core-features]
-description = "Check all features and targets of the portable store, PTY and application core on the current platform"
-run = "cargo check -p pulse-store -p pulse-pty -p pulse-app --all-features --all-targets --locked"
+description = "Check all features and targets of the platform, store, PTY and application core on the current platform"
+run = "cargo check -p pulse-platform -p pulse-store -p pulse-pty -p pulse-app --all-features --all-targets --locked"
+
+[tasks.check-platform]
+description = "Strictly check and run platform policy tests; Windows also runs actual native directory tests"
+run = ["cargo clippy -p pulse-platform --all-targets --locked -- -D warnings", "cargo test -p pulse-platform --all-targets --locked"]
 
 [tasks.check-ssh-adapters]
 description = "Strictly check standalone SSH probes and the complete production SSH workspace adapter"

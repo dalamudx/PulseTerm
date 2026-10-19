@@ -2,6 +2,12 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Windows 私有目录基础原语（生产存储尚未接入）
+
+按既定 `pulse-platform` 分层实现真实进程 SID、句柄绑定祖先、受保护 DACL 创建、现有对象只读准入和身份／权限复核；FFI 仅在私有 sys 模块，其他 crate 的禁止规则不变。只复用已锁定 windows-sys 0.61.2，调查的权限封装未引入；未修改系统工具链或安装宿主目标。
+
+新增正式 `mise run check-platform` 和三平台 CI，Windows 专属目录测试只在 Windows 注册。本机仅运行纯策略测试；Windows GNU 全目标源码／测试类型检查不算 ACL 或真实运行验证。设置原子替换、文件级 ACL／链接边界、生产 Profile／IPC 链及 Windows 实机仍未完成。实现与拒绝条件见 [架构合同](../architecture/windows-private-directory.md)。实际通过：10 项纯策略测试（新增外部仅继承授权反例在旧策略失败）、宿主 `mise run check-platform`、核心全特性入口、依赖分层及格式检查；Windows 专属 5 项测试只注册／编译，不计原生运行。三平台 CI 已接线但没有远端执行结果。未运行 Windows 原生 probe，不将宿主策略或交叉检查作为 Windows 准入通过。最终 Windows GNU 全目标严格 Clippy 已通过，使用完整 128 位文件 ID；原生测试仍为零次执行。源码、失败反例、重现脚本与正式日志归档于 `target/probes/windows-private-directory/accepted/platform-source/verification.json`。两轮 `clean-dev` 分别移除 2.1GiB 和 120.3MiB，私有标准库、候选依赖、缓存写层和两个任务临时目录均已删除，无遗留任务进程。
+
 ## Windows 核心全特性源码检查（交叉编译通过，生产链仍阻塞）
 
 新增正式入口 `mise run check-core-features`，检查 `pulse-store`、`pulse-pty`、`pulse-app` 的全部特性和测试目标，并接入 Linux／Windows／macOS CI。仅依赖 Unix 私有目录或 `/bin/sh` 的持久化／物理进程用例限定为 Unix；同文件的通用授权、原页、期限、取消与 KDF 用例继续注册，生产安全准入未放宽。

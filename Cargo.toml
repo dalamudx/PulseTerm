@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 exclude = ["vendor/alacritty_terminal"]
-members = ["crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-ssh", "crates/pulse-app", "crates/pulse-cap", "apps/desktop/src-tauri", "xtask"]
-default-members = ["crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-ssh", "crates/pulse-app", "crates/pulse-cap", "xtask"]
+members = ["crates/pulse-platform", "crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-ssh", "crates/pulse-app", "crates/pulse-cap", "apps/desktop/src-tauri", "xtask"]
+default-members = ["crates/pulse-platform", "crates/pulse-store", "crates/pulse-core", "crates/pulse-ipc", "crates/pulse-term", "crates/pulse-pty", "crates/pulse-route", "crates/pulse-ssh", "crates/pulse-app", "crates/pulse-cap", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
