@@ -120,12 +120,52 @@ def verify(s):
         key('BackSpace', 'Delete', 'Return')
         wait(lambda: events(key_event) == before + 1, 'remote_bytes_' + encoding)
 
+    def scroll_interaction(session):
+        returned = '回到最新输出'
+        received = events('fixture.ssh_scope_input_received')
+
+        def showing():
+            return accessible(returned).returncode == 0
+
+        def scroll_up():
+            xdo('mousemove', '--window', s['xid'], '650', '350', 'click', '--repeat', '12', '--delay', '20', '4')
+            wait(showing, 'ssh_scroll_reading')
+
+        scroll_up()
+        s['shot']('ssh-scroll-reading')
+        bounds = accessible(returned, 'bounds')
+        assert bounds.returncode == 0
+        left, top, width, height = map(int, bounds.stdout.split())
+        xdo('mousemove', str(left + width // 2), str(top + height // 2), 'click', '1')
+        wait(lambda: not showing(), 'ssh_mouse_returns_latest')
+        assert events('fixture.ssh_scope_input_received') == received, 'scroll.mouse_control_sent_input'
+        scroll_up()
+        assert accessible(returned, 'focus').returncode == 0
+        key('space')
+        wait(lambda: not showing(), 'ssh_keyboard_returns_latest')
+        assert events('fixture.ssh_scope_input_received') == received, 'scroll.keyboard_control_sent_input'
+        scroll_up()
+        xdo('mousemove', '--window', s['xid'], '650', '350', 'click', '1')
+        before_echo = events('fixture.ssh_input_line_echoed')
+        xdo('type', '--clearmodifiers', '--delay', '1', 'SCOPE_SCROLL_INPUT')
+        wait(lambda: not showing(), 'ssh_explicit_input_returns_latest_before_remote_echo')
+        assert events('fixture.ssh_input_line_echoed') == before_echo
+        key('Return')
+        wait(lambda: events('fixture.ssh_input_line_echoed') == before_echo + 1, 'ssh_scroll_explicit_remote_echo')
+        assert auth() == 5
+        assert sum(events('fixture.ssh_scope_term.' + term) for term in ('xterm-256color', 'xterm', 'vt100')) == 5
+        return {'mouseAndKeyboardReturnToLatest': True, 'controlsSendNoRemoteInput': True,
+                'explicitInputReturnsBeforeRemoteOutput': True, 'onlyOneExplicitLineEchoed': True,
+                'noReauthenticationOrPtyRequest': True, 'session': session,
+                'limitations': ['No asynchronous remote output-follow or explicit SSH scroll-setting override acceptance']}
+
     def history_search(session):
         focus(session)
         xdo('type', '--clearmodifiers', 'SCOPE_HISTORY')
         key('Return')
         wait(lambda: events('fixture.ssh_scope_history_sent') == 1, 'history_output')
         verify_terminal(session, 'classic', 'del_csi')  # OSC reply confirms preceding output parsed.
+        scroll_checks = scroll_interaction(session)
         received = events('fixture.ssh_scope_input_received')
         click('查看当前窗格历史与查找')
 
@@ -161,6 +201,7 @@ def verify(s):
         s['shot']('ssh-ended-history')
         key('Escape')
         assert auth() == 5, 'history.search_reauthenticated'
+        return scroll_checks
 
     def organization():
         click('分组、标签与收藏')
@@ -173,7 +214,9 @@ def verify(s):
             select(caption, index)
         click('保存终端行为')
         wait(lambda: document(scope_key) != before, 'saved_scope')
-        stored = document(scope_key)['settings']['terminal']
+        saved_scope = document(scope_key)
+        assert saved_scope is not None, 'scope.saved_document_missing'
+        stored = saved_scope['settings']['terminal']
         choices = {
             '终端配色': ('color_preset', [None, 'classic', 'midnight', 'paper']),
             'Backspace 发送': ('backspace_send', [None, 'del', 'bs']),
@@ -221,14 +264,17 @@ def verify(s):
     fill('分组名称', 'ALPHA_SCOPE_GROUP')
     click('创建分组')
     wait(lambda: document('catalogue.organization.v1') is not None, 'created_group')
-    groups = document('catalogue.organization.v1')['groups']
+    group_catalogue = document('catalogue.organization.v1')
+    assert group_catalogue is not None, 'scope.created_group_missing'
+    groups = group_catalogue['groups']
     group = next(row['metadata']['id'] for row in groups if row['name'] == 'ALPHA_SCOPE_GROUP')
     group_key = 'settings.group.' + group + '.v1'
     allowed.add(group_key)
     select('项目分组', 1)
     click('保存项目组织')
-    wait(lambda: any(row['item'] == s['host'] and row['group'] == group
-                     for row in document('catalogue.organization.v1')['memberships']), 'assigned_direct_group')
+    wait(lambda: (catalogue := document('catalogue.organization.v1')) is not None and any(
+        row['item'] == s['host'] and row['group'] == group for row in catalogue['memberships']),
+        'assigned_direct_group')
     click('完成')
     group_behavior(group_key)
     verify_terminal(global_session, 'classic', 'del_csi')
@@ -261,18 +307,19 @@ def verify(s):
     sessions.append(inherited_global)
     verify_terminal(inherited_global, 'classic', 'del_csi')
     s['shot']('restored-global')
-    history_search(inherited_global)
+    scroll_checks = history_search(inherited_global)
     assert source_rows() == original, 'scope.connection_credential_or_trust_source_changed'
     assert auth() == 5
     s['close_gui'](s['app'])
     wait(lambda: events('fixture.ssh_authenticated_stream_exited') == 5, 'all_peer_streams_exited')
     (evidence / (prefix + '-result.json')).write_text(json.dumps({
-        'version': 3, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
+        'version': 4, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
         'global_direct_group_and_entrance_precedence': True,
         'clear_entrance_restores_group_and_clear_group_restores_global': True,
         'remote_raw_backspace_delete_and_osc10_foreground_verified': True,
         'remote_pty_term_sequence': ['xterm-256color', 'xterm', 'vt100', 'xterm', 'xterm-256color'],
         'no_repeat_pty_on_setting_change_selection_or_refresh': True,
+        'sshScrollInteraction': scroll_checks,
         'ssh_history_soft_wrap_unicode_and_hard_break_isolation': True,
         'ssh_natural_eof_retains_search_without_input_or_reauthentication': True,
         'existing_sessions_keep_frozen_keys_and_palette': True,

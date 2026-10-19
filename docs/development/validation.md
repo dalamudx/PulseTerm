@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## SSH滚动控件与显式输入回底
+
+在既有 `mise run probe-workspace-ssh-settings` 五连接矩阵中复用真实120行远端历史，新增鼠标／键盘返回最新输出、两种控件操作零远端输入，以及显式键入在发送Return／产生远端回显前已回底的检查。原TERM序列、按键／配色继承、刷新不重认证、Unicode软换行和自然EOF查找仍全部保留。结果版本4增加独立 `sshScrollInteraction`；异步远端输出跟随和显式SSH滚动设置不包含在本批。
+
+正式 `mise run probe-workspace-ssh-settings` 已通过Linux生产WebView／真实SSH五连接集中验收。版本4收据确认鼠标／键盘返回最新输出时无远端输入，显式键入在Return与远端回显之前回底；仅测试行SCOPE_SCROLL_INPUT获得一次回显，EOF截图保留精确的GUI_SSH_ECHO:SCOPE_SCROLL_INPUT。五次密码认证、五次PTY TERM依次为xterm-256color／xterm／vt100／xterm／xterm-256color；无额外认证或PTY请求，原作用域继承／恢复、按键／配色、刷新、Unicode／软硬换行及自然EOF只读查找检查保持通过。五条连接全部退出，本轮GUI PID3135938的waitpid退出文件为0，控制端点回收，保存来源／凭据／信任不变。
+
+Python类型／语法零错误、零警告，任务解析、C助手严格编译、GUI／CLI／服务端生产构建和补丁检查通过。三处旧的可空数据库文档读取补齐显式检查；前端资产与C助手输出迁入任务私有目录，截图单线程。产品与认证服务端实现未改；沿用现有Linux CI正式入口。当前收据、当轮退出文件、客户端／远端日志及截图独立归档到 `target/probes/workspace-ssh-settings/accepted/9b731670/`，旧版材料保留在 `attempts/before-scroll/`。异步远端输出跟随和SSH显式滚动开关仍待验，系统IME、硬件多屏与其他平台不包含在本批。
+
+归档并确认GUI／SSH／测试进程退出后，使用本任务私有CARGO_TARGET_DIR执行 `mise run clean-dev`，移除9140项／8.4GiB开发产物，再删除独占目录 `/data/temp/alpha-ssh-scroll.3D7SYj`。接受材料及旧版证据继续保留。
+
 ## 显式滚动开关的设置与视图合同
 
 复用现有全局设置和真实PTY夹具，新增 `mise run probe-workspace-scroll-settings`，检查默认输入回底／输出保位、反转两个布尔值时草稿零写、明确保存不改变已挂载视图、同PTY刷新生效、CLI明确批准的新会话继承、恢复继承后重建默认行为，以及两条PTY的精确输入与物理回收。输出负例先等同包BEL解析并跨越原一秒绘制期限，不以PTY写完代替界面处理。

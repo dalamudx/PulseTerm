@@ -226,7 +226,7 @@ jobs:
       - name: Verify real 100000-row history stop, fresh search, EOF and native exit
         if: runner.os == 'Linux'
         run: mise run probe-workspace-history-stop
-      - name: Verify SSH scopes, remote TERM and keys, Unicode soft-wrap and EOF history search
+      - name: Verify SSH scopes, remote TERM and keys, scroll controls, Unicode soft-wrap and EOF history search
         if: runner.os == 'Linux'
         run: mise run probe-workspace-ssh-settings
       - name: Verify saved encrypted Ed25519 SSH signatures in actual TermView across refresh resize EOF cancelled handshake and native drain

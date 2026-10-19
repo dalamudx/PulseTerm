@@ -1299,8 +1299,8 @@ timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-ses
 
 
 [tasks.probe-workspace-ssh-settings]
-description = "Verify global/direct-group/saved-SSH overrides and restored inheritance through remote PTY TERM, raw keys, remote OSC10, refresh, SSH soft-wrap/EOF search and physical exit"
-env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_SSH_SCOPE_PROBE = "1" }
+description = "Verify SSH scopes through remote PTY TERM, keys, OSC10, scroll controls, input-to-bottom, refresh, Unicode/EOF search and physical exit"
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_SSH_SCOPE_PROBE = "1", MAGICK_THREAD_LIMIT = "1", OMP_NUM_THREADS = "1" }
 run = """
 set -eu
 mkdir -p /data/temp target/probes
@@ -1308,10 +1308,12 @@ fixture_dir=$(mktemp -d /data/temp/pulseterm-ssh-settings.XXXXXX)
 trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
-pnpm --filter ui build
+pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 cargo build -p xtask --features ssh-target-probe --locked
-cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
+export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 export PULSE_SSH_TEST_SERVER="$CARGO_TARGET_DIR/debug/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-settings-wm.log python3 scripts/probe-workspace-cold-ssh.py
 """

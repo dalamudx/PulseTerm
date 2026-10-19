@@ -33,3 +33,7 @@ GUI、CLI 的保存入口直连及跳板叶终端，在网络启动前通过原�
 一次 Chrome 组件检查通过受控原生适配覆盖组／入口表单、单次提交、重复抑制、冲突后重新读取、旧 nonce 响应丢弃、返回入口及 720px 布局。它不访问真实设置数据库或进行 SSH 认证，不能替代原生 WebView、真实 PTY／SSH、macOS Option／IME 或跨平台验收。
 
 类型、产品构建、格式、局部 Biome 及 Store／App／桌面库严格 Clippy 已通过；新增 Store 模块 Astrolabe 诊断为 Exact 零问题。Biome 保留组织编辑器原有的五项信息警告。最终日志与清理收据见 `target/probes/scoped-behavior-development/`。沿用现有 CI，不增加重型矩阵。
+
+## SSH滚动交互集中验证
+
+版本4正式五连接任务已通过Linux生产WebView／真实SSH的鼠标／键盘返回最新输出、控件零远端输入及显式输入回底。回底在Return和远端回显之前检查，避免误判输出引起的滚动；最终只出现明确测试行的回显。TERM序列、来源不变、按键／配色、刷新和自然EOF查找均保持通过，五条连接与GUI正常退出。收据、原始日志、当轮退出文件及截图见 `target/probes/workspace-ssh-settings/accepted/9b731670/`。异步远端输出跟随、SSH显式滚动覆盖及跨平台继续待验。
