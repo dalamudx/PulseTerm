@@ -1,6 +1,7 @@
 # 开发指南
 
 
+跨平台核心编译使用 `mise run check-core-features`，在当前运行平台检查 `pulse-store`、`pulse-pty`、`pulse-app` 的全部特性和测试目标，三平台 CI 均执行。依赖 Unix 私有目录或 `/bin/sh` 的测试只在 Unix 注册，平台无关授权／KDF／取消测试继续保留。Windows GNU 交叉检查只证明源码编译，不代表 Windows ACL、原子替换、ConPTY／IPC 或生产窗口实机验收通过。
 设置弹窗的分类、搜索与焦点规则见[工作区设置导航](../architecture/workspace-settings-navigation.md)。快捷键入口纳入键盘与剪贴板分类及本地搜索；进入时挂起设置，返回保留筛选、未保存草稿和焦点，不转移或续期任一编辑器的保存票据。导航不写配置；字段继续使用既有单次票据保存／恢复，关闭撤销迟到显示，失败后重读。只检查受影响编辑器、类型、产品构建及集中组件使用链，沿用现有前端 CI；原生键位探针同步导航后留待集中实窗验收，不新增 SSH 或全量矩阵。
 私钥导入定向验收使用 `mise run probe-workspace-key-import`：原页面显式解锁后以隔离 GTK 剪贴板粘贴固定加密 Ed25519，验锁定／错口令拒绝、双密文原子保存、刷新／独立进程精确字节与退出。截图须等输入清除，不能将导入成功当作 SSH 连接授权；默认构建不开放导入。夹具和剪贴板 helper 只创建于自有 `/data/temp` 目录并在实际退出后清理。
 后台视图按[调度说明](../architecture/terminal-background-views.md)做受影响检查；原生可见性开发仅运行Visibility／Pane两个Vitest文件、TypeScript／Biome／前端构建，以及CLI＋SSH原生库的`native_visibility::tests`。原生实窗、跨平台、WebGL及资源指标另验。现有CI自动覆盖前端和原生构建，不增加重型矩阵。

@@ -104,6 +104,7 @@ async fn cancellation_waits_for_supervisor_without_leaking_launch_capacity() {
     let next = registry.begin_local_launch(owner).unwrap();
     drop(next);
 }
+#[cfg(unix)]
 #[tokio::test]
 async fn registered_but_unaccepted_launch_is_reaped_without_waiting_for_caller() {
     let registry = SessionRegistry::new();

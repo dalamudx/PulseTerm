@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(unix)]
 use crate::{
     StateStore, vault_database::VaultEdit, vault_lifecycle::VaultKeyLifecycle,
     vault_unlock::begin_validation_unlock,
@@ -16,6 +17,7 @@ fn envelope(id: Uuid) -> Result<ValidationWrappedDek, WrapError> {
     bytes[6..22].copy_from_slice(id.as_bytes());
     ValidationWrappedDek::decode_ciphertext(&bytes, id)
 }
+#[cfg(unix)]
 #[test]
 fn actual_creation_stays_locked_persists_once_and_requires_authenticated_source_confirmation()
 -> TestResult {

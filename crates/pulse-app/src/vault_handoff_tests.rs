@@ -1,6 +1,7 @@
 use super::*;
 use crate::product_document::ProductDocuments;
 use crate::vault_owner::PageVaultOwner;
+#[cfg(unix)]
 use pulse_store::{StateStore, vault_lifecycle::KeyStatus, vault_unlock::PasswordInput};
 type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
 #[tokio::test]
@@ -113,6 +114,7 @@ async fn native_retirement_drop_expired_permit_and_close_never_confirm() -> Test
     p.registry.shutdown()?;
     Ok(())
 }
+#[cfg(unix)]
 #[test]
 fn actual_ready_cancel_stays_locked_then_explicit_front_confirm_accepts_without_deadlock()
 -> TestResult {

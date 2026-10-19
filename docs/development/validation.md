@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Windows 核心全特性源码检查（交叉编译通过，生产链仍阻塞）
+
+新增正式入口 `mise run check-core-features`，检查 `pulse-store`、`pulse-pty`、`pulse-app` 的全部特性和测试目标，并接入 Linux／Windows／macOS CI。仅依赖 Unix 私有目录或 `/bin/sh` 的持久化／物理进程用例限定为 Unix；同文件的通用授权、原页、期限、取消与 KDF 用例继续注册，生产安全准入未放宽。
+
+使用与 `.mise.toml` 一致的 Rust 1.95.0，校验官方发布清单中的 Windows GNU 标准库摘要，MinGW 与 Cargo 写层仅解包／挂载于任务私有目录；未安装宿主目标、未更改系统工具链。基础及全特性组合均通过真实 `x86_64-pc-windows-gnu` 的 `--all-targets --locked` 检查；宿主 Linux 的正式任务通过。Linux 实际运行 92 项 Vault、4 项创建／取消和 15 项本地启动／物理回收测试，合计 111 项，零失败，格式与补丁检查通过。
+
+证据保存于 `target/probes/windows-core/accepted/2bfa2050/`，包含原始失败与通过日志、官方清单与标准库校验记录、包摘要、复现脚本和源码补丁。本批不运行 Windows 二进制，不把交叉编译计作 Windows MSVC、ACL、原子替换、ConPTY／IPC、桌面窗口或生产启动验收；仓库无 remote，三平台远端 CI 尚无执行收据。Windows 安全存储及生产入口、macOS 实机链仍阻塞。验证进程均已退出；有范围 `mise run clean-dev` 分别移除 2.9GiB 与386.2MiB开发产物，任务私有的标准库、MinGW、Cargo写层及剩余目录均已删除；接受材料和原始失败记录保留。
+
 ## Fcitx5 拼音与光标跟随（原窗口输入已验收，窗口移动仍失败）
 
 输入入口 `mise run probe-workspace-fcitx-input` 已接入 Linux CI，复用 IBus 的生产 WebView／真实 PTY 输入、刷新、候选光标跟随与退出矩阵，明确不移动窗口。完整入口 `mise run probe-workspace-fcitx` 保留窗口移动及严格几何断言，仍有已知失败。独立 GTK 预验证已用真实 Fcitx 5.1.12／Pinyin 显示候选、提交“中文中文”并退出；其窗口移动也失败，不计作终端几何通过。守护进程就绪按 D-Bus 名称的实际所有者 PID 确认，避免控制命令自动拉起另一进程。

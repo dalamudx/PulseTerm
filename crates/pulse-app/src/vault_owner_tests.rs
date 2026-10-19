@@ -1,13 +1,14 @@
 use super::*;
+#[cfg(unix)]
 #[path = "vault_key_write_tests.rs"]
 mod key_write;
 use crate::product_document::ProductDocuments;
 use crate::registry::WindowToken;
 type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
-#[cfg(feature = "ssh-use")]
+#[cfg(all(unix, feature = "ssh-use"))]
 #[path = "vault_key_preparation_tests.rs"]
 mod key_preparation;
-#[cfg(feature = "ssh-use")]
+#[cfg(all(unix, feature = "ssh-use"))]
 #[path = "vault_session_gesture_tests.rs"]
 mod session_gesture;
 #[test]
@@ -56,6 +57,7 @@ fn page() -> std::result::Result<Page, Box<dyn std::error::Error>> {
         scope,
     })
 }
+#[cfg(unix)]
 fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -93,6 +95,7 @@ fn actual_predicate_lifetime_keeps_cancelled_slot_and_foreign_retired_pages_reje
     foreign.registry.shutdown()?;
     Ok(())
 }
+#[cfg(unix)]
 #[test]
 fn foreign_same_empty_source_never_aliases_or_closes_either_worker() -> TestResult {
     runtime()?.block_on(async {
@@ -132,6 +135,7 @@ fn foreign_same_empty_source_never_aliases_or_closes_either_worker() -> TestResu
         Ok(())
     })
 }
+#[cfg(unix)]
 #[test]
 fn actual_create_unlock_refresh_lock_and_pending_retirement_remain_distinct() -> TestResult {
     let _serial = crate::VAULT_CRYPTO_TEST_LOCK
@@ -228,17 +232,21 @@ fn actual_create_unlock_refresh_lock_and_pending_retirement_remain_distinct() ->
 }
 #[path = "vault_cancel_observer_tests.rs"]
 mod cancellation_observer_tests;
+#[cfg(unix)]
 #[path = "vault_identity_source_tests.rs"]
 mod identity_source_tests;
+#[cfg(unix)]
 #[path = "vault_identity_write_tests.rs"]
 mod identity_write_tests;
+#[cfg(unix)]
 #[path = "vault_password_bank_tests.rs"]
 mod password_bank_tests;
+#[cfg(unix)]
 #[path = "vault_password_intent_tests.rs"]
 mod password_intent_tests;
-#[cfg(feature = "ssh-use")]
+#[cfg(all(unix, feature = "ssh-use"))]
 #[path = "vault_ssh_preparation_tests.rs"]
 mod ssh_preparation_tests;
-#[cfg(feature = "ssh-use")]
+#[cfg(all(unix, feature = "ssh-use"))]
 #[path = "vault_target_action_tests.rs"]
 mod target_action_tests;
