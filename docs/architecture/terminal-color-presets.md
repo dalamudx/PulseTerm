@@ -76,3 +76,5 @@ theme = { mode = "system", light = "catppuccin_latte", dark = "dracula" }
 Linux的锁定Tao窗口主题查询优先返回创建时缓存，不随后续门户信号更新。工作区在GTK主线程注册系统prefer-dark属性通知，将当前值存入应用管理的原子快照；通知仅持弱引用，不持有窗口、会话或权限。原有GUI／CLI／SSH启动与继承预览继续先校验原页，再读取这份系统快照，页面不提供深浅值。不可用时取浅色；其他平台保留原生窗口查询路径。已有会话及刷新仍以启动时冻结基色恢复。原生回归已在旧实现上复现错误选色，修复通过五PTY／双窗口完整矩阵。
 
 暖CLI系统策略矩阵已通过Linux原生验收：五PTY总规模保持不变，系统深浅两次新建以真实`pulse new-tab sh`请求，原窗口批准前零会话／零工作者，批准后两次CLI成功返回。版本3的11轮观察记录GUI／CLI来源，OSC10／11、实际像素、刷新／恢复／独立重开及五份最终输入均通过，三条GUI／两条暖CLI会话、两个GUI及提供方退出。产品修复继续沿用`3264750`，接受证据独立归档至`target/probes/workspace-terminal-system-theme/accepted/c695c7ac/`；冷CLI／SSH和跨平台仍待验。
+
+冷CLI版本4已通过Linux原生验收：深、浅两次独立冷新建在首屏批准前零新增PTY，批准后OSC和像素分别确认午夜和纸白。使用原构建的私有单链接安装副本，由pulse独立创建GUI；CLI回执后subreaper接管，两份waitpid退出文件均为0，原生进程组及端点回收。合并矩阵总计七PTY／四窗口／13轮观察，七份最终输入逐字匹配，两个暖CLI及两个冷CLI成功退出。接受材料独立归档至`target/probes/workspace-terminal-system-theme/accepted/e18b24d5/`；不改变产品启动或主题逻辑，SSH和跨平台仍待验。

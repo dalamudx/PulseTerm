@@ -10,6 +10,8 @@ Python类型／语法、18项原生设置回归及生产workspace-cli＋workspac
 
 暖CLI系统策略扩展（Linux已验收）：同一五会话矩阵中，系统深浅两次新建由真实`pulse new-tab sh`发起；原窗口批准前零会话／零PTY工作者分配，批准后CLI实际成功返回，并分别采用午夜和纸白。每轮记录GUI／CLI来源，保留11轮OSC／像素、恢复继承、刷新、独立重开和五份精确最终输入检查。三条GUI与两条暖CLI会话、两个GUI和门户提供方全部退出。Python类型／语法、任务解析、应用及pulse生产构建通过；本批仅扩展夹具和任务，产品修复沿用签名基线`3264750`，未重复运行无变化的Rust单测。版本3接受材料归档至`target/probes/workspace-terminal-system-theme/accepted/c695c7ac/`，原GUI版本2证据独立保留；已执行clean-dev清理6770个文件（6.6GiB），移除本任务临时目录。冷CLI、SSH、固定作用域覆盖和其他平台仍未登记通过。
 
+冷CLI系统策略扩展（Linux已验收）：版本4在GUI／暖CLI五会话之后，新增门户深、浅各一次真实`pulse new-tab sh`冷启动。原始二进制复制到私有单链接安装布局，由pulse创建GUI；首屏执行批准前零新增PTY，批准后分别采用午夜和纸白，以OSC回复和实际像素核对。CLI成功回执后由subreaper接管，两个冷GUI的独立waitpid退出文件均为0，原生进程组与控制端点回收。合并矩阵共七条PTY、四个窗口、13轮OSC／像素、七份精确最终输入，两个冷与两个暖CLI均成功退出。Python类型／语法、任务解析、应用及pulse生产构建通过；本批仅扩展夹具／任务，产品源码未改。接受材料归档至`target/probes/workspace-terminal-system-theme/accepted/e18b24d5/`，原版本2、3独立保留；已执行clean-dev清理6770个文件（6.6GiB），移除本任务临时目录。隔离门户不代表GNOME／KDE桌面、SSH、固定作用域覆盖及其他平台验收。
+
 ## 1GiB原输出流终点屏幕比较（Linux已验收）
 
 新增原页绑定的只读Marker与可见屏幕比较；19项终端绑定回归及App严格Clippy通过，覆盖原状态／输入不变、共享500ms额度、旧页拒绝及在途撤销。独立`workspace-load-state-probe`构建与专用前端资产提供真实Ctrl+Shift+F8触发；仅当前终端的可信按键可请求，绘制Marker后才比较，正常构建不注册两个验证命令。任务`mise run probe-workspace-load-state`先确认1GiB最终标记已绘制，再要求后端Equal和原生退出；已接Linux负载CI。

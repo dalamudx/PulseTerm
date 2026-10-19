@@ -165,7 +165,7 @@ def verify(c):
         assert c['count']('session_opened') == opened, 'palette.refresh_created_session'
         assert_palette(entry, preset, tag)
 
-    def finish_window():
+    def finish_workers():
         for entry in workers:
             if not (entry['base'] / 'finished.json').exists():
                 (entry['base'] / 'finish').touch()
@@ -174,6 +174,8 @@ def verify(c):
             final = json.loads((entry['base'] / 'finished.json').read_text())
             assert final['hex'] == expected, 'palette.extra_final_input'
             (out / ('input-final-' + str(entry['pid']) + '.json')).write_text(json.dumps(final, indent=2) + '\n')
+    def finish_window():
+        finish_workers()
         c['expected_sessions'] = c['count']('session_opened')
         c['close']()
         c['windows_exited'] += 1
@@ -213,11 +215,17 @@ def verify(c):
     assert_palette(last, 'paper', 'new-after-system-light')
     finish_window()
     c['checks'].append('saved_policy_survives_independent_reopen_and_new_sessions_follow_both_native_directions')
-    assert len(workers) == 5 and len({entry['pid'] for entry in workers}) == 5
-    c['receipt'].update(passed=True, windowsExited=c['windows_exited'], nativeSessionsStarted=5,
+    import runpy
+    cold = runpy.run_path('scripts/probe-workspace-terminal-system-theme-cold.py')['verify'](
+        c, workers, assert_palette, finish_workers)
+    c['checks'].append('two_independent_cold_cli_system_palettes_require_original_page_approval_and_exact_gui_exit')
+    assert len(workers) == 7 and len({entry['pid'] for entry in workers}) == 7
+    c['receipt'].update(passed=True, windowsExited=c['windows_exited'], nativeSessionsStarted=7,
         nativeExitConfirmed=True, paletteObservations=observations, exactFinalInputVerified=True,
         workerPids=[entry['pid'] for entry in workers], currentUiMode='light',
-        cliSessionsStarted=sum(entry['origin'] == 'cli' for entry in workers),
+        cliSessionsStarted=sum(entry['origin'] in ('cli', 'cold-cli') for entry in workers),
+        warmCliSessionsStarted=sum(entry['origin'] == 'cli' for entry in workers),
+        coldCliSessionsStarted=len(cold), coldCliCases=cold,
         cliRequiresOriginalWindowApproval=True)
 
 

@@ -1260,7 +1260,7 @@ description = "Measure the optimized Linux production WebView with the same proc
 run = "PULSE_PERFORMANCE_PROFILE=release PULSE_PERFORMANCE_OUTPUT=release.json mise run probe-workspace-performance"
 
 [tasks.probe-workspace-terminal-system-theme]
-description = "Verify native system terminal palette selection, frozen sessions, reset and independent reopen"
+description = "Verify GUI and cold/warm CLI native system palettes, frozen sessions, reset and reopen"
 env = { PULSE_TERMINAL_SYSTEM_THEME = "1" }
 run = "mise run probe-workspace-system-appearance"
 
