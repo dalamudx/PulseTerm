@@ -20,7 +20,7 @@ jobs:
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr openssh-client openssh-server vim less htop tmux strace ibus ibus-gtk3 ibus-libpinyin fonts-noto-cjk
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr openssh-client openssh-server vim less htop tmux strace ibus ibus-gtk3 ibus-libpinyin fcitx5 fcitx5-pinyin fcitx5-frontend-gtk3 tesseract-ocr-chi-sim fonts-noto-cjk
       - name: Install JavaScript dependencies
         run: mise run bootstrap
       - name: Check code
@@ -235,6 +235,9 @@ jobs:
       - name: Verify real IBus Pinyin candidates, cancel and exact PTY commits across refresh
         if: runner.os == 'Linux'
         run: mise run probe-workspace-ime
+      - name: Verify Fcitx5 Pinyin cursor advance, popup hide and exact commits (window movement remains open)
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-fcitx-input
       - name: Verify SSH system palettes and fixed scopes, scroll settings, Unicode soft-wrap and EOF search
         if: runner.os == 'Linux'
         run: mise run probe-workspace-ssh-settings

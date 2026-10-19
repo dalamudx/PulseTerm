@@ -15,7 +15,10 @@ from typing import Any
 
 startup = importlib.import_module('probe-workspace-startup')
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'target/probes/workspace-ime'
+PROVIDER = os.environ.get('PULSE_IME_PROVIDER', 'ibus')
+assert PROVIDER in ('ibus', 'fcitx5'), 'ime.unsupported_provider'
+FCITX = PROVIDER == 'fcitx5'
+OUT = ROOT / 'target/probes' / ('workspace-fcitx' if FCITX else 'workspace-ime')
 
 
 def worker(directory):
@@ -45,7 +48,8 @@ def main():
     fixture = Path(os.environ['PULSE_IME_FIXTURE'])
     OUT.mkdir(parents=True, exist_ok=True)
     result = OUT / 'result.json'
-    report: dict[str, Any] = dict(version=2, passed=False, scope='Linux production WebView, real IBus/libpinyin via XTest',
+    report: dict[str, Any] = dict(version=3, provider=PROVIDER, passed=False,
+                  scope='Linux production WebView, real ' + ('Fcitx5/pinyin' if FCITX else 'IBus/libpinyin') + ' via XTest',
                   limitations=['Isolated Xvfb software rendering, not a physical desktop',
                                'Pinyin only; other CJK engines, candidate DPI and other platforms remain open'])
     result.write_text(json.dumps(report, indent=2) + '\n')
@@ -56,8 +60,14 @@ def main():
         path.mkdir(mode=0o700, exist_ok=True)
         path.chmod(0o700)
         env[key] = str(path)
-    env.update(TMPDIR=str(fixture), TMP=str(fixture), TEMP=str(fixture), GTK_IM_MODULE='ibus',
-               IBUS_ADDRESS='unix:path=' + str(fixture / 'ibus.sock'), IBUS_USE_PORTAL='0', XMODIFIERS='@im=ibus')
+    env.update(TMPDIR=str(fixture), TMP=str(fixture), TEMP=str(fixture),
+               GTK_IM_MODULE='fcitx' if FCITX else 'ibus', XMODIFIERS='@im=fcitx' if FCITX else '@im=ibus')
+    if FCITX:
+        config = Path(env['XDG_CONFIG_HOME']) / 'fcitx5'
+        config.mkdir()
+        (config / 'profile').write_text('[Groups/0]\nName=Default\nDefault Layout=us\nDefaultIM=pinyin\n\n[Groups/0/Items/0]\nName=keyboard-us\nLayout=\n\n[Groups/0/Items/1]\nName=pinyin\nLayout=\n\n[GroupOrder]\n0=Default\n')
+    else:
+        env.update(IBUS_ADDRESS='unix:path=' + str(fixture / 'ibus.sock'), IBUS_USE_PORTAL='0')
     schemas = fixture / 'schemas'
     schemas.mkdir()
     env['GSETTINGS_SCHEMA_DIR'] = str(schemas)
@@ -66,8 +76,8 @@ def main():
     run('glib-compile-schemas', '--targetdir', schemas, '/usr/share/glib-2.0/schemas')
     queries = list(Path('/usr/lib').glob('*/libgtk-3-0*/gtk-query-immodules-3.0'))
     assert queries, 'ime.missing_gtk_module_query'
-    modules = list(Path('/usr/lib').glob('*/gtk-3.0/3.0.0/immodules/im-ibus.so'))
-    assert len(modules) == 1, 'ime.missing_gtk_ibus_module'
+    modules = list(Path('/usr/lib').glob('*/gtk-3.0/3.0.0/immodules/' + ('im-fcitx5.so' if FCITX else 'im-ibus.so')))
+    assert len(modules) == 1, 'ime.missing_gtk_module'
     module_file = fixture / 'immodules.cache'
     module_file.write_text(run(queries[0], modules[0]).stdout)
     env['GTK_IM_MODULE_FILE'] = str(module_file)
@@ -82,12 +92,22 @@ def main():
     owned = {}
     xid = None
     try:
-        with (OUT / 'ibus.log').open('w') as ibus_log, (OUT / 'workspace.log').open('w') as app_log:
-            daemon = subprocess.Popen(['ibus-daemon', '--address', env['IBUS_ADDRESS'], '--cache=none',
-                                       '--emoji-extension=disable'], env=env, stdout=ibus_log,
+        with (OUT / (PROVIDER + '.log')).open('w') as ime_log, (OUT / 'workspace.log').open('w') as app_log:
+            command = ['fcitx5', '-D', '--disable=wayland,notificationitem'] if FCITX else [
+                'ibus-daemon', '--address', env['IBUS_ADDRESS'], '--cache=none', '--emoji-extension=disable']
+            daemon = subprocess.Popen(command, env=env, stdout=ime_log,
                                       stderr=subprocess.STDOUT, start_new_session=True)
-            startup.wait(lambda: run('ibus', 'list-engine', check=False).returncode == 0, 'ibus_ready', daemon)
-            report['ibusVersion'] = run('ibus', 'version').stdout.strip()
+            if FCITX:
+                def owns_bus():
+                    answer = run('gdbus', 'call', '--session', '--dest', 'org.freedesktop.DBus',
+                                 '--object-path', '/org/freedesktop/DBus', '--method',
+                                 'org.freedesktop.DBus.GetConnectionUnixProcessID', 'org.fcitx.Fcitx5', check=False)
+                    return answer.returncode == 0 and answer.stdout.strip() == '(uint32 ' + str(daemon.pid) + ',)'
+                startup.wait(owns_bus, 'fcitx_owned_bus', daemon)
+                report['fcitxVersion'] = run('fcitx5', '--version').stdout.strip()
+            else:
+                startup.wait(lambda: run('ibus', 'list-engine', check=False).returncode == 0, 'ibus_ready', daemon)
+                report['ibusVersion'] = run('ibus', 'version').stdout.strip()
             app = subprocess.Popen([str(binary)], env={**env, 'PATH': str(bindir), 'SHELL': str(shell)},
                                    stdout=app_log, stderr=subprocess.STDOUT, start_new_session=True)
             def count(name):
@@ -114,11 +134,36 @@ def main():
                     assert raw() == expected, 'ime.unexpected_input.' + raw().hex()
                     time.sleep(.02)
             def activate():
-                setter = run('ibus', 'engine', 'libpinyin', check=False)
-                startup.wait(lambda: run('ibus', 'engine', check=False).stdout.strip() == 'libpinyin', 'pinyin_selected', daemon)
-                report['engineSetterExitCode'] = setter.returncode
+                if FCITX:
+                    def select_pinyin():
+                        run('fcitx5-remote', '-s', 'pinyin')
+                        run('fcitx5-remote', '-o')
+                        return run('fcitx5-remote', '-n', check=False).stdout.strip() == 'pinyin'
+                    startup.wait(select_pinyin, 'pinyin_selected', daemon)
+                else:
+                    setter = run('ibus', 'engine', 'libpinyin', check=False)
+                    startup.wait(lambda: run('ibus', 'engine', check=False).stdout.strip() == 'libpinyin', 'pinyin_selected', daemon)
+                    report['engineSetterExitCode'] = setter.returncode
             def panels():
                 visible = set()
+                if FCITX:
+                    # Classic UI is an XCB window without AT-SPI or a PID property.
+                    windows = run('xdotool', 'search', '--onlyvisible', '--class', '^fcitx$', check=False).stdout.split()
+                    for window in windows:
+                        if run('xdotool', 'getwindowname', window).stdout.strip() != 'Fcitx5 Input Window':
+                            continue
+                        image = OUT / 'candidate-observation.png'
+                        enlarged = OUT / 'candidate-ocr.png'
+                        run('import', '-window', window, image)
+                        run('convert', image, '-resize', '300%', enlarged)
+                        text = run('tesseract', enlarged, 'stdout', '-l', 'chi_sim+eng', '--psm', '6').stdout
+                        (OUT / 'candidate-ocr.txt').write_text(text)
+                        letters = ''.join(char for char in text.lower() if 'a' <= char <= 'z')
+                        has_candidates = any('\u3400' <= char <= '\u9fff' for char in text)
+                        numbered_list = '2' in text and '3' in text
+                        if has_candidates and ('zhongwen' in letters or numbered_list):
+                            visible.add(window)
+                    return visible
                 for pid in startup.tree(daemon.pid):
                     try:
                         if (Path('/proc') / str(pid) / 'comm').read_text().strip() != 'ibus-ui-gtk3':
@@ -174,7 +219,15 @@ def main():
             unchanged(expected)
             startup.wait(lambda: not panels(), 'space_candidate_hidden', app)
             report['spaceCommitsExactlyOnce'] = True
-            run('xdotool', 'windowmove', xid, '300', '200')
+            candidate('advance', expected)
+            run('xdotool', 'key', '--clearmodifiers', 'Escape')
+            unchanged(expected)
+            startup.wait(lambda: not panels(), 'advance_cancel_hidden', app)
+            report['windowMoveChecked'] = os.environ.get('PULSE_IME_KEEP_WINDOW') != '1'
+            if report['windowMoveChecked']:
+                run('xdotool', 'windowmove', xid, '300', '200')
+            else:
+                report['limitations'].append('Window movement excluded from input acceptance; full Fcitx geometry task remains a known failure, also reproduced in GTK entry.')
             candidate('digit', expected)
             run('xdotool', 'key', '--clearmodifiers', '1')
             expected = '中文中文'.encode()
@@ -207,12 +260,16 @@ def main():
             report.update(guiExitCode=app.returncode, ptyWorkerExited=True, nativeTreeExited=True,
                           finalInputHex=expected.hex(), finalInputUtf8=expected.decode())
             owned.update(startup.tree(daemon.pid))
-            run('ibus', 'exit', check=False)
+            if FCITX:
+                run('fcitx5-remote', '-e')
+            else:
+                run('ibus', 'exit', check=False)
             daemon.wait(timeout=5)
-            assert daemon.returncode == 0, 'ime.ibus_exit'
+            assert daemon.returncode == 0, 'ime.provider_exit'
             startup.wait(lambda: all(startup.identity(pid) != token for pid, token in owned.items()), 'ime_tree_exit')
             report['imeProcessTreeExited'] = True
-            report.update(ibusExitCode=daemon.returncode, passed=True)
+            report.update(passed=True)
+            report['fcitxExitCode' if FCITX else 'ibusExitCode'] = daemon.returncode
     except Exception as error:
         report['failure'] = str(error) or type(error).__name__
         if (fixture / 'input.json').exists():

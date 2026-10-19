@@ -1312,7 +1312,13 @@ description = "Verify real IBus/libpinyin candidates, cancel/commit bytes, refre
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", MAGICK_THREAD_LIMIT = "1", OMP_NUM_THREADS = "1" }
 run = """
 set -eu
-mkdir -p /data/temp target/probes/workspace-ime
+provider=${PULSE_IME_PROVIDER:-ibus}
+case "$provider" in
+  ibus) output_dir=target/probes/workspace-ime; ime_program=ibus-daemon; ime_control=ibus ;;
+  fcitx5) output_dir=target/probes/workspace-fcitx; ime_program=fcitx5; ime_control=fcitx5-remote ;;
+  *) echo "Unsupported IME provider" >&2; exit 1 ;;
+esac
+mkdir -p /data/temp "$output_dir"
 fixture_dir=$(mktemp -d /data/temp/pt-ime.XXXXXX)
 trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
@@ -1320,11 +1326,11 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
 export PULSE_IME_FIXTURE="$fixture_dir"
 if [ -n "${PULSE_IME_PACKAGE_ROOT:-}" ]; then
   case "$PULSE_IME_PACKAGE_ROOT" in /data/temp/*/root) ;; *) echo "Expected private IME package root under /data/temp" >&2; exit 1 ;; esac
-  test -x "$PULSE_IME_PACKAGE_ROOT/usr/bin/ibus-daemon"
+  test -x "$PULSE_IME_PACKAGE_ROOT/usr/bin/$ime_program"
   command -v bwrap >/dev/null
 else
-  command -v ibus-daemon >/dev/null
-  command -v ibus >/dev/null
+  command -v "$ime_program" >/dev/null
+  command -v "$ime_control" >/dev/null
 fi
 pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
@@ -1333,16 +1339,26 @@ cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspa
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gobject-2.0)
 export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 mkdir -m 700 "$fixture_dir/home" "$fixture_dir/data" "$fixture_dir/config" "$fixture_dir/cache" "$fixture_dir/runtime" "$fixture_dir/virtual-tmp"
-set -- xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ime/wm.log python3 scripts/probe-workspace-ime.py
+set -- xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh $output_dir/wm.log python3 scripts/probe-workspace-ime.py
 if [ -n "${PULSE_IME_PACKAGE_ROOT:-}" ]; then
-  set -- bwrap --die-with-parent --ro-bind / / --overlay-src /usr --overlay-src "$PULSE_IME_PACKAGE_ROOT/usr" --ro-overlay /usr --proc /proc --dev-bind /dev /dev --bind "$fixture_dir" "$fixture_dir" --bind "$PWD/target/probes/workspace-ime" "$PWD/target/probes/workspace-ime" --bind "$fixture_dir/virtual-tmp" /tmp --setenv HOME "$fixture_dir/home" --setenv XDG_DATA_HOME "$fixture_dir/data" --setenv XDG_CONFIG_HOME "$fixture_dir/config" --setenv XDG_CACHE_HOME "$fixture_dir/cache" --setenv XDG_RUNTIME_DIR "$fixture_dir/runtime" -- "$@"
+  set -- bwrap --die-with-parent --ro-bind / / --overlay-src /usr --overlay-src "$PULSE_IME_PACKAGE_ROOT/usr" --ro-overlay /usr --proc /proc --dev-bind /dev /dev --bind "$fixture_dir" "$fixture_dir" --bind "$PWD/$output_dir" "$PWD/$output_dir" --bind "$fixture_dir/virtual-tmp" /tmp --setenv HOME "$fixture_dir/home" --setenv XDG_DATA_HOME "$fixture_dir/data" --setenv XDG_CONFIG_HOME "$fixture_dir/config" --setenv XDG_CACHE_HOME "$fixture_dir/cache" --setenv XDG_RUNTIME_DIR "$fixture_dir/runtime" -- "$@"
 fi
 timeout --kill-after=5s 180s "$@"
 """
 
 [tasks.probe-workspace-ime-popup]
 description = "Require full IBus candidate popup hide after Escape; known failure in isolated IBus 1.5.32"
-env = { PULSE_IME_REQUIRE_HIDDEN_POPUP = "1" }
+env = { PULSE_IME_PROVIDER = "ibus", PULSE_IME_REQUIRE_HIDDEN_POPUP = "1" }
+run = "mise run probe-workspace-ime"
+
+[tasks.probe-workspace-fcitx-input]
+description = "Verify Fcitx5 cursor advance, strict popup hide, exact commits and exit; excludes window movement"
+env = { PULSE_IME_PROVIDER = "fcitx5", PULSE_IME_REQUIRE_HIDDEN_POPUP = "1", PULSE_IME_KEEP_WINDOW = "1" }
+run = "mise run probe-workspace-ime"
+
+[tasks.probe-workspace-fcitx]
+description = "Verify real Fcitx5 Pinyin candidates, geometry, full popup hide, exact PTY commits, refresh and exit"
+env = { PULSE_IME_PROVIDER = "fcitx5", PULSE_IME_REQUIRE_HIDDEN_POPUP = "1" }
 run = "mise run probe-workspace-ime"
 
 [tasks.probe-workspace-ssh-settings]

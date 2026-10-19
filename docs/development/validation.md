@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Fcitx5 拼音与光标跟随（原窗口输入已验收，窗口移动仍失败）
+
+输入入口 `mise run probe-workspace-fcitx-input` 已接入 Linux CI，复用 IBus 的生产 WebView／真实 PTY 输入、刷新、候选光标跟随与退出矩阵，明确不移动窗口。完整入口 `mise run probe-workspace-fcitx` 保留窗口移动及严格几何断言，仍有已知失败。独立 GTK 预验证已用真实 Fcitx 5.1.12／Pinyin 显示候选、提交“中文中文”并退出；其窗口移动也失败，不计作终端几何通过。守护进程就绪按 D-Bus 名称的实际所有者 PID 确认，避免控制命令自动拉起另一进程。
+
+Fcitx Classic UI 是无 AT-SPI／PID 属性的 XCB 窗口；在独立 Xvfb 内按窗口类／名称定位，再对原生截图的中文正文和拼音／编号列表进行 OCR。**四轮真实候选**（含首次提交后的光标前移）、取消零输入且弹窗完全隐藏、空格／数字各提交一次、刷新不重发、最终精确 `中文中文\r` 均通过。GUI、PTY、WebView 和 Fcitx 子进程已实际回收，GUI／Fcitx 退出码为 0。生产适配现为明确选择的 `ibus`／`fcitx` 恢复客户端预编辑，未知或无效编码模块维持原设置；**五项策略单测、生产全目标严格 Clippy、Python 类型／语法和正式构建通过**。本批未修改前端，原有前端结果沿用此前归档；运行包仅私有解包、只读叠加，产品依赖版本及发送协议不变。
+
+窗口移动后旧坐标也在普通 GTK 复现；匹配版本 Fcitx GTK 模块源码对相同局部矩形直接返回，符合该缓存边界。最终源码的 `probe-workspace-fcitx` 仍以 `ime.candidate_not_near_input_x` 失败，原始输入为一份“中文”，失败路径正常回收，**完整几何门禁仍未通过**。普通 GTK 对照只证明输入／退出和移动复现，不计终端通过。共享 IBus 已通过四候选、窗口移动、精确 `中文中文\r` 和退出复验，其候选窗口隐藏字段仍为 `false`（箭头残留），原严格弹窗门禁保持开放。真实桌面、Fcitx4、其他中日韩引擎、DPI／跨屏、运行时模块切换和其他平台仍开放。
+
+有限输入验收位于 `target/probes/workspace-fcitx/accepted/a06bcf1d/`；完整几何失败与 GTK 对照分别位于 `geometry-diagnostics/final/`、`gtk-preflight/`，错误选窗／OCR 与原始光标不跟随反例保留于 `attempts/`／`comparisons/`。IBus 共享回归独立保存在 `target/probes/workspace-ime/accepted/fcitx-compat-a06bcf1d/`。所有进程退出后，有范围 `mise run clean-dev` 清除9.7GiB开发产物，私有解包依赖、学习数据和本任务临时目录已删除；接受材料、GTK对照与全部原始失败证据保留。
+
 ## Linux IBus 候选定位修复（位置／字节通过，弹窗隐藏门禁仍失败）
 
 `mise run probe-workspace-ime` 的版本 2 矩阵通过普通生产 WebView、真实 IBus 1.5.32／libpinyin 和真实 PTY。三轮候选位置均靠近真实输入框；窗口移动、首次提交后光标前移时，候选从 `(399,317)` 跟随到 `(574,400)`。候选及 Escape 取消零输入，空格／数字选词各提交一次，刷新不重发，最终快照仍精确为 `中文中文\r`。GUI、PTY、WebView、IBus 及其子进程实际退出，GUI／IBus 退出码均为 0。
