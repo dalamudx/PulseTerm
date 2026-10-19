@@ -17,7 +17,7 @@ description = "Check all features and targets of the platform, store, PTY and ap
 run = "cargo check -p pulse-platform -p pulse-store -p pulse-pty -p pulse-app --all-features --all-targets --locked"
 
 [tasks.check-platform]
-description = "Strictly check platform policies; Windows also runs native private directory and file tests"
+description = "Strictly check platform policies; Windows also runs native private directory, file and atomic-save tests"
 run = ["cargo clippy -p pulse-platform --all-targets --locked -- -D warnings", "cargo test -p pulse-platform --all-targets --locked"]
 
 [tasks.check-ssh-adapters]

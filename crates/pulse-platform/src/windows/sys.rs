@@ -21,27 +21,37 @@ use windows_sys::Win32::{
         TOKEN_USER, TokenUser,
     },
     Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, CreateDirectoryW, CreateFileW, FILE_DISPOSITION_INFO,
-        FILE_ID_INFO, FileDispositionInfo, FileIdInfo, GetDriveTypeW, GetFileInformationByHandle,
+        BY_HANDLE_FILE_INFORMATION, CreateDirectoryW, CreateFileW, FILE_BASIC_INFO,
+        FILE_DISPOSITION_INFO, FILE_ID_INFO, FILE_RENAME_INFO, FileBasicInfo, FileDispositionInfo,
+        FileIdInfo, FileRenameInfo, GetDriveTypeW, GetFileInformationByHandle,
         GetFileInformationByHandleEx, GetVolumeInformationByHandleW, SetFileInformationByHandle,
     },
     System::Threading::{GetCurrentProcess, OpenProcessToken},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) struct Identity {
-    volume: u64,
-    index: [u8; 16],
-}
+pub(super) use crate::file_state::Identity;
 pub(super) struct Facts {
     pub identity: Identity,
     pub attributes: u32,
     pub links: u32,
     pub length: u64,
     pub last_write: u64,
+    pub changed: i64,
+    pub created: i64,
     pub owner: Vec<u8>,
     pub acl: Option<Vec<u8>>,
     pub protected: bool,
+}
+impl Facts {
+    pub(super) fn stamp(&self) -> crate::file_state::FileStamp {
+        crate::file_state::FileStamp {
+            identity: self.identity,
+            length: self.length,
+            written: self.last_write,
+            changed: self.changed,
+            created: self.created,
+        }
+    }
 }
 struct Local(*mut c_void);
 impl Drop for Local {
@@ -129,6 +139,19 @@ pub(super) fn inspect(file: &File) -> DirectoryResult<Facts> {
     let mut flags = 0;
     // SAFETY: File owns a live handle and both native output structures have correctly sized writable storage.
     if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut meta) } == 0 {
+        return Err(Location);
+    }
+    let mut basic = FILE_BASIC_INFO::default();
+    // SAFETY: File is live; FileBasicInfo writes one correctly sized, aligned initialized structure.
+    if unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            ptr::from_mut(&mut basic).cast(),
+            size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    } == 0
+    {
         return Err(Location);
     }
     let mut file_id = FILE_ID_INFO::default();
@@ -233,6 +256,8 @@ pub(super) fn inspect(file: &File) -> DirectoryResult<Facts> {
         length: (u64::from(meta.nFileSizeHigh) << 32) | u64::from(meta.nFileSizeLow),
         last_write: (u64::from(meta.ftLastWriteTime.dwHighDateTime) << 32)
             | u64::from(meta.ftLastWriteTime.dwLowDateTime),
+        changed: basic.ChangeTime,
+        created: basic.CreationTime,
         owner,
         acl,
         protected: control & 0x1000 != 0,
@@ -306,7 +331,7 @@ pub(super) fn create_broad_fixture(path: &Path, inherit_only: bool) -> Directory
     )
 }
 
-fn regular_with_sddl(path: &Path, sddl: Option<&str>) -> std::io::Result<File> {
+fn regular_with_sddl(path: &Path, sddl: Option<&str>, exclusive: bool) -> std::io::Result<File> {
     let sd = sddl
         .map(descriptor)
         .transpose()
@@ -322,6 +347,8 @@ fn regular_with_sddl(path: &Path, sddl: Option<&str>) -> std::io::Result<File> {
     // Existing readers use GENERIC_READ | READ_CONTROL, FILE_SHARE_READ and OPEN_EXISTING.
     let (access, share, disposition) = if create {
         (0xc0030000, 0, 1)
+    } else if exclusive {
+        (0xc0020000, 0, 3) // The cooperative lock: read/write, no sharing, OPEN_EXISTING.
     } else {
         (0x80020000, 1, 3)
     };
@@ -355,7 +382,7 @@ pub(super) fn open_regular(path: &Path, create_user: Option<&[u8]>) -> std::io::
         })
         .transpose()
         .map_err(|_| std::io::Error::from_raw_os_error(5))?;
-    regular_with_sddl(path, sddl.as_deref())
+    regular_with_sddl(path, sddl.as_deref(), false)
 }
 
 pub(super) fn discard_file(file: &File) -> std::io::Result<()> {
@@ -382,7 +409,61 @@ pub(super) fn create_broad_file_fixture(path: &Path) -> DirectoryResult<()> {
     regular_with_sddl(
         path,
         Some(&format!("O:{user}D:P(A;;FA;;;{user})(A;;GR;;;WD)")),
+        false,
     )
     .map_err(|_| Location)?;
+    Ok(())
+}
+
+pub(super) fn open_lock(path: &Path) -> std::io::Result<File> {
+    regular_with_sddl(path, None, true)
+}
+
+pub(super) struct RenameRequest {
+    storage: Vec<usize>,
+    length: u32,
+}
+pub(super) fn prepare_rename(path: &Path, replace: bool) -> std::io::Result<RenameRequest> {
+    let mut name: Vec<u16> = path.as_os_str().encode_wide().take(32768).collect();
+    if name.is_empty() || name.len() > 32767 || name.contains(&0) {
+        return Err(std::io::Error::from_raw_os_error(87));
+    }
+    let byte_length = name.len() * 2;
+    name.push(0);
+    let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+    let length = size_of::<FILE_RENAME_INFO>().max(offset + name.len() * 2);
+    let mut storage = vec![0usize; length.div_ceil(size_of::<usize>())];
+    let header = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    // SAFETY: usize allocation provides FILE_RENAME_INFO alignment; all bytes start initialized.
+    // Field writes preserve initialized padding. The bounded UTF-16 tail fits the checked allocation.
+    unsafe {
+        ptr::addr_of_mut!((*header).Anonymous.Flags).write(u32::from(replace));
+        ptr::addr_of_mut!((*header).RootDirectory).write(ptr::null_mut());
+        ptr::addr_of_mut!((*header).FileNameLength).write(byte_length as u32);
+        ptr::copy_nonoverlapping(
+            name.as_ptr(),
+            storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(),
+            name.len(),
+        );
+    }
+    Ok(RenameRequest {
+        storage,
+        length: length as u32,
+    })
+}
+pub(super) fn rename_file(file: &File, request: &RenameRequest) -> std::io::Result<()> {
+    // SAFETY: The staged file owns DELETE access. Request owns aligned initialized FILE_RENAME_INFO
+    // plus its bounded terminated name; RootDirectory is null and the pinned-parent path is absolute.
+    if unsafe {
+        SetFileInformationByHandle(
+            file.as_raw_handle(),
+            FileRenameInfo,
+            request.storage.as_ptr().cast(),
+            request.length,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
     Ok(())
 }

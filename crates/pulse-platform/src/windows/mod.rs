@@ -1,4 +1,4 @@
-//! Windows local private directories. Synchronous; dispatch off the GUI/runtime threads.
+//! Windows local private directories and file slots. Synchronous; dispatch off GUI/runtime threads.
 use crate::{DirectoryError::Location, DirectoryResult, policy};
 use std::{
     fs::{File, OpenOptions},
@@ -8,6 +8,8 @@ use std::{
 mod private_file;
 #[allow(unsafe_code)]
 mod sys;
+pub use crate::file_state::FileSnapshot;
+pub use private_file::AtomicFile;
 pub use private_file::{PrivateFile, PrivateFileError, PrivateFileResult};
 #[cfg(test)]
 mod private_file_tests;

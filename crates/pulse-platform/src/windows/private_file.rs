@@ -1,4 +1,4 @@
-//! Bound regular-file leases; not a settings store or an atomic-replace API.
+//! Bound regular-file leases and cooperative atomic-save slots.
 use super::{PrivateDirectory, sys};
 use crate::policy;
 use std::{
@@ -12,6 +12,9 @@ pub enum PrivateFileError {
     /// Ownership, permissions, file kind or location is not admissible.
     #[error("platform.file.private_location_required")]
     Location,
+    /// The original authorization was revoked or its callback panicked.
+    #[error("platform.file.authorization_revoked")]
+    Revoked,
     /// The requested existing file is absent.
     #[error("platform.file.not_found")]
     NotFound,
@@ -27,7 +30,7 @@ pub enum PrivateFileError {
     /// An operation failed before a known complete result.
     #[error("platform.file.io")]
     Io,
-    /// Cleanup failed; reload the namespace instead of retrying creation.
+    /// Cleanup or namespace commit is uncertain; reload instead of automatically retrying.
     #[error("platform.file.uncertain")]
     Uncertain,
 }
@@ -44,6 +47,9 @@ fn open_error(e: std::io::Error) -> PrivateFileError {
     }
 }
 
+#[path = "atomic_file.rs"]
+mod atomic_file;
+pub use atomic_file::AtomicFile;
 /// A pinned, bounded regular-file reader; the directory outlives every lease.
 /// No Debug/serde/raw-handle access. Drop the lease before replacing the file.
 pub struct PrivateFile<'a> {
@@ -205,6 +211,8 @@ impl PrivateFile<'_> {
         }
         if before.length != after.length
             || before.last_write != after.last_write
+            || before.changed != after.changed
+            || before.created != after.created
             || bytes.len() as u64 != after.length
         {
             return Err(PrivateFileError::Conflict);

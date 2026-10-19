@@ -2,6 +2,8 @@
 #![deny(unsafe_code)]
 
 #[cfg(any(windows, test))]
+mod file_state;
+#[cfg(any(windows, test))]
 mod policy;
 #[cfg(windows)]
 pub mod windows;
