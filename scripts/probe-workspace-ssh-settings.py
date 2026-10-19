@@ -24,6 +24,35 @@ def verify(s):
                 result[table] = sorted((row for row in rows if table != 'app_state' or row[0] not in allowed), key=repr)
             return result
 
+    palette_observations = []
+    def change_system(mode):
+        before_auth = auth()
+        before_input = events('fixture.ssh_scope_input_received')
+        scheme = 1 if mode == 'dark' else 2
+        portal_log = evidence / (prefix + '-system-portal.log')
+        marker = 'fixture.system_appearance.changed.' + str(scheme)
+        before = portal_log.read_text().splitlines().count(marker)
+        provider = s['palette_provider']
+        assert provider.poll() is None and provider.stdin is not None, 'scope.portal_unavailable'
+        provider.stdin.write(mode + '\n')
+        provider.stdin.flush()
+        wait(lambda: portal_log.read_text().splitlines().count(marker) == before + 1, 'system_' + mode)
+        assert auth() == before_auth and events('fixture.ssh_scope_input_received') == before_input, 'scope.signal_sent_input_or_authenticated'
+
+    def palette_pixels(session, palette, tag):
+        focus(session)
+        fg, bg = {'paper': ('1f2937', 'fafaf9'), 'classic': ('ffffff', '000000')}[palette]
+        image = evidence / (prefix + '-' + tag + '.png')
+        def drawn():
+            s['run'](['/usr/bin/import', '-window', s['xid'], image])
+            histogram = s['run'](['/usr/bin/magick', image, '-crop', '600x60+220+150', '+repage',
+                                  '-depth', '8', '-format', '%c', 'histogram:info:']).stdout
+            colors = {color.lower(): int(count) for count, color in re.findall(
+                r'^\s*(\d+):.*?#([0-9a-fA-F]{6})(?:\s|$)', histogram, re.M)}
+            return colors.get(bg, 0) > 10000 and colors.get(fg, 0) > 5
+        wait(drawn, 'system_palette_pixels_' + tag)
+        palette_observations.append(dict(session=session, preset=palette, tag=tag, foreground=fg, background=bg, image=image.name))
+
     original = source_rows()
 
     def document(key):
@@ -369,7 +398,8 @@ def verify(s):
     sessions = []
     global_session = cli_connect('global', 'xterm-256color', first=True)
     sessions.append(global_session)
-    verify_terminal(global_session, 'classic', 'del_csi')
+    verify_terminal(global_session, 'paper', 'del_csi')
+    palette_pixels(global_session, 'paper', 'system-light-global')
 
     organization()
     fill('分组名称', 'ALPHA_SCOPE_GROUP')
@@ -388,11 +418,14 @@ def verify(s):
         'assigned_direct_group')
     click('完成')
     group_behavior(group_key)
-    verify_terminal(global_session, 'classic', 'del_csi')
+    verify_terminal(global_session, 'paper', 'del_csi')
     group_session = cli_connect('group', 'xterm')
     sessions.append(group_session)
     verify_terminal(group_session, 'midnight', 'bs_del')
 
+    change_system('dark')
+    verify_terminal(global_session, 'paper', 'del_csi')
+    palette_pixels(global_session, 'paper', 'old-global-keeps-after-dark')
     host_behavior()
     verify_terminal(group_session, 'midnight', 'bs_del')
     host_session = cli_connect('host', 'vt100')
@@ -417,17 +450,33 @@ def verify(s):
     inherited_global = cli_connect('restored-global', 'xterm-256color')
     sessions.append(inherited_global)
     verify_terminal(inherited_global, 'classic', 'del_csi')
+    palette_pixels(inherited_global, 'classic', 'system-dark-restored-global')
+    change_system('light')
+    verify_terminal(inherited_global, 'classic', 'del_csi')
+    palette_pixels(inherited_global, 'classic', 'old-dark-keeps-after-light')
+    before_auth = auth()
+    key('ctrl+shift+r')
+    time.sleep(.5)
+    wait(terminal_ready, 'system_light_refreshed_dark_session')
+    verify_terminal(inherited_global, 'classic', 'del_csi')
+    palette_pixels(inherited_global, 'classic', 'old-dark-keeps-after-refresh')
+    assert auth() == before_auth == 5, 'scope.system_signal_refresh_reauthenticated'
     s['shot']('restored-global')
     scroll_checks = history_search(inherited_global)
     assert source_rows() == original, 'scope.connection_credential_or_trust_source_changed'
     assert auth() == 5
     s['close_gui'](s['app'])
     wait(lambda: events('fixture.ssh_authenticated_stream_exited') == 5, 'all_peer_streams_exited')
+    assert s['stop_scope_palette_provider'](), 'scope.portal_bad_exit'
     (evidence / (prefix + '-result.json')).write_text(json.dumps({
-        'version': 5, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
+        'version': 6, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
         'global_direct_group_and_entrance_precedence': True,
         'clear_entrance_restores_group_and_clear_group_restores_global': True,
         'remote_raw_backspace_delete_and_osc10_foreground_verified': True,
+        'systemTerminalPolicy': dict(light='paper', dark='classic'),
+        'systemPaletteObservations': palette_observations,
+        'systemSignalsSendNoInputOrAuthentication': True,
+        'systemPortalProviderExited': True,
         'remote_pty_term_sequence': ['xterm-256color', 'xterm', 'vt100', 'xterm', 'xterm-256color'],
         'no_repeat_pty_on_setting_change_selection_or_refresh': True,
         'sshScrollInteraction': scroll_checks,

@@ -1308,7 +1308,7 @@ timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-ses
 
 
 [tasks.probe-workspace-ssh-settings]
-description = "Verify SSH scopes through remote PTY TERM, keys, OSC10, scroll controls, input-to-bottom, refresh, Unicode/EOF search and physical exit"
+description = "Verify SSH system palettes, fixed group/entry precedence, TERM/keys, scroll settings, Unicode/EOF search and physical exit"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1", PULSE_SSH_SCOPE_PROBE = "1", MAGICK_THREAD_LIMIT = "1", OMP_NUM_THREADS = "1" }
 run = """
 set -eu
@@ -1322,6 +1322,8 @@ pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 cargo build -p xtask --features ssh-target-probe --locked
+cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-system-appearance.c -o "$fixture_dir/system-appearance" $(pkg-config --cflags --libs gio-unix-2.0)
+export PULSE_SSH_APPEARANCE_HELPER="$fixture_dir/system-appearance"
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 export PULSE_SSH_TEST_SERVER="$CARGO_TARGET_DIR/debug/xtask"

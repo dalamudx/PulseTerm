@@ -80,10 +80,31 @@ database = directory / 'state.db'
 peer_log = evidence / (prefix+'-peer.log')
 peer_output = peer_log.open('wb')
 peer = None
+palette_provider = None
+palette_log = None
 seed_root = None
 client = None
 xid = None
 diagnostic_children = []
+
+
+
+def stop_scope_palette_provider():
+    if palette_provider is None:
+        return False
+    if palette_provider.poll() is None:
+        assert palette_provider.stdin is not None, 'scope.portal_pipe_missing'
+        try:
+            palette_provider.stdin.write('quit\n')
+            palette_provider.stdin.flush()
+        except BrokenPipeError:
+            pass
+        try:
+            palette_provider.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            os.killpg(palette_provider.pid, signal.SIGKILL)
+            palette_provider.wait(timeout=3)
+    return palette_provider.returncode == 0
 
 def run(args, check=True, timeout=3):
     return subprocess.run(list(map(str,args)), env=env, capture_output=True, text=True, check=check, timeout=timeout)
@@ -356,6 +377,19 @@ try:
         env["PULSE_SSH_PASSWORD_MFA_POLICY"] = str(policy)
         for hop in ("outer", "middle"):
             policy.with_suffix("."+hop).write_text("partial")
+    if scope_mode:
+        palette_log = (evidence / (prefix + '-system-portal.log')).open('w')
+        palette_provider = subprocess.Popen([os.environ['PULSE_SSH_APPEARANCE_HELPER']], env={**env, 'PULSE_APPEARANCE_FIXTURE': '1'},
+            stdin=subprocess.PIPE, stdout=palette_log, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+        def scope_portal_ready():
+            assert palette_provider is not None and palette_provider.poll() is None, 'scope.portal_exited_before_ready'
+            return 'fixture.system_appearance.ready' in (evidence / (prefix + '-system-portal.log')).read_text()
+        wait(scope_portal_ready, 'system_portal_ready', 8)
+        settings_directory = Path(env['XDG_CONFIG_HOME']) / 'dev.pulseterm.workspace-preview'
+        settings_directory.mkdir(mode=0o700)
+        settings_file = settings_directory / 'settings.toml'
+        settings_file.write_text('[terminal.theme]\nmode="system"\nlight="paper"\ndark="classic"\n')
+        settings_file.chmod(0o600)
     mode = "password-interactive-route" if route_password_interactive_mode else "password-interactive" if password_interactive_mode else "agent-interactive-route" if route_agent_interactive_mode else "agent-interactive" if agent_interactive_mode else "key-interactive-route" if route_key_interactive_mode else "key-interactive" if key_interactive_mode else "interactive-route" if route_interactive_mode else "interactive" if interactive_mode else "agent-route" if route_mode else "cold-agent" if agent_mode else "normal"
     peer = subprocess.Popen([os.environ.get("PULSE_SSH_FIXTURE_EXECUTABLE", str(binaries / "xtask")),"serve-workspace-ssh-fixture",str(directory),mode],env=env,stdout=peer_output,stderr=subprocess.STDOUT,start_new_session=True)
     wait(lambda:'fixture.ssh_gui_seeded_listening' in peer_log.read_text(),'fixture',30)
@@ -562,6 +596,10 @@ finally:
             peer.terminate()
         peer.wait(timeout=3)
     peer_output.close()
+    if palette_provider is not None:
+        stop_scope_palette_provider()
+    if palette_log is not None:
+        palette_log.close()
     end=time.monotonic()+5
     while True:
         owned=[]

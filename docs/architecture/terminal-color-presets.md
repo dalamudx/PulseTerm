@@ -78,3 +78,5 @@ Linux的锁定Tao窗口主题查询优先返回创建时缓存，不随后续门
 暖CLI系统策略矩阵已通过Linux原生验收：五PTY总规模保持不变，系统深浅两次新建以真实`pulse new-tab sh`请求，原窗口批准前零会话／零工作者，批准后两次CLI成功返回。版本3的11轮观察记录GUI／CLI来源，OSC10／11、实际像素、刷新／恢复／独立重开及五份最终输入均通过，三条GUI／两条暖CLI会话、两个GUI及提供方退出。产品修复继续沿用`3264750`，接受证据独立归档至`target/probes/workspace-terminal-system-theme/accepted/c695c7ac/`；冷CLI／SSH和跨平台仍待验。
 
 冷CLI版本4已通过Linux原生验收：深、浅两次独立冷新建在首屏批准前零新增PTY，批准后OSC和像素分别确认午夜和纸白。使用原构建的私有单链接安装副本，由pulse独立创建GUI；CLI回执后subreaper接管，两份waitpid退出文件均为0，原生进程组及端点回收。合并矩阵总计七PTY／四窗口／13轮观察，七份最终输入逐字匹配，两个暖CLI及两个冷CLI成功退出。接受材料独立归档至`target/probes/workspace-terminal-system-theme/accepted/e18b24d5/`；不改变产品启动或主题逻辑，SSH和跨平台仍待验。
+
+SSH版本6系统策略已通过Linux原生验收：原五连接使用私有配置种子浅色paper／深色classic，组固定midnight、入口固定paper，14次OSC10核对固定覆盖及恢复继承；五轮全局新连接／旧连接的前景背景像素核对通过。门户信号不产生认证或远端输入；旧连接切深保持浅色，恢复全局的新连接取深色，之后切浅／刷新保持原深色。五条连接、GUI和门户实际退出，原TERM、按键、异步滚动及EOF检查保留。接受证据独立归档至`target/probes/workspace-ssh-settings/accepted/9536bada/`；只扩展Linux密码直连夹具，不改变产品或服务端协议，真实桌面、更多认证类型和其他平台仍待验。

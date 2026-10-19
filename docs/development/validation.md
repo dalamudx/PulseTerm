@@ -12,6 +12,8 @@ Python类型／语法、18项原生设置回归及生产workspace-cli＋workspac
 
 冷CLI系统策略扩展（Linux已验收）：版本4在GUI／暖CLI五会话之后，新增门户深、浅各一次真实`pulse new-tab sh`冷启动。原始二进制复制到私有单链接安装布局，由pulse创建GUI；首屏执行批准前零新增PTY，批准后分别采用午夜和纸白，以OSC回复和实际像素核对。CLI成功回执后由subreaper接管，两个冷GUI的独立waitpid退出文件均为0，原生进程组与控制端点回收。合并矩阵共七条PTY、四个窗口、13轮OSC／像素、七份精确最终输入，两个冷与两个暖CLI均成功退出。Python类型／语法、任务解析、应用及pulse生产构建通过；本批仅扩展夹具／任务，产品源码未改。接受材料归档至`target/probes/workspace-terminal-system-theme/accepted/e18b24d5/`，原版本2、3独立保留；已执行clean-dev清理6770个文件（6.6GiB），移除本任务临时目录。隔离门户不代表GNOME／KDE桌面、SSH、固定作用域覆盖及其他平台验收。
 
+SSH系统策略扩展（Linux已验收）：版本6五连接任务复用隔离桌面门户，私有夹具设置种子指定浅色paper／深色classic，组固定midnight、入口固定paper。14次远端OSC10回复、五轮全局／冻结终端前景背景像素均通过；系统切深后旧浅色连接冻结，清除覆盖后的新连接采用当前深色，随后切浅及刷新仍保留原深色。门户信号零认证／零远端输入，原TERM序列、按键、固定覆盖及逐级恢复、异步滚动五批输出和EOF查找保持通过。五次密码认证、五条连接全部退出，GUI实际退出码为0，后台输出任务和门户提供方正常结束、端点回收。Python类型／语法、两项夹具单测、C助手严格编译及应用／CLI／服务端构建通过；产品及服务端协议未改。首轮遗漏测试门户隔离开关，在GUI／认证前退出，日志独立保留，未放宽期限。接受证据归档至`target/probes/workspace-ssh-settings/accepted/9536bada/`，已执行clean-dev清理9764个文件（9.5GiB），移除本任务临时目录。此处使用私有配置种子，不重复声称GUI策略保存验收；GNOME／KDE、更多SSH认证类型及跨平台仍独立开放。
+
 ## 1GiB原输出流终点屏幕比较（Linux已验收）
 
 新增原页绑定的只读Marker与可见屏幕比较；19项终端绑定回归及App严格Clippy通过，覆盖原状态／输入不变、共享500ms额度、旧页拒绝及在途撤销。独立`workspace-load-state-probe`构建与专用前端资产提供真实Ctrl+Shift+F8触发；仅当前终端的可信按键可请求，绘制Marker后才比较，正常构建不注册两个验证命令。任务`mise run probe-workspace-load-state`先确认1GiB最终标记已绘制，再要求后端Equal和原生退出；已接Linux负载CI。
