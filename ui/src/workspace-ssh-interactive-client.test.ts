@@ -111,6 +111,75 @@ describe.each([
     begin: "workspace_ssh_agent_interactive_session_begin",
   },
 ])("explicit $kind authentication", ({ connect, begin }) => {
+  it("waits for a submitted answer receipt before presenting an already received next round", async () => {
+    const f = fixture(connect),
+      receipt = deferred<unknown>(),
+      original = f.rpc.getMockImplementation()!;
+    f.rpc.mockImplementation(async (command, args) =>
+      command.endsWith("_answer") ? receipt.promise : original(command, args),
+    );
+    const questions = vi.fn(async () => ["fixture"]),
+      result = f.connect(questions).catch((error) => error);
+    await f.reached.promise;
+    const first = channel().onmessage(packet);
+    await vi.waitFor(() =>
+      expect(
+        f.rpc.mock.calls.some(([command]) => command.endsWith("_answer")),
+      ).toBe(true),
+    );
+    const next = channel().onmessage({
+      ...packet,
+      round: "44444444-4444-4444-8444-444444444444",
+    });
+    expect(questions).toHaveBeenCalledOnce();
+    expect(
+      f.rpc.mock.calls.some(([command]) => command.endsWith("_cancel")),
+    ).toBe(false);
+    receipt.resolve(null);
+    await Promise.all([first, next]);
+    expect(questions).toHaveBeenCalledTimes(2);
+    f.start.resolve("9");
+    expect(await result).toBe("9");
+  });
+  it.each(["invalid receipt", "cancelled page", "extra queued round"])(
+    "never presents a queued round after %s",
+    async (failure) => {
+      const f = fixture(connect),
+        receipt = deferred<unknown>(),
+        original = f.rpc.getMockImplementation()!;
+      f.rpc.mockImplementation(async (command, args) =>
+        command.endsWith("_answer") ? receipt.promise : original(command, args),
+      );
+      const questions = vi.fn(async () => ["fixture"]),
+        result = f.connect(questions).catch((error) => error);
+      await f.reached.promise;
+      const first = channel().onmessage(packet);
+      await vi.waitFor(() =>
+        expect(
+          f.rpc.mock.calls.some(([command]) => command.endsWith("_answer")),
+        ).toBe(true),
+      );
+      const next = channel().onmessage({
+        ...packet,
+        round: "44444444-4444-4444-8444-444444444444",
+      });
+      if (failure === "cancelled page") f.controller.abort();
+      if (failure === "extra queued round")
+        await channel().onmessage({
+          ...packet,
+          round: "55555555-5555-4555-8555-555555555555",
+        });
+      receipt.resolve(
+        failure === "invalid receipt" ? { unexpected: true } : null,
+      );
+      await Promise.all([first, next]);
+      expect(await result).toMatchObject({ message: "ssh.session_cancelled" });
+      expect(questions).toHaveBeenCalledOnce();
+      expect(
+        f.rpc.mock.calls.filter(([command]) => command.endsWith("_cancel")),
+      ).toHaveLength(1);
+    },
+  );
   it("answers only the original token and round, clears application arrays and decodes numeric session IDs", async () => {
     const f = fixture(connect),
       answers = ["fixture-answer"],

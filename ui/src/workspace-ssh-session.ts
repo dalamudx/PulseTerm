@@ -177,40 +177,54 @@ async function connectSaved(
   };
   let challengeCount = 0;
   let answering = false;
+  let answerReceipt: Promise<unknown> | undefined;
+  let waitingForReceipt = false;
   const seenRounds = new Set<string>();
   if (channel)
     channel.onmessage = async (input) => {
       let answers: string[] | undefined;
+      let ownsPrompt = false;
       try {
-        if (
-          !healthy() ||
-          !token ||
-          !questions ||
-          answering ||
-          ++challengeCount > 8
-        )
+        if (!healthy() || !token || !questions || ++challengeCount > 8)
           throw Error("ssh.session_protocol");
         const prompt = decodeInteractivePrompt(input);
         if (seenRounds.has(prompt.round)) throw Error("ssh.session_protocol");
         seenRounds.add(prompt.round);
+        if (answering) {
+          if (!answerReceipt || waitingForReceipt)
+            throw Error("ssh.session_protocol");
+          waitingForReceipt = true;
+          try {
+            await answerReceipt;
+          } finally {
+            waitingForReceipt = false;
+          }
+          if (!healthy() || done || challengeAbort.signal.aborted) return;
+          if (answering) throw Error("ssh.session_protocol");
+        }
+        ownsPrompt = true;
         answering = true;
         answers = await questions(prompt, challengeAbort.signal);
         if (!answers || !healthy()) {
           abort();
           return;
         }
-        const receipt = await rpc("workspace_ssh_interactive_session_answer", {
+        answerReceipt = rpc("workspace_ssh_interactive_session_answer", {
           nonce,
           token,
           round: prompt.round,
           answers,
         });
+        const receipt = await answerReceipt;
         if (receipt !== null && receipt !== undefined)
           throw Error("ssh.session_protocol");
       } catch {
         abort();
       } finally {
-        answering = false;
+        if (ownsPrompt) {
+          answering = false;
+          answerReceipt = undefined;
+        }
         answers?.fill("");
       }
     };

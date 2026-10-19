@@ -55,6 +55,9 @@ export class WorkspaceSshDialog {
       host: HTMLSelectElement;
       identity: HTMLSelectElement;
       connect: HTMLButtonElement;
+      fingerprint: HTMLButtonElement;
+      fingerprintEnabled(): boolean;
+      inspectFingerprint(host: string): void;
       cancel: HTMLButtonElement;
       status: HTMLElement;
       selectedHost: HTMLElement;
@@ -132,6 +135,10 @@ export class WorkspaceSshDialog {
         this.describeHost();
       }
     });
+    options.fingerprint.addEventListener("click", () => {
+      if (this.canInspectFingerprint())
+        options.inspectFingerprint(options.host.value);
+    });
     options.connect.addEventListener("click", () => {
       void this.connect();
     });
@@ -154,7 +161,18 @@ export class WorkspaceSshDialog {
       this.options.dialog.open
     );
   }
+  private canInspectFingerprint(): boolean {
+    const host = this.hosts.find((host) => host.id === this.options.host.value);
+    return (
+      this.current(this.epoch) &&
+      !this.busy &&
+      this.options.fingerprintEnabled() &&
+      !!host &&
+      !host.profile?.via
+    );
+  }
   private describeHost(): void {
+    this.options.fingerprint.disabled = !this.canInspectFingerprint();
     const option = Array.from(this.options.host.options).find(
       (option) => option.value === this.options.host.value,
     );
@@ -236,6 +254,7 @@ export class WorkspaceSshDialog {
     this.options.selectedHost.textContent = "";
     this.options.identity.replaceChildren();
     this.options.connect.disabled = true;
+    this.options.fingerprint.disabled = true;
     this.options.host.disabled = true;
     this.options.identity.disabled = true;
     this.busy = true;
@@ -432,6 +451,7 @@ export class WorkspaceSshDialog {
     } finally {
       if (this.current(epoch)) {
         this.busy = false;
+        this.describeHost();
         this.options.working(false);
       }
     }
@@ -454,6 +474,7 @@ export class WorkspaceSshDialog {
     this.options.host.disabled = true;
     this.options.identity.disabled = true;
     this.options.connect.disabled = true;
+    this.options.fingerprint.disabled = true;
     this.options.cancel.disabled = false;
     uiText(this.options.status, "正在读取 CLI 已批准路线的实际指纹…");
     this.options.dialog.showModal();
@@ -635,6 +656,7 @@ export class WorkspaceSshDialog {
     this.busy = true;
     this.options.working(true);
     this.options.connect.disabled = true;
+    this.options.fingerprint.disabled = true;
     this.options.host.disabled = true;
     this.options.identity.disabled = true;
     uiText(this.options.status, "正在验证主机并连接保存的身份…");
@@ -750,6 +772,7 @@ export class WorkspaceSshDialog {
       if (this.current(epoch)) {
         this.busy = false;
         this.options.working(false);
+        this.describeHost();
       }
     }
   }
@@ -766,6 +789,7 @@ export class WorkspaceSshDialog {
     this.controller = undefined;
     if (this.options.dialog.open) this.options.dialog.close();
     this.options.connect.disabled = true;
+    this.options.fingerprint.disabled = true;
     uiText(this.options.connect, "连接");
     this.routeAnswer = undefined;
     this.options.host.replaceChildren();

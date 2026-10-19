@@ -1,6 +1,39 @@
 import { expect, it, vi } from "vitest";
-import { WorkspaceModalEscape } from "./workspace-modal-escape";
+import {
+  focusedWorkspaceModal,
+  WorkspaceModalEscape,
+} from "./workspace-modal-escape";
 
+it("focused nested modal closes before its parent and one Escape gesture cannot dismiss both", () => {
+  const parent = new Dialog(),
+    child = new Dialog(),
+    life = new AbortController();
+  const closest = vi.fn(() => (child.open ? child : parent));
+  const document = {
+    activeElement: { closest },
+    querySelector: vi.fn(() => parent),
+  } as unknown as Document;
+  const handler = new WorkspaceModalEscape(life.signal, () =>
+    focusedWorkspaceModal(document),
+  );
+  expect(handler.keydown(event())).toBe(true);
+  expect(child.closes).toBe(1);
+  expect(parent.open).toBe(true);
+  expect(handler.keydown(event({ repeat: true }))).toBe(true);
+  expect(parent.open).toBe(true);
+  expect(handler.keyup(event())).toBe(true);
+  expect(handler.keydown(event())).toBe(true);
+  expect(parent.closes).toBe(1);
+  expect(closest).toHaveBeenCalledWith("dialog[open]");
+});
+it("focused modal lookup retains the original fallback when no dialog owns focus", () => {
+  const dialog = new Dialog();
+  const document = {
+    activeElement: null,
+    querySelector: vi.fn(() => dialog),
+  } as unknown as Document;
+  expect(focusedWorkspaceModal(document)).toBe(dialog);
+});
 function event(extra: object = {}) {
   return {
     key: "Escape",

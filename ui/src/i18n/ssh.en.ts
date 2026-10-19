@@ -77,6 +77,7 @@ export const sshEnglish = {
   " · 未保存密码": " · No saved password",
   "{0} · {1} · 私钥{2}": "{0} · {1} · Private key{2}",
   " · 未保存凭据": " · Credentials not saved",
+  核对所选主机指纹: "Check selected host fingerprint",
   "连接前请解锁保险库；连接将使用所选身份和已批准的主机指纹。":
     "Unlock the Vault before connecting. The connection uses the selected identity and approved host key fingerprint.",
   "请先添加主机和保存的 SSH 身份。":

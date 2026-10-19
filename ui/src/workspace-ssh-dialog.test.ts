@@ -80,6 +80,7 @@ function fixture() {
     host = new Node("select", doc),
     identity = new Node("select", doc),
     connect = new Node("button", doc),
+    fingerprint = new Node("button", doc),
     cancel = new Node("button", doc),
     status = new Node("p", doc),
     selectedHost = new Node("output", doc);
@@ -184,12 +185,17 @@ function fixture() {
   const working = vi.fn(),
     connected = vi.fn(async () => {}),
     temporaryConnected = vi.fn();
+  const inspectFingerprint = vi.fn(),
+    fingerprintEnabled = vi.fn(() => true);
   const controller = new WorkspaceSshDialog(
     {
       dialog: dialog as unknown as HTMLDialogElement,
       host: host as unknown as HTMLSelectElement,
       identity: identity as unknown as HTMLSelectElement,
       connect: connect as unknown as HTMLButtonElement,
+      fingerprint: fingerprint as unknown as HTMLButtonElement,
+      inspectFingerprint,
+      fingerprintEnabled,
       cancel: cancel as unknown as HTMLButtonElement,
       status: status as unknown as HTMLElement,
       selectedHost: selectedHost as unknown as HTMLElement,
@@ -207,6 +213,9 @@ function fixture() {
     host,
     identity,
     connect,
+    fingerprint,
+    inspectFingerprint,
+    fingerprintEnabled,
     cancel,
     status,
     selectedHost,
@@ -224,6 +233,62 @@ function fixture() {
     },
   };
 }
+it("temporary targets can inspect their fingerprint without connecting or offering save", async () => {
+  const f = fixture();
+  const temporary = {
+    version: 1 as const,
+    token: nonce,
+    target: { ...f.hosts.hosts[0]!, label: "Temporary" },
+  };
+  await f.controller.open(hostId, temporary);
+  expect(f.fingerprint.disabled).toBe(false);
+  f.fingerprint.dispatchEvent(new Event("click"));
+  expect(f.inspectFingerprint).toHaveBeenCalledExactlyOnceWith(hostId);
+  expect(f.dependencies.connect).not.toHaveBeenCalled();
+  expect(f.dependencies.connectPasswordInteractive).not.toHaveBeenCalled();
+  expect(f.connected).not.toHaveBeenCalled();
+  expect(f.temporaryConnected).not.toHaveBeenCalled();
+  expect(f.dialog.open).toBe(true);
+  f.controller.close();
+});
+it("fingerprint inspection rejects unsupported, stale and retired pages", async () => {
+  const f = fixture();
+  f.fingerprintEnabled.mockReturnValue(false);
+  await f.controller.open();
+  expect(f.fingerprint.disabled).toBe(true);
+  f.fingerprint.dispatchEvent(new Event("click"));
+  expect(f.inspectFingerprint).not.toHaveBeenCalled();
+  f.fingerprintEnabled.mockReturnValue(true);
+  f.host.dispatchEvent(new Event("change"));
+  expect(f.fingerprint.disabled).toBe(false);
+  f.setNonce("22222222-2222-4222-8222-222222222222");
+  f.fingerprint.dispatchEvent(new Event("click"));
+  f.life.abort();
+  f.fingerprint.dispatchEvent(new Event("click"));
+  expect(f.inspectFingerprint).not.toHaveBeenCalled();
+  expect(f.fingerprint.disabled).toBe(true);
+});
+it("fingerprint inspection never dials a route destination directly", async () => {
+  const f = routeFixture();
+  await f.controller.open();
+  expect(f.fingerprint.disabled).toBe(true);
+  f.fingerprint.dispatchEvent(new Event("click"));
+  expect(f.inspectFingerprint).not.toHaveBeenCalled();
+  f.controller.close();
+});
+it("fingerprint inspection stays disabled during an admitted connection", async () => {
+  const f = fixture(),
+    result = deferred<string>();
+  f.dependencies.connect.mockReturnValue(result.promise);
+  await f.controller.open();
+  f.connect.dispatchEvent(new Event("click"));
+  expect(f.fingerprint.disabled).toBe(true);
+  f.fingerprint.dispatchEvent(new Event("click"));
+  expect(f.inspectFingerprint).not.toHaveBeenCalled();
+  f.controller.close();
+  result.resolve("1");
+  await Promise.resolve();
+});
 it("temporary metadata uses the original identity and connect dependency, with save offered only after registration", async () => {
   const f = fixture();
   const target = {

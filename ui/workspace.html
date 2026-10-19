@@ -83,7 +83,7 @@
             <div class="workspace-host-form"><label for="workspace-ssh-host">主机</label><select id="workspace-ssh-host" aria-label="选择保存的SSH主机" aria-describedby="workspace-ssh-selected-host" disabled></select><label for="workspace-ssh-identity">身份</label><select id="workspace-ssh-identity" aria-label="选择保存的SSH身份" aria-describedby="workspace-ssh-selected-host" disabled></select></div>
             <output id="workspace-ssh-selected-host" class="workspace-visually-hidden" aria-live="polite"></output>
             <p id="workspace-ssh-status" role="status" aria-live="polite"></p>
-            <div class="terminal-paste-actions"><button id="workspace-ssh-cancel" type="button">取消</button><button id="workspace-ssh-connect" type="button" aria-describedby="workspace-ssh-selected-host" disabled>连接</button></div>
+            <div class="terminal-paste-actions"><button id="workspace-ssh-fingerprint" type="button" aria-describedby="workspace-ssh-selected-host" disabled>核对所选主机指纹</button><button id="workspace-ssh-cancel" type="button">取消</button><button id="workspace-ssh-connect" type="button" aria-describedby="workspace-ssh-selected-host" disabled>连接</button></div>
           </dialog>
           <dialog id="workspace-fingerprint-dialog" class="terminal-paste-dialog" aria-labelledby="workspace-fingerprint-title">
             <h2 id="workspace-fingerprint-title">SSH 主机指纹</h2>

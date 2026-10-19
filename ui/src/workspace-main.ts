@@ -69,7 +69,10 @@ import {
   loadPanePreference,
   savePanePreference,
 } from "./workspace-layout-preferences";
-import { WorkspaceModalEscape } from "./workspace-modal-escape";
+import {
+  focusedWorkspaceModal,
+  WorkspaceModalEscape,
+} from "./workspace-modal-escape";
 import { retireBeforeReload, workspaceReloadKey } from "./workspace-navigation";
 import { requestOrganization } from "./workspace-organization";
 import { WorkspaceOrganizationEditor } from "./workspace-organization-editor";
@@ -852,6 +855,11 @@ const quickSave = new WorkspaceQuickSaveDialog({
 const sshDialog = new WorkspaceSshDialog({
   dialog: element("workspace-ssh-dialog") as HTMLDialogElement,
   host: element("workspace-ssh-host") as HTMLSelectElement,
+  fingerprint: element("workspace-ssh-fingerprint") as HTMLButtonElement,
+  fingerprintEnabled: () => window.__PULSE_WORKSPACE_SSH_FINGERPRINT__ === true,
+  inspectFingerprint: (host) => {
+    void fingerprintDialog.open(host);
+  },
   identity: element("workspace-ssh-identity") as HTMLSelectElement,
   connect: element("workspace-ssh-connect") as HTMLButtonElement,
   cancel: element("workspace-ssh-cancel") as HTMLButtonElement,
@@ -1862,7 +1870,7 @@ const composition = new CompositionGuard(window, life.signal, () =>
   keymapRuntime?.cancelPrefix(),
 );
 const modalEscape = new WorkspaceModalEscape(life.signal, () =>
-  document.querySelector<HTMLDialogElement>("dialog[open]"),
+  focusedWorkspaceModal(document),
 );
 window.addEventListener(
   "keyup",

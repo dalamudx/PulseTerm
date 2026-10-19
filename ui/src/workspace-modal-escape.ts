@@ -1,5 +1,13 @@
 import { isCompositionKey } from "./keybindings/composition";
 
+export function focusedWorkspaceModal(
+  document: Pick<Document, "activeElement" | "querySelector">,
+): HTMLDialogElement | null {
+  return (
+    document.activeElement?.closest<HTMLDialogElement>("dialog[open]") ??
+    document.querySelector<HTMLDialogElement>("dialog[open]")
+  );
+}
 /** Modal dismissal consumes the whole Escape gesture before focus can return to xterm. */
 export class WorkspaceModalEscape {
   private suppressing = false;

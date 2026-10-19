@@ -1,5 +1,6 @@
 .pi/
 .astrolabe/
+.asgrep/
 /target/
 /apps/desktop/src-tauri/gen/
 **/node_modules/
