@@ -23,6 +23,8 @@ workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep
 workspace-startup-diagnostics = ["workspace-cli"]
 # Delayed display receipts for Linux native acceptance only; never production.
 workspace-readiness-probe = ["workspace-startup-diagnostics"]
+# Ordered screen verification commands; absent from ordinary production builds.
+workspace-load-state-probe = ["workspace-cli"]
 # Opt-in Linux CLI; single-instance/startup foundation never enters default/probe builds.
 workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix"]
 # Opt-in saved-host/identity SSH trust and supervised session entry; default stays network-free.

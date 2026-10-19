@@ -11,6 +11,8 @@ import time
 
 KIND = os.environ.get('PULSE_LOAD_KIND', 'load')
 assert KIND in ('load', 'echo'), 'load.invalid_kind'
+VERIFY = os.environ.get("PULSE_LOAD_VERIFY", "0") == "1"
+assert not VERIFY or KIND == "load", "load.invalid_verification_kind"
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/probes/workspace-load'
 label = os.environ.get('PULSE_LOAD_RUN')
@@ -21,7 +23,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 RESULT = OUT / 'result.json'
 RESULT.unlink(missing_ok=True)
 BINARY = Path(os.environ['CARGO_TARGET_DIR']) / 'release/pulseterm-workspace'
-HELPER = ROOT / 'target/probes/x11-status'
+HELPER = Path(os.environ.get("PULSE_NATIVE_HELPER", str(ROOT / "target/probes/x11-status")))
 
 
 def run(*args, check=True):
@@ -62,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
         env[key] = str(value)
     bindir = fixture / 'bin'
     bindir.mkdir(mode=0o700)
-    run('/usr/bin/install', '-m', '700', ROOT / 'target/probes/load-shell', bindir / 'sh')
+    run('/usr/bin/install', '-m', '700', Path(os.environ.get('PULSE_LOAD_SHELL', str(ROOT / 'target/probes/load-shell'))), bindir / 'sh')
     env.update(PATH=str(bindir), SHELL=str(bindir / 'sh'), PULSE_LOAD_FIXTURE=directory,
                TMPDIR=directory, TMP=directory, TEMP=directory)
     row = b'LOAD ' + b'0123456789abcdef' * 3 + b'0123456789\n'
@@ -71,12 +73,12 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
         for _ in range(16384): data.write(row * 1024)
     assert (fixture / 'text-1gib').stat().st_size == 1073741824
     log_path = OUT / 'native.log'
-    report = {'version': 1, 'passed': False, 'measurementsComplete': False,
+    report = {'version': 2 if VERIFY else 1, 'passed': False, 'measurementsComplete': False,
               'sourceCommit': run('git', 'rev-parse', 'HEAD').stdout.strip(),
               'platform': 'linux', 'build': 'release', 'display': 'X11 Xvfb software rendering',
               'textBytes': 1073741824, 'command': '/bin/cat',
               'limitations': ['No echo p95, cold-start, hardware, IME or cross-platform acceptance',
-                              'Final marker verification; no full parser-state comparison']}
+                              'Visible screen verification only; not full hidden parser/history state' if VERIFY else 'Final marker verification; no full parser-state comparison']}
     app, xid, owned = None, None, {}
 
     def wait(predicate, name, seconds=15):
@@ -126,6 +128,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
                 xdo('key', '--clearmodifiers', '--delay', '0', 'ctrl+c')
                 interrupted = wait(lambda: read('interrupt-finished'), 'interrupt_finished', 5)
                 assert interrupted['signal'] == signal.SIGINT and interrupted['signalNs'] >= sent
+                (OUT / 'interrupt-native.json').write_text(json.dumps(interrupted, indent=2) + '\n')
                 latency_ms = (interrupted['exitedNs'] - sent) / 1000000
                 report.update(interruptChildExitMs=latency_ms, interruptSignalMs=(interrupted['signalNs']-sent)/1000000,
                               interruptUnder100Ms=latency_ms < 100, interruptedCatSignal=interrupted['signal'])
@@ -161,6 +164,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
                 complete = wait(full_progress, 'full_1gib', full_seconds)
                 assert complete['exitCode'] == 0 and complete['signal'] == 0
                 assert complete_running['pid'] == complete['pid']
+                (OUT / 'full-native.json').write_text(json.dumps(complete, indent=2) + '\n')
                 report['fullCatElapsedMs'] = (complete['exitedNs'] - complete['startedNs']) / 1000000
                 image = OUT / 'complete.png'
                 text = fixture / 'complete-ocr'
@@ -172,6 +176,32 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
 
                 wait(painted, 'painted_completion', 30)
                 report.update(measurementsComplete=True, full1GiBCatExitedNormally=True, finalMarkerPainted=True)
+                if VERIFY:
+                    prefix = 'workspace.load_screen_equal:'
+                    assert not any(line.startswith(prefix) for line in log_path.read_text().splitlines())
+                    xdo('key', '--clearmodifiers', 'ctrl+shift+F8')
+                    def screen_receipt():
+                        values = [line[len(prefix):] for line in log_path.read_text().splitlines() if line.startswith(prefix)]
+                        assert len(values) <= 1, 'load.duplicate_screen_receipt'
+                        return values[0] if values else None
+                    value = wait(screen_receipt, 'original_screen_comparison', 15)
+                    fields = value.split(':')
+                    assert len(fields) == 6
+                    columns, rows, revision, source_bytes, utf8_bytes = map(int, fields[:5])
+                    assert columns > 0 and rows > 0 and revision > 0
+                    assert source_bytes >= 1073741824 and utf8_bytes >= 1073741824
+                    assert len(fields[5]) == 16 and all(char in '0123456789abcdef' for char in fields[5])
+                    assert count('load_marker_admitted') == 1
+                    report['originalScreenEqual'] = True
+                    report['screenComparison'] = dict(columns=columns, rows=rows, revision=revision, sourceBytes=source_bytes, utf8Bytes=utf8_bytes, digest=fields[5], beforeAnyRefresh=True)
+                    xdo('type', '--clearmodifiers', '--delay', '0', 'Q')
+                    final_input = wait(lambda: read('load-input-finished'), 'final_native_input', 5)
+                    assert final_input['count'] == 3 and final_input['bytesHex'] == '494651'
+                    (OUT / 'input-final.json').write_text(json.dumps(final_input, indent=2) + '\n')
+                    wait(lambda: identity(final_input['pid']) is None, 'native_fixture_exit', 5)
+                    report['fixtureInputBytesHex'] = final_input['bytesHex']
+                    report['fixtureInputExact'] = True
+                    report['fixtureExitedBeforeWindowClose'] = True
             xdo('key', '--clearmodifiers', 'alt+F4')
             app.wait(timeout=15)
             assert app.returncode == 0 and count('exited') == 1
@@ -204,7 +234,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
                     report['forcedNativeCleanup'] = True
                 report['nativeProcessesDrained'] = not remaining
             target_met = report.get('echoP95Under16Ms') if KIND == 'echo' else report.get('interruptUnder100Ms')
-            report['passed'] = bool(report['measurementsComplete'] and target_met and report.get('nativeProcessesDrained') and report.get('normalAppExit') and not report.get('forcedAppCleanup'))
+            report['passed'] = bool(report['measurementsComplete'] and target_met and (not VERIFY or report.get('originalScreenEqual') is True and report.get('fixtureInputExact') is True and report.get('fixtureExitedBeforeWindowClose') is True) and report.get('nativeProcessesDrained') and report.get('normalAppExit') and not report.get('forcedAppCleanup'))
             RESULT.write_text(json.dumps(report, indent=2) + '\n')
     assert report['passed'], 'load.performance_gate_failed'
     print('workspace.real_cat_1gib_sigint_latency_and_native_exit_confirmed')

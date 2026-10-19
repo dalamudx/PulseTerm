@@ -1,5 +1,8 @@
 //! Existing root sessions only. Page-bound v2 delivery and confirmed UTF-8 input.
 use super::*;
+#[cfg(feature = "workspace-load-state-probe")]
+#[path = "product_terminal_load_state.rs"]
+pub(super) mod load_state;
 use crate::raw_frame::RawFrame;
 use pulse_app::{
     attachment::AttachmentConfig,

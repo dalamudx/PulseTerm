@@ -626,6 +626,10 @@ pub fn run() {
             terminal::workspace_terminal_connect,
             terminal::workspace_terminal_ack,
             terminal::workspace_terminal_confirm,
+            #[cfg(feature = "workspace-load-state-probe")]
+            terminal::load_state::workspace_terminal_load_marker,
+            #[cfg(feature = "workspace-load-state-probe")]
+            terminal::load_state::workspace_terminal_load_compare,
             terminal::workspace_terminal_enable_input,
             terminal::workspace_terminal_input_ready,
             terminal::workspace_terminal_report_failure,

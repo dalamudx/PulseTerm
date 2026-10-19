@@ -162,6 +162,31 @@ impl TerminalViewBinding {
             .input_page_bound(&self.page, self.id, self.generation, bytes)
             .await
     }
+    /// Admit only a read-only ordered Marker for this original page/generation.
+    /// Admission is not a drawing boundary; use the Marker on the existing wire.
+    pub async fn request_marker(&self) -> Result<(), RegistryError> {
+        self.check_current()?;
+        let result = self
+            .registry
+            .request_marker(self.page.owner(), self.id, self.generation)
+            .await;
+        self.check_current()?;
+        result
+    }
+    /// Compare visible cells/styles/cursor/buffer at an exact wire boundary.
+    /// Does not prove hidden parser/history state, grant input, or clear risk hints.
+    pub async fn compare_visible(
+        &self,
+        rendered: crate::registry::RenderedScreen,
+    ) -> Result<crate::registry::VisibleComparison, RegistryError> {
+        self.check_current()?;
+        let result = self
+            .registry
+            .compare_visible(self.page.owner(), self.id, self.generation, rendered)
+            .await;
+        self.check_current()?;
+        result
+    }
     /// Compatibility API; reattach from authoritative backend grid after success.
     pub async fn resize(&self, size: pulse_core::TermSize) -> Result<(), RegistryError> {
         self.resize_with_receipt(size).await.map(|_| ())

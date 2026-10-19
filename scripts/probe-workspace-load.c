@@ -53,6 +53,10 @@ int main(void) {
     action.sa_handler = on_interrupt;
     sigemptyset(&action.sa_mask);
     if (sigaction(SIGINT, &action, NULL)) return 77;
+    const char *verify = getenv("PULSE_LOAD_VERIFY");
+    int verify_load = verify && strcmp(verify, "1") == 0;
+    unsigned char commands[3];
+    size_t command_count = 0;
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("LOAD READY\r\n");
     for (;;) {
@@ -60,6 +64,16 @@ int main(void) {
         ssize_t length = read(STDIN_FILENO, &command, 1);
         if (length < 0 && errno == EINTR) continue;
         if (length != 1) return 0;
+        if (verify_load) {
+            if (command_count >= sizeof(commands)) return 87;
+            commands[command_count++] = command;
+            if (command == 'Q') {
+                if (command_count != 3 || memcmp(commands, "IFQ", 3)) return 87;
+                snprintf(json, sizeof(json), "{\"pid\":%ld,\"count\":%zu,\"bytesHex\":\"%02x%02x%02x\"}\n", (long)getpid(), command_count, commands[0], commands[1], commands[2]);
+                publish(directory, "load-input-finished", json);
+                return 0;
+            }
+        }
         if (command == 'E') {
             printf("\033[2J\033[HECHO READY\r\nECHO REFERENCE\r\nX");
             char samples[32768] = "[";
@@ -111,6 +125,11 @@ int main(void) {
         publish(directory, finished, json);
         if (command == 'I' && (sig != SIGINT || !interrupted)) return 81;
         if (command == 'F' && (sig || code || interrupted)) return 82;
-        printf("\033[2J\033[H%s\r\n", command == 'F' ? "LOAD COMPLETE 1073741824" : "INTERRUPT COMPLETE");
+        if (verify_load && command == 'F') {
+            // Compare the real tail, not a fresh grid created by ED/HOME.
+            printf("LOAD COMPLETE 1073741824\r\n");
+        } else {
+            printf("\033[2J\033[H%s\r\n", command == 'F' ? "LOAD COMPLETE 1073741824" : "INTERRUPT COMPLETE");
+        }
     }
 }

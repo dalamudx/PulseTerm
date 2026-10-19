@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { AttachmentV2Receiver } from "../../ipc/attachment-v2";
 import {
@@ -11,6 +12,7 @@ import type { DisplayPreferences } from "./display-preferences";
 import { FitScheduler, type Geometry } from "./fit-scheduler";
 import { InputQueue } from "./input-queue";
 import { parseLayoutReceipt } from "./layout-receipt";
+import { LoadStateProbe } from "./load-state-probe";
 import { parseQueryPaletteData } from "./query-palette";
 import type { TerminalPasteOptions } from "./terminal-surface";
 import {
@@ -235,6 +237,7 @@ export class WorkspaceTerminalConnection {
   private readonly started = performance.now();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly rpc: TerminalConnectionRpc;
+  private loadProbe: LoadStateProbe | undefined;
   private readonly generation: bigint;
   private readonly linkNonce: string;
   private readonly aborted = () => this.dispose();
@@ -287,6 +290,21 @@ export class WorkspaceTerminalConnection {
           throw new Error("terminal.invalid_begin");
         const scope = this.options.host.begin(this.generation);
         scope.own(() => this.fail(new Error("view.retired")));
+        if (import.meta.env.VITE_LOAD_STATE_PROBE === "1") {
+          this.loadProbe = new LoadStateProbe({
+            element: this.options.element,
+            signal: scope.signal,
+            isCurrent: () =>
+              scope.isCurrent() &&
+              this.bootstrapped &&
+              !this.closed &&
+              !this.resizing,
+            nonce: this.options.nonce,
+            connection: this.capture.ticket,
+            failed: (error) => this.fail(error),
+          });
+          scope.own(this.loadProbe);
+        }
         this.stream = new TerminalViewStream(
           scope,
           this.options.element,
@@ -353,6 +371,7 @@ export class WorkspaceTerminalConnection {
                   this.resolve();
                 }
               }
+              await this.loadProbe?.observe(boundary);
               this.options.observed?.(boundary);
             },
           },
@@ -612,6 +631,7 @@ export class WorkspaceTerminalConnection {
   suspend(): Promise<void> {
     if (this.detached) return this.detached;
     this.closed = true;
+    this.loadProbe?.dispose();
     this.detached = detachTerminal(
       this.rpc,
       this.options.nonce,

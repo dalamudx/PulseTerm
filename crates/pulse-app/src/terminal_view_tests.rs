@@ -225,3 +225,6 @@ async fn cancelled_constructor_before_capture_cannot_install_over_fresh_view() -
     let _ = timeout(Duration::from_secs(5), fresh.transport.completion).await?;
     f.finish().await
 }
+
+#[path = "terminal_view_comparison_tests.rs"]
+mod comparison_tests;

@@ -1324,6 +1324,10 @@ description = "Measure release XTest-to-PTY-to-glyph echo p95 against the 16ms t
 env = { PULSE_LOAD_KIND = "echo", PULSE_LOAD_RUN = "echo-latest" }
 run = "mise run probe-workspace-load"
 
+[tasks.probe-workspace-load-state]
+description = "Compare the original drawn 1GiB screen against the actor before refresh"
+env = { PULSE_LOAD_VERIFY = "1", PULSE_LOAD_KIND = "load", PULSE_LOAD_RUN = "state-latest" }
+run = "mise run probe-workspace-load"
 [tasks.probe-workspace-load]
 description = "Verify release WebView with real cat 1GiB, tty Ctrl+C latency and native exit"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
@@ -1334,12 +1338,20 @@ fixture_dir=$(mktemp -d /data/temp/pulseterm-load-build.XXXXXX)
 trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
-pnpm --filter ui build
-cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --release --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
-cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-load.c -o target/probes/load-shell
+load_features=workspace-cli,workspace-ssh,tauri/custom-protocol
+export VITE_LOAD_STATE_PROBE=0
+if [ "${PULSE_LOAD_VERIFY:-0}" = 1 ]; then
+  export VITE_LOAD_STATE_PROBE=1
+  load_features="$load_features,workspace-load-state-probe"
+fi
+pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --release --features "$load_features" --bin pulseterm-workspace --locked
+cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-load.c -o "$fixture_dir/load-shell"
+export PULSE_LOAD_SHELL="$fixture_dir/load-shell" PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 if [ "${PULSE_LOAD_KIND:-load}" = echo ]; then
   cc -std=c11 -O2 -Wall -Wextra -Werror scripts/probe-workspace-echo.c -o target/probes/echo-pixels $(pkg-config --cflags --libs x11 xtst)
 fi
-cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs x11 atspi-2 gobject-2.0 glib-2.0)
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 timeout --kill-after=25s 720s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-load/wm.log python3 scripts/probe-workspace-load.py
 """
