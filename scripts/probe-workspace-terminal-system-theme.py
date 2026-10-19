@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import select
 import signal
+import subprocess
 import sys
 import termios
 import time
@@ -99,14 +100,35 @@ def verify(c):
         key('Escape')
         wait(lambda: not accessible('搜索设置', 'focus'), 'settings_closed')
 
-    def start():
+    def start(via_cli=False):
         before = c['count']('session_opened')
-        click('POSIX sh')
+        if via_cli:
+            previous_workers = set(fixture.glob('palette-*'))
+            pulse = Path(os.environ['CARGO_TARGET_DIR']) / 'debug/pulse'
+            with subprocess.Popen([str(pulse), 'new-tab', 'sh'], env=c['environment'], stdout=subprocess.PIPE, stderr=subprocess.PIPE) as client:
+                try:
+                    wait(lambda: accessible('创建终端', 'bounds') or client.poll() is not None, 'cli_approval')
+                    assert client.poll() is None, 'palette.cli_rejected_early'
+                    assert c['count']('session_opened') == before, 'palette.cli_created_before_approval'
+                    assert set(fixture.glob('palette-*')) == previous_workers, 'palette.cli_worker_before_approval'
+                    click('创建终端')
+                    client.communicate(timeout=12)
+                    assert client.returncode == 0, 'palette.cli_failed'
+                finally:
+                    if client.poll() is None:
+                        client.terminate()
+                        try:
+                            client.communicate(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            client.kill()
+                            client.communicate(timeout=3)
+        else:
+            click('POSIX sh')
         wait(lambda: c['count']('session_opened') == before + 1, 'session_opened')
         wait(lambda: c['count']('terminal_input_ready') >= before + 1, 'input_ready')
         found = wait(lambda: [path for path in fixture.glob('palette-*') if path.is_dir() and path not in [item['base'] for item in workers] and (path / 'ready.json').exists()], 'worker_ready')
         assert len(found) == 1, 'palette.extra_worker'
-        entry = dict(base=found[0], pid=json.loads((found[0] / 'ready.json').read_text())['pid'], round=0)
+        entry = dict(base=found[0], pid=json.loads((found[0] / 'ready.json').read_text())['pid'], round=0, origin='cli' if via_cli else 'gui')
         workers.append(entry)
         return entry
 
@@ -133,7 +155,7 @@ def verify(c):
             counts = {color.lower(): int(count) for count, color in re.findall(r'^\s*(\d+):.*?#([0-9a-fA-F]{6})(?:\s|$)', histogram, re.M)}
             return counts.get(bg, 0) > 10000 and counts.get(fg, 0) > 5
         wait(pixels, 'paint_' + tag)
-        observations.append(dict(tag=tag, preset=preset, foreground=fg, background=bg, workerPid=entry['pid'], round=entry['round'], inputHex=expected.hex(), image=image.name))
+        observations.append(dict(tag=tag, preset=preset, foreground=fg, background=bg, workerPid=entry['pid'], origin=entry['origin'], round=entry['round'], inputHex=expected.hex(), image=image.name))
 
     def refresh(entry, preset, tag):
         opened = c['count']('session_opened')
@@ -169,7 +191,7 @@ def verify(c):
     assert_palette(light, 'paper', 'light-keeps-after-system-dark')
     refresh(light, 'paper', 'light-keeps-after-refresh')
     c['checks'].append('system_light_new_session_and_frozen_after_native_dark_and_refresh')
-    dark = start()
+    dark = start(via_cli=True)
     assert_palette(dark, 'midnight', 'dark-new-with-light-ui')
     strategy(reset=True)
     assert_palette(dark, 'midnight', 'dark-keeps-after-reset')
@@ -187,14 +209,16 @@ def verify(c):
     assert_palette(reopened, 'midnight', 'reopened-system-dark')
     c['change']('light')
     assert_palette(reopened, 'midnight', 'reopened-keeps-after-system-light')
-    last = start()
+    last = start(via_cli=True)
     assert_palette(last, 'paper', 'new-after-system-light')
     finish_window()
     c['checks'].append('saved_policy_survives_independent_reopen_and_new_sessions_follow_both_native_directions')
     assert len(workers) == 5 and len({entry['pid'] for entry in workers}) == 5
     c['receipt'].update(passed=True, windowsExited=c['windows_exited'], nativeSessionsStarted=5,
         nativeExitConfirmed=True, paletteObservations=observations, exactFinalInputVerified=True,
-        workerPids=[entry['pid'] for entry in workers], currentUiMode='light')
+        workerPids=[entry['pid'] for entry in workers], currentUiMode='light',
+        cliSessionsStarted=sum(entry['origin'] == 'cli' for entry in workers),
+        cliRequiresOriginalWindowApproval=True)
 
 
 if __name__ == '__main__':

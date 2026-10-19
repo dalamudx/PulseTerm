@@ -1282,7 +1282,7 @@ cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-system-appearance.c -o
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gobject-2.0)
 pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
-cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 export PULSE_APPEARANCE_HELPER="$fixture_dir/system-appearance" PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 export PULSE_WORKSPACE_EXECUTABLE="$CARGO_TARGET_DIR/debug/pulseterm-workspace"
 timeout --kill-after=5s 240s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh "$appearance_output/wm.log" python3 scripts/probe-workspace-system-appearance.py

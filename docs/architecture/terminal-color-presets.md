@@ -74,3 +74,5 @@ theme = { mode = "system", light = "catppuccin_latte", dark = "dracula" }
 正式入口`mise run probe-workspace-terminal-system-theme`复用系统外观门户提供方和生产WebView，以五个真实本地PTY核对浅深分支、界面覆盖独立性、旧会话／刷新冻结、恢复继承与独立重开。11轮OSC10／11与实际前景／背景像素核对通过，五份最终输入只含预期回复；两个GUI、五个PTY和提供方实际退出。18项设置回归、生产严格Clippy及原五项界面外观矩阵也通过。不登记GNOME／KDE、SSH／CLI、固定作用域覆盖或三平台完成。
 
 Linux的锁定Tao窗口主题查询优先返回创建时缓存，不随后续门户信号更新。工作区在GTK主线程注册系统prefer-dark属性通知，将当前值存入应用管理的原子快照；通知仅持弱引用，不持有窗口、会话或权限。原有GUI／CLI／SSH启动与继承预览继续先校验原页，再读取这份系统快照，页面不提供深浅值。不可用时取浅色；其他平台保留原生窗口查询路径。已有会话及刷新仍以启动时冻结基色恢复。原生回归已在旧实现上复现错误选色，修复通过五PTY／双窗口完整矩阵。
+
+暖CLI系统策略矩阵已通过Linux原生验收：五PTY总规模保持不变，系统深浅两次新建以真实`pulse new-tab sh`请求，原窗口批准前零会话／零工作者，批准后两次CLI成功返回。版本3的11轮观察记录GUI／CLI来源，OSC10／11、实际像素、刷新／恢复／独立重开及五份最终输入均通过，三条GUI／两条暖CLI会话、两个GUI及提供方退出。产品修复继续沿用`3264750`，接受证据独立归档至`target/probes/workspace-terminal-system-theme/accepted/c695c7ac/`；冷CLI／SSH和跨平台仍待验。

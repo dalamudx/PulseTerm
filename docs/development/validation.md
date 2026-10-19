@@ -8,6 +8,8 @@
 
 Python类型／语法、18项原生设置回归及生产workspace-cli＋workspace-ssh全目标严格Clippy通过。修复后五条真实PTY、11轮OSC10／11回复与像素核对、两个GUI及门户提供方退出均通过；五份最终输入快照逐字匹配最后一轮累积回复，控件零输入泄漏。原有五项界面外观矩阵也复验通过，另两个GUI退出。旧实现已在门户切深后复现新会话仍取纸白，截图和原始回复保留。锁定Tao 0.37.1的Window::theme优先返回创建时门户缓存，Linux修复在主线程注册GTK系统主题通知，由原启动／继承预览路径读取受管理的原子快照；未知时取浅色，旧会话继续冻结。首轮ST／BEL夹具错误单独保留。两组正式任务已接Linux CI，共用私有构建目录、结束统一清理；本机不代表远端CI结果。系统GNOME／KDE桌面、SSH／CLI、Profile／组固定覆盖及跨平台仍按原范围待验。证据归档至`target/probes/workspace-terminal-system-theme/accepted/1958cb60/`，已执行clean-dev清理11378个文件（9.3GiB），移除本任务临时目录；完整接受与失败证据保留。
 
+暖CLI系统策略扩展（Linux已验收）：同一五会话矩阵中，系统深浅两次新建由真实`pulse new-tab sh`发起；原窗口批准前零会话／零PTY工作者分配，批准后CLI实际成功返回，并分别采用午夜和纸白。每轮记录GUI／CLI来源，保留11轮OSC／像素、恢复继承、刷新、独立重开和五份精确最终输入检查。三条GUI与两条暖CLI会话、两个GUI和门户提供方全部退出。Python类型／语法、任务解析、应用及pulse生产构建通过；本批仅扩展夹具和任务，产品修复沿用签名基线`3264750`，未重复运行无变化的Rust单测。版本3接受材料归档至`target/probes/workspace-terminal-system-theme/accepted/c695c7ac/`，原GUI版本2证据独立保留；已执行clean-dev清理6770个文件（6.6GiB），移除本任务临时目录。冷CLI、SSH、固定作用域覆盖和其他平台仍未登记通过。
+
 ## 1GiB原输出流终点屏幕比较（Linux已验收）
 
 新增原页绑定的只读Marker与可见屏幕比较；19项终端绑定回归及App严格Clippy通过，覆盖原状态／输入不变、共享500ms额度、旧页拒绝及在途撤销。独立`workspace-load-state-probe`构建与专用前端资产提供真实Ctrl+Shift+F8触发；仅当前终端的可信按键可请求，绘制Marker后才比较，正常构建不注册两个验证命令。任务`mise run probe-workspace-load-state`先确认1GiB最终标记已绘制，再要求后端Equal和原生退出；已接Linux负载CI。

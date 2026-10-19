@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
                                 'No terminal palette, external monitor or cross-platform acceptance'])
     expected_sessions = 0
     if TERMINAL_THEME:
-        receipt.update(version=2, kind='native-system-terminal-theme-over-real-pty', limitations=['Isolated desktop portal, not GNOME/KDE or cross-platform', 'Local GUI only; SSH, CLI, fixed Profile/group overrides remain separate'])
+        receipt.update(version=3, kind='native-system-terminal-theme-over-real-pty', limitations=['Isolated desktop portal, not GNOME/KDE or cross-platform', 'Local GUI and warm CLI; SSH, cold CLI, fixed Profile/group overrides remain separate'])
     def current_app():
         assert app is not None, 'appearance.app_missing'
         return app
