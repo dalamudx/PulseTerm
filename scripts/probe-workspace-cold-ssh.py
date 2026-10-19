@@ -363,6 +363,8 @@ try:
         return next(line.removeprefix(prefix) for line in peer_log.read_text().splitlines() if line.startswith(prefix))
     host = descriptor('fixture.ssh_gui_host_id.')
     identity = descriptor('fixture.ssh_gui_identity_id.')
+    if scope_mode:
+        (directory / 'scope-scroll').mkdir(mode=0o700)
     if key_interactive_mode or route_key_interactive_mode:
         with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
             rows = db.execute("SELECT id FROM key_identities WHERE deleted=0 AND label='GUI_KEY_IDENTITY'").fetchall()

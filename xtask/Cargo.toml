@@ -7,7 +7,7 @@ license.workspace = true
 publish = false
 
 [features]
-ssh-target-probe = ["ssh-probe", "dep:uuid", "dep:zeroize", "dep:pkcs8", "dep:tokio-util", "pulse-app/ssh-use"]
+ssh-target-probe = ["ssh-probe", "tokio/fs", "dep:uuid", "dep:zeroize", "dep:pkcs8", "dep:tokio-util", "pulse-app/ssh-use"]
 ssh-private-key-probe = ["ssh-target-probe", "dep:zeroize"]
 cli-probe = ["dep:tempfile", "dep:uuid", "dep:zeroize"]
 ssh-probe = ["dep:russh", "dep:rand", "dep:tempfile", "dep:encoding_rs", "pulse-ssh/managed-store"]

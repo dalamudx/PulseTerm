@@ -5,6 +5,7 @@ import re
 import sqlite3
 import subprocess
 import time
+import tomllib
 
 
 def verify(s):
@@ -120,6 +121,113 @@ def verify(s):
         key('BackSpace', 'Delete', 'Return')
         wait(lambda: events(key_event) == before + 1, 'remote_bytes_' + encoding)
 
+    def asynchronous_scroll_settings(session, scroll_up, showing):
+        control = s['directory'] / 'scope-scroll'
+        config = s['root'] / 'config/dev.pulseterm.workspace-preview/settings.toml'
+        bell = '清除终端响铃提示'
+        checks = []
+        wait(lambda: events('fixture.ssh_scope_async_started') == 1, 'async_output_started')
+
+        def native_click(caption):
+            reveal(caption, 'bounds')
+            result = accessible(caption, 'bounds')
+            assert result.returncode == 0
+            left, top, width, height = map(int, result.stdout.split())
+            xdo('mousemove', str(left + width // 2), str(top + height // 2), 'click', '1')
+
+        def stays_reading(label):
+            until = time.monotonic() + 1.1
+            while time.monotonic() < until:
+                assert showing(), label
+                time.sleep(.03)
+
+        def emit(index, reading):
+            if accessible(bell).returncode == 0:
+                native_click(bell)
+                wait(lambda: accessible(bell).returncode != 0, 'previous_async_bell_cleared')
+            received = events('fixture.ssh_scope_input_received')
+            (control / ('emit-' + str(index))).touch()
+            wait(lambda: events('fixture.ssh_scope_async_sent.' + str(index)) == 1, 'async_output_sent')
+            wait(lambda: accessible(bell).returncode == 0, 'async_output_parsed')
+            if reading:
+                stays_reading('scroll.async_output_changed_reading_position')
+            else:
+                wait(lambda: not showing(), 'async_output_follows_latest')
+            assert events('fixture.ssh_scope_input_received') == received, 'scroll.async_control_leaked_input'
+
+        def change_settings(reset=False):
+            native_click('设置')
+            wait(lambda: accessible('搜索设置').returncode == 0, 'async_scroll_settings_open')
+            for field, caption, value in [('scroll_on_output', '新输出时回到底部', True),
+                                          ('scroll_on_input', '输入时回到底部', False)]:
+                fill('搜索设置', field)
+                reveal(caption, 'focus')
+                before = config.read_bytes() if config.exists() else b''
+                if not reset:
+                    key('space')
+                    assert (config.read_bytes() if config.exists() else b'') == before
+                native_click(caption + '恢复继承' if reset else '保存' + caption)
+                wait(lambda: (config.read_bytes() if config.exists() else b'') != before, 'async_scroll_persisted')
+                wait(lambda: accessible('已保存 · 重新加载终端后应用；当前会话未关闭').returncode == 0,
+                     'async_scroll_frontend_saved')
+                stored = tomllib.loads(config.read_text()).get('terminal', {})
+                assert field not in stored if reset else stored[field] is value
+            key('Escape')
+            wait(lambda: accessible('搜索设置').returncode != 0, 'async_scroll_settings_closed')
+
+        def input_char(char, reading):
+            received = events('fixture.ssh_scope_input_received')
+            xdo('mousemove', '--window', s['xid'], '650', '350', 'click', '1')
+            xdo('type', '--clearmodifiers', char)
+            wait(lambda: events('fixture.ssh_scope_input_received') > received, 'async_scroll_partial_input_received')
+            if reading:
+                stays_reading('scroll.disabled_input_moved_viewport')
+            else:
+                wait(lambda: not showing(), 'async_scroll_input_returns_latest')
+
+        def refresh():
+            before_auth = auth()
+            key('ctrl+shift+r')
+            time.sleep(.5)
+            wait(terminal_ready, 'async_scroll_refreshed_terminal')
+            assert auth() == before_auth == 5
+            assert sum(events('fixture.ssh_scope_term.' + term) for term in ('xterm-256color', 'xterm', 'vt100')) == 5
+
+        scroll_up()
+        emit(1, True)
+        checks.append('default_background_output_preserves_reading')
+        change_settings()
+        scroll_up()
+        input_char('p', False)
+        scroll_up()
+        emit(2, True)
+        checks.append('explicit_save_preserves_mounted_input_and_output_behavior')
+        refresh()
+        scroll_up()
+        input_char('n', True)
+        emit(3, False)
+        s['shot']('ssh-async-output-follow')
+        checks.append('same_ssh_session_refresh_applies_input_false_output_true')
+        change_settings(reset=True)
+        scroll_up()
+        input_char('q', True)
+        emit(4, False)
+        checks.append('reset_preserves_mounted_explicit_behavior')
+        refresh()
+        scroll_up()
+        emit(5, True)
+        before_echo = events('fixture.ssh_input_line_echoed')
+        input_char('r', False)
+        assert events('fixture.ssh_input_line_echoed') == before_echo
+        key('Return')
+        wait(lambda: events('fixture.ssh_input_line_echoed') == before_echo + 1, 'async_scroll_final_echo')
+        wait(lambda: events('fixture.ssh_scope_async_exited') == 1, 'async_output_task_exited')
+        assert events('fixture.ssh_scope_async_failed') == 0
+        checks.append('reset_then_refresh_restores_defaults_and_output_task_exits')
+        return {'checks': checks, 'backgroundBatches': 5, 'zeroInputDuringBackgroundOutput': True,
+                'partialInputEcho': 'GUI_SSH_ECHO:pnqr', 'sameSession': session,
+                'actualOutputTaskExit': True, 'limitations': ['Linux software rendering; no IME or cross-platform acceptance']}
+
     def scroll_interaction(session):
         returned = '回到最新输出'
         received = events('fixture.ssh_scope_input_received')
@@ -154,10 +262,11 @@ def verify(s):
         wait(lambda: events('fixture.ssh_input_line_echoed') == before_echo + 1, 'ssh_scroll_explicit_remote_echo')
         assert auth() == 5
         assert sum(events('fixture.ssh_scope_term.' + term) for term in ('xterm-256color', 'xterm', 'vt100')) == 5
+        async_checks = asynchronous_scroll_settings(session, scroll_up, showing)
         return {'mouseAndKeyboardReturnToLatest': True, 'controlsSendNoRemoteInput': True,
                 'explicitInputReturnsBeforeRemoteOutput': True, 'onlyOneExplicitLineEchoed': True,
                 'noReauthenticationOrPtyRequest': True, 'session': session,
-                'limitations': ['No asynchronous remote output-follow or explicit SSH scroll-setting override acceptance']}
+                'asynchronousSettings': async_checks}
 
     def history_search(session):
         focus(session)
@@ -198,6 +307,8 @@ def verify(s):
         click('查看当前窗格历史与查找')
         find(soft, '匹配历史')
         find('GUI_SSH_END', '匹配主屏')
+        ended_text = accessible('当前页历史文本', 'readonly-text')
+        assert ended_text.returncode == 0 and 'GUI_SSH_ECHO:pnqr' in ended_text.stdout, 'scroll.partial_input_changed_or_leaked'
         s['shot']('ssh-ended-history')
         key('Escape')
         assert auth() == 5, 'history.search_reauthenticated'
@@ -313,7 +424,7 @@ def verify(s):
     s['close_gui'](s['app'])
     wait(lambda: events('fixture.ssh_authenticated_stream_exited') == 5, 'all_peer_streams_exited')
     (evidence / (prefix + '-result.json')).write_text(json.dumps({
-        'version': 4, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
+        'version': 5, 'passed': True, 'scope': 'Linux production WebView, saved SSH password peer, cold and warm CLI',
         'global_direct_group_and_entrance_precedence': True,
         'clear_entrance_restores_group_and_clear_group_restores_global': True,
         'remote_raw_backspace_delete_and_osc10_foreground_verified': True,

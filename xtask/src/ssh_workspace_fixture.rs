@@ -10,6 +10,8 @@ mod key_fixture;
 mod password_fixture;
 #[path = "ssh_workspace_route_fixture.rs"]
 mod route_fixture;
+#[path = "ssh_workspace_scope_fixture.rs"]
+mod scope_fixture;
 struct GuiPeer {
     auth: AcceptSpy,
     pty: bool,
@@ -19,9 +21,12 @@ struct GuiPeer {
     interactive_round: Option<u8>,
     password_factor_complete: bool,
     key_factor_complete: bool,
+    scope_directory: Option<std::path::PathBuf>,
+    scope_output: Option<scope_fixture::Output>,
 }
 impl Drop for GuiPeer {
     fn drop(&mut self) {
+        self.scope_output.take();
         if std::env::var_os("PULSE_SSH_PASSWORD_MFA_POLICY").is_some() {
             eprintln!("fixture.ssh_password_joint_stream_exited");
         }
@@ -51,6 +56,8 @@ impl Server for GuiPeer {
             interactive_round: self.interactive_round.map(|_| 0),
             password_factor_complete: false,
             key_factor_complete: false,
+            scope_directory: self.scope_directory.clone(),
+            scope_output: None,
         }
     }
 }
@@ -282,6 +289,15 @@ impl server::Handler for GuiPeer {
                     }
                     session.data(channel, output.into_bytes())?;
                     eprintln!("fixture.ssh_scope_history_sent");
+                    if self.scope_output.is_none()
+                        && let Some(directory) = &self.scope_directory
+                    {
+                        self.scope_output = Some(scope_fixture::Output::start(
+                            session.handle(),
+                            channel,
+                            directory.clone(),
+                        ));
+                    }
                 } else if scope_probe && self.line == b"\x08\x7f" {
                     self.line.clear();
                     eprintln!("fixture.ssh_scope_keys.bs_del");
@@ -638,6 +654,9 @@ pub(crate) fn run() -> Result<()> {
                 .then_some(0),
                 password_factor_complete: false,
                 key_factor_complete: false,
+                scope_directory: std::env::var_os("PULSE_SSH_SCOPE_PROBE")
+                    .map(|_| directory.join("scope-scroll")),
+                scope_output: None,
             };
             eprintln!(
                 "fixture.ssh_gui_host_id.{}",

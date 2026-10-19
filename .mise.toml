@@ -1308,6 +1308,7 @@ fixture_dir=$(mktemp -d /data/temp/pulseterm-ssh-settings.XXXXXX)
 trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
+cargo test -p xtask --features ssh-target-probe --locked scope_fixture::tests
 pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
