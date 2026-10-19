@@ -113,6 +113,18 @@ pub(crate) fn directory_attributes(attributes: u32) -> DirectoryResult<()> {
     Ok(())
 }
 
+/// A file must remain ordinary, writable in intent and unaliased before bytes are read.
+pub(crate) fn file_attributes(attributes: u32, links: u32) -> DirectoryResult<()> {
+    if attributes & 0x451 != 0 || links != 1 {
+        return Err(Location);
+    }
+    Ok(())
+}
+
+pub(crate) fn file_budget(length: u64, limit: usize) -> bool {
+    limit <= 1024 * 1024 && length <= limit as u64
+}
+
 pub(crate) fn component(name: &[u16]) -> DirectoryResult<()> {
     if name.is_empty()
         || name.len() > 255

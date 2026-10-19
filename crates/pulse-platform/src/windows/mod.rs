@@ -5,8 +5,12 @@ use std::{
     os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
     path::{Component, Path, PathBuf, Prefix},
 };
+mod private_file;
 #[allow(unsafe_code)]
 mod sys;
+pub use private_file::{PrivateFile, PrivateFileError, PrivateFileResult};
+#[cfg(test)]
+mod private_file_tests;
 #[cfg(test)]
 mod tests;
 

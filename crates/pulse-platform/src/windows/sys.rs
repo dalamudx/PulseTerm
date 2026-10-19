@@ -21,8 +21,9 @@ use windows_sys::Win32::{
         TOKEN_USER, TokenUser,
     },
     Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, CreateDirectoryW, FILE_ID_INFO, FileIdInfo, GetDriveTypeW,
-        GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationByHandleW,
+        BY_HANDLE_FILE_INFORMATION, CreateDirectoryW, CreateFileW, FILE_DISPOSITION_INFO,
+        FILE_ID_INFO, FileDispositionInfo, FileIdInfo, GetDriveTypeW, GetFileInformationByHandle,
+        GetFileInformationByHandleEx, GetVolumeInformationByHandleW, SetFileInformationByHandle,
     },
     System::Threading::{GetCurrentProcess, OpenProcessToken},
 };
@@ -35,6 +36,9 @@ pub(super) struct Identity {
 pub(super) struct Facts {
     pub identity: Identity,
     pub attributes: u32,
+    pub links: u32,
+    pub length: u64,
+    pub last_write: u64,
     pub owner: Vec<u8>,
     pub acl: Option<Vec<u8>>,
     pub protected: bool,
@@ -225,6 +229,10 @@ pub(super) fn inspect(file: &File) -> DirectoryResult<Facts> {
             index: file_id.FileId.Identifier,
         },
         attributes: meta.dwFileAttributes,
+        links: meta.nNumberOfLinks,
+        length: (u64::from(meta.nFileSizeHigh) << 32) | u64::from(meta.nFileSizeLow),
+        last_write: (u64::from(meta.ftLastWriteTime.dwHighDateTime) << 32)
+            | u64::from(meta.ftLastWriteTime.dwLowDateTime),
         owner,
         acl,
         protected: control & 0x1000 != 0,
@@ -244,7 +252,7 @@ fn sid_text(sid: &[u8]) -> DirectoryResult<String> {
     Ok(s)
 }
 
-fn create_sddl(path: &Path, sddl: &str) -> DirectoryResult<()> {
+fn descriptor(sddl: &str) -> DirectoryResult<Local> {
     let text: Vec<u16> = sddl.encode_utf16().chain([0]).collect();
     let mut raw = ptr::null_mut();
     // SAFETY: text is terminated UTF-16; raw receives one LocalAlloc-owned descriptor on success.
@@ -260,7 +268,11 @@ fn create_sddl(path: &Path, sddl: &str) -> DirectoryResult<()> {
     {
         return Err(Location);
     }
-    let sd = Local(raw);
+    Ok(Local(raw))
+}
+
+fn create_sddl(path: &Path, sddl: &str) -> DirectoryResult<()> {
+    let sd = descriptor(sddl)?;
     let attrs = SECURITY_ATTRIBUTES {
         nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
         lpSecurityDescriptor: sd.0,
@@ -292,4 +304,85 @@ pub(super) fn create_broad_fixture(path: &Path, inherit_only: bool) -> Directory
         path,
         &format!("O:{user}D:P(A;OICI;FA;;;{user})(A;{flags};GR;;;WD)"),
     )
+}
+
+fn regular_with_sddl(path: &Path, sddl: Option<&str>) -> std::io::Result<File> {
+    let sd = sddl
+        .map(descriptor)
+        .transpose()
+        .map_err(|_| std::io::Error::from_raw_os_error(5))?;
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd.as_ref().map_or(ptr::null_mut(), |d| d.0),
+        bInheritHandle: 0,
+    };
+    let path: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let create = sd.is_some();
+    // GENERIC_READ | GENERIC_WRITE | READ_CONTROL | DELETE, no sharing, CREATE_NEW.
+    // Existing readers use GENERIC_READ | READ_CONTROL, FILE_SHARE_READ and OPEN_EXISTING.
+    let (access, share, disposition) = if create {
+        (0xc0030000, 0, 1)
+    } else {
+        (0x80020000, 1, 3)
+    };
+    // SAFETY: Path is a validated terminated basename under a pinned directory; attributes borrow a live owned descriptor.
+    // CREATE_NEW never truncates; existing opens omit write/delete sharing and never follow a final reparse point.
+    let raw = unsafe {
+        CreateFileW(
+            path.as_ptr(),
+            access,
+            share,
+            if create { &attrs } else { ptr::null() },
+            disposition,
+            0x00200080,
+            ptr::null_mut(),
+        )
+    };
+    if raw == windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: Successful CreateFileW transferred one owned, non-inheritable file handle.
+    Ok(unsafe { File::from_raw_handle(raw) })
+}
+
+pub(super) fn open_regular(path: &Path, create_user: Option<&[u8]>) -> std::io::Result<File> {
+    let sddl = create_user
+        .map(|user| {
+            let user = sid_text(user)?;
+            Ok::<_, crate::DirectoryError>(format!(
+                "O:{user}D:P(A;;FA;;;{user})(A;;FA;;;SY)(A;;FA;;;BA)"
+            ))
+        })
+        .transpose()
+        .map_err(|_| std::io::Error::from_raw_os_error(5))?;
+    regular_with_sddl(path, sddl.as_deref())
+}
+
+pub(super) fn discard_file(file: &File) -> std::io::Result<()> {
+    let info = FILE_DISPOSITION_INFO { DeleteFile: true };
+    // SAFETY: The creator owns DELETE access and exclusive sharing; the sized native structure is live for this synchronous call.
+    // This marks only that exact file for deletion on handle close, never a later replacement at its old path.
+    if unsafe {
+        SetFileInformationByHandle(
+            file.as_raw_handle(),
+            FileDispositionInfo,
+            ptr::from_ref(&info).cast(),
+            size_of::<FILE_DISPOSITION_INFO>() as u32,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(super) fn create_broad_file_fixture(path: &Path) -> DirectoryResult<()> {
+    let user = sid_text(&self::user()?)?;
+    regular_with_sddl(
+        path,
+        Some(&format!("O:{user}D:P(A;;FA;;;{user})(A;;GR;;;WD)")),
+    )
+    .map_err(|_| Location)?;
+    Ok(())
 }

@@ -151,3 +151,24 @@ fn foreign_inherit_only_grants_cannot_expose_future_private_children() {
         assert!(admit_acl(&u, &u, Some(&a), false, false).is_ok());
     }
 }
+
+#[test]
+fn file_aliases_readonly_devices_and_directories_reject() {
+    for attributes in [1, 0x10, 0x40, 0x400, 0x410] {
+        assert_eq!(file_attributes(attributes, 1), Err(Location));
+    }
+    for links in [0, 2, u32::MAX] {
+        assert_eq!(file_attributes(0x80, links), Err(Location));
+    }
+    assert!(file_attributes(0x80, 1).is_ok());
+    assert!(file_attributes(0x180, 1).is_ok());
+}
+#[test]
+fn file_budget_is_bounded_even_for_empty_or_large_inputs() {
+    assert!(file_budget(0, 0));
+    assert!(file_budget(65536, 65536));
+    assert!(!file_budget(65537, 65536));
+    assert!(!file_budget(u64::MAX, 65536));
+    assert!(!file_budget(0, usize::MAX));
+    assert!(!file_budget(0, 1024 * 1024 + 1));
+}
