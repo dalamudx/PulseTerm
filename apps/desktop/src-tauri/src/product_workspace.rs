@@ -70,6 +70,9 @@ mod ssh_trust;
 mod startup_diagnostics;
 #[path = "product_terminal.rs"]
 mod terminal;
+#[cfg(target_os = "linux")]
+#[path = "product_terminal_ime.rs"]
+mod terminal_ime;
 #[path = "product_vault.rs"]
 mod vault;
 use startup_diagnostics::{Stage as StartupStage, record as record_startup};
@@ -687,6 +690,8 @@ pub fn run() {
                 }
             });
             let state = app.state::<Workspace>();
+            #[cfg(target_os = "linux")]
+            terminal_ime::install(&window)?;
             visibility::install(&window, &state)?;
             record_startup(StartupStage::VisibilityInstalled);
             state

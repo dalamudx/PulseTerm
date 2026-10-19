@@ -45,7 +45,7 @@ def main():
     fixture = Path(os.environ['PULSE_IME_FIXTURE'])
     OUT.mkdir(parents=True, exist_ok=True)
     result = OUT / 'result.json'
-    report: dict[str, Any] = dict(version=1, passed=False, scope='Linux production WebView, real IBus/libpinyin via XTest',
+    report: dict[str, Any] = dict(version=2, passed=False, scope='Linux production WebView, real IBus/libpinyin via XTest',
                   limitations=['Isolated Xvfb software rendering, not a physical desktop',
                                'Pinyin only; other CJK engines, candidate DPI and other platforms remain open'])
     result.write_text(json.dumps(report, indent=2) + '\n')
@@ -136,6 +136,20 @@ def main():
                 before = panels()
                 run('xdotool', 'type', '--clearmodifiers', '--delay', '100', 'zhongwen')
                 visible = startup.wait(lambda: panels() - before, 'candidate_' + tag, app)
+                bounds = accessible('Terminal input', 'bounds')
+                report.setdefault('candidateGeometry', []).append(dict(
+                    tag=tag, inputBounds=dict(exitCode=bounds.returncode, output=bounds.stdout.strip()),
+                    appWindow=run('xdotool', 'getwindowgeometry', '--shell', xid).stdout.strip(),
+                    candidateWindows=[run('xdotool', 'getwindowgeometry', '--shell', window).stdout.strip()
+                                      for window in sorted(visible)]))
+                assert bounds.returncode == 0, 'ime.input_bounds_unavailable'
+                bx, by, bw, bh = map(int, bounds.stdout.split())
+                for geometry in report['candidateGeometry'][-1]['candidateWindows']:
+                    values = dict(line.split('=', 1) for line in geometry.splitlines())
+                    gx, gy = int(values['X']), int(values['Y'])
+                    assert bx - 16 <= gx <= bx + bw + 16, 'ime.candidate_not_near_input_x'
+                    assert abs(gy - (by + bh)) <= max(8, bh), 'ime.candidate_not_near_input_y'
+                report['candidateGeometry'][-1]['nearInput'] = True
                 unchanged(expected)
                 run('import', '-window', 'root', OUT / (tag + '-candidate.png'))
                 report.setdefault('candidateWindows', []).append(sorted(visible))
@@ -143,6 +157,14 @@ def main():
             run('xdotool', 'key', '--clearmodifiers', 'Escape')
             unchanged(b'')
             startup.wait(lambda: not panels(), 'cancel_candidate_hidden', app)
+            def popup_hidden():
+                return all('Map State: IsViewable' not in run('xwininfo', '-id', window, check=False).stdout
+                           for window in report['candidateWindows'][-1])
+            if os.environ.get('PULSE_IME_REQUIRE_HIDDEN_POPUP') == '1':
+                startup.wait(popup_hidden, 'cancel_popup_hidden', app)
+            report['cancelCandidateWindowHidden'] = popup_hidden()
+            if not report['cancelCandidateWindowHidden']:
+                report['limitations'].append('Candidate arrow shell remains after Escape; also reproduced in independent GTK entry. Strict popup gate remains open.')
             run('import', '-window', 'root', OUT / 'cancelled.png')
             report['candidateEscapeZeroInput'] = True
             candidate('space', b'')
@@ -152,6 +174,7 @@ def main():
             unchanged(expected)
             startup.wait(lambda: not panels(), 'space_candidate_hidden', app)
             report['spaceCommitsExactlyOnce'] = True
+            run('xdotool', 'windowmove', xid, '300', '200')
             candidate('digit', expected)
             run('xdotool', 'key', '--clearmodifiers', '1')
             expected = '中文中文'.encode()
@@ -213,8 +236,13 @@ def main():
                     os.kill(pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-        result.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
-        assert all(startup.identity(pid) != token for pid, token in owned.items()), 'ime.cleanup_failed'
+        try:
+            startup.wait(lambda: all(startup.identity(pid) != token for pid, token in owned.items()), 'ime_cleanup')
+        except Exception as error:
+            report['cleanupFailure'] = str(error)
+            raise
+        finally:
+            result.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps(report, ensure_ascii=False))
 
 

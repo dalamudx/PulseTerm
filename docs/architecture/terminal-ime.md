@@ -32,4 +32,12 @@
 
 CI 安装 IBus／ibus-gtk3／libpinyin 运行依赖；本机通过 `PULSE_IME_PACKAGE_ROOT` 指定 `/data/temp` 内解压包，使用 bubblewrap 只读叠加 `/usr`，配置、词库学习数据和临时 socket 写入私有目录。两种路径使用同一正式场景。普通生产构建已通过候选零输入、取消、两种选词各单次提交、刷新零重复和精确 `中文中文\r`，GUI／IBus 退出码为 0，原生子进程回收。完整 1543 项前端回归、类型／双语／格式及 Python 检查通过。最终证据见 `target/probes/workspace-ime/accepted/f12d77d0/`。
 
-候选正文采用 AT-SPI 的实际 SHOWING 状态判断；IBus 会复用候选窗口，取消后也可能仅留下翻页箭头，窗口 ID 差集或可见窗口数量不能替代正文判定。本批截图仍显示候选框偏到左上角和箭头空壳残留，尚未修复或验收定位；真实桌面、其他中日韩引擎、DPI／跨屏、辅助技术和其他平台继续开放。
+## Linux IBus 原生预编辑
+
+锁定 wry 0.57.0 会为兼容 Fcitx 关闭 WebKit 预编辑。在已明确选择 IBus 的环境，该选择令候选停在原点：GTK／IBus 客户端的光标坐标正确，候选面板仍向候选窗口请求 `(0,0)`。普通 GTK 输入框启用预编辑时能正确定位。
+
+生产工作区首窗和后续窗口均在 wry 完成配置后，通过 `with_webview` 在 GTK 主线程设置现有输入上下文。非空 `GTK_IM_MODULE` 优先，仅精确值 `ibus` 启用预编辑；没有非空覆盖时才读取 GTK 的输入模块选择。Fcitx、未知或无效编码模块均保持原设置，其他平台不编译此适配。它不替换输入上下文，不修改输入目的／提示，不读取或重发文本。未来 wry 改变该行为时，应重新核对本适配，避免保留过期兼容。
+
+正式位置／字节矩阵已通过三个候选、移动窗口后的坐标、精确 `中文中文\r`、刷新零重复和实际进程退出。四项策略单测覆盖环境优先级、其他模块、GTK 后备和无效编码。原始证据见 `target/probes/workspace-ime/accepted/d9780bb5/`。
+
+候选正文采用 AT-SPI 的实际 SHOWING 判断；窗口可见性另行记录。取消后的翻页箭头空壳在独立 GTK 也复现，仍未解决。`probe-workspace-ime` 成功只代表位置／字节合同，收据保留 `cancelCandidateWindowHidden=false`；`probe-workspace-ime-popup` 强制要求窗口隐藏并继续失败。真实桌面、多屏／DPI、其他引擎、Fcitx 原生复验和其他平台不在本次通过范围。

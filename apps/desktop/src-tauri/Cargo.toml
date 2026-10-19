@@ -18,7 +18,7 @@ settings-probe = ["desktop", "dep:pulse-store", "dep:tempfile"]
 cli-window-probe = ["desktop", "dep:tempfile", "dep:zeroize", "tokio/io-util", "tokio/process"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:uuid", "dep:specta", "dep:tauri-specta", "dep:specta-typescript", "dep:pulse-app", "dep:pulse-core", "dep:pulse-term", "dep:pulse-pty"]
 # A distinct, native-only workspace entry. No validation command table is registered.
-workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep:gtk", "dep:tokio-util", "dep:zeroize"]
+workspace = ["desktop", "dep:pulse-store", "dep:pulse-cap", "dep:schemars", "dep:gtk", "dep:webkit2gtk", "dep:tokio-util", "dep:zeroize"]
 # Fixed-code, bounded primary-window traces for explicit Linux diagnosis only.
 workspace-startup-diagnostics = ["workspace-cli"]
 # Delayed display receipts for Linux native acceptance only; never production.
@@ -76,6 +76,7 @@ specta-typescript = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "=0.18.2", optional = true }
+webkit2gtk = { version = "=2.0.2", features = ["v2_28"], optional = true }
 tauri-plugin-single-instance = { workspace = true, optional = true }
 zbus = { workspace = true, optional = true }
 rustix = { workspace = true, optional = true }

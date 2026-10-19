@@ -1328,6 +1328,7 @@ else
 fi
 pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib --features workspace-cli,workspace-ssh,tauri/custom-protocol --locked terminal_ime::tests
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gobject-2.0)
 export PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
@@ -1338,6 +1339,11 @@ if [ -n "${PULSE_IME_PACKAGE_ROOT:-}" ]; then
 fi
 timeout --kill-after=5s 180s "$@"
 """
+
+[tasks.probe-workspace-ime-popup]
+description = "Require full IBus candidate popup hide after Escape; known failure in isolated IBus 1.5.32"
+env = { PULSE_IME_REQUIRE_HIDDEN_POPUP = "1" }
+run = "mise run probe-workspace-ime"
 
 [tasks.probe-workspace-ssh-settings]
 description = "Verify SSH system palettes, fixed group/entry precedence, TERM/keys, scroll settings, Unicode/EOF search and physical exit"

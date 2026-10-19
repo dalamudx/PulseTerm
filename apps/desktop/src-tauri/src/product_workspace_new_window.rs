@@ -78,6 +78,12 @@ pub(super) fn create(app: &tauri::AppHandle, origin: &Workspace) -> Result<Strin
             let _ = closing.retire_window();
         }
     });
+    #[cfg(target_os = "linux")]
+    if terminal_ime::install(&window).is_err() {
+        let _ = state.retire_window();
+        let _ = window.close();
+        return Err("workspace.window_unconfirmed");
+    }
     if visibility::install(&window, &state).is_err() {
         let _ = state.retire_window();
         let _ = window.close();

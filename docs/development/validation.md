@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Linux IBus 候选定位修复（位置／字节通过，弹窗隐藏门禁仍失败）
+
+`mise run probe-workspace-ime` 的版本 2 矩阵通过普通生产 WebView、真实 IBus 1.5.32／libpinyin 和真实 PTY。三轮候选位置均靠近真实输入框；窗口移动、首次提交后光标前移时，候选从 `(399,317)` 跟随到 `(574,400)`。候选及 Escape 取消零输入，空格／数字选词各提交一次，刷新不重发，最终快照仍精确为 `中文中文\r`。GUI、PTY、WebView、IBus 及其子进程实际退出，GUI／IBus 退出码均为 0。
+
+根因是锁定 wry 0.57.0 为兼容 Fcitx 统一关闭 Linux WebView 预编辑。GTK／IBus 客户端已收到正确光标矩形，但该路径的面板预编辑将候选移至原点。修复仅在 `GTK_IM_MODULE=ibus`，或无非空环境覆盖且 GTK 桌面模块为 `ibus` 时，在 GTK 主线程恢复 WebKit 预编辑；首窗及后续窗口都接线。Fcitx、未知／非 UTF-8 模块保持原设置，不修改输入目的／提示、不读取文本或补发输入。新增直接依赖只引用锁文件已有 WebKit2GTK 2.0.2，包版本未升级。四项模块选择单测、生产全目标严格 Clippy、Python 类型／语法、任务解析与生产构建通过；本批未修改前端，既有 1543 项前端结果沿用前批证据。
+
+取消后候选正文消失，翻页箭头空壳仍可见。独立原生 GTK 输入框也复现同一残留，取消未提交文本，GTK／IBus 正常退出。正式严格入口 `mise run probe-workspace-ime-popup` 仍以 `startup.timeout.cancel_popup_hidden` 失败，失败路径也已回收。默认位置／字节任务明确记录 `cancelCandidateWindowHidden=false`，其成功不代表完整弹窗生命周期或 TERM-04 完成。
+
+位置／字节接受证据与源码位于 `target/probes/workspace-ime/accepted/d9780bb5/`；跨层取证、GTK 对照、严格失败证据在 `target/probes/workspace-ime/geometry-diagnostics/`，早期失败保留于 `attempts/`。正式 CI 的既有 IME 任务现包含候选位置断言与四项策略单测；严格弹窗门禁为已知未通过项。原生验证限于 Linux Xvfb／X11 单一受控比例，真实桌面、DPI／跨屏、Fcitx 实测、其他中日韩引擎及平台仍开放。已在全部进程退出后执行有范围 `mise run clean-dev`，清除12.4GiB开发产物，并删除私有依赖、取证注入和本任务临时目录；接受材料、独立GTK对照和严格失败证据保留。
+
 ## 真实系统 IME 与未配对提交修复（Linux 拼音字节链已验收）
 
 正式入口 `mise run probe-workspace-ime` 已通过真实 IBus 1.5.32／libpinyin、GTK 输入上下文、生产 WebView 和真实 PTY 验收。XTest 输入拼音，原生 AT-SPI 读取候选正文；不派发 DOM 组合事件，不直接注入中文。候选阶段及 Escape 取消零 PTY 输入；空格、数字选词各提交一次，刷新不重复发送，结束后普通 Return 恢复。最终输入快照精确为 `e4b8ade69687e4b8ade696870d`（`中文中文\r`），GUI 与 IBus 实际退出码均为 0，PTY、WebView 和输入法子进程已回收。
