@@ -8,7 +8,9 @@
 
 类型／格式／双语、50项相关前端回归、19项终端绑定回归、2项原生元数据单测及App／生产／验证全目标严格Clippy均通过。普通前端构建已核对不含验证命令。正式未清屏轮次1GiB于264.43s完成，原92×29尾部网格在revision 208893、source／UTF-8 1091089938字节上Equal，摘要961c1ac856c7a580；比较前只有一次捕获，无刷新／重建。Ctrl+C到cat物理退出10.22ms，原生夹具最终仅收到IFQ并先于窗口退出，GUI实际退出0、进程树排空。首轮177.26ms失败及清屏后的弱比较证据保留，不据一次成功关闭延迟稳定性问题。
 
-接受证据归档到`target/probes/workspace-load/accepted/842f80a8/`，原始失败保存在`target/probes/workspace-load/attempts/e62c8e84/`；二进制暂保留用于后续中断时延诊断，验证链结束后统一清理。可见摘要只覆盖网格、样式、光标及主／备用屏，不证明完整隐藏解析器或历史一致性。合同见`docs/architecture/terminal-load-state-verification.md`。
+追加同一release二进制的固定20次中断诊断：每次真实cat输出150ms后发送一次Ctrl+C，20个不同cat均实际SIGINT退出，输入注入耗时中位7.10ms，信号到退出中位0.32ms；整体退出中位18.81ms、p95 31.19ms、最大32.54ms，零次超过100ms。该轮GUI和原生进程正常退出，原始分段数据与实际诊断脚本保存在`target/probes/workspace-load/interrupt-follow-up-842f80a8/`。该诊断没有再次完成1GiB，不能解释首轮177.26ms，亦不构成跨环境稳定性结论。
+
+接受证据归档到`target/probes/workspace-load/accepted/842f80a8/`，原始失败保存在`target/probes/workspace-load/attempts/e62c8e84/`；验证链结束后已执行有范围`mise run clean-dev`移除7.8GiB开发产物，并删除任务私有临时目录，保留全部收据、源码与失败记录。可见摘要只覆盖网格、样式、光标及主／备用屏，不证明完整隐藏解析器或历史一致性。合同见`docs/architecture/terminal-load-state-verification.md`。
 
 ## SSH异步输出与显式滚动开关
 
