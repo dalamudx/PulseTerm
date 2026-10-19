@@ -142,6 +142,7 @@ mise run probe-workspace-route-agent-interactive # 三跳密码/Agent+MFA转发/
 mise run probe-workspace-password-interactive # 保存/临时密码+MFA：首次指纹独立核对、取消零写、新主机保存、刷新/独立重连、16连接/两窗退出
 mise run probe-workspace-settings-contract # 全局保存重开、刷新按键字节、GUI/CLI新旧TERM/前景色/历史冻结，主/备用/结束查找、真实PTY滚动/响铃/回放隔离、链接/文件检查与GTK剪贴板回读、隔离GIO/Chrome本机页面交接与三PTY退出（需已有Chrome/Chromium）
 mise run probe-workspace-history-stop # 独立真实100000行PTY：双向停止保页、重查、自然EOF只读及零输入／物理退出；观测延迟含AT-SPI开销
+mise run probe-workspace-scroll-settings # 显式输入/输出滚动、保存旧视图不变、同PTY刷新、CLI新会话继承、恢复默认与精确字节/两PTY退出
 mise run probe-workspace-dpi # 顺序1x/2x受控GTK缩放：实际物理窗口、四组逻辑PTY网格、字体保存/刷新/重开及六会话退出；实际多屏另验
 mise run probe-workspace-ssh-settings # SSH全局/直属组/入口的远端PTY TERM、按键与OSC10前景色、清除覆盖恢复继承、旧会话冻结/刷新、SSH软换行/自然结束查找及五连接退出
 mise run probe-workspace-startup # release新进程参考：Profile可见、选择到可输入、真实首条PTY输入、六次退出；Linux数据不判定Mac/Windows启动目标

@@ -50,6 +50,7 @@ while :; do
     ALPHA_HISTORY) n=0;while [ "$n" -lt 1100 ];do printf 'alpha-history-%04d\r\n' "$n";n=$((n+1));done;;
     ALPHA_STOP_HISTORY) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/history-stop.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
     ALPHA_INTERACTION) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/terminal-interaction.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
+    ALPHA_SCROLL) /usr/bin/python3 "$PULSETERM_SETTINGS_FIXTURE/scroll-settings.py" worker "$PULSETERM_SETTINGS_FIXTURE";;
     ALPHA_ALT) printf '\033[?1049hALPHA-ALT-needle\r\n';;
     ALPHA_PRIMARY) printf '\033[?1049l';;
     ALPHA_FINISH) printf 'ALPHA-ENDED-needle\r\n';exit 0;;
@@ -58,6 +59,9 @@ while :; do
 done
 SHELL
 chmod 700 "$fixture/bin/sh"
+if [ "${PULSE_SCROLL_SETTINGS:-0}" = 1 ]; then
+  cp scripts/probe-workspace-scroll-settings.py "$fixture/scroll-settings.py"
+fi
 if [ "${PULSE_HISTORY_STOP:-0}" = 1 ]; then
   cp scripts/probe-workspace-history-stop.py "$fixture/history-stop.py"
 fi
@@ -132,6 +136,14 @@ if [ "${PULSE_HISTORY_STOP:-0}" = 1 ]; then
   python3 scripts/probe-workspace-history-stop.py finalize "$fixture"
   exit 0
 fi
+if [ "${PULSE_SCROLL_SETTINGS:-0}" = 1 ]; then
+  python3 scripts/probe-workspace-scroll-settings.py "$fixture" "$app" "$xid" "$file" "$log"
+  timeout 2s xdotool key --clearmodifiers alt+F4
+  await_count exited 1; wait "$app"
+  app=""
+  python3 scripts/probe-workspace-scroll-settings.py finalize "$fixture"
+  exit 0
+fi
 if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
   python3 scripts/probe-workspace-settings-contract.py "$fixture" "$app" "$xid" "$file" "$log"
   timeout 2s xdotool key --clearmodifiers alt+F4
@@ -139,6 +151,7 @@ if [ "${PULSE_ALPHA_SETTINGS:-0}" = 1 ]; then
   python3 scripts/probe-workspace-settings-contract.py finalize "$fixture"
   exit 0
 fi
+
 settings_open
 await_count settings_read_confirmed 2
 sleep 0.2

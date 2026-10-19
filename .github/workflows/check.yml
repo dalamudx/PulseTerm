@@ -220,6 +220,9 @@ jobs:
       - name: Verify settings, PTY interaction, links, GTK clipboard, GIO browser handoff and native exit
         if: runner.os == 'Linux'
         run: mise run probe-workspace-settings-contract
+      - name: Verify explicit scroll settings, same-PTY refresh, CLI inheritance and native exit
+        if: runner.os == 'Linux'
+        run: mise run probe-workspace-scroll-settings
       - name: Verify real 100000-row history stop, fresh search, EOF and native exit
         if: runner.os == 'Linux'
         run: mise run probe-workspace-history-stop

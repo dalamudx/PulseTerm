@@ -22,6 +22,12 @@ Shell Profile 表单提供“继承全局设置”选择：`appearance.macOption
 
 按键值随既有外观快照保存、恢复并合并到对应本地会话的 Surface；Profile 配色在 PTY 创建前覆盖本次启动基色，经后端引导和捕获恢复显示，不作为 xterm 显示偏好自行应用。Profile 修改不在线改变已创建会话的快照；全局设置也不在线改变已挂载的 Surface。分组／SSH入口的[统一编辑与新会话应用](terminal-scoped-behavior.md)已接通配色与四项行为的继承、单次保存和刷新恢复；祖先组不额外叠加，原生及跨平台效果仍需验收。
 
+## 输入／输出滚动与视图应用
+
+全局 `scroll_on_input` 默认true、`scroll_on_output` 默认false。明确保存只更新设置，已挂载Surface继续使用创建时的显示偏好；刷新重建同一会话视图或新建GUI／CLI视图才采用新值。这些是显示偏好，不与TERM、配色、历史容量的会话启动冻结合同混同。恢复继承只移除对应覆盖，随后新建／重建视图采用默认值。
+
+正式 `mise run probe-workspace-scroll-settings` 复用设置夹具和CLI批准，已通过Linux生产WebView／两PTY的五段检查：默认行为、明确反转、旧视图保持、同PTY刷新、CLI新视图继承和逐项恢复继承。输出先等同包BEL解析，再跨越原一秒绘制期限观察保位；最终精确输入分别为abc／xyz，两个实际PTY进程及GUI回收，原生drain／exit完成。收据、原始输入快照与截图见 `target/probes/workspace-scroll-settings/accepted/b2c3c2ac/`。本批不扩大到SSH、系统IME、硬件多屏或跨平台。
+
 ## 投影与检查
 
 最新设置投影为 v11，要求 `delete_send` 与 `term_type` 的封闭值和来源；v1～v10 保持原有字段契约，缺少新增项时采用 `csi`／`xterm-256color`。原页保存、恢复继承、冲突检查和过期票据拒绝沿用现有边界。
