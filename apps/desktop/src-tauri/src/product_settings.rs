@@ -5,11 +5,54 @@ mod shared_io;
 #[cfg(all(test, unix))]
 #[path = "product_settings_tests.rs"]
 mod tests;
-/// Read the native window's system appearance; an unavailable query uses light.
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "linux")]
+struct SystemAppearance(Arc<AtomicBool>);
+
+// Tao 0.37 caches the initial portal theme in Window::theme; GTK receives later signals.
+#[cfg(target_os = "linux")]
+pub(super) fn observe_system_appearance(app: &tauri::App) -> Result<()> {
+    use gtk::prelude::*;
+    if !gtk::is_initialized_main_thread() {
+        return Err("workspace.settings_unavailable");
+    }
+    let current = Arc::new(AtomicBool::new(false));
+    if !app.manage(SystemAppearance(current.clone())) {
+        return Err("workspace.settings_unavailable");
+    }
+    if let Some(settings) = gtk::Settings::default() {
+        current.store(
+            settings.is_gtk_application_prefer_dark_theme(),
+            Ordering::Release,
+        );
+        let current = Arc::downgrade(&current);
+        settings.connect_gtk_application_prefer_dark_theme_notify(move |settings| {
+            if let Some(current) = current.upgrade() {
+                current.store(
+                    settings.is_gtk_application_prefer_dark_theme(),
+                    Ordering::Release,
+                );
+            }
+        });
+    }
+    Ok(())
+}
+
+/// Read the native system appearance; an unavailable query uses light.
 pub(super) fn system_dark(window: &tauri::WebviewWindow) -> bool {
-    window
-        .theme()
-        .is_ok_and(|theme| theme == tauri::Theme::Dark)
+    #[cfg(target_os = "linux")]
+    {
+        window
+            .try_state::<SystemAppearance>()
+            .is_some_and(|current| current.0.load(Ordering::Acquire))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        window
+            .theme()
+            .is_ok_and(|theme| theme == tauri::Theme::Dark)
+    }
 }
 use pulse_app::registry::PageLaunchScope;
 use pulse_store::{

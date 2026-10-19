@@ -1259,24 +1259,33 @@ timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-ses
 description = "Measure the optimized Linux production WebView with the same process-tree scenarios"
 run = "PULSE_PERFORMANCE_PROFILE=release PULSE_PERFORMANCE_OUTPUT=release.json mise run probe-workspace-performance"
 
+[tasks.probe-workspace-terminal-system-theme]
+description = "Verify native system terminal palette selection, frozen sessions, reset and independent reopen"
+env = { PULSE_TERMINAL_SYSTEM_THEME = "1" }
+run = "mise run probe-workspace-system-appearance"
+
 [tasks.probe-workspace-system-appearance]
 description = "Verify native desktop Settings portal signals, saved UI modes, refresh, independent reopen and exit"
 env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1", PYTHONDONTWRITEBYTECODE = "1" }
 run = """
 set -eu
-mkdir -p /data/temp target/probes/workspace-system-appearance
+appearance_output=target/probes/workspace-system-appearance
+if [ "${PULSE_TERMINAL_SYSTEM_THEME:-0}" = 1 ]; then
+  appearance_output=target/probes/workspace-terminal-system-theme
+fi
+mkdir -p /data/temp "$appearance_output"
 fixture_dir=$(mktemp -d /data/temp/pulseterm-system-appearance.XXXXXX)
 trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
 cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-system-appearance.c -o "$fixture_dir/system-appearance" $(pkg-config --cflags --libs gio-unix-2.0)
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs atspi-2 gobject-2.0)
-pnpm --filter ui exec vite build --outDir "$fixture_dir/ui-dist"
+pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
 export PULSE_APPEARANCE_HELPER="$fixture_dir/system-appearance" PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 export PULSE_WORKSPACE_EXECUTABLE="$CARGO_TARGET_DIR/debug/pulseterm-workspace"
-timeout --kill-after=5s 240s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-system-appearance/wm.log python3 scripts/probe-workspace-system-appearance.py
+timeout --kill-after=5s 240s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh "$appearance_output/wm.log" python3 scripts/probe-workspace-system-appearance.py
 """
 
 [tasks.probe-workspace-settings-contract]

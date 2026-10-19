@@ -658,6 +658,8 @@ pub fn run() {
             #[cfg(unix)]
             let _admitted_data = app_data::prepare(&app.path().app_data_dir()?)?;
             record_startup(StartupStage::DataPrepared);
+            #[cfg(target_os = "linux")]
+            settings::observe_system_appearance(app)?;
             record_startup(StartupStage::WindowBuildStarted);
             let window =
                 WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("workspace.html".into()))

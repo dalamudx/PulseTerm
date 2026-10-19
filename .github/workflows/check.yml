@@ -166,9 +166,15 @@ jobs:
       - name: Test native workspace source and nonce authorization
         if: runner.os == 'Linux'
         run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked
-      - name: Verify native Settings portal appearance, explicit modes, refresh and independent reopen
+      - name: Verify native UI appearance and frozen system terminal palettes
         if: runner.os == 'Linux'
-        run: mise run probe-workspace-system-appearance
+        run: |
+          set -eu
+          appearance_tmp=$(mktemp -d /data/temp/pulseterm-appearance-ci.XXXXXX)
+          export TMPDIR="$appearance_tmp" TMP="$appearance_tmp" TEMP="$appearance_tmp" CARGO_TARGET_DIR="$appearance_tmp/target"
+          trap 'appearance_status=$?; mise run clean-dev || appearance_status=$?; rm -rf -- "$appearance_tmp"; exit "$appearance_status"' EXIT
+          mise run probe-workspace-system-appearance
+          mise run probe-workspace-terminal-system-theme
       - name: Test original-page fingerprint approval tickets and native cancellation drain
         if: runner.os == 'Linux'
         run: mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked

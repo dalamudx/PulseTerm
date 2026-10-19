@@ -13,7 +13,8 @@ import tempfile
 import time
 import tomllib
 
-OUTPUT = Path('target/probes/workspace-system-appearance')
+TERMINAL_THEME = os.environ.get("PULSE_TERMINAL_SYSTEM_THEME") == "1"
+OUTPUT = Path('target/probes/workspace-terminal-system-theme' if TERMINAL_THEME else 'target/probes/workspace-system-appearance')
 OUTPUT.mkdir(parents=True, exist_ok=True)
 checks = []
 
@@ -47,6 +48,9 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
     shell_dir.mkdir(mode=0o700)
     shell = shell_dir / 'sh'
     shell.write_text('#!/bin/sh\nexit 0\n')
+    if TERMINAL_THEME:
+        shell.write_text('#!/bin/sh\nexec /usr/bin/python3 "$PULSE_TERMINAL_THEME_SCRIPT" --worker "$PULSE_TERMINAL_THEME_FIXTURE"\n')
+        environment.update(PULSE_TERMINAL_THEME_SCRIPT=str(Path('scripts/probe-workspace-terminal-system-theme.py').resolve()), PULSE_TERMINAL_THEME_FIXTURE=str(fixture))
     shell.chmod(0o700)
     environment.update(PATH=str(shell_dir), SHELL=str(shell),
                        PULSE_APPEARANCE_FIXTURE='1')
@@ -63,6 +67,9 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
                    checks=checks,
                    limitations=['Isolated Settings portal provider; no GNOME/KDE desktop session acceptance',
                                 'No terminal palette, external monitor or cross-platform acceptance'])
+    expected_sessions = 0
+    if TERMINAL_THEME:
+        receipt.update(version=2, kind='native-system-terminal-theme-over-real-pty', limitations=['Isolated desktop portal, not GNOME/KDE or cross-platform', 'Local GUI only; SSH, CLI, fixed Profile/group overrides remain separate'])
     def current_app():
         assert app is not None, 'appearance.app_missing'
         return app
@@ -162,7 +169,7 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
         key('alt+F4')
         assert current_app().wait(timeout=15) == 0, 'appearance.app_exit'
         assert count('exited') == 1, 'appearance.exit_barrier'
-        assert count('session_opened') == 0, 'appearance.unexpected_session'
+        assert count('session_opened') == expected_sessions, 'appearance.unexpected_session'
         def group_exited():
             try:
                 os.killpg(current_app().pid, 0)
@@ -176,58 +183,62 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
                 stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT,
                 text=True, start_new_session=True)
         wait(lambda: 'fixture.system_appearance.ready' in portal_log.read_text(), 'portal_ready')
-        app = launch()
-        xid = find_window()
-        paint('light', 'default-light')
-        choose('system')
-        change('dark')
-        paint('dark', 'system-dark')
-        change('light')
-        paint('light', 'system-light')
-        checks.append('real_portal_signal_updates_production_webview_both_directions')
-        change('dark')
-        paint('dark', 'system-dark-before-override')
-        choose('light')
-        paint('light', 'explicit-light')
-        change('light')
-        change('dark')
-        paint('light', 'explicit-light-stays')
-        choose('dark')
-        change('light')
-        paint('dark', 'explicit-dark-stays')
-        checks.append('explicit_modes_ignore_system_changes_and_drafts_do_not_apply')
-        choose('system')
-        paint('light', 'follow-restored')
-        change('dark')
-        paint('dark', 'follow-dark-again')
-        before = count('document_confirmed')
-        key('ctrl+shift+r')
-        wait(lambda: count('document_confirmed') == before + 1, 'refresh')
-        paint('dark', 'refreshed-dark')
-        assert persisted() == 'system'
-        checks.append('saved_follow_system_survives_refresh')
-        close()
-        windows_exited += 1
-        (OUTPUT / 'first-native.log').write_bytes(app_log.read_bytes())
-        app = launch()
-        xid = find_window()
-        paint('dark', 'reopened-dark')
-        checks.append('independent_reopen_reads_saved_mode_and_current_native_preference')
-        setting()
-        saves = count('settings_save_confirmed')
-        click('界面外观恢复继承')
-        wait(lambda: count('settings_save_confirmed') == saves + 1 and persisted() is None,
-             'reset_override')
-        key('Escape')
-        paint('light', 'reset-default-light')
-        change('light')
-        change('dark')
-        paint('light', 'reset-ignores-system')
-        checks.append('reset_removes_override_and_restores_default_light')
-        close()
-        windows_exited += 1
-        receipt.update(passed=True, windowsExited=windows_exited, nativeSessionsStarted=0,
-                       nativeExitConfirmed=True)
+        if TERMINAL_THEME:
+            import runpy
+            runpy.run_path(str(Path('scripts/probe-workspace-terminal-system-theme.py')))['verify'](globals())
+        else:
+            app = launch()
+            xid = find_window()
+            paint('light', 'default-light')
+            choose('system')
+            change('dark')
+            paint('dark', 'system-dark')
+            change('light')
+            paint('light', 'system-light')
+            checks.append('real_portal_signal_updates_production_webview_both_directions')
+            change('dark')
+            paint('dark', 'system-dark-before-override')
+            choose('light')
+            paint('light', 'explicit-light')
+            change('light')
+            change('dark')
+            paint('light', 'explicit-light-stays')
+            choose('dark')
+            change('light')
+            paint('dark', 'explicit-dark-stays')
+            checks.append('explicit_modes_ignore_system_changes_and_drafts_do_not_apply')
+            choose('system')
+            paint('light', 'follow-restored')
+            change('dark')
+            paint('dark', 'follow-dark-again')
+            before = count('document_confirmed')
+            key('ctrl+shift+r')
+            wait(lambda: count('document_confirmed') == before + 1, 'refresh')
+            paint('dark', 'refreshed-dark')
+            assert persisted() == 'system'
+            checks.append('saved_follow_system_survives_refresh')
+            close()
+            windows_exited += 1
+            (OUTPUT / 'first-native.log').write_bytes(app_log.read_bytes())
+            app = launch()
+            xid = find_window()
+            paint('dark', 'reopened-dark')
+            checks.append('independent_reopen_reads_saved_mode_and_current_native_preference')
+            setting()
+            saves = count('settings_save_confirmed')
+            click('界面外观恢复继承')
+            wait(lambda: count('settings_save_confirmed') == saves + 1 and persisted() is None,
+                 'reset_override')
+            key('Escape')
+            paint('light', 'reset-default-light')
+            change('light')
+            change('dark')
+            paint('light', 'reset-ignores-system')
+            checks.append('reset_removes_override_and_restores_default_light')
+            close()
+            windows_exited += 1
+            receipt.update(passed=True, windowsExited=windows_exited, nativeSessionsStarted=0,
+                           nativeExitConfirmed=True)
     except BaseException as error:
         receipt.update(error=type(error).__name__ + ': ' + str(error), windowsExited=windows_exited)
         if xid is not None:
