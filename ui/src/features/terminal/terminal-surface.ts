@@ -20,6 +20,7 @@ import {
   terminalFontFamily,
   waitForBundledTerminalFont,
 } from "./terminal-fonts";
+import { TerminalImeCommitGuard } from "./terminal-ime-commit";
 import { createScrollReturn } from "./terminal-scroll-return";
 export interface TerminalPasteOptions {
   confirm(
@@ -522,6 +523,14 @@ export class TerminalSurface implements ViewResource {
     const composition = root
       ? new CompositionGuard(root, this.lifetime.signal)
       : undefined;
+    if (root) {
+      const imeCommit = new TerminalImeCommitGuard(
+        root,
+        this.lifetime.signal,
+        () => this.scope.isCurrent(),
+      );
+      this.cleanup.push(imeCommit.dispose);
+    }
     root?.addEventListener("copy", copy, { capture: true });
     this.terminal.attachCustomKeyEventHandler((event) => {
       if (this.disposed || !this.scope.isCurrent()) return false;

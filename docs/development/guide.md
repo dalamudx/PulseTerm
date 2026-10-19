@@ -84,6 +84,7 @@ mise run test                     # Rust 单元/属性测试 + Vitest
 mise run probe                    # Rust 与 xterm headless 共享样例比较
 mise run probe-workspace-system-appearance # Linux：真实门户主题信号→Tao/GTK/WebView，显式保存/刷新/重开/恢复继承
 mise run probe-workspace-terminal-system-theme # Linux：系统深浅选新PTY配色，OSC前景/背景与真实像素、冻结/刷新/恢复/独立重开及退出
+mise run probe-workspace-ime # Linux：真实IBus拼音候选、取消零输入、选词单次提交、刷新不重复及原生退出（需ibus/ibus-gtk3/ibus-libpinyin）
 mise run probe-pty                # Unix 真实 PTY、查询回写、尺寸与背压
 mise run probe-ssh-private-key-use # Rust-only：Vault密文→实际Ed25519签名，独立于产品绘制验收
 mise run probe-profiles           # Unix只读Shell发现、自动profile规则与字面PTY启动
