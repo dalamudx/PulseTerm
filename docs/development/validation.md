@@ -8,6 +8,10 @@
 
 v2诊断实机只记录`runtime=155.0.4283.62`和通用`navigate E_FAIL`，说明Runtime已加载，但导航原因未知，不能归因为GPU或IME。v3将诊断开关放入`#diagnostic=1`，保留已成功过的单`renderer`查询路径；记录实际导航请求／开始／完成地址、ID和原始WebErrorStatus。只有目标导航ID完成才判定成功／失败，无关或过期导航不冒充目标失败；页面消息仍绑定同一文件／查询，忽略片段。新增宿主导航策略反例和脚本片段参数测试通过。此为候选修正与取证增强，尚未实机确认导航或原无标记问题解决。
 
+v3用户实机回传目标导航id2、`success=0 webErrorStatus=9`。已核对锁定SDK：9=`CONNECTION_ABORTED`，14=`OPERATION_CANCELED`；最初口头把9称作取消的解释不准确，现予纠正。没有第二次Navigate或主动Cancel的源码证据，具体中止原因仍未定位，不据此归因焦点递归、URL、GPU或输入法。
+
+v4恢复已成功版本相同的单renderer查询地址，导航期完全静默，宿主仅在目标NavigationCompleted成功后ExecuteScript开启诊断；脚本等待独立诊断标题。开启不得覆盖failed/lost状态；增加进程故障事件和SDK错误名／静态断言。宿主编译、核心／导航反例、真实PowerShell脚本替身和页面计数测试通过；Linux无头软件Chromium实际加载DOM／WebGL后各110次真实键入，input／write／render均110，导航阶段零消息，无页面异常。这是本机页面验证，不是Windows WebView2、真实GPU或性能通过。Windows连接中止和原样本29超时仍待实机，新包为`target/windows-echo-kit/pulseterm-echo-webgl-diagnostic-v4.zip`。
+
 新增独立`-DiagnoseWebGL`模式，只测WebGL，记录固定input／write／render／焦点／上下文丢失事件与计数；消息只接受同一页面来源、限长与条数，不记录输入正文。原生逐样本QPC与失败时的像素范围、帧数、部分样本同时保留，超时1秒和16像素增量门槛不变。测量中失焦、移动和异常标题单独拒绝，失败自动打包。主机QPC是消息接收时刻，render不是最终呈现，诊断开销不得作正常性能比较。
 
 宿主和采样器全警告为错误交叉编译、像素核心单测、PowerShell真实脚本的替身编排／仅WebGL／失败zip测试、页面110次输入计数／无日志正常模式测试通过；页面测试使用Terminal替身，不是真实渲染验证。实际Windows诊断待用户执行，GPU根因尚未修复。普通产品与根依赖未改，临时构建环境清理及证据见`target/probes/windows-echo-webgl/accepted/diagnostic-kit/verification.json`。

@@ -16,6 +16,15 @@ for (const renderer of ['dom','webgl']) for (const diagnostic of [false,true]) {
     location:{search:`?renderer=${renderer}`, hash:diagnostic?"#diagnostic=1":""},
     window:{chrome:{webview:{postMessage:value=>messages.push(value)}},addEventListener(){}}};
   vm.runInNewContext(source,context);document.activeElement=terminal.textarea;terminal.data('2');
+  assert.deepEqual(messages,[]); // Even a legacy diagnostic fragment must be silent during navigation.
+  if(diagnostic){
+    const ready=document.title;document.title=`echo-${renderer}-failed`;
+    assert.equal(context.window.enableEchoDiagnostics(),false);assert.deepEqual(messages,[]);
+    document.title=ready;
+    assert.equal(context.window.enableEchoDiagnostics(),true);
+    assert.equal(document.title,`echo-${renderer}-diagnostic`);
+    assert.equal(context.window.enableEchoDiagnostics(),true);
+  }
   for(let i=0;i<110;i++){terminal.data('1');if(diagnostic)terminal.render();}
   assert.equal(terminal.buffer.active.cursorX,220);
   assert.equal(terminal.callbacks,diagnostic?110:0);

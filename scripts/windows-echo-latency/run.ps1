@@ -7,7 +7,7 @@ param(
     [switch]$DiagnoseWebGL
 )
 $ErrorActionPreference = 'Stop'
-Write-Host "echo-kit: webview2-navigation-v3"
+Write-Host "echo-kit: webview2-deferred-v4"
 $kit = $PSScriptRoot
 $measure = Join-Path $kit 'echo-latency.exe'
 $echo = Join-Path $kit 'echo-console.exe'
@@ -74,11 +74,12 @@ try {
             $profile = Join-Path $profileRoot $label
             $log = Join-Path $out "$label-host.log"
             $arguments = @('--url', "`"${page}?renderer=$renderer`"", '--profile', "`"$profile`"", '--log', "`"$log`"")
-            if ($DiagnoseWebGL) { $arguments[1] = "`"${page}?renderer=$renderer#diagnostic=1`"" }
+            if ($DiagnoseWebGL) { $arguments += @('--diagnostic', '1') }
             if ($RuntimePath) { $arguments += @('--runtime', "`"$RuntimePath`"") }
             $webWindow = Start-Process -FilePath $web -ArgumentList $arguments -PassThru
             try {
-                Wait-WebView $webWindow "echo-$renderer" $log
+                $readyTitle = if ($DiagnoseWebGL) { "echo-$renderer-diagnostic" } else { "echo-$renderer" }
+                Wait-WebView $webWindow $readyTitle $log
                 Measure-Target $label 'echo-webview2.exe' "echo-$renderer"
             } finally { Stop-KitWebView; $webWindow = $null; Start-Sleep -Seconds 1 }
         }

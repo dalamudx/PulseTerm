@@ -24,6 +24,7 @@ function Start-Process {
     if ($PassThru) {
         $process = [Diagnostics.Process]::Start('/bin/sleep', '60')
         $title = if (($ArgumentList -join ' ') -match 'renderer=webgl') { 'echo-webgl' } else { 'echo-dom' }
+        if (($ArgumentList -join ' ') -match '--diagnostic 1') { $title += '-diagnostic' }
         $process | Add-Member -NotePropertyName MainWindowTitle -NotePropertyValue $title -Force
         $process | Add-Member -MemberType ScriptMethod -Name CloseMainWindow -Value { $this.Kill(); return $true } -Force
         return $process
@@ -63,7 +64,8 @@ $before = $global:EchoRunnerTest.measurements
 & $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL
 if ($global:EchoRunnerTest.measurements -ne $before + 1) { throw 'diagnostic mode did not isolate WebGL' }
 $lastLaunch = $global:EchoRunnerTest.launches[$global:EchoRunnerTest.launches.Count - 1]
-if (($lastLaunch.Arguments -join ' ') -notmatch 'renderer=webgl#diagnostic=1') { throw 'diagnostic page flag missing' }
+if (($lastLaunch.Arguments -join ' ') -notmatch '--diagnostic 1') { throw 'diagnostic host flag missing' }
+if (($lastLaunch.Arguments -join ' ') -match '#diagnostic|&diagnostic') { throw 'diagnostic flag changed navigation URL' }
 $global:EchoRunnerTest | Add-Member -NotePropertyName failNext -NotePropertyValue $true
 try { & $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL; throw 'missing measurement failure' }
 catch { if ($_.Exception.Message -notlike 'measurement failed:*') { throw } }

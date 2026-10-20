@@ -18,6 +18,7 @@ static FILE *log_file;
 static int exit_code;
 static std::wstring uri;
 static EchoNavigation navigation;
+static bool diagnostic;
 
 #ifdef __MINGW32__
 // The SDK's MIDL uuid attributes are MSVC-only; bind the same published interface IDs.
@@ -27,8 +28,21 @@ __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, 0x6c4
 __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, 0x4e8a3389, 0xc9d8, 0x4bd2, 0xb6,0xb5,0x12,0x4f,0xee,0x6c,0xc1,0x4d)
 __CRT_UUID_DECL(ICoreWebView2WebMessageReceivedEventHandler, 0x57213f19, 0x00e6, 0x49fa, 0x8e,0x07,0x89,0x8e,0xa0,0x1e,0xcb,0xd2)
 __CRT_UUID_DECL(ICoreWebView2NavigationStartingEventHandler, 0x9adbe429, 0xf36d, 0x432b, 0x9d,0xdc,0xf8,0x88,0x1f,0xbd,0x76,0xe3)
+__CRT_UUID_DECL(ICoreWebView2ExecuteScriptCompletedHandler, 0x49511172, 0xcc67, 0x4bca, 0x99,0x23,0x13,0x71,0x12,0xf4,0xc4,0xcc)
+__CRT_UUID_DECL(ICoreWebView2ProcessFailedEventHandler, 0x79e0aea4, 0x990b, 0x42d9, 0xaa,0x1d,0x0f,0x3b,0xc3,0x57,0x14,0x98)
 #endif
 
+static_assert(COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED == 9, "SDK connection-aborted value");
+static_assert(COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED == 14, "SDK operation-canceled value");
+static const char *web_error_name(COREWEBVIEW2_WEB_ERROR_STATUS error) {
+    switch (error) {
+    case COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN: return "UNKNOWN";
+    case COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED: return "CONNECTION_ABORTED";
+    case COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET: return "CONNECTION_RESET";
+    case COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED: return "OPERATION_CANCELED";
+    default: return "OTHER";
+    }
+}
 static void check(HRESULT result, const char *stage) {
     if (SUCCEEDED(result)) return;
     if (log_file) { std::fprintf(log_file, "%s failed: HRESULT 0x%08lx\n", stage, static_cast<unsigned long>(result)); std::fflush(log_file); }
@@ -87,6 +101,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         else if (flag == L"--profile") profile = argv[i + 1];
         else if (flag == L"--runtime") runtime = argv[i + 1];
         else if (flag == L"--log") log_path = argv[i + 1];
+        else if (flag == L"--diagnostic" && std::wstring(argv[i + 1]) == L"1") diagnostic = true;
         else { LocalFree(argv); return 1; }
     }
     LocalFree(argv);
@@ -164,6 +179,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             });
             check(webview->add_WebMessageReceived(message, &token), "message_handler");
             message->Release();
+            using ProcessFailed = Handler<ICoreWebView2ProcessFailedEventHandler, ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *>;
+            auto failed = new ProcessFailed([](ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *args) -> HRESULT {
+                COREWEBVIEW2_PROCESS_FAILED_KIND kind = COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED;
+                HRESULT result = args->get_ProcessFailedKind(&kind);
+                std::fprintf(log_file, "process_failed kind=%d result=0x%08lx\n", static_cast<int>(kind), static_cast<unsigned long>(result));
+                std::fflush(log_file);
+                check(FAILED(result) ? result : E_FAIL, "process_failed");
+                return S_OK;
+            });
+            check(webview->add_ProcessFailed(failed, &token), "process_failed_handler");
+            failed->Release();
             using NavigationStarting = Handler<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *>;
             auto starting = new NavigationStarting([](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) -> HRESULT {
                 LPWSTR address = nullptr; UINT64 id = 0;
@@ -187,14 +213,26 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
                 HRESULT success_result = args->get_IsSuccess(&success);
                 HRESULT error_result = args->get_WebErrorStatus(&error);
                 bool target = SUCCEEDED(id_result) && navigation.completes(id);
-                std::fprintf(log_file, "navigation_complete id=%llu target=%d success=%d webErrorStatus=%d errorResult=0x%08lx\n",
-                    id, target ? 1 : 0, success, static_cast<int>(error), static_cast<unsigned long>(error_result));
+                std::fprintf(log_file, "navigation_complete id=%llu target=%d success=%d webErrorStatus=%d errorName=%s errorResult=0x%08lx\n",
+                    id, target ? 1 : 0, success, static_cast<int>(error), web_error_name(error), static_cast<unsigned long>(error_result));
                 std::fflush(log_file);
                 if (FAILED(id_result) || FAILED(success_result)) {check(FAILED(id_result) ? id_result : success_result, "navigation_complete_properties");return S_OK;}
                 if (!target) return S_OK;
                 if (!success) {check(E_FAIL, "navigate");return S_OK;}
                 SetForegroundWindow(window);
                 check(controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC), "focus");
+                if (diagnostic) {
+                    using ScriptComplete = Handler<ICoreWebView2ExecuteScriptCompletedHandler, HRESULT, LPCWSTR>;
+                    auto completed = new ScriptComplete([](HRESULT result, LPCWSTR value) -> HRESULT {
+                        bool enabled = SUCCEEDED(result) && value && wcscmp(value, L"true") == 0;
+                        std::fprintf(log_file, "diagnostic_started success=%d result=0x%08lx\n", enabled ? 1 : 0, static_cast<unsigned long>(result));
+                        std::fflush(log_file);
+                        if (!enabled) check(FAILED(result) ? result : E_FAIL, "diagnostic_script");
+                        return S_OK;
+                    });
+                    check(webview->ExecuteScript(L"window.enableEchoDiagnostics()", completed), "diagnostic_script_start");
+                    completed->Release();
+                }
                 return S_OK;
             });
             check(webview->add_NavigationCompleted(navigated, &token), "navigation_handler");

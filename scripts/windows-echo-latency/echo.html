@@ -11,18 +11,24 @@
 const renderer = new URLSearchParams(location.search).get("renderer") ?? "dom";
 const term = new Terminal({ fontSize: 16, cursorBlink: false, theme: { background: "#000000" } });
 term.open(document.getElementById("terminal"));
-const diagnostic = new URLSearchParams(location.hash.slice(1)).get("diagnostic") === "1";
+let diagnostic = false; // The host enables logging only after target navigation succeeds.
 let received = 0;
 function recordEvent(name) {
   if (!diagnostic) return;
   const active = document.activeElement === term.textarea ? 1 : 0;
   window.chrome?.webview?.postMessage(`echo-event ${name} ${received} ${term.buffer.active.cursorX} ${term.buffer.active.cursorY} ${document.hasFocus() ? 1 : 0} ${active}`);
 }
-if (diagnostic) {
+window.enableEchoDiagnostics = () => {
+  if (document.title !== `echo-${renderer}` && document.title !== `echo-${renderer}-diagnostic`) return false;
+  if (diagnostic) return true;
+  diagnostic = true;
   window.addEventListener("focus", () => recordEvent("focus"));
   window.addEventListener("blur", () => recordEvent("blur"));
   term.onRender(() => recordEvent("render"));
-}
+  document.title = `echo-${renderer}-diagnostic`;
+  recordEvent("ready");
+  return true;
+};
 let title = `echo-${renderer}`;
 if (renderer === "webgl") {
   try {
