@@ -13,7 +13,7 @@ for (const renderer of ['dom','webgl']) for (const diagnostic of [false,true]) {
   }
   const document={title:'',activeElement:null,hasFocus:()=>true,getElementById:()=>({})};
   const context={URLSearchParams,Terminal,WebglAddon:{WebglAddon:class{onContextLoss(fn){lost=fn;}}},document,
-    location:{search:`?renderer=${renderer}${diagnostic?'&diagnostic=1':''}`},
+    location:{search:`?renderer=${renderer}`, hash:diagnostic?"#diagnostic=1":""},
     window:{chrome:{webview:{postMessage:value=>messages.push(value)}},addEventListener(){}}};
   vm.runInNewContext(source,context);document.activeElement=terminal.textarea;terminal.data('2');
   for(let i=0;i<110;i++){terminal.data('1');if(diagnostic)terminal.render();}

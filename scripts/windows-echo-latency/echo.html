@@ -11,7 +11,7 @@
 const renderer = new URLSearchParams(location.search).get("renderer") ?? "dom";
 const term = new Terminal({ fontSize: 16, cursorBlink: false, theme: { background: "#000000" } });
 term.open(document.getElementById("terminal"));
-const diagnostic = new URLSearchParams(location.search).get("diagnostic") === "1";
+const diagnostic = new URLSearchParams(location.hash.slice(1)).get("diagnostic") === "1";
 let received = 0;
 function recordEvent(name) {
   if (!diagnostic) return;

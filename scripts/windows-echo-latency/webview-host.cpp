@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <cstdio>
+#include "navigation.h"
 
 static HWND window;
 static ICoreWebView2Environment *environment;
@@ -16,6 +17,7 @@ static ICoreWebView2 *webview;
 static FILE *log_file;
 static int exit_code;
 static std::wstring uri;
+static EchoNavigation navigation;
 
 #ifdef __MINGW32__
 // The SDK's MIDL uuid attributes are MSVC-only; bind the same published interface IDs.
@@ -24,6 +26,7 @@ __CRT_UUID_DECL(ICoreWebView2NavigationCompletedEventHandler, 0xd33a35bf, 0x1c49
 __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, 0x6c4819f3, 0xc9b7, 0x4260, 0x81,0x27,0xc9,0xf5,0xbd,0xe7,0xf6,0x8c)
 __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, 0x4e8a3389, 0xc9d8, 0x4bd2, 0xb6,0xb5,0x12,0x4f,0xee,0x6c,0xc1,0x4d)
 __CRT_UUID_DECL(ICoreWebView2WebMessageReceivedEventHandler, 0x57213f19, 0x00e6, 0x49fa, 0x8e,0x07,0x89,0x8e,0xa0,0x1e,0xcb,0xd2)
+__CRT_UUID_DECL(ICoreWebView2NavigationStartingEventHandler, 0x9adbe429, 0xf36d, 0x432b, 0x9d,0xdc,0xf8,0x88,0x1f,0xbd,0x76,0xe3)
 #endif
 
 static void check(HRESULT result, const char *stage) {
@@ -90,6 +93,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     if (uri.rfind(L"file:///", 0) != 0 || profile.empty() || log_path.empty()) return 1;
     log_file = _wfopen(log_path.c_str(), L"w");
     if (!log_file) return 1;
+    navigation.select(uri);
+    std::fprintf(log_file, "navigation_request uri=%ls\n", uri.c_str()); std::fflush(log_file);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(initialized)) { std::fclose(log_file); return 2; }
@@ -147,7 +152,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             auto message = new WebMessage([](ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *args) -> HRESULT {
                 static unsigned messages = 0;
                 LPWSTR source = nullptr, text = nullptr;
-                if (SUCCEEDED(args->get_Source(&source)) && source && uri == source &&
+                if (SUCCEEDED(args->get_Source(&source)) && source && echo_same_document(uri, source) &&
                     SUCCEEDED(args->TryGetWebMessageAsString(&text)) && text &&
                     wcslen(text) < 160 && wcsncmp(text, L"echo-event ", 11) == 0 && messages < 4096) {
                     LARGE_INTEGER tick, hz; QueryPerformanceCounter(&tick); QueryPerformanceFrequency(&hz);
@@ -159,11 +164,35 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             });
             check(webview->add_WebMessageReceived(message, &token), "message_handler");
             message->Release();
+            using NavigationStarting = Handler<ICoreWebView2NavigationStartingEventHandler, ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *>;
+            auto starting = new NavigationStarting([](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) -> HRESULT {
+                LPWSTR address = nullptr; UINT64 id = 0;
+                HRESULT address_result = args->get_Uri(&address);
+                HRESULT id_result = args->get_NavigationId(&id);
+                if (SUCCEEDED(address_result) && SUCCEEDED(id_result) && address) {
+                    bool target = navigation.begin(address, id);
+                    std::fprintf(log_file, "navigation_start id=%llu target=%d uri=%ls\n", id, target ? 1 : 0, address);
+                    std::fflush(log_file);
+                } else {check(FAILED(address_result) ? address_result : id_result, "navigation_start_properties");}
+                CoTaskMemFree(address);
+                return S_OK;
+            });
+            check(webview->add_NavigationStarting(starting, &token), "navigation_start_handler");
+            starting->Release();
             using NavigationReady = Handler<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *>;
             auto navigated = new NavigationReady([](ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) -> HRESULT {
-                BOOL success = FALSE;
-                args->get_IsSuccess(&success);
-                if (!success) { check(E_FAIL, "navigate"); return S_OK; }
+                BOOL success = FALSE; UINT64 id = 0;
+                COREWEBVIEW2_WEB_ERROR_STATUS error = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+                HRESULT id_result = args->get_NavigationId(&id);
+                HRESULT success_result = args->get_IsSuccess(&success);
+                HRESULT error_result = args->get_WebErrorStatus(&error);
+                bool target = SUCCEEDED(id_result) && navigation.completes(id);
+                std::fprintf(log_file, "navigation_complete id=%llu target=%d success=%d webErrorStatus=%d errorResult=0x%08lx\n",
+                    id, target ? 1 : 0, success, static_cast<int>(error), static_cast<unsigned long>(error_result));
+                std::fflush(log_file);
+                if (FAILED(id_result) || FAILED(success_result)) {check(FAILED(id_result) ? id_result : success_result, "navigation_complete_properties");return S_OK;}
+                if (!target) return S_OK;
+                if (!success) {check(E_FAIL, "navigate");return S_OK;}
                 SetForegroundWindow(window);
                 check(controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC), "focus");
                 return S_OK;

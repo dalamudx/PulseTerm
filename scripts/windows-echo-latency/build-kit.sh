@@ -21,6 +21,8 @@ mkdir -p "$kit/xterm" "$kit/third-party"
 rm -f -- "$out/pulseterm-echo-latency.zip"
 ${CC:-cc} -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror "$src/core_test.c" -o "$scratch/core-test"
 "$scratch/core-test"
+${CXX:-c++} -std=c++17 -Wall -Wextra -Werror "$src/navigation_test.cpp" -o "$scratch/navigation-test"
+"$scratch/navigation-test"
 flags="-std=gnu11 -O2 -Wall -Wextra -Werror -static -s"
 $cc_win $flags "$src/echo-latency.c" -o "$kit/echo-latency.exe" -ld3d11 -ldxgi
 $cc_win $flags "$src/echo-console.c" -o "$kit/echo-console.exe"
