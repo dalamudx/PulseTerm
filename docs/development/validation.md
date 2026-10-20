@@ -16,6 +16,10 @@
 
 脚本据此更新：重选活动标签后断言**输入回执数不变、会话数不变、两条 PTY 均存活**（证明未重连、未重生），再用点击选择另一标签并要求新的 `terminal_input_ready` 与实际输入。默认两标签模式随后通过，输出 `workspace.two_tab_keyboard_refresh_close_confirmed`。此前的失败日志保留，未用作通过证据。
 
+### 仍开放的标签／分屏模式（同日复跑）
+
+同一次复跑中 `probe-workspace-profiles` 通过；`probe-workspace-labels` 停在 `workspace.label_color_missing`，其保存后截图显示的是历史与查找对话框而非标签编辑器，说明该模式的前置步骤已与实际界面不一致；`probe-workspace-split` 仍停在 `terminal_input_ready`。`probe-workspace-split-adjust` 在当前仓库中不存在同名任务，批处理中的该项为命令错误。这三项沿用既有失败记录，未登记通过，也未据此改动产品代码；后续需按当前界面重新校准这些模式的步骤与坐标。
+
 ## Windows 原子文件槽与精确快照（原生运行待验）
 
 沿 `pulse-platform` 私有目录／文件 lease 实现目录级固定锁、精确快照和源句柄改名提交。快照绑定目录、名称、预算、存在状态、完整文件 ID、创建／修改／变更时间和字节；跨槽和陈旧快照拒绝。三处复核原授权，暂存后重新比较；新建禁止覆盖竞争目标，既有同字节文件保持身份。提交尝试前失败回收精确暂存句柄；尝试后任何未知结果保留现场、返回 Uncertain 并要求重读，不自动重试。
