@@ -22,6 +22,18 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 -RuntimePath "C:\Program File
 
 结果为 `results-时间-随机后缀.zip`，请将整个结果包发回。失败时保留结果目录和日志。60Hz和144Hz数据分开保存；JSON会记录实际模式。
 
+## WebGL 中途无标记的诊断
+
+若WebGL某次在1秒内没有新增红块，不能直接认定是输入法。请解压完整诊断版，只运行该目标：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1 -RuntimePath "C:\Program Files (x86)\Microsoft\EdgeWebView\Application\155.0.4283.62" -DiagnoseWebGL -Rounds 1
+```
+
+无论成功或失败都会生成`results-*.zip`，请发回整个包。日志仅含固定事件、计数、光标、焦点和像素数，不保存输入正文或截图。主机QPC记录的是事件消息到达原生的时间，不是浏览器事件发生的精确时间；xterm的render事件也不等于最终上屏。失败JSON保留基准／最小／最大／最新红色像素、观测帧数及已经完成的样本，但不产生完整性能统计。页面异常标题和测量中失焦会单独拒绝。
+
+诊断日志会影响时序，因此该模式不用于延迟比较。正常模式不启用页面消息、写完成回调或逐次原生日志，默认仍测三目标两轮。阈值与1秒超时没有放宽。
+
 ## 范围与解释
 
 Windows Terminal 经 ConPTY；WebView2 在页面内本地回显。路径不同，比较仅用于初筛，不能替代完整 PulseTerm 门禁。两边按键 `1` 都画纯红块，测量器用SendInput发键，DXGI检测像素增量并取对应帧QPC呈现时间；这是软件呈现时间，不是屏幕实际发光或物理键盘延迟。

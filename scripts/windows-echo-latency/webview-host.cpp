@@ -23,6 +23,7 @@ __CRT_UUID_DECL(ICoreWebView2DocumentTitleChangedEventHandler, 0xf5f2b923, 0x953
 __CRT_UUID_DECL(ICoreWebView2NavigationCompletedEventHandler, 0xd33a35bf, 0x1c49, 0x4f98, 0x93,0xab,0x00,0x6e,0x05,0x33,0xfe,0x1c)
 __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, 0x6c4819f3, 0xc9b7, 0x4260, 0x81,0x27,0xc9,0xf5,0xbd,0xe7,0xf6,0x8c)
 __CRT_UUID_DECL(ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, 0x4e8a3389, 0xc9d8, 0x4bd2, 0xb6,0xb5,0x12,0x4f,0xee,0x6c,0xc1,0x4d)
+__CRT_UUID_DECL(ICoreWebView2WebMessageReceivedEventHandler, 0x57213f19, 0x00e6, 0x49fa, 0x8e,0x07,0x89,0x8e,0xa0,0x1e,0xcb,0xd2)
 #endif
 
 static void check(HRESULT result, const char *stage) {
@@ -142,6 +143,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             EventRegistrationToken token{};
             check(webview->add_DocumentTitleChanged(title, &token), "title_handler");
             title->Release();
+            using WebMessage = Handler<ICoreWebView2WebMessageReceivedEventHandler, ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *>;
+            auto message = new WebMessage([](ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *args) -> HRESULT {
+                static unsigned messages = 0;
+                LPWSTR source = nullptr, text = nullptr;
+                if (SUCCEEDED(args->get_Source(&source)) && source && uri == source &&
+                    SUCCEEDED(args->TryGetWebMessageAsString(&text)) && text &&
+                    wcslen(text) < 160 && wcsncmp(text, L"echo-event ", 11) == 0 && messages < 4096) {
+                    LARGE_INTEGER tick, hz; QueryPerformanceCounter(&tick); QueryPerformanceFrequency(&hz);
+                    std::fprintf(log_file, "qpc=%lld hz=%lld %ls\n", tick.QuadPart, hz.QuadPart, text);
+                    std::fflush(log_file); messages++;
+                }
+                CoTaskMemFree(source); CoTaskMemFree(text);
+                return S_OK;
+            });
+            check(webview->add_WebMessageReceived(message, &token), "message_handler");
+            message->Release();
             using NavigationReady = Handler<ICoreWebView2NavigationCompletedEventHandler, ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *>;
             auto navigated = new NavigationReady([](ICoreWebView2 *, ICoreWebView2NavigationCompletedEventArgs *args) -> HRESULT {
                 BOOL success = FALSE;

@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Windows 实机初筛与 WebGL 无标记诊断（根因待定位）
+
+用户回传同一轮RTX2080Ti／Windows11／143.998Hz的100样本：Windows Terminal p50=16.892ms、p95=28.294ms；WebView2 DOM p50=16.833ms、p95=28.927ms，差值−0.059／+0.633ms。两者无缺失呈现时间，但窗口区域不同、WebView2省略PTY，只有一轮；不能据此宣称完整产品门禁通过或双路径等价。两者保留各自慢样本，不去除离群点。WebGL在含预热序列的index29报无标记，未形成完整结果，根因未知。
+
+新增独立`-DiagnoseWebGL`模式，只测WebGL，记录固定input／write／render／焦点／上下文丢失事件与计数；消息只接受同一页面来源、限长与条数，不记录输入正文。原生逐样本QPC与失败时的像素范围、帧数、部分样本同时保留，超时1秒和16像素增量门槛不变。测量中失焦、移动和异常标题单独拒绝，失败自动打包。主机QPC是消息接收时刻，render不是最终呈现，诊断开销不得作正常性能比较。
+
+宿主和采样器全警告为错误交叉编译、像素核心单测、PowerShell真实脚本的替身编排／仅WebGL／失败zip测试、页面110次输入计数／无日志正常模式测试通过；页面测试使用Terminal替身，不是真实渲染验证。实际Windows诊断待用户执行，GPU根因尚未修复。普通产品与根依赖未改，临时构建环境清理及证据见`target/probes/windows-echo-webgl/accepted/diagnostic-kit/verification.json`。
+
 ## WebView2 Runtime 回显包修复（无需 Edge 浏览器，实机对照待运行）
 
 用户主机只有WebView2 Runtime，原脚本假设msedge.exe可启动不成立。现新增Win32 WebView2宿主，直接发现Evergreen或指定`-RuntimePath`版本目录；完整新包包含echo-webview2.exe和官方WebView2Loader.dll，无需安装Edge。页面、采样器和原生对照保持原逻辑，WebView2标题就绪后再开始采样。每次运行独立配置目录，只回收本次宿主和对应运行时进程；结果保留Runtime版本及启动失败日志，跨显示模式拒绝合并。

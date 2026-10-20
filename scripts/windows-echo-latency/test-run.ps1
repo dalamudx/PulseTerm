@@ -38,6 +38,7 @@ function Invoke-TestMeasurement {
     $output = [string]$Rest[[Array]::IndexOf($Rest, '--out') + 1]
     $hz = if ($global:EchoRunnerTest.mismatch -and $label -like '*webgl') { 60 } else { 144 }
     @{ label=$label; title='echo-ok'; adapter='fixture GPU'; refreshHz=$hz; displayFrequency=$hz; windowsBuild='fixture'; presentTimeMissing=0; latencyMs=@(1,2,3,4,5) } | ConvertTo-Json | Set-Content $output
+    if ($global:EchoRunnerTest.failNext) { $global:LASTEXITCODE = 4; return }
     $global:LASTEXITCODE = 0
 }
 & $runner -Rounds 1 -RuntimePath $runtime
@@ -57,5 +58,16 @@ $before = $global:EchoRunnerTest.measurements
 try { & $runner -Rounds 1 -RuntimePath (Join-Path $TestRoot 'missing'); throw 'missing preflight rejection' }
 catch { if ($_.Exception.Message -eq 'missing preflight rejection') { throw } }
 if ($global:EchoRunnerTest.measurements -ne $before) { throw 'preflight performed measurement' }
+$global:EchoRunnerTest.mismatch = $false
+$before = $global:EchoRunnerTest.measurements
+& $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL
+if ($global:EchoRunnerTest.measurements -ne $before + 1) { throw 'diagnostic mode did not isolate WebGL' }
+$lastLaunch = $global:EchoRunnerTest.launches[$global:EchoRunnerTest.launches.Count - 1]
+if (($lastLaunch.Arguments -join ' ') -notmatch 'renderer=webgl&diagnostic=1') { throw 'diagnostic page flag missing' }
+$global:EchoRunnerTest | Add-Member -NotePropertyName failNext -NotePropertyValue $true
+try { & $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL; throw 'missing measurement failure' }
+catch { if ($_.Exception.Message -notlike 'measurement failed:*') { throw } }
+$failureLog = Get-ChildItem $TestRoot -Recurse -Filter failure.txt | Select-Object -First 1
+if (!$failureLog -or !(Test-Path ($failureLog.Directory.FullName + '.zip'))) { throw 'failure archive missing' }
 if (Get-ChildItem $TestRoot -Directory -Filter 'pulseterm-echo-*') { throw 'profile not removed' }
 Write-Host 'runner: parsing, no-Edge launch flow, quoted RuntimePath, summary, display mismatch and preflight passed (mock Windows operations)'

@@ -77,7 +77,7 @@ static void write_series(FILE *out, const char *name, const double *values, int 
 
 int main(int argc, char **argv) {
     const char *label = NULL, *expect = NULL, *title_prefix = NULL, *output = NULL;
-    int samples = 100, warmup = 5, countdown = 5;
+    int samples = 100, warmup = 5, countdown = 5, diagnostic = 0;
     for (int i = 1; i + 1 < argc; i += 2) {
         if (!strcmp(argv[i], "--label")) label = argv[i + 1];
         else if (!strcmp(argv[i], "--expect")) expect = argv[i + 1];
@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--samples")) samples = atoi(argv[i + 1]);
         else if (!strcmp(argv[i], "--warmup")) warmup = atoi(argv[i + 1]);
         else if (!strcmp(argv[i], "--countdown")) countdown = atoi(argv[i + 1]);
+        else if (!strcmp(argv[i], "--diagnostic")) diagnostic = atoi(argv[i + 1]);
         else fail(1, "usage: echo-latency --label L --expect EXE --title PREFIX --out FILE [--samples N --warmup N --countdown S]");
     }
     if (!label || !expect || !title_prefix || !output || samples < 20 || samples > MAX_SAMPLES || warmup < 0 ||
@@ -162,6 +163,13 @@ int main(int argc, char **argv) {
     static double latency[MAX_SAMPLES], acquired[MAX_SAMPLES], increase[MAX_SAMPLES];
     unsigned missing_present = 0;
     UINT scan = MapVirtualKeyW('1', MAPVK_VK_TO_VSC);
+    FILE *trace = NULL;
+    if (diagnostic) {
+        char trace_name[32768];
+        if (snprintf(trace_name, sizeof trace_name, "%s.trace.log", output) >= (int)sizeof trace_name) fail(7, "output.path_too_long");
+        trace = fopen(trace_name, "w");
+        if (!trace) fail(7, "trace.open");
+    }
     for (int i = 0; i < warmup + samples; i++) {
         RECT now_region = client_rect(window);
         if (GetForegroundWindow() != window) fail(3, "focus.lost (do not touch keyboard or mouse)");
@@ -169,6 +177,8 @@ int main(int argc, char **argv) {
         while (acquire(0, &present)) {
         }
         size_t baseline = markers;
+        size_t smallest = baseline, largest = baseline;
+        unsigned frames = 0;
         INPUT input[2];
         memset(input, 0, sizeof input);
         input[0].type = input[1].type = INPUT_KEYBOARD;
@@ -178,17 +188,46 @@ int main(int argc, char **argv) {
         LARGE_INTEGER start, now;
         QueryPerformanceCounter(&start);
         if (SendInput(2, input, sizeof(INPUT)) != 2) fail(6, "input.send_failed");
+        if (trace) { fprintf(trace, "send %d qpc=%lld baseline=%llu\n", i, start.QuadPart, (unsigned long long)baseline); fflush(trace); }
         for (;;) {
+            RECT active_region = client_rect(window);
+            if (GetForegroundWindow() != window) fail(3, "focus.lost_during_sample");
+            if (!EqualRect(&active_region, &region)) fail(3, "window.moved_during_sample");
+            GetWindowTextW(window, wide, MAX_PATH);
+            utf8(wide, title, sizeof title);
+            if (strstr(title, "-lost") || strstr(title, "-failed")) {
+                fprintf(stderr, "echo-latency: renderer unavailable during sample %d: %s\n", i, title);
+                return 4;
+            }
             QueryPerformanceCounter(&now);
             double waited = ms(now.QuadPart - start.QuadPart);
             if (waited > 1000) {
-                fprintf(stderr, "echo-latency: sample %d produced no red marker within 1s (IME in Chinese mode?)\n", i);
+                int complete = i > warmup ? i - warmup : 0;
+                fprintf(stderr, "echo-latency: sample %d: no marker in 1s; baseline=%llu latest=%llu min=%llu max=%llu frames=%u title=%s (cause unknown; see host log)\n",
+                        i, (unsigned long long)baseline, (unsigned long long)markers,
+                        (unsigned long long)smallest, (unsigned long long)largest, frames, title);
+                FILE *partial = fopen(output, "w");
+                if (partial) {
+                    fprintf(partial, "{\n  \"schemaVersion\": 1,\n  \"status\": \"failed\",\n  \"reason\": \"no_marker\",\n  \"label\": ");
+                    echo_json_string(partial, label);
+                    fprintf(partial, ",\n  \"title\": "); echo_json_string(partial, title);
+                    fprintf(partial, ",\n  \"sampleIndexIncludingWarmup\": %d,\n  \"completedSamples\": %d,\n  \"warmup\": %d,\n  \"baselinePixels\": %llu,\n  \"latestPixels\": %llu,\n  \"minPixels\": %llu,\n  \"maxPixels\": %llu,\n  \"framesObserved\": %u,\n  \"sendQpc\": %lld,\n  \"qpcHz\": %lld",
+                            i, complete, warmup, (unsigned long long)baseline, (unsigned long long)markers,
+                            (unsigned long long)smallest, (unsigned long long)largest, frames, start.QuadPart, frequency.QuadPart);
+                    write_series(partial, "partialLatencyMsNotForComparison", latency, complete);
+                    fprintf(partial, "\n}\n"); fclose(partial);
+                }
                 return 4;
             }
-            if (!acquire((UINT)(1000 - waited) + 1, &present) || markers < baseline + MIN_MARKER_INCREASE) continue;
+            if (!acquire((UINT)(1000 - waited) + 1, &present)) continue;
+            frames++;
+            if (markers < smallest) smallest = markers;
+            if (markers > largest) largest = markers;
+            if (markers < baseline + MIN_MARKER_INCREASE) continue;
             QueryPerformanceCounter(&now);
             break;
         }
+        if (trace) { fprintf(trace, "draw %d present=%lld qpc=%lld pixels=%llu\n", i, present, now.QuadPart, (unsigned long long)markers); fflush(trace); }
         if (present && present < start.QuadPart) fail(4, "present.before_input");
         if (!present) missing_present++;
         if (i >= warmup) {

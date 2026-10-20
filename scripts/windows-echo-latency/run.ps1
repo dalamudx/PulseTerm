@@ -3,7 +3,8 @@
 param(
     [ValidateRange(20, 512)][int]$Samples = 100,
     [ValidateRange(1, 10)][int]$Rounds = 2,
-    [string]$RuntimePath
+    [string]$RuntimePath,
+    [switch]$DiagnoseWebGL
 )
 $ErrorActionPreference = 'Stop'
 $kit = $PSScriptRoot
@@ -29,7 +30,7 @@ $page = ([Uri](Join-Path $kit 'echo.html')).AbsoluteUri
 $webWindow = $null
 
 function Measure-Target([string]$Label, [string]$Expect, [string]$Title) {
-    & $measure --label $Label --expect $Expect --title $Title --samples $Samples --warmup $warmup --countdown 4 --out (Join-Path $out "$Label.json")
+    & $measure --label $Label --expect $Expect --title $Title --samples $Samples --warmup $warmup --countdown 4 --diagnostic ([int][bool]$DiagnoseWebGL) --out (Join-Path $out "$Label.json")
     if ($LASTEXITCODE -ne 0) { throw "measurement failed: $Label (exit $LASTEXITCODE). Partial results remain in $out" }
 }
 
@@ -61,14 +62,18 @@ function Stop-KitWebView {
 
 try {
     for ($round = 1; $round -le $Rounds; $round++) {
-        Start-Process -FilePath $wt -ArgumentList "-w new new-tab --title echo-wt --suppressApplicationTitle `"$echo`" $($Samples + $warmup)"
-        Measure-Target "r$round-wt" 'WindowsTerminal.exe' 'echo-wt'
-        Start-Sleep -Seconds 3
-        foreach ($renderer in 'dom', 'webgl') {
+        if (!$DiagnoseWebGL) {
+            Start-Process -FilePath $wt -ArgumentList "-w new new-tab --title echo-wt --suppressApplicationTitle `"$echo`" $($Samples + $warmup)"
+            Measure-Target "r$round-wt" 'WindowsTerminal.exe' 'echo-wt'
+            Start-Sleep -Seconds 3
+        }
+        $renderers = if ($DiagnoseWebGL) { @('webgl') } else { @('dom', 'webgl') }
+        foreach ($renderer in $renderers) {
             $label = "r$round-webview2-$renderer"
             $profile = Join-Path $profileRoot $label
             $log = Join-Path $out "$label-host.log"
             $arguments = @('--url', "`"${page}?renderer=$renderer`"", '--profile', "`"$profile`"", '--log', "`"$log`"")
+            if ($DiagnoseWebGL) { $arguments[1] = "`"${page}?renderer=$renderer&diagnostic=1`"" }
             if ($RuntimePath) { $arguments += @('--runtime', "`"$RuntimePath`"") }
             $webWindow = Start-Process -FilePath $web -ArgumentList $arguments -PassThru
             try {
@@ -77,12 +82,26 @@ try {
             } finally { Stop-KitWebView; $webWindow = $null; Start-Sleep -Seconds 1 }
         }
     }
+} catch {
+    $failure = $_
+    try { Stop-KitWebView } catch { Write-Warning "Host cleanup failed: $_" }
+    $webWindow = $null
+    $failure | Out-String | Set-Content (Join-Path $out 'failure.txt')
+    Compress-Archive -Path "$out\*" -DestinationPath "$out.zip" -Force -ErrorAction Continue
+    Write-Host "Send this diagnostic archive back: $out.zip"
+    throw $failure
 } finally {
     Stop-KitWebView
     Remove-Item -LiteralPath $profileRoot -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $profileRoot) { Write-Warning "Temporary profile could not be removed: $profileRoot" }
 }
 
+if ($DiagnoseWebGL) {
+    @{ schemaVersion=1; diagnosticOnly=$true; latencyComparisonValid=$false } | ConvertTo-Json | Set-Content (Join-Path $out 'summary.json')
+    Compress-Archive -Path "$out\*" -DestinationPath "$out.zip" -Force
+    Write-Host "Diagnostic logging changes timing. Send this archive back: $out.zip"
+    return
+}
 $results = @(Get-ChildItem $out -Filter 'r*.json' | ForEach-Object { Get-Content $_.FullName -Raw | ConvertFrom-Json })
 if ($results.Count -ne 3 * $Rounds) { throw 'Missing target results; no complete summary was generated.' }
 $first = $results[0]

@@ -11,11 +11,23 @@
 const renderer = new URLSearchParams(location.search).get("renderer") ?? "dom";
 const term = new Terminal({ fontSize: 16, cursorBlink: false, theme: { background: "#000000" } });
 term.open(document.getElementById("terminal"));
+const diagnostic = new URLSearchParams(location.search).get("diagnostic") === "1";
+let received = 0;
+function recordEvent(name) {
+  if (!diagnostic) return;
+  const active = document.activeElement === term.textarea ? 1 : 0;
+  window.chrome?.webview?.postMessage(`echo-event ${name} ${received} ${term.buffer.active.cursorX} ${term.buffer.active.cursorY} ${document.hasFocus() ? 1 : 0} ${active}`);
+}
+if (diagnostic) {
+  window.addEventListener("focus", () => recordEvent("focus"));
+  window.addEventListener("blur", () => recordEvent("blur"));
+  term.onRender(() => recordEvent("render"));
+}
 let title = `echo-${renderer}`;
 if (renderer === "webgl") {
   try {
     const webgl = new WebglAddon.WebglAddon();
-    webgl.onContextLoss(() => { document.title = "echo-webgl-lost"; });
+    webgl.onContextLoss(() => { document.title = "echo-webgl-lost"; recordEvent("context-lost"); });
     term.loadAddon(webgl);
   } catch {
     title = "echo-webgl-failed";
@@ -23,8 +35,13 @@ if (renderer === "webgl") {
 }
 term.write("\x1b[?25l");
 term.onData((data) => {
-  for (const ch of data) if (ch === "1") term.write("\x1b[48;2;255;0;0m  \x1b[0m");
+  for (const ch of data) if (ch === "1") {
+    received++;
+    recordEvent("input");
+    term.write("\x1b[48;2;255;0;0m  \x1b[0m", diagnostic ? () => recordEvent("write") : undefined);
+  }
 });
 term.focus();
 document.title = title;
+recordEvent("ready");
 </script>
