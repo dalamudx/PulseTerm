@@ -13,6 +13,7 @@ static gboolean focus_mode;
 static gboolean bounds_mode;
 static gboolean inspect_mode;
 static gboolean combo_inspect_mode;
+static gboolean checkbox_inspect_mode;
 static gboolean combo_bounds_mode;
 static gboolean description_mode;
 static gboolean readonly_text_mode;
@@ -48,6 +49,7 @@ static gboolean select_visible(AtspiAccessible *node, unsigned depth) {
 }
 static gboolean activate_match(AtspiAccessible *node) {
     if (combo_bounds_mode && atspi_accessible_get_role(node, NULL) != ATSPI_ROLE_COMBO_BOX) return FALSE;
+    if (checkbox_inspect_mode && atspi_accessible_get_role(node, NULL) != ATSPI_ROLE_CHECK_BOX) return FALSE;
     if (readonly_text_mode) {
         GError *error = NULL;
         AtspiStateSet *states = atspi_accessible_get_state_set(node);
@@ -192,13 +194,14 @@ static gboolean matches_frame(AtspiAccessible *node, const char *frame, const ch
 }
 
 int main(int argc, char **argv) {
-    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "bounds-combo") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "inspect-combo") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
+    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "bounds-combo") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "inspect-combo") != 0 && strcmp(argv[3], "inspect-checkbox") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
     action_mode = argc == 4 && strcmp(argv[3], "activate") == 0;
     focus_mode = argc == 4 && strcmp(argv[3], "focus") == 0;
     combo_bounds_mode = argc == 4 && strcmp(argv[3], "bounds-combo") == 0;
     bounds_mode = combo_bounds_mode || (argc == 4 && strcmp(argv[3], "bounds") == 0);
     combo_inspect_mode = argc == 4 && strcmp(argv[3], "inspect-combo") == 0;
-    inspect_mode = combo_inspect_mode || (argc == 4 && strcmp(argv[3], "inspect") == 0);
+    checkbox_inspect_mode = argc == 4 && strcmp(argv[3], "inspect-checkbox") == 0;
+    inspect_mode = combo_inspect_mode || checkbox_inspect_mode || (argc == 4 && strcmp(argv[3], "inspect") == 0);
     description_mode = argc == 4 && strcmp(argv[3], "description") == 0;
     readonly_text_mode = argc == 4 && strcmp(argv[3], "readonly-text") == 0;
     char *end = NULL;

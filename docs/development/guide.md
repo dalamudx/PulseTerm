@@ -174,7 +174,7 @@ mise run probe-workspace-keymap # 真实Linux当前页GUI保存/禁用/恢复/�
 mise run probe-keymap # 固定内存Rust→TS6投影/1158策略对照，三独立进程私有keymap.toml旧快照拒写/提交重开/自有fixture清理；无真实用户配置或GUI键位编辑。
 mise run probe-workspace-commands # Linux当前页固定7动作palette：真实CtrlShiftP/检索/Settings跳转/empty取消/三页同PTY无按键漏写/default保留与确认close；不是通用Capability或可配置快捷键。严格CSP与原8s/80s截止。
 mise run probe-workspace-clipboard # Linux原生GTK剪贴板→WebView用户事件：copy／单行／审批取消／CtrlC中断／换页和resize撤销
-mise run probe-workspace-selection-copy # Linux默认关闭／授权保存／同PTY刷新／实际鼠标复制／关闭恢复；勾选、来源和成功状态同帧
+mise run probe-workspace-selection-copy # Linux默认关闭／字段搜索保存／旧视图冻结／同PTY刷新／显式false与恢复继承／真实鼠标和系统剪贴板／最终输入快照及GUI实际退出
 mise run probe-workspace-right-click-paste # LinuxGTK单次原页原连接读取，单行／多行批准取消／刷新退休／鼠标报告优先／迟到X11回调与退出等待；非跨平台结论
 mise run probe-workspace-bracketed-paste # 真实 Bash／GNU Readline 缓冲：多行取消／批准后等待Enter、待决输入刷新、UTF8预算及模式开关；非系统IME
 mise run probe-workspace-vim       # 真实Vim：审批／缩进及Unicode原文／插入缓冲跨页／一次撤销／文件字节保存／未保存关窗回收；非系统IME

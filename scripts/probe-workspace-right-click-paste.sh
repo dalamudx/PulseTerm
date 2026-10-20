@@ -6,6 +6,8 @@ mkdir -p /data/temp target/probes
 fixture=$(mktemp -d /data/temp/pt-workspace-right-paste.XXXXXX)
 export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$fixture/bin"
+export TMPDIR="$fixture" TMP="$fixture" TEMP="$fixture"
+clipboard_helper=${PULSE_CLIPBOARD_HELPER:-target/probes/x11-clipboard}
 mkdir -m 700 "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview"
 printf '[terminal]\nfont_size = 13\n' > "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
 cat > "$fixture/bin/sh" <<'SHELL'
@@ -29,7 +31,7 @@ done
 SHELL
 chmod 700 "$fixture/bin/sh"
 log=target/probes/workspace-right-click-paste-native.log
-PULSETERM_CLIP_FIXTURE="$fixture/native" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+PULSETERM_CLIP_FIXTURE="$fixture/native" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "${PULSE_WORKSPACE_BINARY:-${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace}" > "$log" 2>&1 &
 app=$!; clip=""
 cleanup(){ if [ -n "$clip" ]; then kill "$clip" 2>/dev/null || true; wait "$clip" 2>/dev/null || true; fi; kill "$app" 2>/dev/null || true; wait "$app" 2>/dev/null || true; rm -rf "$fixture"; test ! -e "$fixture"; }
 trap cleanup EXIT
@@ -47,9 +49,9 @@ await_lines(){ expected=$1; attempt=0; while [ "$(lines)" -lt "$expected" ]; do 
 own_clip(){
   if [ -n "$clip" ]; then kill "$clip"; wait "$clip" 2>/dev/null || true; fi
   if [ "$#" -eq 1 ]; then
-    target/probes/x11-clipboard "$fixture/paste.txt" "$1" > "$fixture/clipboard.log" 2>&1 &
+    "$clipboard_helper" "$fixture/paste.txt" "$1" > "$fixture/clipboard.log" 2>&1 &
   else
-    target/probes/x11-clipboard "$fixture/paste.txt" > "$fixture/clipboard.log" 2>&1 &
+    "$clipboard_helper" "$fixture/paste.txt" > "$fixture/clipboard.log" 2>&1 &
   fi
   clip=$!
   attempt=0; while ! grep -q '^clipboard.ready$' "$fixture/clipboard.log"; do [ "$attempt" -lt 80 ] || exit 1; kill -0 "$clip"; attempt=$((attempt+1)); sleep 0.1; done
@@ -82,30 +84,27 @@ timeout 2s xdotool key --clearmodifiers Escape
 # Save exactly one known field in the current page; source and ticket checks are native.
 observer '设置' activate
 await_count settings_read_confirmed 1
+observer 搜索设置 focus
+timeout 2s xdotool key --clearmodifiers ctrl+a
+timeout 2s xdotool type --clearmodifiers --delay 1 right_click_paste
 attempt=0; until observer '右键粘贴' focus > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || { cat "$fixture/status.log" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
-timeout 2s xdotool key --clearmodifiers space Tab Return
+timeout 2s xdotool key --clearmodifiers space
+attempt=0; until observer 右键粘贴 inspect-checkbox > "$fixture/draft-checkbox.txt" && grep -q 'showing=1 enabled=1 .*checked=1' "$fixture/draft-checkbox.txt"; do
+  [ "$attempt" -lt 80 ] || { echo workspace.right_paste_draft_not_ready >&2; exit 1; }
+  attempt=$((attempt+1)); sleep 0.1
+done
+observer 保存右键粘贴 activate
 await_count settings_save_confirmed 1
 grep -q 'right_click_paste = true' "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
 attempt=0; until timeout 2s "$fixture/observer" "$app" '已保存 · 重新加载终端后应用；当前会话未关闭' > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || exit 1; attempt=$((attempt+1)); sleep 0.1; done
 paint_settings(){
   deadline=$(( $(date +%s) + 8 ))
   while :; do
-    timeout 3s import -window "$xid" "$1"
-    timeout 3s tesseract "$1" "$fixture/settings-frame" --psm 6 > "$fixture/settings-frame.log" 2>&1
-    if grep -q monospace "$fixture/settings-frame.txt" && python3 - "$1" <<'PY'
-from PIL import Image
-import sys
-with Image.open(sys.argv[1]) as image:
-    rgb = image.convert('RGB')
-    data = rgb.get_flattened_data() if hasattr(rgb, 'get_flattened_data') else rgb.getdata()
-    # Only right_click_paste is checked; fixture terminal output is monochrome.
-    count = sum(1 for r,g,b in data if b > 130 and b-r > 35 and b-g > 15)
-sys.exit(0 if count >= 10 else 1)
-PY
-    then break; fi
-    [ "$(date +%s)" -lt "$deadline" ] || { echo workspace.right_paste_settings_not_painted >&2; exit 1; }
+    if observer '右键粘贴' inspect-checkbox > "$fixture/checkbox-state.txt" && grep -q 'showing=1 enabled=1 .*checked=1' "$fixture/checkbox-state.txt"; then break; fi
+    [ "$(date +%s)" -lt "$deadline" ] || { echo workspace.right_paste_checkbox_mismatch >&2; exit 1; }
     sleep 0.1
   done
+  timeout 3s import -window "$xid" "$1"
 }
 paint_settings target/probes/workspace-right-click-paste-settings.png
 observer '完成' activate
@@ -178,4 +177,6 @@ cp "$fixture/native.input" target/probes/workspace-right-click-paste-input.txt
 [ "$(lines)" -eq 7 ]
 ! grep -q 'LATE_PAGE\|LATE_CLOSE' "$fixture/native.input"
 ! grep -q '^workspace.terminal_failure.' "$log"
+cp -p -- "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml" target/probes/workspace-right-click-paste-settings.toml
+printf '{"version":1,"status":"passed","mode":"right-click-paste","gui_exit_code":0,"native_reaped":true,"pty_pid":%s,"session_opened":1,"late_reads_rejected":%s}\n' "$pid" "$rejected" > target/probes/workspace-right-click-paste-result.json
 echo workspace.right_click_paste_default_off_settings_single_multiline_approve_cancel_refresh_mouse_mode_late_read_exit_barrier_confirmed

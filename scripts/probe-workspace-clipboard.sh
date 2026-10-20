@@ -7,6 +7,9 @@ mkdir -p /data/temp
 fixture=$(mktemp -d /data/temp/pt-workspace-clipboard.XXXXXX)
 export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$fixture/bin"
+export TMPDIR="$fixture" TMP="$fixture" TEMP="$fixture"
+clipboard_helper=${PULSE_CLIPBOARD_HELPER:-target/probes/x11-clipboard}
+status_helper=${PULSE_X11_STATUS:-target/probes/x11-status}
 # Explicit controlled font baseline; production compiled default remains 14px.
 mkdir -m 700 "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview"
 printf '[terminal]\nfont_size = 13\n' > "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
@@ -27,7 +30,7 @@ done
 SHELL
 chmod 700 "$fixture/bin/sh"
 log=target/probes/workspace-clipboard-native.log
-PULSETERM_CLIP_FIXTURE="$fixture/native" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+PULSETERM_CLIP_FIXTURE="$fixture/native" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "${PULSE_WORKSPACE_BINARY:-${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace}" > "$log" 2>&1 &
 app=$!; clip=""
 cleanup(){ if [ -n "$clip" ]; then kill "$clip" 2>/dev/null || true; wait "$clip" 2>/dev/null || true; fi; kill "$app" 2>/dev/null || true; wait "$app" 2>/dev/null || true; rm -rf "$fixture"; }
 trap cleanup EXIT
@@ -44,7 +47,7 @@ pid=$(cat "$fixture/native.pid")
 lines(){ if [ -f "$fixture/native.input" ]; then wc -l < "$fixture/native.input"; else echo 0; fi; }
 own_clip(){
   if [ -n "$clip" ]; then kill "$clip"; wait "$clip" 2>/dev/null || true; fi
-  target/probes/x11-clipboard "$fixture/paste.txt" > "$fixture/clipboard.log" 2>&1 & clip=$!
+  "$clipboard_helper" "$fixture/paste.txt" > "$fixture/clipboard.log" 2>&1 & clip=$!
   attempt=0; while ! grep -q '^clipboard.ready$' "$fixture/clipboard.log"; do [ "$attempt" -lt 80 ] || exit 1; kill -0 "$clip"; attempt=$((attempt+1)); sleep 0.1; done
 }
 set_clip(){
@@ -64,65 +67,102 @@ own_clip
 # Row 2, 12 ASCII cells; no programmatic Terminal.select or synthetic ClipboardEvent.
 timeout 2s xdotool mousemove --window "$xid" 200 170 mousedown 1 mousemove --window "$xid" 296 170 mouseup 1
 if [ "${PULSE_COPY_ON_SELECT_PROBE:-0}" = 1 ]; then
-  timeout 3s target/probes/x11-clipboard read "$fixture/default-copy.txt"
+  timeout 3s "$clipboard_helper" read "$fixture/default-copy.txt"
   [ "$(cat "$fixture/default-copy.txt")" = COPY_SENTINEL_DIFFERENT ]
-  observer(){ if [ "$2" = status ]; then timeout 3s target/probes/x11-status "$app" "$1"; else timeout 3s target/probes/x11-status "$app" "$1" "$2"; fi; }
+  observer(){ if [ "$2" = status ]; then timeout 3s "$status_helper" "$app" "$1"; else timeout 3s "$status_helper" "$app" "$1" "$2"; fi; }
   paint_settings(){
+    expected=0; [ "$2" != enabled ] || expected=1
     settings_frame_deadline=$(( $(date +%s) + 8 ))
     while :; do
-      timeout 3s import -window "$xid" "$1"
-      timeout 3s tesseract "$1" "$fixture/settings-frame" --psm 6 > "$fixture/settings-frame.log" 2>&1
-      if grep -q monospace "$fixture/settings-frame.txt" && python3 - "$1" "$2" <<'PY'
-from PIL import Image
-import sys
-with Image.open(sys.argv[1]) as image:
-    # This fixed Linux fixture has one checked control: copy_on_select.
-    # The other check box is off; the fixed terminal output is monochrome.
-    pixels = image.convert('RGB')
-    data = pixels.get_flattened_data() if hasattr(pixels, 'get_flattened_data') else pixels.getdata()
-    count = sum(1 for r,g,b in data if b>130 and b-r>35 and b-g>15)
-sys.exit(0 if ((count >= 10) if sys.argv[2] == 'enabled' else (count == 0)) else 1)
-PY
-      then break; fi
-      [ "$(date +%s)" -lt "$settings_frame_deadline" ] || { echo workspace.selection_copy_settings_not_painted >&2; exit 1; }
+      if observer 选中复制 inspect-checkbox > "$fixture/checkbox-state.txt" && grep -q "showing=1 enabled=1 .*checked=$expected" "$fixture/checkbox-state.txt"; then break; fi
+      [ "$(date +%s)" -lt "$settings_frame_deadline" ] || { echo workspace.selection_copy_checkbox_mismatch >&2; exit 1; }
       sleep 0.1
     done
+    timeout 3s import -window "$xid" "$1"
+  }
+  close_settings(){
+    observer 完成 activate
+    close_deadline=$(( $(date +%s) + 8 ))
+    while observer 完成 status > "$fixture/closing-state.txt" 2>&1; do
+      [ "$(date +%s)" -lt "$close_deadline" ] || { echo workspace.selection_copy_settings_not_closed >&2; exit 1; }
+      sleep 0.1
+    done
+    timeout 2s xdotool mousemove --window "$xid" 700 500 click 1
   }
   attempt=0; until observer 设置 activate > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || { cat "$fixture/status.log" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
+  observer 搜索设置 focus
+  timeout 2s xdotool key --clearmodifiers ctrl+a
+  timeout 2s xdotool type --clearmodifiers --delay 1 copy_on_select
   attempt=0; until observer 选中复制 focus > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || { cat "$fixture/status.log" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
-  timeout 2s xdotool key --clearmodifiers space Tab Return
+  timeout 2s xdotool key --clearmodifiers space
+  paint_settings "$fixture/draft-enabled.png" enabled
+  observer 保存选中复制 activate
   attempt=0; until grep -q '^copy_on_select = true$' "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"; do [ "$attempt" -lt 80 ] || { echo workspace.selection_copy_setting_not_saved >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
   attempt=0; until observer '已保存 · 重新加载终端后应用；当前会话未关闭' status > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || { cat "$fixture/status.log" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
   paint_settings target/probes/workspace-selection-copy-settings-enabled.png enabled
-  observer 完成 activate
+  close_settings
+  # Saving applies to the next view; this original disabled view must not copy.
+  own_clip
+  timeout 2s xdotool mousemove --window "$xid" 200 170 mousedown 1 mousemove --window "$xid" 296 170 mouseup 1
+  timeout 3s "$clipboard_helper" read "$fixture/old-disabled-copy.txt"
+  [ "$(cat "$fixture/old-disabled-copy.txt")" = COPY_SENTINEL_DIFFERENT ]
   timeout 2s xdotool key --clearmodifiers ctrl+shift+r
   await_count document_confirmed 2; await_count terminal_input_ready 2
   own_clip
   timeout 2s xdotool mousemove --window "$xid" 200 170 mousedown 1 mousemove --window "$xid" 296 170 mouseup 1
-  attempt=0; while :; do timeout 3s target/probes/x11-clipboard read "$fixture/auto-copy.txt"; [ "$(cat "$fixture/auto-copy.txt")" = PASTE_SINGLE ] && break; [ "$attempt" -lt 80 ] || { echo workspace.selection_copy_mismatch >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
+  attempt=0; while :; do timeout 3s "$clipboard_helper" read "$fixture/auto-copy.txt"; [ "$(cat "$fixture/auto-copy.txt")" = PASTE_SINGLE ] && break; [ "$attempt" -lt 80 ] || { echo workspace.selection_copy_mismatch >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
   kill -0 "$pid"; [ "$(lines)" -eq 1 ]
   timeout 3s import -window "$xid" target/probes/workspace-selection-copy-enabled.png
   observer 设置 activate
+  observer 搜索设置 focus
+  timeout 2s xdotool key --clearmodifiers ctrl+a
+  timeout 2s xdotool type --clearmodifiers --delay 1 copy_on_select
   observer 选中复制 focus
-  timeout 2s xdotool key --clearmodifiers space Tab Return
+  timeout 2s xdotool key --clearmodifiers space
+  paint_settings "$fixture/draft-disabled.png" disabled
+  observer 保存选中复制 activate
   attempt=0; until grep -q '^copy_on_select = false$' "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"; do [ "$attempt" -lt 80 ] || exit 1; attempt=$((attempt+1)); sleep 0.1; done
   attempt=0; until observer '已保存 · 重新加载终端后应用；当前会话未关闭' status > "$fixture/status.log" 2>&1; do [ "$attempt" -lt 80 ] || { cat "$fixture/status.log" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done
   paint_settings target/probes/workspace-selection-copy-settings-disabled.png disabled
-  observer 完成 activate
+  observer 选中复制恢复继承 activate
+  await_count settings_save_confirmed 3
+  ! grep -q '^copy_on_select' "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
+  paint_settings target/probes/workspace-selection-copy-settings-inherited.png disabled
+  close_settings
+  # Explicit false and inheritance reset must not change the already enabled view.
+  own_clip
+  timeout 2s xdotool mousemove --window "$xid" 200 170 mousedown 1 mousemove --window "$xid" 296 170 mouseup 1
+  attempt=0; while :; do
+    timeout 3s "$clipboard_helper" read "$fixture/old-enabled-copy.txt"
+    [ "$(cat "$fixture/old-enabled-copy.txt")" = PASTE_SINGLE ] && break
+    [ "$attempt" -lt 80 ] || {
+      cp -p -- "$fixture/old-enabled-copy.txt" target/probes/workspace-selection-copy-old-enabled-failure.txt
+      timeout 3s import -window "$xid" target/probes/workspace-selection-copy-old-enabled-failure.png
+      echo workspace.selection_copy_old_view_changed >&2; exit 1;
+    }
+    attempt=$((attempt+1)); sleep 0.1
+  done
   timeout 2s xdotool key --clearmodifiers ctrl+shift+r
   await_count document_confirmed 3; await_count terminal_input_ready 3
   own_clip
   timeout 2s xdotool mousemove --window "$xid" 200 170 mousedown 1 mousemove --window "$xid" 296 170 mouseup 1
-  timeout 3s target/probes/x11-clipboard read "$fixture/disabled-copy.txt"
+  timeout 3s "$clipboard_helper" read "$fixture/disabled-copy.txt"
   [ "$(cat "$fixture/disabled-copy.txt")" = COPY_SENTINEL_DIFFERENT ]
   timeout 3s import -window "$xid" target/probes/workspace-selection-copy-disabled.png
   timeout 2s xdotool key --clearmodifiers alt+F4
   await_count exited 1; wait "$app"; ! kill -0 "$pid" 2>/dev/null
+  [ "$(lines)" -eq 1 ]
+  cp -p -- "$fixture/native.input" target/probes/workspace-selection-copy-input.txt
+  cp -p -- "$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml" target/probes/workspace-selection-copy-settings.toml
+  for state in default auto disabled old-disabled old-enabled; do
+    cp -p -- "$fixture/$state-copy.txt" "target/probes/workspace-selection-copy-$state.txt"
+  done
+  printf '{"version":1,"status":"passed","mode":"selection-copy","gui_exit_code":0,"native_reaped":true,"pty_pid":%s,"session_opened":1,"refreshes":2,"restore_inheritance":true}\n' "$pid" > target/probes/workspace-selection-copy-result.json
   echo workspace.selection_copy_default_off_settings_enable_refresh_actual_mouse_clipboard_disable_no_input_exit_confirmed
   exit 0
 fi
 timeout 2s xdotool key --clearmodifiers ctrl+c
-timeout 3s target/probes/x11-clipboard read "$fixture/copied.txt"
+timeout 3s "$clipboard_helper" read "$fixture/copied.txt"
 [ "$(cat "$fixture/copied.txt")" = PASTE_SINGLE ] || { echo workspace.clipboard_copy_mismatch >&2; exit 1; }
 kill -0 "$pid" # Selected Ctrl+C did not interrupt the Shell.
 timeout 2s xdotool mousemove --window "$xid" 700 500 click 1
@@ -164,4 +204,6 @@ timeout 2s xdotool key --clearmodifiers alt+F4
 await_count exited 1
 wait "$app"
 ! kill -0 "$pid" 2>/dev/null
+cp -p -- "$fixture/native.input" target/probes/workspace-clipboard-input.txt
+printf '{"version":1,"status":"passed","mode":"clipboard","gui_exit_code":0,"native_reaped":true,"pty_pid":%s,"session_opened":1}\n' "$pid" > target/probes/workspace-clipboard-result.json
 echo workspace.clipboard_single_cancel_approve_retire_confirmed

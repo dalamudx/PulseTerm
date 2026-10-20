@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 剪贴板设置探针按当前界面校准（Linux 原生）
+
+现有基础复制／粘贴、选中复制和右键粘贴正式场景沿用真实 GTK 系统剪贴板与 PTY。设置步骤改为按稳定字段名搜索、明确保存动作，不再依赖旧 Tab 顺序或全窗口蓝色像素。helper 新增仅匹配 CHECK_BOX 角色的只读 `inspect-checkbox`，要求显示、启用及实际勾选状态，避免同名静态标签误判。选中复制补显式 false／恢复继承和保存前后当前视图冻结检查，并记录最终精确剪贴板、PTY 输入与退出快照；原右键多行批准、页面撤销、鼠标报告优先和迟到读取退出屏障检查保留。
+
+Shell 语法／补丁、C helper 严格编译以及当前源码的隔离前端／原生构建通过。最终三场景复验全部通过，三份完整 PTY 输入快照逐字匹配：基础粘贴为 PASTE_SINGLE／MULTI_ONE／MULTI_TWO／空行，选中复制只有 PASTE_SINGLE，右键场景为 RIGHT_SINGLE／RIGHT_ONE／RIGHT_TWO／MOUSE_ON／MOUSE_OFF／RIGHT_AFTER_MOUSE／空行。系统剪贴板的默认、旧关闭视图和继承刷新后均保留 sentinel；启用刷新及旧开启视图均精确为 PASTE_SINGLE。恢复继承后配置无 copy_on_select 项，原 PTY 和会话均未重建；右键两次迟到读取被拒，关窗确实等待回调结束后才记录 shutdown_complete／exited。三条 PTY 已回收，三个 GUI 的 wait 退出码均为 0。
+
+首轮在旧开启视图重拖选区时失败，原始日志与当轮设置截图保留；AT-SPI 的“完成”动作返回不等于 WebView 对话框已关闭，新增实际隐藏等待及终端聚焦后完整矩阵通过，产品实现未改。沿用原正式 mise 任务及 Linux CI，不新增重型矩阵。最终证据见 `target/probes/workspace-clipboard-settings/accepted/b74115f2/verification.json`。本批仅登记 Linux 隔离 GTK／WebView 与固定 PTY 场景；SSH、多平台、真实桌面及更多剪贴板格式仍单独待验。Windows 设置源与 Profile／SQLite 生产接入继续受原生权限验证资源阻塞，未切换现有生产读取路径。
+本批 `clean-dev` 清理 4.5GiB，剩余私有二进制／前端资产／helper 与任务目录已删除，任务进程全部退出；接受材料摘要独立核验，既有失败记录继续保留。
+
+
 ## Windows 设置文档与平台快照适配（验证候选）
 
 在 desktop 层新增验证候选，将固定 settings.toml 的平台精确快照与 store 的文档解析／类型化 Set、Remove 接通。store 与 platform 不互相依赖，生产设置命令和不支持平台的拒绝路径保持原值。读取先按 65536 字节预算验证 UTF-8／完整设置；保存只接受已知字段，保留注释与其他字段，未授权／回调 panic、锁冲突、陈旧快照和不确定提交不自动重试或恢复默认。
