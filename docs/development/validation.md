@@ -2,6 +2,16 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Wine 10 平台文件测试兼容性调查
+
+为 Windows 平台测试链接 GNU 可执行文件，并在 Linux 的独立 Wine 10.0（Debian 10.0~repack-6）前缀实际运行。完整 39 项测试中 20 项通过、19 项失败：17 项纯策略及三项拒绝路径通过；其余目录、文件与原子保存测试在私有目录准入时以 Location 拒绝，未验证到保存语义。执行环境采用私有解包的 Wine／MinGW、摘要校验的 Rust 1.95.0 Windows 标准库和隔离挂载，不修改宿主安装。
+
+一次性阶段诊断确认祖先属性／ACL 检查及创建调用成功，私有叶目录的所有者正确，但重读 `SE_DACL_PROTECTED=false`。独立、严格编译的 Win32 C 程序使用与产品相同的受保护 SDDL：请求保护位为 true、`CreateDirectoryW` 返回成功、`GetSecurityInfo` 重读为 false，复现该环境不保留保护位；卷声明支持持久 ACL 和 128 位文件 ID 查询并不足以证明实际合同。产品拒绝行为保持不变，不跳过保护位、不先宽权限创建后修复，也不以 Wine 结果登记 Windows 实机通过。
+
+临时 Rust 阶段诊断已移除，原始源码恢复。加载器部署失败、完整测试失败和独立 C 反例分别保留；Wine 启动还观察到辅助进程的 OLE 初始化告警，因此不将此运行环境视为完整 Windows 系统。Windows 原生执行仍为零；后续设置／Profile 适配与真实 NTFS／ACL／原子保存／IPC 验收继续开放。调查材料见 `target/probes/windows-wine/diagnostic/verification.json`。
+最终原始源码复验仍为 20 通过／19 失败，测试退出码为 101；临时诊断不保留在产品或测试源码中。`clean-dev` 清理 67.9MiB，私有 Wine／MinGW／前缀／标准库和任务目录已删除，任务进程全部退出；源码与工具环境不变，归档摘要独立核验。
+
+
 ## 会话复制与关闭前确认（Linux 原生）
 
 命令面板新增 `duplicate-session`（第 17 项）：按当前页面记录的 Profile 来源重开同一 Profile，来源未知（例如页面刷新后）时按钮与命令均不可用并给出提示，不猜测目标、不自动降级到默认 Shell。设置新增 `confirm_close`（默认开启），可全局／Profile／组／SSH 入口继承；为 `false` 时点击关闭直接关闭并回收，为 `true` 时保留原有确认弹窗。
