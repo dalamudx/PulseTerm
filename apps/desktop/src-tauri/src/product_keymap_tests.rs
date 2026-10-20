@@ -41,7 +41,8 @@ async fn actual_private_source_requires_confirmation_and_single_use_edit_consent
     let (directory, owner, _documents, _window, page) = fixture()?;
     let initial = owner.read(page.clone(), directory.path().into()).await?;
     assert!(!initial.confirmed);
-    assert_eq!(initial.values.bindings.len(), 2);
+    let defaults = pulse_store::keymap::KeymapPatch::parse("schema_version = 1\n")?.resolve()?;
+    assert_eq!(initial.values, defaults);
     assert!(matches!(
         owner
             .save(page.clone(), initial.token, change(), true)
@@ -89,10 +90,10 @@ async fn actual_private_source_requires_confirmation_and_single_use_edit_consent
             true,
         )
         .await?;
-    assert_eq!(restored.values.bindings.len(), 2);
+    assert_eq!(restored.values, defaults);
     owner.shutdown().await?;
     let file = KeymapFile::open_private(directory.path().into())?;
-    assert_eq!(file.load()?.projection()?.bindings.len(), 2);
+    assert_eq!(file.load()?.projection()?, defaults);
     Ok(())
 }
 #[tokio::test]

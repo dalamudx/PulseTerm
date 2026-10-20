@@ -4,7 +4,7 @@
 
 ## 来源与覆盖
 
-当前清单为 778 个组件：618 个非工作区 Rust 包、pnpm 锁文件中的全部 159 个包，以及原始 JetBrains Mono 2.304 字体。pnpm 范围包括当前机器未安装的可选平台包，不能用本机 `pnpm licenses list` 代替。
+当前清单为 779 个组件：619 个非工作区 Rust 包、pnpm 锁文件中的全部 159 个包，以及原始 JetBrains Mono 2.304 字体。pnpm 范围包括当前机器未安装的可选平台包，不能用本机 `pnpm licenses list` 代替。
 
 生成器用 Cargo.lock 的 SHA-256 或 pnpm v9 的 SHA-512 校验发布归档，再读取包内元数据与独立许可证／COPYING／NOTICE／AUTHORS 等文本。平台归档不解包，不执行其二进制或安装脚本。原文字节按内容 SHA-256 去重存储，各包仍保留包内原路径和来源；这不是用统一 SPDX 模板替代上游原文。
 

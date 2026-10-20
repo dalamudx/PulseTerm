@@ -1,7 +1,7 @@
 {
   "generatedFiles": {
     "NOTICE": "841c9ca3b1a3cfd5a4616ef20ba43fb0f4619ab1ecad6826ae2461777b84df9d",
-    "THIRD_PARTY.md": "e5a43bb8aec57da24fce0a83683edc99e6f5d8baaa1ee6156b55ba02bb3dc5c7",
+    "THIRD_PARTY.md": "7864edd00000689ece6b194667df64e75266fbe3a82ea2d2cb9152f85e601628",
     "third-party/licenses/002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1.txt": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1",
     "third-party/licenses/0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13.txt": "0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13",
     "third-party/licenses/003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0.txt": "003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0",
@@ -209,6 +209,7 @@
     "third-party/licenses/7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349.txt": "7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349",
     "third-party/licenses/73b9dc2e79c7308998dd30296e073aefaefb944a68fb89aa412c23c0edcabcaa.txt": "73b9dc2e79c7308998dd30296e073aefaefb944a68fb89aa412c23c0edcabcaa",
     "third-party/licenses/7429802d3e67e3308471b91fbea341e484c4e0a23d0fb230a8636c38184cec79.txt": "7429802d3e67e3308471b91fbea341e484c4e0a23d0fb230a8636c38184cec79",
+    "third-party/licenses/748c208045a6f00734dbc85a1c0e401c9a25e1f83fc756e99916750dbd2469a7.txt": "748c208045a6f00734dbc85a1c0e401c9a25e1f83fc756e99916750dbd2469a7",
     "third-party/licenses/74db5baf44a41b1000312c673544b3374e4198af5605c7f9080a402cec42cfa3.txt": "74db5baf44a41b1000312c673544b3374e4198af5605c7f9080a402cec42cfa3",
     "third-party/licenses/751963a8b88c0e3a9f27e98933079fbcf09b9998b2c13ac49c2e4d58444520d6.txt": "751963a8b88c0e3a9f27e98933079fbcf09b9998b2c13ac49c2e4d58444520d6",
     "third-party/licenses/7554701d1e74fc434f68c522b1dd743c8c16d816a4b761b5213f367b898884c8.txt": "7554701d1e74fc434f68c522b1dd743c8c16d816a4b761b5213f367b898884c8",
@@ -334,6 +335,7 @@
     "third-party/licenses/b8601fc79bdf8d8088f0938bea861ffc63ed0eebbedf25f44ab2cf2e85bd7edc.txt": "b8601fc79bdf8d8088f0938bea861ffc63ed0eebbedf25f44ab2cf2e85bd7edc",
     "third-party/licenses/b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab.txt": "b8778b155bfde5a28b023a558753c0fa058a52bb9de35c343c250be1bbcdedab",
     "third-party/licenses/b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0.txt": "b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0",
+    "third-party/licenses/b9290e9d37bc53272ff4f3fb392c1762169fc0a8b797d164803049c81eacb48c.txt": "b9290e9d37bc53272ff4f3fb392c1762169fc0a8b797d164803049c81eacb48c",
     "third-party/licenses/b99f9d43803f2ac979c50949df630bd8eeaf2fcd1b9fdb9093710d70f5dfb63d.txt": "b99f9d43803f2ac979c50949df630bd8eeaf2fcd1b9fdb9093710d70f5dfb63d",
     "third-party/licenses/b9b7e5d4bf8857061fbecab39ef1923644eba639337af22d7ad0bb9b3ce59c49.txt": "b9b7e5d4bf8857061fbecab39ef1923644eba639337af22d7ad0bb9b3ce59c49",
     "third-party/licenses/bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3.txt": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3",
@@ -345,6 +347,7 @@
     "third-party/licenses/c144680885b29e4719e2a51f0aab5439a1e02d980692b5aaf086cae12727f28b.txt": "c144680885b29e4719e2a51f0aab5439a1e02d980692b5aaf086cae12727f28b",
     "third-party/licenses/c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b.txt": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b",
     "third-party/licenses/c1c9d5ca65122bab96e368709f8cfe9b92b443a3c21306c3260fc98eaac7e5fc.txt": "c1c9d5ca65122bab96e368709f8cfe9b92b443a3c21306c3260fc98eaac7e5fc",
+    "third-party/licenses/c1ff532091cac33bdecedf7268ff4f9bc3ddcffba494249fb723033e9e782f1a.txt": "c1ff532091cac33bdecedf7268ff4f9bc3ddcffba494249fb723033e9e782f1a",
     "third-party/licenses/c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383.txt": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
     "third-party/licenses/c30152c94a6d75e021adbc52b3a52470366a46edb917e17deae3259251af244c.txt": "c30152c94a6d75e021adbc52b3a52470366a46edb917e17deae3259251af244c",
     "third-party/licenses/c5f54bc513da6de13cfec3334ed095786a46ca25352a5e038437095157c4aa03.txt": "c5f54bc513da6de13cfec3334ed095786a46ca25352a5e038437095157c4aa03",
@@ -443,33 +446,34 @@
   },
   "generator": "scripts/third-party.py",
   "inputs": {
-    "Cargo.lock": "3c76e999561ce5f77d63783b8da75ff3c97f5b71b9a7b5c693cc22d1353ada31",
-    "Cargo.toml": "1aa0e5e8c69097a0a0c27f71a20666d86c3381bd760d9eb1c78c6657c96675a8",
-    "apps/desktop/src-tauri/Cargo.toml": "7e4e1137850b621e23551141a06c542826e0f100d13d2107d0e709a19ff778b6",
+    "Cargo.lock": "0f4fb47aaa327aa1000f49745e26051f13cd6d05f12fbbddda580f104f598c34",
+    "Cargo.toml": "e3d7ab79023ae8ef9fa125d917c2744470953aef7009e1721429f5c54ec03588",
+    "apps/desktop/src-tauri/Cargo.toml": "7f67b223a84a7d77d37489a7886cd208be40b696155b6469c67c3bb9f86ba4d2",
     "crates/pulse-app/Cargo.toml": "20b29527d8061809efbd6edad97c428ec8815bba3d0a0a39b10650bb49a12da5",
     "crates/pulse-cap/Cargo.toml": "85dbc17c0de165c424cd3622bbf535708af47cec0269336c70e78f1cd009aaff",
     "crates/pulse-core/Cargo.toml": "780c341d6a230ed6d0faa664786cd249810a0e0cfb5b13632cf7ee0ded5cfbc4",
     "crates/pulse-ipc/Cargo.toml": "a5080bc314cd7cde0fd25622630993546d2f5b7d04b41c2a7e6576004dc7e722",
+    "crates/pulse-platform/Cargo.toml": "d882933755c6db6cfee2e3b47e4fb638cb34afb95f0ea993fec63c98bb312eb9",
     "crates/pulse-pty/Cargo.toml": "ca76edf7ff64c8973b32585980de88e87e07b5f64a1bf6614ab1aa909769c6a2",
     "crates/pulse-route/Cargo.toml": "02f156d607db532a2115992031e18759c3442927a667838206870850bf9a7daa",
     "crates/pulse-ssh/Cargo.toml": "da4b6575df9398e67aa61d666f0452161c40f5bb1822f4aae1b209bfda2f20c2",
-    "crates/pulse-store/Cargo.toml": "6cc69a45794f76b4147ff89a3175fd6e370590675164076b1cf348db648b8caa",
-    "crates/pulse-term/Cargo.toml": "3bae919f64df8e47ad3ee204fc1b1e7930e014f84ac041f82772f16b58062923",
+    "crates/pulse-store/Cargo.toml": "5fe311ce83f8afa8e9ac97153cf345dddeb1a639b0e22a026b4372716f2d94aa",
+    "crates/pulse-term/Cargo.toml": "5b83bec972a63753f4efa0b4e94c99541ef74407f75e78f9df1275a042fadcb7",
     "deny.toml": "622ff84227a675ca2104977bf8e9751301859aa9974b6fa76c83f9137e3caf1f",
     "package.json": "1e6925a74a1581c3f2a81650f7b4ee5d48d8faa2d4f2c667e9a07007a5db180d",
-    "pnpm-lock.yaml": "d93cace7a95a706513f610620b1493040233fc53064b276936ab57d72f9877fc",
+    "pnpm-lock.yaml": "09566466a15b3f6846fa861525e69636fb06d51276cab66ef7e417fef9fba715",
     "pnpm-workspace.yaml": "25c8abe62df32175b07a1b73c1f865b84b699958219a4b76fea1d6740e7ad521",
     "scripts/third-party.py": "ef84a84e9fe47940796de02a459dc31606f3bbe8f15d35fc22cc47f1a54663fb",
     "scripts/third_party_sources.py": "f5d632a3bdf774e656f7bc8da5ba8140f319c8db59c906a56c6e04fa6c90d748",
     "third-party/supplemental-sources.json": "f45c6d9de4f2cb37adb50dc5c9c50bc226e48f4e11559fc57dcc8b5d7a04e6be",
-    "ui/package.json": "ef9ea5644d3c6c67b70901ac5998d0da467c80792586ace9ceaed90fd95d2a2d",
+    "ui/package.json": "6d16c495af53d616e8d81138d2fe530ed0d33255cf7895a4f86e64927b4c4fab",
     "ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2",
     "ui/src/assets/fonts/jetbrains-mono/OFL.txt": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
     "ui/src/assets/fonts/jetbrains-mono/source.json": "ef8ab95d85a1b591ac8978e88b52271f2877dc8d26bd02ea1adca0729dd783af",
     "vendor/README.md": "29a521540eae5d9af826aa93143e52d988baeb977001e0f8322b9b0908518630",
     "vendor/alacritty_terminal.patch": "86c4bd8150b1c5f5b57c041f00f2eeaa585848cbf17a420100ae0828321a14c3",
     "vendor/alacritty_terminal.upstream.json": "489b4fee9ed7526a8e03326cba0ff9bc702b2727765723172bb494df4cc41f3b",
-    "xtask/Cargo.toml": "76abfcd1a4149e3b67364fa47d53bce43af582831f2858071efb1d9ee71182a4"
+    "xtask/Cargo.toml": "3613aa4590728a6bfb3a9f32bf7ebbbe9a8fb842192a0cd452df9e6263eb3d94"
   },
   "packages": [
     {
@@ -13952,6 +13956,42 @@
       "version": "1.2.1"
     },
     {
+      "authors": [],
+      "declaredLicense": "MIT OR Apache-2.0 OR Zlib",
+      "ecosystem": "cargo",
+      "id": "cargo:static_vcruntime@3.0.0",
+      "licenseTexts": [
+        {
+          "file": "third-party/licenses/b9290e9d37bc53272ff4f3fb392c1762169fc0a8b797d164803049c81eacb48c.txt",
+          "sha256": "b9290e9d37bc53272ff4f3fb392c1762169fc0a8b797d164803049c81eacb48c",
+          "sourcePath": "LICENSE"
+        },
+        {
+          "file": "third-party/licenses/e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb.txt",
+          "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb",
+          "sourcePath": "LICENSE-APACHE"
+        },
+        {
+          "file": "third-party/licenses/748c208045a6f00734dbc85a1c0e401c9a25e1f83fc756e99916750dbd2469a7.txt",
+          "sha256": "748c208045a6f00734dbc85a1c0e401c9a25e1f83fc756e99916750dbd2469a7",
+          "sourcePath": "LICENSE-MIT"
+        },
+        {
+          "file": "third-party/licenses/c1ff532091cac33bdecedf7268ff4f9bc3ddcffba494249fb723033e9e782f1a.txt",
+          "sha256": "c1ff532091cac33bdecedf7268ff4f9bc3ddcffba494249fb723033e9e782f1a",
+          "sourcePath": "LICENSE-ZLIB"
+        }
+      ],
+      "name": "static_vcruntime",
+      "origin": {
+        "archiveSha256": "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7",
+        "url": "https://static.crates.io/crates/static_vcruntime/static_vcruntime-3.0.0.crate"
+      },
+      "repository": "https://github.com/ChrisDenton/static_vcruntime",
+      "textStatus": "collected",
+      "version": "3.0.0"
+    },
+    {
       "authors": [
         "The Servo Project Developers"
       ],
@@ -14061,7 +14101,7 @@
       ],
       "declaredLicense": "MIT OR Apache-2.0",
       "ecosystem": "cargo",
-      "id": "cargo:swift-rs@1.0.8",
+      "id": "cargo:swift-rs@1.0.9",
       "licenseTexts": [
         {
           "file": "third-party/licenses/908a661cf763bddfa04f2739bea561be62a246f03ad53fcb2272d3ddbd1d943f.txt",
@@ -14076,12 +14116,12 @@
       ],
       "name": "swift-rs",
       "origin": {
-        "archiveSha256": "e45c444e496845d3f2a351146bff59aae4975b2280238df1dfaa0c7d1846f38e",
-        "url": "https://static.crates.io/crates/swift-rs/swift-rs-1.0.8.crate"
+        "archiveSha256": "cefd87076fd385308ee4aff597256c902f1fbb4d031de1558efc12f8ffefadd9",
+        "url": "https://static.crates.io/crates/swift-rs/swift-rs-1.0.9.crate"
       },
       "repository": "https://github.com/Brendonovich/swift-rs",
       "textStatus": "collected",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "authors": [
@@ -14333,7 +14373,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-build@2.7.1",
+      "id": "cargo:tauri-build@2.7.3",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14348,12 +14388,12 @@
       ],
       "name": "tauri-build",
       "origin": {
-        "archiveSha256": "59563ca5b331fd97f27ee9672ec8d36d33bb3c9e2c9f6710a1a5687256052e45",
-        "url": "https://static.crates.io/crates/tauri-build/tauri-build-2.7.1.crate"
+        "archiveSha256": "641dd5fd297c99ab92717b0428cca5b9c6f960b2ac96ca131b3eebc9d70b8ddc",
+        "url": "https://static.crates.io/crates/tauri-build/tauri-build-2.7.3.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.7.1"
+      "version": "2.7.3"
     },
     {
       "authors": [
@@ -14361,7 +14401,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-codegen@2.7.1",
+      "id": "cargo:tauri-codegen@2.7.3",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14376,12 +14416,12 @@
       ],
       "name": "tauri-codegen",
       "origin": {
-        "archiveSha256": "e50213e463086ecc283d7e9f51c30cc0fd304ad457425158018be26dbf0d0a80",
-        "url": "https://static.crates.io/crates/tauri-codegen/tauri-codegen-2.7.1.crate"
+        "archiveSha256": "a6585c5b536c00f039d12ce70a9755172d5423bbcfd3969863baa70314c3e02f",
+        "url": "https://static.crates.io/crates/tauri-codegen/tauri-codegen-2.7.3.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.7.1"
+      "version": "2.7.3"
     },
     {
       "authors": [
@@ -14389,7 +14429,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-macros@2.7.1",
+      "id": "cargo:tauri-macros@2.7.3",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14404,12 +14444,12 @@
       ],
       "name": "tauri-macros",
       "origin": {
-        "archiveSha256": "8129fb43bb6e0d6b73ad3315cd172beaab17cd28899c594b1b32c80edbbfd99c",
-        "url": "https://static.crates.io/crates/tauri-macros/tauri-macros-2.7.1.crate"
+        "archiveSha256": "e2e83a0cfa1bae376e8fbbdc0b1692707aed50cd6072ce85cae4789af5d6c19f",
+        "url": "https://static.crates.io/crates/tauri-macros/tauri-macros-2.7.3.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.7.1"
+      "version": "2.7.3"
     },
     {
       "authors": [
@@ -14450,7 +14490,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-runtime-wry@2.12.1",
+      "id": "cargo:tauri-runtime-wry@2.12.2",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14465,12 +14505,12 @@
       ],
       "name": "tauri-runtime-wry",
       "origin": {
-        "archiveSha256": "7f9e7e0c9f80a5130773cfabb6df4dc924518fb1b2c923726966804634b57d22",
-        "url": "https://static.crates.io/crates/tauri-runtime-wry/tauri-runtime-wry-2.12.1.crate"
+        "archiveSha256": "8d61892587aea2a85245bcaec98c6fe46268874c0a0deae5535fb71ca7b93eae",
+        "url": "https://static.crates.io/crates/tauri-runtime-wry/tauri-runtime-wry-2.12.2.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.12.1"
+      "version": "2.12.2"
     },
     {
       "authors": [
@@ -14478,7 +14518,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-runtime@2.12.1",
+      "id": "cargo:tauri-runtime@2.12.2",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14493,12 +14533,12 @@
       ],
       "name": "tauri-runtime",
       "origin": {
-        "archiveSha256": "c2a57a2a9b8c8b7fc00d35b510fe808ded7f9f1b44fc1cdda6aee38632ea5413",
-        "url": "https://static.crates.io/crates/tauri-runtime/tauri-runtime-2.12.1.crate"
+        "archiveSha256": "7c55766d99cea69055904d1735b93c2049302b2e09effd462120deb5581d78e9",
+        "url": "https://static.crates.io/crates/tauri-runtime/tauri-runtime-2.12.2.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.12.1"
+      "version": "2.12.2"
     },
     {
       "authors": [
@@ -14612,7 +14652,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri-utils@2.10.1",
+      "id": "cargo:tauri-utils@2.10.2",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14627,12 +14667,12 @@
       ],
       "name": "tauri-utils",
       "origin": {
-        "archiveSha256": "2ff55a614843b9a3f010f211df637c94df2607175b8d0f6e0f4a7c19e18621ee",
-        "url": "https://static.crates.io/crates/tauri-utils/tauri-utils-2.10.1.crate"
+        "archiveSha256": "362ab21cd4cc713f2a02b1a9b5688198b1541cfb6907c4281e9190e0f0ef4aa3",
+        "url": "https://static.crates.io/crates/tauri-utils/tauri-utils-2.10.2.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.10.1"
+      "version": "2.10.2"
     },
     {
       "authors": [
@@ -14664,7 +14704,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:tauri@2.12.1",
+      "id": "cargo:tauri@2.12.4",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -14679,12 +14719,12 @@
       ],
       "name": "tauri",
       "origin": {
-        "archiveSha256": "ed99ee9694a2deb776d91cae48ac7411ddfc89ecae2f9b5041111d8c88f2ace9",
-        "url": "https://static.crates.io/crates/tauri/tauri-2.12.1.crate"
+        "archiveSha256": "f316751027fc2644221d1a448564d519efb07067fda584879d9cda966391d212",
+        "url": "https://static.crates.io/crates/tauri/tauri-2.12.4.crate"
       },
       "repository": "https://github.com/tauri-apps/tauri",
       "textStatus": "collected",
-      "version": "2.12.1"
+      "version": "2.12.4"
     },
     {
       "authors": [
@@ -20800,7 +20840,7 @@
       "authors": [],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "npm",
-      "id": "npm:@tauri-apps/api@2.12.1",
+      "id": "npm:@tauri-apps/api@2.12.4",
       "licenseTexts": [
         {
           "file": "third-party/licenses/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
@@ -20820,15 +20860,15 @@
       ],
       "name": "@tauri-apps/api",
       "origin": {
-        "integrity": "sha512-DeyFHa3wynpyoqTDikDEDGTJIq4LQ5USfolQGRmGIWT6JMADyxZBTDa5cAdT3tDg73rUXufPaCwN7aXBos4OnQ==",
-        "url": "https://registry.npmjs.org/@tauri-apps/api/-/api-2.12.1.tgz"
+        "integrity": "sha512-pVmfis+4zT8H0Qhp3xPZx9Ju7kpzvA6rr/PSJPyuwfvucTQ8sVt61NYU9KMkK703UFlYadFmjKA4HhybOtN0gg==",
+        "url": "https://registry.npmjs.org/@tauri-apps/api/-/api-2.12.4.tgz"
       },
       "repository": {
         "type": "git",
         "url": "git+https://github.com/tauri-apps/tauri.git"
       },
       "textStatus": "collected",
-      "version": "2.12.1"
+      "version": "2.12.4"
     },
     {
       "authors": [],

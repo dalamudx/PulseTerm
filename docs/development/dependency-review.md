@@ -2,6 +2,14 @@
 
 当前功能编译与运行通过，但启用 `desktop` 的完整依赖审计未通过。**不得打包发布，不得声称依赖审计通过。** `.mise.toml` 的 `audit` 已改为 `cargo deny --all-features --locked check`，避免默认特性漏查 Tauri 可选依赖。
 
+## Tauri 稳定补丁组合（Linux 验证）
+
+通过 crates.io 稀疏注册表核对稳定发布，Tauri 已有 2.12.4，Wry 仍为 0.57.0、Specta 仍为 rc.25。发布归档 SHA-256 已校验，变更记录绑定包内 `.cargo_vcs_info.json` 的固定提交 `59b63ab500da9859f12d8888c3298bc29bba0b92`，不以可变 dev 分支替代发布来源。同步 Tauri／前端 API 2.12.4、tauri-build／macros／codegen 2.7.3、runtime 系列 2.12.2、utils 2.10.2；传递更新 Swift 1.0.9，并新增 build 的 static_vcruntime 3.0.0。后者已独立验摘要及源码：只对 MSVC 输出链接参数、不含下载执行步骤，不能据此证明 Windows CRT 分发义务已完成。
+
+升级理由是上游修复空路径 IPC／资源协议 panic、一次性事件监听竞争，以及 Channel 的 onmessage 抛错后所有后续消息停滞。新增两项实际 SDK 回归验证有序／乱序回调抛错后仍投递并正确回收 End，原 2.12.1 同一测试两项均失败；完整前端 1549 项通过。此证据不把历史黑窗／SIGSEGV 根因登记为已解决。
+
+生产组合全目标严格 Clippy 已通过；原生库套件 328 项通过、5 项既有忽略，唯一失败来自键位测试仍按两个绑定计数。首次／恢复／重读已改为完整默认投影比较，六项键位组最终复验通过；IPC 版本未变。另补齐此前本地 xtask→pulse-platform 依赖的 0.1.0 版本声明，清除 wildcard 阻断。原策略审计仍为 8 项许可拒绝／5 项维护公告，Rust 退出 5、JavaScript 通过；779 组件材料刷新及 39 项校验通过，完整文本缺口仍为 22，发布文本检查退出 1。Linux 生产 CLI＋SSH 实窗的分屏与剪贴板使用链通过，三 PTY 与两 GUI 退出、控制端点回收；首轮运行目录缺失的启动失败单独保留。不升级 Wry／GTK 主版本，不移除 IBus／Fcitx 兼容，不添加许可例外或公告 ignore；既有发布阻塞继续有效，历史原生故障未登记修复。
+
 复现（联网更新公告）：
 
 ```sh
