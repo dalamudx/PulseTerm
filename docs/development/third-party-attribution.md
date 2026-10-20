@@ -4,7 +4,7 @@
 
 ## 来源与覆盖
 
-当前清单为 779 个组件：619 个非工作区 Rust 包、pnpm 锁文件中的全部 159 个包，以及原始 JetBrains Mono 2.304 字体。pnpm 范围包括当前机器未安装的可选平台包，不能用本机 `pnpm licenses list` 代替。
+当前清单为 769 个组件：619 个非工作区 Rust 包、pnpm 锁文件中的全部 149 个包，以及原始 JetBrains Mono 2.304 字体。pnpm 范围包括未在本机安装的可选平台包，不能用本机安装清单代替。
 
 生成器用 Cargo.lock 的 SHA-256 或 pnpm v9 的 SHA-512 校验发布归档，再读取包内元数据与独立许可证／COPYING／NOTICE／AUTHORS 等文本。平台归档不解包，不执行其二进制或安装脚本。原文字节按内容 SHA-256 去重存储，各包仍保留包内原路径和来源；这不是用统一 SPDX 模板替代上游原文。
 
@@ -20,7 +20,7 @@ npm 的另一种补充绑定 `npm-manifest-commit` 只接受完整性已验证�
 
 objc2 家族根目录 `LICENSE.md` 只有许可链接和 Apple SDK 说明；可保留为 `supplemented-notice-only`，仍属缺完整原文，不能以链接说明关闭门禁。独立原归档识别也支持 `MIT-LICENSE`／`Apache-LICENSE`，避免漏掉后缀命名的文本。
 
-`.gitattributes` 禁止对 `third-party/licenses/` 的原文作文本换行转换。不要对该目录运行格式器。
+`.gitattributes` 禁止对 `third-party/licenses/` 的原文作文本换行转换。不要对该目录运行格式器；原文目录仅豁免尾随空格提示，来源与字节摘要校验不变。
 
 ## 可重复执行
 
@@ -32,13 +32,13 @@ objc2 家族根目录 `LICENSE.md` 只有许可链接和 Apple SDK 说明；可�
 
 ## 当前未闭合项
 
-最新材料经实际注册生成、离线检查和独立发布归档核验：778个组件、438份去重原文、94项补充来源，完整文本缺口22项（18项objc2 notice-only＋4项未绑定）。98个发布归档自身未附独立文本仍单列，未把补充原文冒充归档内容。libappindicator-sys复用同提交发布父包原文，selectors源码官方引用绑定仍保留；MPL政策、系统动态库和源码提供义务继续单独审查。
+最新材料经锁定归档联网生成与离线校验：769 个组件、437 份去重原文、94 项补充来源，完整文本缺口21项（18项objc2 notice-only＋3项未绑定）。97个发布归档自身未附独立文本仍单列。Vitest 5.0.5 的 SHA512、Node／Vite要求及新增许可原文已独立核验；上游采用why-is-node-running 3.2.1，移除stackback并减少10个声明组件，全部1549项既有前端测试保持通过。libappindicator-sys发布父包与selectors官方引用绑定保留；组件数不是实际分发资源审查。
 
-四项未绑定来源为 `russh-util@0.52.0`、两个 `winapi-*-pc-windows-gnu@0.4.0` 和 `stackback@0.0.2`。逐包发布证据与当前处置见[剩余来源审查](remaining-attribution-review.md)。russh-util三个源码文件与记录提交一致，但原始manifest版本不同，dirty拒绝仍保留；winapi构建会链接包内原生导入库，不能以Rust文件头替代原生资源审查。其他包不因短名、同名标签或当前分支而自动补齐。
+三项未绑定来源为 `russh-util@0.52.0` 和两个 `winapi-*-pc-windows-gnu@0.4.0`；stackback 已随上游测试工具升级离开锁图，未用标签推测补入文本。逐包发布证据与当前处置见[剩余来源审查](remaining-attribution-review.md)。russh-util原发布仍dirty，winapi仍含待审的原生导入库，既有来源拒绝规则不变。
 
 `releaseApproved` 始终为 `false`；将其改成 `true` 会使校验失败。Cargo/npm 元数据中的作者、许可证表达式和仓库 URL 都只是上游声明。
 
-原生库内嵌子组件、系统动态库、平台安装包资源以及源码提供义务需要按实际发行内容另外审查。8 项许可证、2 项维护策略审计阻断也继续保留，依赖版本、锁文件和 `deny.toml` 未因本次材料生成而修改。Alpha 发布门未关闭。
+原生内嵌子组件、系统动态库、平台安装资源及源码提供义务仍需按实际发行内容审查。本批仅升级JavaScript开发测试工具，JavaScript审计零漏洞；Cargo.lock及deny.toml均未改，沿用上批8项许可拒绝／5项维护公告，Rust审计未重复执行。文本门禁仍失败，releaseApproved仍为false。
 
 ## 验证与归档
 

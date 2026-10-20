@@ -1,7 +1,7 @@
 {
   "generatedFiles": {
     "NOTICE": "841c9ca3b1a3cfd5a4616ef20ba43fb0f4619ab1ecad6826ae2461777b84df9d",
-    "THIRD_PARTY.md": "7864edd00000689ece6b194667df64e75266fbe3a82ea2d2cb9152f85e601628",
+    "THIRD_PARTY.md": "0504e2a297a63f4eefb975aaab0fb613ec37f759009b951ded4b30cb7b202064",
     "third-party/licenses/002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1.txt": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1",
     "third-party/licenses/0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13.txt": "0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13",
     "third-party/licenses/003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0.txt": "003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0",
@@ -56,7 +56,6 @@
     "third-party/licenses/1e5d3ddaf5cbc111c8517df39e6f252e4c16dbda26b7cc1ad54c9e3efb0586be.txt": "1e5d3ddaf5cbc111c8517df39e6f252e4c16dbda26b7cc1ad54c9e3efb0586be",
     "third-party/licenses/1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd.txt": "1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd",
     "third-party/licenses/1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5.txt": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
-    "third-party/licenses/1fa6ee8bb95a81ae3d73a5bd074a3ac380ffec13697051063ca1a601921b91db.txt": "1fa6ee8bb95a81ae3d73a5bd074a3ac380ffec13697051063ca1a601921b91db",
     "third-party/licenses/2088f55c6731498410b20c95ebd345ed4a4a800bf74c0fba4d282fd2a021daaa.txt": "2088f55c6731498410b20c95ebd345ed4a4a800bf74c0fba4d282fd2a021daaa",
     "third-party/licenses/2096783a9b939ae2a3a4789d9696740cec1a72ac04ccf8a7972d436fd0e7b240.txt": "2096783a9b939ae2a3a4789d9696740cec1a72ac04ccf8a7972d436fd0e7b240",
     "third-party/licenses/209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b.txt": "209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b",
@@ -121,7 +120,6 @@
     "third-party/licenses/396b7a23a91c27248241e3bc0e0521f0421a62ceb1ea23b6fa2650b05fb0f068.txt": "396b7a23a91c27248241e3bc0e0521f0421a62ceb1ea23b6fa2650b05fb0f068",
     "third-party/licenses/39bec22df7525380b392c7ead6f098e8bce157600a020150955fd8aa86d63afb.txt": "39bec22df7525380b392c7ead6f098e8bce157600a020150955fd8aa86d63afb",
     "third-party/licenses/39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2.txt": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2",
-    "third-party/licenses/3bdddf0b9b08aaa2fe4365b803fc958ed32c0597ca0bd727be8d9fcb8b248d18.txt": "3bdddf0b9b08aaa2fe4365b803fc958ed32c0597ca0bd727be8d9fcb8b248d18",
     "third-party/licenses/3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94.txt": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
     "third-party/licenses/3dd30063cdb4a378736348c215cb84b78b0711ba7e39903162cae5ce71dc9757.txt": "3dd30063cdb4a378736348c215cb84b78b0711ba7e39903162cae5ce71dc9757",
     "third-party/licenses/3f39c032be4639be635da96d77c4d0f4393c3595a164450ffd86f3d17701ec10.txt": "3f39c032be4639be635da96d77c4d0f4393c3595a164450ffd86f3d17701ec10",
@@ -153,7 +151,6 @@
     "third-party/licenses/508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1.txt": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1",
     "third-party/licenses/516b24e051bf5630880ebbd55c40a25ce9552ebaf8970a53e8976eb70e522406.txt": "516b24e051bf5630880ebbd55c40a25ce9552ebaf8970a53e8976eb70e522406",
     "third-party/licenses/523a42c25d245dde9c015f882cec7f4555aad883382a6cf19b4b7d9b2cd5419b.txt": "523a42c25d245dde9c015f882cec7f4555aad883382a6cf19b4b7d9b2cd5419b",
-    "third-party/licenses/52e92576851154bad7737e90cc72818936f43665cb0e3f7428ed8edc8cc5709b.txt": "52e92576851154bad7737e90cc72818936f43665cb0e3f7428ed8edc8cc5709b",
     "third-party/licenses/5444779e62a6f136892955bab2727694509b2cc1c0cd0f394d5edc7ff9203cd1.txt": "5444779e62a6f136892955bab2727694509b2cc1c0cd0f394d5edc7ff9203cd1",
     "third-party/licenses/544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde.txt": "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde",
     "third-party/licenses/54a744942eb3fa63a74d8d359989ed6962c04f3f10ff20cfa08ff8aa7efbe4e6.txt": "54a744942eb3fa63a74d8d359989ed6962c04f3f10ff20cfa08ff8aa7efbe4e6",
@@ -184,7 +181,6 @@
     "third-party/licenses/63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68.txt": "63af4bea227c94d021e99427f6ca3a4b8efddadcca93ab6130f708cf6138cf68",
     "third-party/licenses/6462612d92b861384dcd378168a7a0ef3ef28876d3d380d382cb5a3091e360b8.txt": "6462612d92b861384dcd378168a7a0ef3ef28876d3d380d382cb5a3091e360b8",
     "third-party/licenses/6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
-    "third-party/licenses/653b779005a3a4d64a7288c940f7b9a0e8f0b1e0375f6aa6af9473caf131e564.txt": "653b779005a3a4d64a7288c940f7b9a0e8f0b1e0375f6aa6af9473caf131e564",
     "third-party/licenses/6582629e2979466878f6014313dcc2f3756c9616148682227ce3063dde310750.txt": "6582629e2979466878f6014313dcc2f3756c9616148682227ce3063dde310750",
     "third-party/licenses/65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee.txt": "65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee",
     "third-party/licenses/65fdb6c76cd61612070c066eec9ecdb30ee74fb27859d0d9af58b9f499fd0c3e.txt": "65fdb6c76cd61612070c066eec9ecdb30ee74fb27859d0d9af58b9f499fd0c3e",
@@ -217,6 +213,7 @@
     "third-party/licenses/769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c.txt": "769d154fbde32a915af110b1123650bc79f4cbe675acc66e005265bf069c6c6c",
     "third-party/licenses/769f80b5bcb42ed0af4e4d2fd74e1ac9bf843cb80c5a29219d1ef3544428a6bb.txt": "769f80b5bcb42ed0af4e4d2fd74e1ac9bf843cb80c5a29219d1ef3544428a6bb",
     "third-party/licenses/78779d420019e6b4630376af8e86b6b335ee8a2f89ede6e0411e0469a326aaa4.txt": "78779d420019e6b4630376af8e86b6b335ee8a2f89ede6e0411e0469a326aaa4",
+    "third-party/licenses/78fbac9e571c2ee260deb2a1941a8a18f0a85e3f39c23d08e2dcee6da4841998.txt": "78fbac9e571c2ee260deb2a1941a8a18f0a85e3f39c23d08e2dcee6da4841998",
     "third-party/licenses/799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d.txt": "799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d",
     "third-party/licenses/79b0c7d284efc4c2dc8da73c01a6d10c19caf61e70fca813e642dc010049eee7.txt": "79b0c7d284efc4c2dc8da73c01a6d10c19caf61e70fca813e642dc010049eee7",
     "third-party/licenses/7a0cf7a38603186c95a90e5b3a0faa6175b9217f1a06ea1e4040dee6153da68f.txt": "7a0cf7a38603186c95a90e5b3a0faa6175b9217f1a06ea1e4040dee6153da68f",
@@ -245,7 +242,6 @@
     "third-party/licenses/8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2.txt": "8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2",
     "third-party/licenses/87d9feb9238c6bd8e0024fc4733b06cff036f89f36d93b7df1c8a0549bbb7a5b.txt": "87d9feb9238c6bd8e0024fc4733b06cff036f89f36d93b7df1c8a0549bbb7a5b",
     "third-party/licenses/87f7527b1066337751f7f4d717089bf514ff8f7ee7d66c4c5b891b09e744ec11.txt": "87f7527b1066337751f7f4d717089bf514ff8f7ee7d66c4c5b891b09e744ec11",
-    "third-party/licenses/881d660c26831481b697e39724d4a35c9f86e07b67156d4aeb693a0b39910435.txt": "881d660c26831481b697e39724d4a35c9f86e07b67156d4aeb693a0b39910435",
     "third-party/licenses/8884289e3969c089cd556c53fa1d3f51d86b29e52a8c1d660a55ce8292986910.txt": "8884289e3969c089cd556c53fa1d3f51d86b29e52a8c1d660a55ce8292986910",
     "third-party/licenses/898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1.txt": "898b1ae9821e98daf8964c8d6c7f61641f5f5aa78ad500020771c0939ee0dea1",
     "third-party/licenses/8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5.txt": "8a35369f3ca263b3c62fbb5032947e53b6bfebc6c8a4d1bb982de1c069f6fba5",
@@ -461,12 +457,12 @@
     "crates/pulse-term/Cargo.toml": "5b83bec972a63753f4efa0b4e94c99541ef74407f75e78f9df1275a042fadcb7",
     "deny.toml": "622ff84227a675ca2104977bf8e9751301859aa9974b6fa76c83f9137e3caf1f",
     "package.json": "1e6925a74a1581c3f2a81650f7b4ee5d48d8faa2d4f2c667e9a07007a5db180d",
-    "pnpm-lock.yaml": "09566466a15b3f6846fa861525e69636fb06d51276cab66ef7e417fef9fba715",
+    "pnpm-lock.yaml": "b03b872c202b1e64ae6c41437a47daed4c63ba2d042d2797f3bd5b294fea0699",
     "pnpm-workspace.yaml": "25c8abe62df32175b07a1b73c1f865b84b699958219a4b76fea1d6740e7ad521",
     "scripts/third-party.py": "ef84a84e9fe47940796de02a459dc31606f3bbe8f15d35fc22cc47f1a54663fb",
     "scripts/third_party_sources.py": "f5d632a3bdf774e656f7bc8da5ba8140f319c8db59c906a56c6e04fa6c90d748",
     "third-party/supplemental-sources.json": "f45c6d9de4f2cb37adb50dc5c9c50bc226e48f4e11559fc57dcc8b5d7a04e6be",
-    "ui/package.json": "6d16c495af53d616e8d81138d2fe530ed0d33255cf7895a4f86e64927b4c4fab",
+    "ui/package.json": "b2345481f7a9283c55547f80056d5baae8df425f659fd48f410a117c73b5c3c5",
     "ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2",
     "ui/src/assets/fonts/jetbrains-mono/OFL.txt": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
     "ui/src/assets/fonts/jetbrains-mono/source.json": "ef8ab95d85a1b591ac8978e88b52271f2877dc8d26bd02ea1adca0729dd783af",
@@ -20423,30 +20419,6 @@
       "version": "1.0.1"
     },
     {
-      "authors": "Colin McDonnell",
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@standard-schema/spec@1.1.0",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/653b779005a3a4d64a7288c940f7b9a0e8f0b1e0375f6aa6af9473caf131e564.txt",
-          "sha256": "653b779005a3a4d64a7288c940f7b9a0e8f0b1e0375f6aa6af9473caf131e564",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@standard-schema/spec",
-      "origin": {
-        "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==",
-        "url": "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz"
-      },
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/standard-schema/standard-schema"
-      },
-      "textStatus": "collected",
-      "version": "1.1.0"
-    },
-    {
       "authors": [],
       "declaredLicense": "MIT",
       "ecosystem": "npm",
@@ -21049,32 +21021,7 @@
       "authors": [],
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:@vitest/expect@4.1.11",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
-          "sha256": "04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@vitest/expect",
-      "origin": {
-        "integrity": "sha512-VX2x5vNJXET47KAFzwERI+KRMtTTCSWTfSMKsW7JsUsXV4psq++e3DvZpuTDOpHcxytiDs6p2nhVb2tVDiiUYw==",
-        "url": "https://registry.npmjs.org/@vitest/expect/-/expect-4.1.11.tgz"
-      },
-      "repository": {
-        "directory": "packages/expect",
-        "type": "git",
-        "url": "git+https://github.com/vitest-dev/vitest.git"
-      },
-      "textStatus": "collected",
-      "version": "4.1.11"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@vitest/mocker@4.1.11",
+      "id": "npm:@vitest/mocker@5.0.5",
       "licenseTexts": [
         {
           "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
@@ -21084,8 +21031,8 @@
       ],
       "name": "@vitest/mocker",
       "origin": {
-        "integrity": "sha512-2XJVD55d1o5AZous5CCGKS74g/riOj9odEt2bQpCVZeblHyHdnMeFl4jl0XjU21stf4mbjUkew2eXQZt65g5CQ==",
-        "url": "https://registry.npmjs.org/@vitest/mocker/-/mocker-4.1.11.tgz"
+        "integrity": "sha512-xLL3lkDegJZw+MGoGaCCsFayDZthGgpAtr3Vziyfc4p7xH89K7KRPcRBBh/kEYm0Aqkt5DtTmkYpBtRV/FrHZg==",
+        "url": "https://registry.npmjs.org/@vitest/mocker/-/mocker-5.0.5.tgz"
       },
       "repository": {
         "directory": "packages/mocker",
@@ -21093,88 +21040,13 @@
         "url": "git+https://github.com/vitest-dev/vitest.git"
       },
       "textStatus": "collected",
-      "version": "4.1.11"
+      "version": "5.0.5"
     },
     {
       "authors": [],
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:@vitest/pretty-format@4.1.11",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
-          "sha256": "04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@vitest/pretty-format",
-      "origin": {
-        "integrity": "sha512-yiZzPbGTS9Sr/JpFl8zHrcIkAofNbFV6k21vIgQN/cY/oxZeXhJv5sc/MBJ5jFKWmWs+oJHw0UXLZjmf931+Vw==",
-        "url": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-4.1.11.tgz"
-      },
-      "repository": {
-        "directory": "packages/pretty-format",
-        "type": "git",
-        "url": "git+https://github.com/vitest-dev/vitest.git"
-      },
-      "textStatus": "collected",
-      "version": "4.1.11"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@vitest/runner@4.1.11",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
-          "sha256": "04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@vitest/runner",
-      "origin": {
-        "integrity": "sha512-LztvUgdwMNJMIkj3hQnnxiC2Xy1zNxq928W/xhjCLaNCzqTZOudjwbQf6v9IntZGPw132i2Lq2rgTRZHD3JHNw==",
-        "url": "https://registry.npmjs.org/@vitest/runner/-/runner-4.1.11.tgz"
-      },
-      "repository": {
-        "directory": "packages/runner",
-        "type": "git",
-        "url": "git+https://github.com/vitest-dev/vitest.git"
-      },
-      "textStatus": "collected",
-      "version": "4.1.11"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@vitest/snapshot@4.1.11",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
-          "sha256": "04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@vitest/snapshot",
-      "origin": {
-        "integrity": "sha512-pN7ikn1ON7h8ee4gIAp4AzyK+zBtJPzVbqOgu5LCEh4VaJVbPQcgYQYJIMGQPXVeJJq1fnfazis7a5pFNPahog==",
-        "url": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-4.1.11.tgz"
-      },
-      "repository": {
-        "directory": "packages/snapshot",
-        "type": "git",
-        "url": "git+https://github.com/vitest-dev/vitest.git"
-      },
-      "textStatus": "collected",
-      "version": "4.1.11"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@vitest/spy@4.1.11",
+      "id": "npm:@vitest/spy@5.0.5",
       "licenseTexts": [
         {
           "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
@@ -21184,8 +21056,8 @@
       ],
       "name": "@vitest/spy",
       "origin": {
-        "integrity": "sha512-apNa/prQy2qCeywhnixOHPRCgGNhvg7T4Dapfl1GahLp/R+uhBm5cPyFoNVyqsNd2h1nJxL6BqqdIjiABL60YA==",
-        "url": "https://registry.npmjs.org/@vitest/spy/-/spy-4.1.11.tgz"
+        "integrity": "sha512-lwJRExuH417257Q5wv9QYugN9IMJkoxcrKrYxGPQkBzl7wlNpTUxD/5yNX4ESKVUIShKPgkGchYPFMWOOk0wzw==",
+        "url": "https://registry.npmjs.org/@vitest/spy/-/spy-5.0.5.tgz"
       },
       "repository": {
         "directory": "packages/spy",
@@ -21193,32 +21065,7 @@
         "url": "git+https://github.com/vitest-dev/vitest.git"
       },
       "textStatus": "collected",
-      "version": "4.1.11"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:@vitest/utils@4.1.11",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551.txt",
-          "sha256": "04575fc5bfae19a9b63100f8691f901a2e15a399011ac02db435a9ef27295551",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "@vitest/utils",
-      "origin": {
-        "integrity": "sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==",
-        "url": "https://registry.npmjs.org/@vitest/utils/-/utils-4.1.11.tgz"
-      },
-      "repository": {
-        "directory": "packages/utils",
-        "type": "git",
-        "url": "git+https://github.com/vitest-dev/vitest.git"
-      },
-      "textStatus": "collected",
-      "version": "4.1.11"
+      "version": "5.0.5"
     },
     {
       "authors": {
@@ -21414,34 +21261,6 @@
       },
       "textStatus": "collected",
       "version": "6.3.0"
-    },
-    {
-      "authors": {
-        "email": "thlorenz@gmx.de",
-        "name": "Thorsten Lorenz",
-        "url": "http://thlorenz.com"
-      },
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:convert-source-map@2.0.0",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/1fa6ee8bb95a81ae3d73a5bd074a3ac380ffec13697051063ca1a601921b91db.txt",
-          "sha256": "1fa6ee8bb95a81ae3d73a5bd074a3ac380ffec13697051063ca1a601921b91db",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "convert-source-map",
-      "origin": {
-        "integrity": "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==",
-        "url": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz"
-      },
-      "repository": {
-        "type": "git",
-        "url": "git://github.com/thlorenz/convert-source-map.git"
-      },
-      "textStatus": "collected",
-      "version": "2.0.0"
     },
     {
       "authors": "Fredrik Nicol <fredrik.nicol@gmail.com>",
@@ -22303,6 +22122,30 @@
       "version": "0.30.21"
     },
     {
+      "authors": "Rich Harris",
+      "declaredLicense": "MIT",
+      "ecosystem": "npm",
+      "id": "npm:magic-string@1.4.3",
+      "licenseTexts": [
+        {
+          "file": "third-party/licenses/1cbe51b907662f6cb1492b16c359384a595180bf0e4d101603ed525e75c4e484.txt",
+          "sha256": "1cbe51b907662f6cb1492b16c359384a595180bf0e4d101603ed525e75c4e484",
+          "sourcePath": "LICENSE"
+        }
+      ],
+      "name": "magic-string",
+      "origin": {
+        "integrity": "sha512-z12OxmaPGE0F4xlpGdjuAUckipLpQlTAuAmyGhNoD7ODpYUzvDfvtxUbjM/jwznyP178oju/KDdyi220wNJ0RQ==",
+        "url": "https://registry.npmjs.org/magic-string/-/magic-string-1.4.3.tgz"
+      },
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Rich-Harris/magic-string.git"
+      },
+      "textStatus": "collected",
+      "version": "1.4.3"
+    },
+    {
       "authors": "Andrey Sitnik <andrey@sitnik.ru>",
       "declaredLicense": "MIT",
       "ecosystem": "npm",
@@ -22327,7 +22170,7 @@
       "authors": "Kevin Deng <sxzz@sxzz.moe>",
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:obug@2.2.1",
+      "id": "npm:obug@3.0.0",
       "licenseTexts": [
         {
           "file": "third-party/licenses/ee48679d379ca6b4493d5e231094d85f818dd9be40b1a4f234fb7ff657ee35d9.txt",
@@ -22337,36 +22180,15 @@
       ],
       "name": "obug",
       "origin": {
-        "integrity": "sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==",
-        "url": "https://registry.npmjs.org/obug/-/obug-2.2.1.tgz"
+        "integrity": "sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==",
+        "url": "https://registry.npmjs.org/obug/-/obug-3.0.0.tgz"
       },
       "repository": {
         "type": "git",
         "url": "git+https://github.com/sxzz/obug.git"
       },
       "textStatus": "collected",
-      "version": "2.2.1"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:pathe@2.0.3",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/52e92576851154bad7737e90cc72818936f43665cb0e3f7428ed8edc8cc5709b.txt",
-          "sha256": "52e92576851154bad7737e90cc72818936f43665cb0e3f7428ed8edc8cc5709b",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "pathe",
-      "origin": {
-        "integrity": "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==",
-        "url": "https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz"
-      },
-      "repository": "unjs/pathe",
-      "textStatus": "collected",
-      "version": "2.0.3"
+      "version": "3.0.0"
     },
     {
       "authors": "Alexey Raspopov",
@@ -22538,30 +22360,6 @@
       "version": "0.28.0"
     },
     {
-      "authors": "Emil Bay <github@tixz.dk>",
-      "declaredLicense": "ISC",
-      "ecosystem": "npm",
-      "id": "npm:siginfo@2.0.0",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/3bdddf0b9b08aaa2fe4365b803fc958ed32c0597ca0bd727be8d9fcb8b248d18.txt",
-          "sha256": "3bdddf0b9b08aaa2fe4365b803fc958ed32c0597ca0bd727be8d9fcb8b248d18",
-          "sourcePath": "LICENSE"
-        }
-      ],
-      "name": "siginfo",
-      "origin": {
-        "integrity": "sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==",
-        "url": "https://registry.npmjs.org/siginfo/-/siginfo-2.0.0.tgz"
-      },
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/emilbayes/siginfo.git"
-      },
-      "textStatus": "collected",
-      "version": "2.0.0"
-    },
-    {
       "authors": "Valentin 7rulnik Semirulnik <v7rulnik@gmail.com>",
       "declaredLicense": "BSD-3-Clause",
       "ecosystem": "npm",
@@ -22581,24 +22379,6 @@
       "repository": "7rulnik/source-map-js",
       "textStatus": "collected",
       "version": "1.2.2"
-    },
-    {
-      "authors": "Roman Shtylman <shtylman@gmail.com>",
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:stackback@0.0.2",
-      "licenseTexts": [],
-      "name": "stackback",
-      "origin": {
-        "integrity": "sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==",
-        "url": "https://registry.npmjs.org/stackback/-/stackback-0.0.2.tgz"
-      },
-      "repository": {
-        "type": "git",
-        "url": "git://github.com/shtylman/node-stackback.git"
-      },
-      "textStatus": "missing-from-published-package",
-      "version": "0.0.2"
     },
     {
       "authors": [],
@@ -22677,7 +22457,7 @@
       "authors": [],
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:tinybench@2.9.0",
+      "id": "npm:tinybench@6.2.2",
       "licenseTexts": [
         {
           "file": "third-party/licenses/cebc084d54e6dd99e53292ddb4bc1cdb63d9bfcd9ce438fe3aa6eb106d79e2ea.txt",
@@ -22687,12 +22467,15 @@
       ],
       "name": "tinybench",
       "origin": {
-        "integrity": "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==",
-        "url": "https://registry.npmjs.org/tinybench/-/tinybench-2.9.0.tgz"
+        "integrity": "sha512-nIZ2N2dFpjBsg2hgitKu7mA+FvsIJuGJOwysRngmVRRmWgR/UyPjwJj8c/fT/dhm8EkHnF5EOogRf+0Z2qrimA==",
+        "url": "https://registry.npmjs.org/tinybench/-/tinybench-6.2.2.tgz"
       },
-      "repository": "tinylibs/tinybench",
+      "repository": {
+        "type": "git",
+        "url": "tinylibs/tinybench"
+      },
       "textStatus": "collected",
-      "version": "2.9.0"
+      "version": "6.2.2"
     },
     {
       "authors": "James Garbutt (https://github.com/43081j)",
@@ -22741,30 +22524,6 @@
       },
       "textStatus": "collected",
       "version": "0.2.17"
-    },
-    {
-      "authors": [],
-      "declaredLicense": "MIT",
-      "ecosystem": "npm",
-      "id": "npm:tinyrainbow@3.2.0",
-      "licenseTexts": [
-        {
-          "file": "third-party/licenses/cebc084d54e6dd99e53292ddb4bc1cdb63d9bfcd9ce438fe3aa6eb106d79e2ea.txt",
-          "sha256": "cebc084d54e6dd99e53292ddb4bc1cdb63d9bfcd9ce438fe3aa6eb106d79e2ea",
-          "sourcePath": "LICENCE"
-        }
-      ],
-      "name": "tinyrainbow",
-      "origin": {
-        "integrity": "sha512-LgO3D9yZJjApUiuUfl9iFAwrtaX4+lok3wJIqttGoKCHlWUqHqbQpnxCf82L8FjgKsh4iGo78hqJwgL8F6To2A==",
-        "url": "https://registry.npmjs.org/tinyrainbow/-/tinyrainbow-3.2.0.tgz"
-      },
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/tinylibs/tinyrainbow.git"
-      },
-      "textStatus": "collected",
-      "version": "3.2.0"
     },
     {
       "authors": {
@@ -22867,18 +22626,18 @@
       "authors": "Anthony Fu <anthonyfu117@hotmail.com>",
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:vitest@4.1.11",
+      "id": "npm:vitest@5.0.5",
       "licenseTexts": [
         {
-          "file": "third-party/licenses/881d660c26831481b697e39724d4a35c9f86e07b67156d4aeb693a0b39910435.txt",
-          "sha256": "881d660c26831481b697e39724d4a35c9f86e07b67156d4aeb693a0b39910435",
+          "file": "third-party/licenses/78fbac9e571c2ee260deb2a1941a8a18f0a85e3f39c23d08e2dcee6da4841998.txt",
+          "sha256": "78fbac9e571c2ee260deb2a1941a8a18f0a85e3f39c23d08e2dcee6da4841998",
           "sourcePath": "LICENSE.md"
         }
       ],
       "name": "vitest",
       "origin": {
-        "integrity": "sha512-fhACrNXUidIbGSBr5FlbuBkO7VWC1ZyLl0DO4CU2DrQoAPxX84Ysxs+HeGQpii5lZWV1Q4gBZTTu49mF+A6Edw==",
-        "url": "https://registry.npmjs.org/vitest/-/vitest-4.1.11.tgz"
+        "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+        "url": "https://registry.npmjs.org/vitest/-/vitest-5.0.5.tgz"
       },
       "repository": {
         "directory": "packages/vitest",
@@ -22886,13 +22645,13 @@
         "url": "git+https://github.com/vitest-dev/vitest.git"
       },
       "textStatus": "collected",
-      "version": "4.1.11"
+      "version": "5.0.5"
     },
     {
       "authors": "Mathias Buus (@mafintosh)",
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:why-is-node-running@2.3.0",
+      "id": "npm:why-is-node-running@3.2.1",
       "licenseTexts": [
         {
           "file": "third-party/licenses/6a134e51aa31496c15a741592fc5d782b2dbf8d8b6b8524e15c8520ae0cd6374.txt",
@@ -22902,15 +22661,15 @@
       ],
       "name": "why-is-node-running",
       "origin": {
-        "integrity": "sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==",
-        "url": "https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-2.3.0.tgz"
+        "integrity": "sha512-Tb2FUhB4vUsGQlfSquQLYkApkuPAFQXGFzxWKHHumVz2dK+X1RUm/HnID4+TfIGYJ1kTcwOaCk/buYCEJr6YjQ==",
+        "url": "https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-3.2.1.tgz"
       },
       "repository": {
         "type": "git",
         "url": "https://github.com/mafintosh/why-is-node-running.git"
       },
       "textStatus": "collected",
-      "version": "2.3.0"
+      "version": "3.2.1"
     }
   ],
   "releaseApproved": false,
