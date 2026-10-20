@@ -2,6 +2,7 @@
 //! Discovery and signing use separate revocable grants. No socket paths, private keys or generic
 //! signing interface are issued to the frontend; untrusted Agent frames are bounded before parsing.
 use pulse_core::ssh_agent_identity::SshAgentIdentity;
+#[cfg(unix)]
 use russh::keys::PublicKey;
 use std::sync::Arc;
 /// Independent original-page discovery or actual-peer signing grant.
@@ -32,6 +33,7 @@ impl From<russh::SendError> for AgentError {
 }
 /// Drawing-only discovered public-key metadata. Comments from the Agent are never projected.
 pub struct AgentPublicKey {
+    #[cfg(unix)]
     key: PublicKey,
     algorithm: String,
     fingerprint: String,

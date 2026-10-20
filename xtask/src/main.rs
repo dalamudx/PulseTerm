@@ -63,6 +63,9 @@ mod theme_file_probe;
 mod theme_probe;
 mod unicode_probe;
 mod unicode_table;
+#[cfg(all(test, feature = "windows-settings-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/settings_file_windows.rs"]
+mod windows_settings;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

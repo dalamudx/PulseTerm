@@ -1,8 +1,11 @@
 use anyhow::{Context, Result, bail, ensure};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(any(unix, test))]
+use serde_json::json;
 use std::io::{IsTerminal, Write};
 use std::thread;
 use std::time::{Duration, Instant};
+#[cfg(unix)]
 const NAME: &str = "pulseterm-login-probe";
 const OUTPUT: &[u8] = b"LOGIN_ARGV0_OK\r\n";
 /// Finite own binary mode. It is not a shell and reads no shell startup files.

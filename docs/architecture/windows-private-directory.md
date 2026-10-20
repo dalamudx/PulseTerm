@@ -41,6 +41,16 @@
 
 提交尝试前的撤销／冲突通过原句柄回收暂存文件；回收失败返回 `Uncertain`。一旦尝试改名，原生失败、刷盘失败或提交后复核失败都返回 `Uncertain`，保留可能已发布的文件或未安装的私有暂存项，不按旧路径删除，不自动重试。调用方须重新读取并显式处理残留；本层不提供通配符清理或替代存储恢复流程。
 
+## Windows 设置文档适配候选
+
+`apps/desktop/src-tauri/src/settings_file_windows.rs` 连接平台快照与 `pulse-store` 的纯类型化编辑，但当前仅由 xtask 的 `windows-settings-probe` 测试特性编译；未注册为生产设置命令、未改 Unix 实现、未开放 Windows Profile／设置入口。平台与 store 保持同层独立，适配器不向 store 添加平台依赖，也不申请页面或 Vault 权限。
+
+只访问固定的 `settings.toml`，上限沿用 65536 字节。读取按原平台目录 lease／锁／快照完成后，校验 UTF-8 和完整 SettingsPatch；坏文档、超限及未来版本不能当作缺失配置。快照不派生 Debug／serde，原始注释不进入错误日志。保存仅接受既有 SettingsMutation；保留注释和其他字段，校验原文与新文，不提供任意文本或文件名写入。
+
+保存前先复核原调用方授权，平台继续在 I/O 前、暂存后、提交前复核同一闭包；panic 按撤销处理。Busy、Conflict、Authorization 与 Uncertain 保持独立，缺失的原生操作错误不能变为默认文档。安装后解码／验证出现未知失败按 Uncertain 处理，重读而不自动重试。上层将来接入时仍须绑定原页和 Vault 代际、保持物理 I/O 信用、禁止迟到回执发布；候选模块不替代这些监督层。
+
+`mise run check-windows-settings` 检查同一源码。当前宿主运行六项文档策略，Windows 另运行七项原生文件／保存测试；交叉编译只证明能检查，不算真实文件系统行为通过。Windows 原生门禁、生产接入和目录掉电持久性仍待完成。
+
 ## 验证门槛
 
 正式入口为 `mise run check-platform`：当前宿主全目标严格 Clippy 和平台单测。Linux／macOS 只运行纯 ACL／路径策略测试；Windows 额外注册真实创建、重开、句柄阻止改名、宽权限原目录不修复、文件／缺失父目录及非法路径测试，并新增七项私有文件测试（链接／只读／宽 ACL／字节／限额／失败回收）。另增加十项文件槽／快照原生测试。Windows 专属测试不在其他平台伪装通过，不使用零测试命令作为原生证据。

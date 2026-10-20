@@ -29,6 +29,8 @@ jobs:
         run: mise run check-core-features
       - name: Check native platform policy and private atomic-save boundaries
         run: mise run check-platform
+      - name: Check Windows settings adapter and native-only file cases
+        run: mise run check-windows-settings
       - name: Verify static workspace translation coverage
         run: mise run workspace-language-check
       - name: Verify locked third-party inventory and original texts

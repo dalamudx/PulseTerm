@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [features]
+windows-settings-probe = ["dep:pulse-platform", "dep:tempfile"]
 ssh-target-probe = ["ssh-probe", "tokio/fs", "dep:uuid", "dep:zeroize", "dep:pkcs8", "dep:tokio-util", "pulse-app/ssh-use"]
 ssh-private-key-probe = ["ssh-target-probe", "dep:zeroize"]
 cli-probe = ["dep:tempfile", "dep:uuid", "dep:zeroize"]
@@ -14,6 +15,7 @@ ssh-probe = ["dep:russh", "dep:rand", "dep:tempfile", "dep:encoding_rs", "pulse-
 
 [dependencies]
 anyhow.workspace = true
+pulse-platform = { path = "../crates/pulse-platform", optional = true }
 pulse-core.workspace = true
 pulse-ipc.workspace = true
 pulse-term = { workspace = true, features = ["validation"] }

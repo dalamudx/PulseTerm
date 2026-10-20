@@ -6594,6 +6594,7 @@ dependencies = [
  "pulse-app",
  "pulse-core",
  "pulse-ipc",
+ "pulse-platform",
  "pulse-pty",
  "pulse-route",
  "pulse-ssh",

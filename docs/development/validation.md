@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Windows 设置文档与平台快照适配（验证候选）
+
+在 desktop 层新增验证候选，将固定 settings.toml 的平台精确快照与 store 的文档解析／类型化 Set、Remove 接通。store 与 platform 不互相依赖，生产设置命令和不支持平台的拒绝路径保持原值。读取先按 65536 字节预算验证 UTF-8／完整设置；保存只接受已知字段，保留注释与其他字段，未授权／回调 panic、锁冲突、陈旧快照和不确定提交不自动重试或恢复默认。
+
+六项宿主文档回归已通过，覆盖坏 UTF-8、超限／非法／未来文档、注释及其他字段保留、显式 false 与恢复继承、非法编辑和缺失文档。七项 Windows 原生测试覆盖首次保存／重开、跨目录／陈旧／外部改动、坏文件不重置、四处授权撤销、panic、Busy／Uncertain 分离和无效改动。正式 `mise run check-windows-settings` 已接入三平台 CI；宿主和 Windows GNU 全目标严格 Clippy 通过，七项 Windows 测试只编译、原生执行次数为零。同步收窄仅由 Unix Agent 传输使用的公钥缓存，以及登录／Profile 探针的 Unix／测试 import 边界，不压制告警；三项真实 Agent 回归与二十项报告回归通过。`cargo xtask check-deps`、格式／补丁与任务解析通过，无外部依赖版本升级。本批候选尚不能登记为 Windows 生产设置链完成。
+本批源码、两轮跨平台编译告警与最终日志归档于 `target/probes/windows-settings-adapter/accepted/source-checks/verification.json`。`clean-dev` 清理 3.0GiB；其余交叉产物、私有标准库／MinGW 和任务目录已删除，全部任务进程退出。接受材料摘要独立核验。
+
+
 ## 分屏折叠与比例方向探针恢复（Linux 原生）
 
 `mise run probe-workspace-split` 已恢复完整两模式验证；它本来就串行执行 `split` 与 `split-adjust`，后者不是独立任务。重选已存在会话只切换焦点；探针明确聚焦 B，再将侧栏滚至“仅显示焦点”并激活，不再等待重选标签触发重绑。左右／上下与比例滑块均按当前可访问名称定位，只对实际显示的控件执行动作，原有等待上限不增加。支持从任务私有 `CARGO_TARGET_DIR` 或指定 `PULSE_WORKSPACE_BINARY` 运行，不需要把二进制复制进仓库。

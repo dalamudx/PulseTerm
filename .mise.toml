@@ -20,6 +20,10 @@ run = "cargo check -p pulse-platform -p pulse-store -p pulse-pty -p pulse-app --
 description = "Strictly check platform policies; Windows also runs native private directory, file and atomic-save tests"
 run = ["cargo clippy -p pulse-platform --all-targets --locked -- -D warnings", "cargo test -p pulse-platform --all-targets --locked"]
 
+[tasks.check-windows-settings]
+description = "Check validation-only Windows settings adapter; native file tests run only on Windows"
+run = ["cargo clippy -p xtask --features windows-settings-probe --all-targets --locked -- -D warnings", "cargo test -p xtask --features windows-settings-probe --bin xtask --locked windows_settings::"]
+
 [tasks.check-ssh-adapters]
 description = "Strictly check standalone SSH probes and the complete production SSH workspace adapter"
 run = ["cargo clippy -p xtask --features ssh-target-probe --all-targets --locked -- -D warnings", "cargo clippy -p pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets --locked -- -D warnings"]

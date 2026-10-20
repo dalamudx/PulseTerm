@@ -31,7 +31,7 @@ pub enum SettingsFileError {
     /// Failure before installation; original target was not replaced by this operation.
     #[error("settings.file.io_failed")]
     Io,
-    /// Rename occurred but durability/receipt could not be confirmed; reload, never replay.
+    /// Commit or cleanup result could not be confirmed; reload, never replay.
     #[error("settings.file.commit_uncertain")]
     Uncertain,
     /// Reject bad documents instead of overwriting/resetting them.

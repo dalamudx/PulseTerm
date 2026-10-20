@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, bail, ensure};
 #[cfg(unix)]
 use pulse_pty::profiles::{AutoProfileCatalog, ShellKind, discover_unix_shells};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(any(unix, test))]
+use serde_json::json;
 use std::io::{IsTerminal, Write};
 use std::thread;
 use std::time::{Duration, Instant};
