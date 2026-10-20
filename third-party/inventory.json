@@ -455,7 +455,7 @@
     "crates/pulse-ssh/Cargo.toml": "da4b6575df9398e67aa61d666f0452161c40f5bb1822f4aae1b209bfda2f20c2",
     "crates/pulse-store/Cargo.toml": "5fe311ce83f8afa8e9ac97153cf345dddeb1a639b0e22a026b4372716f2d94aa",
     "crates/pulse-term/Cargo.toml": "5b83bec972a63753f4efa0b4e94c99541ef74407f75e78f9df1275a042fadcb7",
-    "deny.toml": "622ff84227a675ca2104977bf8e9751301859aa9974b6fa76c83f9137e3caf1f",
+    "deny.toml": "3070870bc9668ddabc7b904934b3982fe2435f9833db44a5e7c011a7939f9fdb",
     "package.json": "1e6925a74a1581c3f2a81650f7b4ee5d48d8faa2d4f2c667e9a07007a5db180d",
     "pnpm-lock.yaml": "b03b872c202b1e64ae6c41437a47daed4c63ba2d042d2797f3bd5b294fea0699",
     "pnpm-workspace.yaml": "25c8abe62df32175b07a1b73c1f865b84b699958219a4b76fea1d6740e7ad521",

@@ -2,6 +2,12 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 八项精确版本许可例外启用（维护公告与发布门禁仍失败）
+
+用户确认本项目保持 MIT（`MIT OR Apache-2.0`）开源即可，据此批准此前审查的八项例外，仅写入根 `deny.toml` 的 `[licenses].exceptions`；全局 allow、置信度、bans、sources 与公告门禁逐项不变，未加任何 ignore，依赖版本和锁文件未改。独立候选文件已删除，以根配置为准。
+
+联网 `mise run audit`：Rust 许可拒绝 8→0，五项维护公告（paste、proc-macro-error、zbus_names、zvariant、zvariant_derive）保留，Rust 退出1；JavaScript 审计通过。署名生成与39项离线校验通过，清单仅 `deny.toml` 输入摘要变化，769组件／21项完整文本缺口不变；发布文本门禁仍按规则退出1，releaseApproved=false。MPL 覆盖代码随可执行形式分发时的源码获取渠道尚未落实，列为发行门禁。证据见 `target/probes/license-policy-review/accepted/enabled/verification.json`；临时目录已清理。
+
 ## 八项精确版本许可候选（仅审查，实际策略未启用）
 
 已核对实际八项拒绝：cssparser0.37.0、cssparser-macros0.7.1、dtoa-short0.3.5、option-ext0.2.0、selectors0.38.0的MPL；doctest-file1.1.1、recvmsg1.0.0的0BSD；target-lexicon0.12.16的Apache＋LLVM例外。完整文本与发布归档身份来自现有已验证清单，逐项文本SHA复核通过。候选只增加精确`name@=version`例外，移除exceptions后与现行全部配置逐项相等，无公告ignore或全局准入扩张。

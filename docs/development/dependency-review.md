@@ -18,13 +18,13 @@ mise run audit
 mise exec -- cargo deny --all-features --offline check
 ```
 
-## 八项版本定点候选（待审批，未启用）
+## 八项版本定点例外（已批准并启用）
 
-已形成[审查材料](license-policy-review.md)和独立[候选配置](license-exceptions.candidate.toml)：五项MPL、两项0BSD、一项Apache＋LLVM例外，均绑定精确版本及已核验原文。同库离线全门禁对照：原配置退出5，候选退出1；八项许可拒绝清零、五项维护拒绝完整保留。合成反例验证未来版本和无关MPL包仍拒绝。当前根deny.toml保持原值；根据[开发指南](guide.md)“新增的许可证类型需要在PR中审批”，启用属于许可准入决定。候选通过不是发布批准，21项文本缺口及实际发行审查仍开放。
+用户确认项目保持 MIT 开源即可，据此批准[审查材料](license-policy-review.md)中的五项MPL、两项0BSD、一项Apache＋LLVM例外，均绑定精确版本及已核验原文，已写入根 `deny.toml`。启用前同库离线对照：原配置退出5，候选退出1；八项许可拒绝清零、五项维护拒绝完整保留；合成反例验证未来版本和无关MPL包仍拒绝。启用不是发布批准：MPL源码获取渠道、21项文本缺口及实际发行审查仍开放。
 
 ## 许可证门禁
 
-现有白名单拒绝以下精确版本；没有自动扩大全局白名单或添加例外：
+下列精确版本原被白名单拒绝，现仅以定点例外放行（全局白名单未扩大）：
 
 | crate | 版本 | 许可证 | 依赖来源 |
 |---|---|---|---|
@@ -39,7 +39,7 @@ mise exec -- cargo deny --all-features --offline check
 
 MPL 为文件级 copyleft，不等同于 GPL/AGPL；开发指南已允许在不修改文件、履行公开修改文件义务的条件下使用 MPL 库，但配置里的具体例外仍需审查。LLVM exception 也不是 GPL，不能仅因名字包含 Apache 就省略核对许可证文本。
 
-**建议的审查方向（未批准、未实施）**：仅为上述已锁定 crate 版本添加定点许可证例外；保留 MPL 文件不修改、提供第三方署名与源码获取方式；审查 LLVM exception 义务。禁止直接放开全部 MPL、GPL 或 AGPL。开发依赖、构建依赖与最终分发的系统库应分别核对；系统 WebKitGTK/GTK 的分发义务不能由 Rust crate 审计替代。
+**已实施**：仅为上述已锁定 crate 版本添加定点许可证例外；保留 MPL 文件不修改、提供第三方署名，源码获取方式仍待落实到发行流程；LLVM exception 按完整文本履行。禁止直接放开全部 MPL、GPL 或 AGPL。开发依赖、构建依赖与最终分发的系统库应分别核对；系统 WebKitGTK/GTK 的分发义务不能由 Rust crate 审计替代。
 
 ## 维护公告
 
