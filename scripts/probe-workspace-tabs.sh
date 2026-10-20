@@ -30,7 +30,7 @@ if [ "$mode" = split ]; then log=target/probes/workspace-split-native.log; fi
 if [ "$mode" = split-adjust ]; then log=target/probes/workspace-split-adjust-native.log; fi
 if [ "$mode" = labels ]; then log=target/probes/workspace-labels-native.log; fi
 if [ "$mode" = profiles ]; then log=target/probes/workspace-profiles-native.log; fi
-PULSETERM_TAB_FIXTURE="$fixture/children" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+PULSETERM_TAB_FIXTURE="$fixture/children" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "${PULSE_WORKSPACE_BINARY:-${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace}" > "$log" 2>&1 &
 app=$!
 cleanup(){ kill "$app" 2>/dev/null || true; wait "$app" 2>/dev/null || true; rm -rf "$fixture"; }
 trap cleanup EXIT
@@ -41,6 +41,18 @@ xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工�
 [ "$(printf '%s\n' "$xid" | awk 'NF {n++} END {print n+0}')" -eq 1 ] || { echo workspace.tabs_ambiguous_window >&2; exit 1; }
 [ "$(xdotool getwindowpid "$xid")" = "$app" ]
 timeout 2s xdotool windowactivate --sync "$xid"
+# Sidebar content can scroll as controls change; only activate an actually showing control.
+sidebar_action(){
+  label=$1; action=${2:-activate}; started=$(date +%s)
+  timeout 2s xdotool mousemove --window "$xid" 90 420 click --repeat 16 --delay 10 4
+  while ! timeout 1s target/probes/x11-status "$app" "$label" "$action"; do
+    [ "$(( $(date +%s) - started ))" -lt 8 ] || {
+      timeout 3s import -window "$xid" "target/probes/workspace-$mode-control-failure.png"
+      echo "workspace.tabs_control_timeout.$mode.$action" >&2; return 1;
+    }
+    timeout 2s xdotool mousemove --window "$xid" 90 420 click --repeat 2 --delay 25 5
+  done
+}
 # A native sessions-list receipt can precede the first compositor paint.
 # Observe actual pixels under a one-second visibility gate, not a guessed delay.
 paint=0
@@ -158,7 +170,7 @@ if [ "$mode" = labels ]; then
   exit 0
 fi
 if [ "$mode" = split-adjust ]; then
-  timeout 2s xdotool mousemove --window "$xid" 54 449 click 1
+  sidebar_action "左右分屏"
   await_count terminal_input_ready 4
   timeout 2s xdotool mousemove --window "$xid" 300 350 click 1
   timeout 2s xdotool key --clearmodifiers ctrl+shift+Right
@@ -167,7 +179,7 @@ if [ "$mode" = split-adjust ]; then
   input "$b" FOCUS_B 2
   [ "$(count terminal_input_ready)" -eq 4 ]
   timeout 3s import -window "$xid" target/probes/workspace-split-adjust-before.png
-  timeout 2s xdotool mousemove --window "$xid" 90 512 click 1
+  sidebar_action "第一个窗格比例" focus
   timeout 2s xdotool key --clearmodifiers Right
   await_count terminal_input_ready 6
   # Resize readiness is not focus permission; leave the ratio control explicitly.
@@ -182,7 +194,7 @@ if [ "$mode" = split-adjust ]; then
   [ "$(tail -1 "$fixture/children/$a.size" | awk '{print $1}')" -eq 31 ]
   kill -0 "$a"; kill -0 "$b"; [ "$(count session_opened)" -eq 2 ]
   drawn RATIO_B target/probes/workspace-split-adjust-ratio.png 3 200 149
-  timeout 2s xdotool mousemove --window "$xid" 125 449 click 1
+  sidebar_action "上下分屏"
   await_count terminal_input_ready 8
   timeout 2s xdotool mousemove --window "$xid" 350 220 click 1
   timeout 2s xdotool key --clearmodifiers ctrl+shift+Down
@@ -191,17 +203,32 @@ if [ "$mode" = split-adjust ]; then
   input "$b" COLUMN_NAV_B 4
   [ "$(count terminal_input_ready)" -eq 8 ]
   drawn COLUMN_NAV_B target/probes/workspace-split-adjust-column.png 4 200 149
-  drawn COLUMN_NAV_A target/probes/workspace-split-adjust-column.png 4 200 388
+  # The 55% ratio persists across direction changes; locate the lower viewport independently.
+  brows=$(tail -1 "$fixture/children/$b.size" | awk '{print $1}')
+  arows=$(tail -1 "$fixture/children/$a.size" | awk '{print $1}')
+  [ "$brows" -gt "$arows" ] || { echo workspace.split_column_ratio_lost >&2; exit 1; }
+  [ "$(tail -1 "$fixture/children/$a.size" | awk '{print $2}')" -eq 92 ]
+  [ "$(tail -1 "$fixture/children/$b.size" | awk '{print $2}')" -eq 92 ]
+  timeout 3s import -window "$xid" target/probes/workspace-split-adjust-column.png
+  lower_y=$(magick target/probes/workspace-split-adjust-column.png -crop 1x480+939+140 +repage txt:- |
+    awk -F ': ' '/^[0-9]/ { split($1,p,","); black=($2 ~ /#000000 /); if (black && !last) {runs++; if (runs==2) print p[2]+140;} last=black } END {if(runs!=2) exit 1}')
+  [ "$lower_y" -gt 350 ] && [ "$lower_y" -lt 450 ]
+  drawn COLUMN_NAV_A target/probes/workspace-split-adjust-column.png 4 200 "$lower_y"
   timeout 2s xdotool key --clearmodifiers alt+F4
   await_count exited 1; wait "$app"
   ! kill -0 "$a" 2>/dev/null; ! kill -0 "$b" 2>/dev/null
+  for pid in "$a" "$b"; do
+    cp -p -- "$fixture/children/$pid.input" "target/probes/workspace-$mode-input-$pid.txt"
+    cp -p -- "$fixture/children/$pid.size" "target/probes/workspace-$mode-size-$pid.txt"
+  done
+  printf '{"version":1,"mode":"%s","status":"passed","gui_exit_code":0,"sessions_opened":2,"native_reaped":true,"pids":[%s,%s]}\n' "$mode" "$a" "$b" > "target/probes/workspace-$mode-result.json"
   echo workspace.split_ratio_direction_native_sizes_confirmed
   exit 0
 fi
 if [ "$mode" = split ]; then
   timeout 3s import -window "$xid" target/probes/workspace-split-before.png
   # Header/sidebar controls drift; activate the split action by accessible name.
-  timeout 2s target/probes/x11-status "$app" "左右分屏" activate
+  sidebar_action "左右分屏"
   await_count terminal_input_ready 4
   kill -0 "$a"; kill -0 "$b"
   timeout 2s xdotool mousemove --window "$xid" 300 350 click 1
@@ -213,7 +240,7 @@ if [ "$mode" = split ]; then
   drawn ROW_B target/probes/workspace-split-two.png 2 200 149
   drawn ROW_A target/probes/workspace-split-two.png 2 573 149
   # Same two sessions, now a column split, not two more shell launches.
-  timeout 2s target/probes/x11-status "$app" "上下分屏" activate
+  sidebar_action "上下分屏"
   await_count terminal_input_ready 6
   timeout 2s xdotool mousemove --window "$xid" 350 220 click 1
   input "$b" COLUMN_B 3
@@ -223,8 +250,9 @@ if [ "$mode" = split ]; then
   [ "$(count session_opened)" -eq 2 ]; kill -0 "$a"; kill -0 "$b"
   drawn COLUMN_B target/probes/workspace-split-column.png 3 200 149
   drawn COLUMN_A target/probes/workspace-split-column.png 3 200 388
-  # Selecting the owning tab returns to a single view, not a new session.
-  timeout 2s xdotool mousemove --window "$xid" 300 80 click 1
+  # Selecting a retained session only focuses it. Explicitly collapse the focused B pane.
+  timeout 2s xdotool mousemove --window "$xid" 350 220 click 1
+  sidebar_action "仅显示焦点"
   await_count terminal_input_ready 7
   input "$b" SPLIT_B_SINGLE 4
   kill -0 "$a"; kill -0 "$b"
@@ -233,7 +261,7 @@ if [ "$mode" = split ]; then
   await_count terminal_input_ready 8
   input "$b" SPLIT_B_REFRESH 5
   kill -0 "$a"; kill -0 "$b"; [ "$(count session_opened)" -eq 2 ]
-  timeout 2s target/probes/x11-status "$app" "左右分屏" activate
+  sidebar_action "左右分屏"
   await_count terminal_input_ready 10
   timeout 2s xdotool mousemove --window "$xid" 750 350 click 1
   input "$a" ROW_A_REBOUND 4
@@ -255,6 +283,11 @@ if [ "$mode" = split ]; then
   await_count exited 1
   wait "$app"
   ! kill -0 "$b" 2>/dev/null || { echo workspace.split_survivor_not_reaped >&2; exit 1; }
+  for pid in "$a" "$b"; do
+    cp -p -- "$fixture/children/$pid.input" "target/probes/workspace-$mode-input-$pid.txt"
+    cp -p -- "$fixture/children/$pid.size" "target/probes/workspace-$mode-size-$pid.txt"
+  done
+  printf '{"version":1,"mode":"%s","status":"passed","gui_exit_code":0,"sessions_opened":2,"native_reaped":true,"pids":[%s,%s]}\n' "$mode" "$a" "$b" > "target/probes/workspace-$mode-result.json"
   echo workspace.two_pane_row_column_input_focused_close_confirmed
   exit 0
 fi

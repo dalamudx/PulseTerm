@@ -215,7 +215,7 @@ mise run probe-workspace-identity-password # Linux预览：已保存身份／原
 mise run probe-workspace-vault    # Linux预览单向主密码：创建保持锁定、错误密码拒绝、前端确认解锁、锁定／刷新／私库重开；不读取秘密或连接SSH
 mise run probe-workspace-vault-revocation # Linux认证已准入后关对话框／换页：无迟到启用、Profile读取等待实际旧信用退出
 mise run probe-workspace-labels   # Linux窗口显示偏好：原生modal编辑不泄入PTY、固定标色RGB、换页当前目录校验
-mise run probe-workspace-split    # Linux两个已有PTY：左右／上下尺寸、焦点路由、换页保活／重建、关闭焦点保留peer、完整回显
+mise run probe-workspace-split    # 一个任务依次验split／split-adjust：侧栏可见控件、显式折叠、55%比例跨方向保留、键盘焦点、刷新及独立关闭／实际回收
 mise run probe-workspace-tabs     # Linux双Profile PTY：标签键盘切换／活动选择刷新／独立关闭／完整回显像素／退出排空
 mise run probe-workspace-close-duplicate # Linux单PTY：命令面板复制会话（来源已知）／confirm_close=false 免确认关闭／进程回收
 mise run probe-workspace-eof      # Linux隔离Profile：自然EOF及结束后两次刷新，保画面/禁输入/End ACK/独立native退出码与回收
