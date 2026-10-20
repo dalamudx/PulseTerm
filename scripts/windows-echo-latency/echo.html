@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>echo-loading</title>
+<link rel="stylesheet" href="xterm/xterm.css">
+<style>html,body{margin:0;height:100%;background:#000}#terminal{position:absolute;inset:0}</style>
+<div id="terminal"></div>
+<script src="xterm/xterm.js"></script>
+<script src="xterm/addon-webgl.js"></script>
+<script>
+// Local echo with the product's xterm.js 6 build: no PTY or IPC, so this isolates browser rendering.
+const renderer = new URLSearchParams(location.search).get("renderer") ?? "dom";
+const term = new Terminal({ fontSize: 16, cursorBlink: false, theme: { background: "#000000" } });
+term.open(document.getElementById("terminal"));
+let title = `echo-${renderer}`;
+if (renderer === "webgl") {
+  try {
+    const webgl = new WebglAddon.WebglAddon();
+    webgl.onContextLoss(() => { document.title = "echo-webgl-lost"; });
+    term.loadAddon(webgl);
+  } catch {
+    title = "echo-webgl-failed";
+  }
+}
+term.write("\x1b[?25l");
+term.onData((data) => {
+  for (const ch of data) if (ch === "1") term.write("\x1b[48;2;255;0;0m  \x1b[0m");
+});
+term.focus();
+document.title = title;
+</script>

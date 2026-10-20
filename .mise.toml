@@ -1405,6 +1405,10 @@ description = "Measure release XTest-to-PTY-to-glyph echo p95 against the 16ms t
 env = { PULSE_LOAD_KIND = "echo", PULSE_LOAD_RUN = "echo-latest" }
 run = "mise run probe-workspace-load"
 
+[tasks.windows-echo-kit]
+description = "Build the Windows real-GPU echo latency kit (needs MinGW-w64 as CC_WIN)"
+run = "sh scripts/windows-echo-latency/build-kit.sh target/windows-echo-kit"
+
 [tasks.probe-workspace-load-state]
 description = "Compare the original drawn 1GiB screen against the actor before refresh"
 env = { PULSE_LOAD_VERIFY = "1", PULSE_LOAD_KIND = "load", PULSE_LOAD_RUN = "state-latest" }

@@ -2,6 +2,12 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## Windows 真实 GPU 回显测量包（已构建，实机结果待回传）
+
+本机没有 GPU，WSLg 经 RDP 合成也不能代表真实呈现，因此改为在用户的 Windows 11／RTX 2080 Ti／144Hz 主机上测。新增 `scripts/windows-echo-latency/` 与 `mise run windows-echo-kit`：`echo-latency.exe` 以 SendInput 向前台窗口发送按键 `1`，用 DXGI 桌面复制读取窗口客户区，以纯红标记像素增加的那一帧的 QPC 呈现时间计算延迟；对照 Windows Terminal＋ConPTY＋原生控制台回显，与 Edge 应用窗口中产品同版本 xterm.js 6.0.0（DOM 及 WebGL 0.19.0）的页面内本地回显。Edge 不经 PTY，对比偏向 Edge。焦点丢失、窗口移动、HDR／旋转、1 秒内无回显及呈现早于发键均失败退出；每目标预热 5 次＋100 次采样、共 2 轮，结果含刷新率、显卡、DPI 与键盘布局。
+
+本机已验证：核心像素计数、步距、百分位和 JSON 转义单测通过；两个 exe 以 MinGW-w64 14.2 `-Wall -Wextra -Werror -static` 交叉编译，仅导入系统 DLL；`run.ps1` 为纯 ASCII。无头 Chrome 加载实际打包页面，DOM 与 WebGL 标题均正确，按 `2` 零红色像素，每次按 `1` 增加约 350 个。**Windows 上的测量程序、Windows Terminal 回显和 Edge 启动流程均未在此执行**，SwiftShader 结果不代表延迟。产物位于被忽略的 `target/windows-echo-kit/`，私有 MinGW 与临时目录已清理。
+
 ## 八项精确版本许可例外启用（维护公告与发布门禁仍失败）
 
 用户确认本项目保持 MIT（`MIT OR Apache-2.0`）开源即可，据此批准此前审查的八项例外，仅写入根 `deny.toml` 的 `[licenses].exceptions`；全局 allow、置信度、bans、sources 与公告门禁逐项不变，未加任何 ignore，依赖版本和锁文件未改。独立候选文件已删除，以根配置为准。
