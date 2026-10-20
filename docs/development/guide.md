@@ -157,7 +157,7 @@ mise run probe-workspace-performance # Linux真实WebView整进程树PSS/RSS：�
 mise run probe-workspace-performance-release # 同场景release构建，记录原产品MB目标；软件渲染基线不能代替硬件/跨平台验收
 mise run probe-workspace-load # release真实cat 1GiB和Ctrl+C到cat物理退出延迟；不替代回显p95／完整屏幕状态／硬件验收
 mise run probe-workspace-load-state # 独立验证构建：真实1GiB标记绘制后、刷新前核对原输出的可见网格／样式／光标／主备用屏；不证明隐藏解析器／全部历史
-mise run probe-workspace-echo # 100次原生XTest→PTY→字形像素回显p95；需X11/XTest开发库，软件环境不代表硬件验收
+mise run probe-workspace-echo # 100次原生XTest→PTY→字形像素回显p95；需X11/XTest开发库，输出原始像素／PTY JSON，helper在私有目录；软件环境不代表硬件验收
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
 mise run probe-ssh-owned-session  # 显式会话动作：私库密文→真实SSH→根actor，换页/EOF/read取消与SDK+流join；合成PTY尺寸通知与显示应用，不冒充kernel ACK，非产品/SSH GUI/OS PTY
 mise run probe-ssh-system         # Linux临时sshd与真实PTY，russh公钥认证/native尺寸/EOF验证

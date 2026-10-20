@@ -1431,7 +1431,8 @@ cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --release --featur
 cc -std=c11 -Wall -Wextra -Werror scripts/probe-workspace-load.c -o "$fixture_dir/load-shell"
 export PULSE_LOAD_SHELL="$fixture_dir/load-shell" PULSE_NATIVE_HELPER="$fixture_dir/x11-status"
 if [ "${PULSE_LOAD_KIND:-load}" = echo ]; then
-  cc -std=c11 -O2 -Wall -Wextra -Werror scripts/probe-workspace-echo.c -o target/probes/echo-pixels $(pkg-config --cflags --libs x11 xtst)
+  cc -std=c11 -O2 -Wall -Wextra -Werror scripts/probe-workspace-echo.c -o "$fixture_dir/echo-pixels" $(pkg-config --cflags --libs x11 xtst)
+  export PULSE_ECHO_PIXELS="$fixture_dir/echo-pixels"
 fi
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 timeout --kill-after=25s 720s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-load/wm.log python3 scripts/probe-workspace-load.py

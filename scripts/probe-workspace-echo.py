@@ -28,9 +28,10 @@ def verify(s):
     assert 8 <= line_height <= 40, 'echo.invalid_line_height'
     x, y = int(first['left']), int(first['top']) + 2 * line_height
     assert s['accessible']('Terminal input', 'focus').returncode == 0
-    result = subprocess.run([str(s['ROOT'] / 'target/probes/echo-pixels'), str(xid), str(x), str(y), '8', str(line_height), '100'],
+    result = subprocess.run([s['env'].get('PULSE_ECHO_PIXELS', str(s['ROOT'] / 'target/probes/echo-pixels')), str(xid), str(x), str(y), '8', str(line_height), '100'],
                             check=True, capture_output=True, text=True, timeout=20)
     timing = json.loads(result.stdout)
+    (out / 'echo-pixels.json').write_text(json.dumps(timing, indent=2) + '\n')
     samples = timing['samplesMs']
     assert len(samples) == 100 and all(value > 0 for value in samples)
     ordered = sorted(samples)
@@ -44,6 +45,7 @@ def verify(s):
     xdo('type', '--clearmodifiers', '--delay', '0', 'Q')
     wait(lambda: s['count']('terminal_eof_acked') == 1, 'echo_native_eof', 10)
     native = json.loads((fixture / 'echo-native.json').read_text())
+    (out / 'echo-native.json').write_text(json.dumps(native, indent=2) + '\n')
     assert len(native) == len(samples)
     input_ms, output_ms = [], []
     for started, observed, sample in zip(timing['startNs'], timing['observedNs'], native, strict=True):
