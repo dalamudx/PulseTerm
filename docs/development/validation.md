@@ -10,6 +10,12 @@
 
 前端 1547 项测试、`pulse-store` 420 项（另 2／28 组）测试、`cargo xtask check-deps`、`mise run check-platform` 17 项策略、`check-core-features`、设置模式与双语校验通过；能力策略测试确认调色板目录由 11／16 变为 12／17。此前的 `probe-workspace-tabs` 在干净基线上同样停在 `terminal_input_ready`，属既存问题，与本批改动无关，未据此登记标签矩阵通过。证据见 `target/probes/workspace-close-duplicate/accepted/native/`。
 
+## 标签再激活断言与标签矩阵恢复（Linux 原生）
+
+`probe-workspace-tabs` 曾在 `terminal_input_ready` 处超时；在干净基线上以同一份脚本复现，确认与本批功能改动无关，而是断言已过期：产品当前对“重选已激活标签”走 `view.focusOutput()` 短路，聚焦输出而不重新挂载，因此不会产生新的 `terminal_input_ready`。
+
+脚本据此更新：重选活动标签后断言**输入回执数不变、会话数不变、两条 PTY 均存活**（证明未重连、未重生），再用点击选择另一标签并要求新的 `terminal_input_ready` 与实际输入。默认两标签模式随后通过，输出 `workspace.two_tab_keyboard_refresh_close_confirmed`。此前的失败日志保留，未用作通过证据。
+
 ## Windows 原子文件槽与精确快照（原生运行待验）
 
 沿 `pulse-platform` 私有目录／文件 lease 实现目录级固定锁、精确快照和源句柄改名提交。快照绑定目录、名称、预算、存在状态、完整文件 ID、创建／修改／变更时间和字节；跨槽和陈旧快照拒绝。三处复核原授权，暂存后重新比较；新建禁止覆盖竞争目标，既有同字节文件保持身份。提交尝试前失败回收精确暂存句柄；尝试后任何未知结果保留现场、返回 Uncertain 并要求重读，不自动重试。

@@ -260,11 +260,15 @@ fi
 timeout 2s xdotool mousemove --window "$xid" 234 80 click 1
 await_count terminal_input_ready 3
 input "$a" TAB_A_RESTORED 2
-# Clicking the already selected tab focuses its manual-activation control.
+# Re-clicking the already selected tab must focus its output without re-attaching:
+# no extra terminal_input_ready, no extra session, both PTYs alive.
 timeout 2s xdotool mousemove --window "$xid" 234 80 click 1
-timeout 2s xdotool key --clearmodifiers End
-[ "$(count terminal_input_ready)" -eq 3 ] || { echo workspace.tabs_arrow_activated >&2; exit 1; }
-timeout 2s xdotool key --clearmodifiers Return
+sleep 0.5
+[ "$(count terminal_input_ready)" -eq 3 ] || { echo workspace.tabs_selected_reactivated >&2; exit 1; }
+[ "$(count session_opened)" -eq 2 ] || { echo workspace.tabs_selected_respawned >&2; exit 1; }
+kill -0 "$a"; kill -0 "$b"
+# Select the other tab by click; a non-selected tab must attach and report input readiness.
+timeout 2s xdotool mousemove --window "$xid" 305 80 click 1
 await_count terminal_input_ready 4
 input "$b" TAB_B_KEYBOARD 2
 # New page must restore B from display preference, not select A or spawn again.
