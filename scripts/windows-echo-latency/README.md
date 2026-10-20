@@ -1,44 +1,37 @@
-# PulseTerm 回显延迟测量包（Windows，真实 GPU）
+# Windows 真实 GPU 回显测量包（WebView2 版）
 
-这个测量包回答一个问题：**在真实 GPU 上，WebView 加 xterm.js 的按键回显比原生终端慢多少？** 它不运行 PulseTerm，也不经过 PTY 和后端。
-
-| 目标 | 说明 |
-|---|---|
-| `wt` | Windows Terminal（原生 DirectX 渲染）运行 `echo-console.exe`，经 ConPTY 回显 |
-| `edge-dom` | Edge 应用窗口中的 xterm.js 6，DOM 渲染器，页面内本地回显 |
-| `edge-webgl` | 同上，WebGL 渲染器 |
-
-Edge 页面不经过 PTY，`wt` 经过 ConPTY，所以对比**偏向 Edge**。即使这样 Edge 仍明显更慢，结论更可靠。Edge 与 PulseTerm 在 Windows 上使用的 WebView2 同为 Chromium 内核，但窗口合成方式不完全相同。
-
-## 测量原理
-
-`echo-latency.exe` 用 `SendInput` 向前台窗口发送按键 `1`。三个目标收到后都会画一个纯红色块。程序用 DXGI 桌面复制读取窗口客户区，红色像素增加的那一帧即为回显帧，延迟取该帧的 QPC 呈现时间减去发键时间。每个目标先预热 5 次，再采样 100 次；整套流程跑 2 轮。
-
-## 运行前
-
-1. 显示器设为 **144Hz**，**关闭 HDR**。G-SYNC 保持你平时的设置即可，结果中会记录刷新率。
-2. 输入法切换到**英文**（任务栏显示“英”或 ENG）。中文模式可能拦截按键，导致测量超时。
-3. 关闭录屏、远程桌面、截图工具等占用桌面复制的软件。必须在本机直接操作，**不要通过远程桌面运行**。
-4. 解压前右键 zip →“属性”→ 勾选“解除锁定”。也可以在解压后执行 `Get-ChildItem -Recurse | Unblock-File`。
+本包比较 Windows Terminal 与产品同版本 xterm.js 6 的 DOM／WebGL 回显。直接使用电脑已有的 **WebView2 Runtime**，无需安装 Edge 浏览器，不修改系统设置。它不是完整 PulseTerm，也不包含产品 IPC／SSH／Vault。
 
 ## 运行
 
-在解压目录打开 PowerShell：
+1. 在 Windows“设置 → 系统 → 显示 → 高级显示”选定 **144Hz**，关闭 HDR。本机直接运行，不通过远程桌面。
+2. 输入法切到英文，关闭录屏／截图工具。解压完整新包，别只替换旧 `run.ps1`。
+3. 在解压目录打开普通 PowerShell（无需管理员）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
-脚本会依次打开 Windows Terminal 和两个 Edge 窗口，每个窗口自动测约 10–15 秒，总共约 2–3 分钟。**测量期间不要碰键盘和鼠标**；窗口失去焦点或被移动时，测量会报错退出，重新运行即可。
+宿主自动发现已安装的 Evergreen WebView2。也可指定已有版本目录：
 
-运行结束后会显示汇总表，并生成 `results-时间.zip`。请把这个 zip 发回。
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1 -RuntimePath "C:\Program Files (x86)\Microsoft\EdgeWebView\Application\155.0.4283.62"
+```
 
-## 结果内容
+共两轮，每轮 Windows Terminal → WebView2 DOM → WebView2 WebGL，每目标预热5次、正式100次。约2–3分钟，期间不要碰键鼠、切窗或移动窗口。先等 WebView2 页面就绪，再开始四秒倒计时；启动失败会保留 `*-host.log`。
 
-每个目标的 JSON 包含逐次延迟、p50、p95、刷新率、显卡、Windows 版本、窗口 DPI 和键盘布局。`summary.json` 合并两轮数据，列出各目标与 Windows Terminal 的 p50、p95 差值。测量只读取目标窗口区域的像素颜色计数，不保存截图。
+结果为 `results-时间-随机后缀.zip`，请将整个结果包发回。失败时保留结果目录和日志。60Hz和144Hz数据分开保存；JSON会记录实际模式。
 
-Edge 使用独立的临时配置目录（`%TEMP%\pulseterm-echo-edge`），不读取你的浏览数据，结束后会自动删除。
+## 范围与解释
 
-## 第三方组件
+Windows Terminal 经 ConPTY；WebView2 在页面内本地回显。路径不同，比较仅用于初筛，不能替代完整 PulseTerm 门禁。两边按键 `1` 都画纯红块，测量器用SendInput发键，DXGI检测像素增量并取对应帧QPC呈现时间；这是软件呈现时间，不是屏幕实际发光或物理键盘延迟。
 
-`xterm/` 目录包含 xterm.js 6.0.0 与 @xterm/addon-webgl 0.19.0，采用 MIT 许可，许可文本随附于同一目录。
+同一屏幕、刷新率、显卡下各取p50／p95和差值。显示模式变化、缺失呈现时间、焦点丢失等拒绝汇总。记录积压帧与读取完成时间，读屏本身可能带来扰动。
+
+每次运行使用独立临时配置，退出仅清理该目录和对应进程，不读取浏览资料，不保存截图或按键正文。本包已在Linux交叉编译并检查脚本；WebView2创建、焦点和DXGI仍需Windows实机验证。
+
+## 构建与第三方
+
+Linux交叉构建：设置`CC_WIN`／`CXX_WIN`指向MinGW-w64、`WEBVIEW2_PACKAGE`指向官方`Microsoft.Web.WebView2 1.0.4258.31` nupkg，再运行`mise run windows-echo-kit`。构建校验固定SHA256，未改项目运行依赖。
+
+包内包含MIT的xterm.js6.0.0、addon-webgl0.19.0及完整许可；WebView2Loader.dll来自官方SDK，微软BSD三条款许可、完整NOTICE和来源摘要在`third-party/`。不分发Runtime本体。`SHA256SUMS`覆盖关键exe、DLL、脚本和页面。

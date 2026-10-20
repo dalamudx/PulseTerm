@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## WebView2 Runtime 回显包修复（无需 Edge 浏览器，实机对照待运行）
+
+用户主机只有WebView2 Runtime，原脚本假设msedge.exe可启动不成立。现新增Win32 WebView2宿主，直接发现Evergreen或指定`-RuntimePath`版本目录；完整新包包含echo-webview2.exe和官方WebView2Loader.dll，无需安装Edge。页面、采样器和原生对照保持原逻辑，WebView2标题就绪后再开始采样。每次运行独立配置目录，只回收本次宿主和对应运行时进程；结果保留Runtime版本及启动失败日志，跨显示模式拒绝合并。
+
+新增宿主以MinGW全警告为错误编译，静态运行库、仅系统DLL导入；SDK1.0.4258.31来自官方NuGet并锁定SHA256，完整微软BSD三条款许可／NOTICE随包，不分发Runtime。核心像素单测通过；PowerShell7.2解析及真实脚本的模拟编排通过，覆盖无Edge启动、含空格Runtime参数、百分位／差值、模式变化拒绝和缺失Runtime前置拒绝。这些替身不算Windows原生运行，实际COM创建、焦点与DXGI仍待用户验证。旧页面功能验收沿用；产品运行依赖未改。
+
+用户提供的单轮Windows Terminal JSON记录实际60Hz、RTX2080Ti、2560×1440、DPI120，100次p50=21.464ms／p95=34.979ms，presentTimeMissing=0。该数据仅为用户提供参考，尚无同机WebView2对照，也不能按显示器最高144Hz解释。建议在高级显示设置启用144Hz后完整重跑，各刷新率单独保存。最终包和证据在`target/windows-echo-kit/`、`target/probes/windows-echo-webview2/accepted/source-checks/`。
+
 ## Windows 真实 GPU 回显测量包（已构建，实机结果待回传）
 
 本机没有 GPU，WSLg 经 RDP 合成也不能代表真实呈现，因此改为在用户的 Windows 11／RTX 2080 Ti／144Hz 主机上测。新增 `scripts/windows-echo-latency/` 与 `mise run windows-echo-kit`：`echo-latency.exe` 以 SendInput 向前台窗口发送按键 `1`，用 DXGI 桌面复制读取窗口客户区，以纯红标记像素增加的那一帧的 QPC 呈现时间计算延迟；对照 Windows Terminal＋ConPTY＋原生控制台回显，与 Edge 应用窗口中产品同版本 xterm.js 6.0.0（DOM 及 WebGL 0.19.0）的页面内本地回显。Edge 不经 PTY，对比偏向 Edge。焦点丢失、窗口移动、HDR／旋转、1 秒内无回显及呈现早于发键均失败退出；每目标预热 5 次＋100 次采样、共 2 轮，结果含刷新率、显卡、DPI 与键盘布局。

@@ -1406,7 +1406,7 @@ env = { PULSE_LOAD_KIND = "echo", PULSE_LOAD_RUN = "echo-latest" }
 run = "mise run probe-workspace-load"
 
 [tasks.windows-echo-kit]
-description = "Build the Windows real-GPU echo latency kit (needs MinGW-w64 as CC_WIN)"
+description = "Build the Windows real-GPU WebView2 echo kit (CC_WIN, CXX_WIN, WEBVIEW2_PACKAGE)"
 run = "sh scripts/windows-echo-latency/build-kit.sh target/windows-echo-kit"
 
 [tasks.probe-workspace-load-state]
