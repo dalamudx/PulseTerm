@@ -133,7 +133,8 @@ if [ "$mode" = profiles ]; then
   exit 0
 fi
 if [ "$mode" = labels ]; then
-  timeout 2s xdotool mousemove --window "$xid" 800 80 click 1
+  # Address the header control by accessible name: header button coordinates drift.
+  timeout 2s target/probes/x11-status "$app" "标签名称" activate
   timeout 2s xdotool type --clearmodifiers --delay 1 BUILD_TWO
   timeout 2s xdotool key --clearmodifiers Tab Home Down Tab Return
   sleep 0.2
@@ -199,7 +200,8 @@ if [ "$mode" = split-adjust ]; then
 fi
 if [ "$mode" = split ]; then
   timeout 3s import -window "$xid" target/probes/workspace-split-before.png
-  timeout 2s xdotool mousemove --window "$xid" 54 449 click 1
+  # Header/sidebar controls drift; activate the split action by accessible name.
+  timeout 2s target/probes/x11-status "$app" "左右分屏" activate
   await_count terminal_input_ready 4
   kill -0 "$a"; kill -0 "$b"
   timeout 2s xdotool mousemove --window "$xid" 300 350 click 1
@@ -211,7 +213,7 @@ if [ "$mode" = split ]; then
   drawn ROW_B target/probes/workspace-split-two.png 2 200 149
   drawn ROW_A target/probes/workspace-split-two.png 2 573 149
   # Same two sessions, now a column split, not two more shell launches.
-  timeout 2s xdotool mousemove --window "$xid" 125 449 click 1
+  timeout 2s target/probes/x11-status "$app" "上下分屏" activate
   await_count terminal_input_ready 6
   timeout 2s xdotool mousemove --window "$xid" 350 220 click 1
   input "$b" COLUMN_B 3
@@ -221,7 +223,7 @@ if [ "$mode" = split ]; then
   [ "$(count session_opened)" -eq 2 ]; kill -0 "$a"; kill -0 "$b"
   drawn COLUMN_B target/probes/workspace-split-column.png 3 200 149
   drawn COLUMN_A target/probes/workspace-split-column.png 3 200 388
-  # Explicitly activating the owning tab collapses the display, not the sessions.
+  # Selecting the owning tab returns to a single view, not a new session.
   timeout 2s xdotool mousemove --window "$xid" 300 80 click 1
   await_count terminal_input_ready 7
   input "$b" SPLIT_B_SINGLE 4
@@ -231,7 +233,7 @@ if [ "$mode" = split ]; then
   await_count terminal_input_ready 8
   input "$b" SPLIT_B_REFRESH 5
   kill -0 "$a"; kill -0 "$b"; [ "$(count session_opened)" -eq 2 ]
-  timeout 2s xdotool mousemove --window "$xid" 54 449 click 1
+  timeout 2s target/probes/x11-status "$app" "左右分屏" activate
   await_count terminal_input_ready 10
   timeout 2s xdotool mousemove --window "$xid" 750 350 click 1
   input "$a" ROW_A_REBOUND 4
