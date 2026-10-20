@@ -18,6 +18,10 @@ mise run audit
 mise exec -- cargo deny --all-features --offline check
 ```
 
+## 八项版本定点候选（待审批，未启用）
+
+已形成[审查材料](license-policy-review.md)和独立[候选配置](license-exceptions.candidate.toml)：五项MPL、两项0BSD、一项Apache＋LLVM例外，均绑定精确版本及已核验原文。同库离线全门禁对照：原配置退出5，候选退出1；八项许可拒绝清零、五项维护拒绝完整保留。合成反例验证未来版本和无关MPL包仍拒绝。当前根deny.toml保持原值；根据[开发指南](guide.md)“新增的许可证类型需要在PR中审批”，启用属于许可准入决定。候选通过不是发布批准，21项文本缺口及实际发行审查仍开放。
+
 ## 许可证门禁
 
 现有白名单拒绝以下精确版本；没有自动扩大全局白名单或添加例外：
@@ -29,6 +33,8 @@ mise exec -- cargo deny --all-features --offline check
 | dtoa-short | 0.3.5 | MPL-2.0 | CSS 序列化 |
 | selectors | 0.38.0 | MPL-2.0 | tauri-utils → dom_query |
 | option-ext | 0.2.0 | MPL-2.0 | Tauri/Wry → dirs → dirs-sys |
+| doctest-file | 1.1.1 | 0BSD | interprocess → pulse-app |
+| recvmsg | 1.0.0 | 0BSD | interprocess → pulse-app |
 | target-lexicon | 0.12.16 | Apache-2.0 WITH LLVM-exception | GTK 系统依赖构建工具 |
 
 MPL 为文件级 copyleft，不等同于 GPL/AGPL；开发指南已允许在不修改文件、履行公开修改文件义务的条件下使用 MPL 库，但配置里的具体例外仍需审查。LLVM exception 也不是 GPL，不能仅因名字包含 Apache 就省略核对许可证文本。

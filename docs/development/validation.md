@@ -2,6 +2,12 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 八项精确版本许可候选（仅审查，实际策略未启用）
+
+已核对实际八项拒绝：cssparser0.37.0、cssparser-macros0.7.1、dtoa-short0.3.5、option-ext0.2.0、selectors0.38.0的MPL；doctest-file1.1.1、recvmsg1.0.0的0BSD；target-lexicon0.12.16的Apache＋LLVM例外。完整文本与发布归档身份来自现有已验证清单，逐项文本SHA复核通过。候选只增加精确`name@=version`例外，移除exceptions后与现行全部配置逐项相等，无公告ignore或全局准入扩张。
+
+cargo-deny0.20.2在同一离线缓存／全特性锁图上，现行退出5（8许可＋5维护）、候选许可单项通过，候选全检查退出1（0许可＋5维护）。独立合成包的cssparser0.37.0允许，0.37.1与无关MPL包均拒绝、退出4；自动审查断言与原文哈希检查通过。离线结果不代表更新在线公告。候选和[发行义务审查](license-policy-review.md)已完成，依据开发指南新增许可审批要求，当前deny.toml未变，实际八项许可、五项维护和21项文本缺口仍阻断。接受材料见`target/probes/license-policy-review/accepted/version-exceptions/verification.json`；`clean-dev`完成（0文件），合成fixture、隔离配置缓存和私有任务目录已删除，无遗留进程。完整原文、控制／候选／负向日志及自动断言已独立归档并校验摘要，候选可审阅，根策略保持未启用。
+
 ## 上游测试工具升级消除 stackback 文本缺口
 
 Vitest 从4.1.11升级至稳定5.0.5，上游指定why-is-node-running 3.2.1，不再依赖stackback／siginfo。版本要求符合现有Node22.23.3和Vite8.3.2，未改工具链、测试用例或产品运行依赖。发布归档SHA512与新增993行许可原文逐字校验，声明组件779→769，完整文本缺口22→21，仍有18项objc2说明和russh-util／两个winapi未绑定项；原文441→437份，补充来源94不变，原发布自身缺文本97项仍独立统计。
