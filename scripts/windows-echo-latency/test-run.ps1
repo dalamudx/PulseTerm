@@ -22,7 +22,10 @@ function Start-Process {
     param($FilePath, $ArgumentList, [switch]$PassThru)
     $global:EchoRunnerTest.launches.Add([pscustomobject]@{ File = $FilePath; Arguments = @($ArgumentList) })
     if ($PassThru) {
-        $process = [Diagnostics.Process]::Start('/bin/sleep', '60')
+        if ($global:EchoRunnerTest.hostFailure) {
+            $process = [Diagnostics.Process]::Start('/bin/false')
+            $process.WaitForExit()
+        } else { $process = [Diagnostics.Process]::Start('/bin/sleep', '60') }
         $title = if (($ArgumentList -join ' ') -match 'renderer=webgl') { 'echo-webgl' } else { 'echo-dom' }
         if (($ArgumentList -join ' ') -match '--diagnostic 1') { $title += '-diagnostic' }
         $process | Add-Member -NotePropertyName MainWindowTitle -NotePropertyValue $title -Force
@@ -71,5 +74,16 @@ try { & $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL; throw 'missing m
 catch { if ($_.Exception.Message -notlike 'measurement failed:*') { throw } }
 $failureLog = Get-ChildItem $TestRoot -Recurse -Filter failure.txt | Select-Object -First 1
 if (!$failureLog -or !(Test-Path ($failureLog.Directory.FullName + '.zip'))) { throw 'failure archive missing' }
+$global:EchoRunnerTest | Add-Member -NotePropertyName hostFailure -NotePropertyValue $true
+$before = $global:EchoRunnerTest.measurements
+$beforeFailures = @(Get-ChildItem $TestRoot -Recurse -Filter failure.txt).Count
+try { & $runner -Rounds 1 -RuntimePath $runtime -DiagnoseWebGL; throw 'missing host startup failure' }
+catch { if ($_.Exception.Message -notlike 'WebView2 host exited:*') { throw } }
+if ($global:EchoRunnerTest.measurements -ne $before) { throw 'host startup failure performed sampling' }
+$allFailures = @(Get-ChildItem $TestRoot -Recurse -Filter failure.txt)
+if ($allFailures.Count -ne $beforeFailures + 1) { throw 'host startup failure was not archived' }
+foreach ($item in $allFailures) {
+    if (!(Test-Path ($item.Directory.FullName + '.zip'))) { throw 'failure archive missing' }
+}
 if (Get-ChildItem $TestRoot -Directory -Filter 'pulseterm-echo-*') { throw 'profile not removed' }
 Write-Host 'runner: parsing, no-Edge launch flow, quoted RuntimePath, summary, display mismatch and preflight passed (mock Windows operations)'

@@ -19,6 +19,7 @@ static int exit_code;
 static std::wstring uri;
 static EchoNavigation navigation;
 static bool diagnostic;
+static bool closing;
 
 #ifdef __MINGW32__
 // The SDK's MIDL uuid attributes are MSVC-only; bind the same published interface IDs.
@@ -43,9 +44,40 @@ static const char *web_error_name(COREWEBVIEW2_WEB_ERROR_STATUS error) {
     default: return "OTHER";
     }
 }
+static_assert(COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED == 1, "SDK renderer kind");
+static_assert(COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED == 4, "SDK utility kind");
+static_assert(COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED == 6, "SDK GPU kind");
+static const char *process_kind_name(COREWEBVIEW2_PROCESS_FAILED_KIND kind) {
+    switch (kind) {
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED: return "BROWSER_PROCESS_EXITED";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED: return "RENDER_PROCESS_EXITED";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE: return "RENDER_PROCESS_UNRESPONSIVE";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_FRAME_RENDER_PROCESS_EXITED: return "FRAME_RENDER_PROCESS_EXITED";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_UTILITY_PROCESS_EXITED: return "UTILITY_PROCESS_EXITED";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_SANDBOX_HELPER_PROCESS_EXITED: return "SANDBOX_HELPER_PROCESS_EXITED";
+    case COREWEBVIEW2_PROCESS_FAILED_KIND_GPU_PROCESS_EXITED: return "GPU_PROCESS_EXITED";
+    default: return "OTHER";
+    }
+}
+static const char *process_reason_name(COREWEBVIEW2_PROCESS_FAILED_REASON reason) {
+    switch (reason) {
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_UNEXPECTED: return "UNEXPECTED";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_UNRESPONSIVE: return "UNRESPONSIVE";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_TERMINATED: return "TERMINATED";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_CRASHED: return "CRASHED";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_LAUNCH_FAILED: return "LAUNCH_FAILED";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_OUT_OF_MEMORY: return "OUT_OF_MEMORY";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_PROFILE_DELETED: return "PROFILE_DELETED";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_NORMAL_EXIT: return "NORMAL_EXIT";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_ABNORMAL_EXIT: return "ABNORMAL_EXIT";
+    case COREWEBVIEW2_PROCESS_FAILED_REASON_INTEGRITY_FAILURE: return "INTEGRITY_FAILURE";
+    default: return "OTHER";
+    }
+}
 static void check(HRESULT result, const char *stage) {
     if (SUCCEEDED(result)) return;
     if (log_file) { std::fprintf(log_file, "%s failed: HRESULT 0x%08lx\n", stage, static_cast<unsigned long>(result)); std::fflush(log_file); }
+    if (exit_code != 0 || closing) return; // Preserve the first failure and queue shutdown once.
     exit_code = 2;
     PostMessageW(window, WM_CLOSE, 0, 0);
 }
@@ -81,6 +113,9 @@ static LRESULT CALLBACK events(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
     } else if (message == WM_SETFOCUS && controller) {
         controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     } else if (message == WM_CLOSE) {
+        if (closing) return 0;
+        closing = true;
+        std::fprintf(log_file, "host_closing exitCode=%d\n", exit_code); std::fflush(log_file);
         if (controller) controller->Close();
         DestroyWindow(hwnd);
         return 0;
@@ -110,6 +145,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     if (!log_file) return 1;
     navigation.select(uri);
     std::fprintf(log_file, "navigation_request uri=%ls\n", uri.c_str()); std::fflush(log_file);
+    std::fprintf(log_file, "host_pid=%lu diagnostic=%d\n", GetCurrentProcessId(), diagnostic);
+    for (const wchar_t *name : {L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", L"WEBVIEW2_USER_DATA_FOLDER"}) {
+        std::fprintf(log_file, "environment_override name=%ls present=%d\n", name, GetEnvironmentVariableW(name, nullptr, 0) != 0);
+    }
+    std::fflush(log_file);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(initialized)) { std::fclose(log_file); return 2; }
@@ -183,7 +223,31 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             auto failed = new ProcessFailed([](ICoreWebView2 *, ICoreWebView2ProcessFailedEventArgs *args) -> HRESULT {
                 COREWEBVIEW2_PROCESS_FAILED_KIND kind = COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED;
                 HRESULT result = args->get_ProcessFailedKind(&kind);
-                std::fprintf(log_file, "process_failed kind=%d result=0x%08lx\n", static_cast<int>(kind), static_cast<unsigned long>(result));
+                LARGE_INTEGER tick; QueryPerformanceCounter(&tick);
+                std::fprintf(log_file, "process_failed qpc=%lld kind=%d kindName=%s result=0x%08lx failureQueued=%d closing=%d\n",
+                    tick.QuadPart, static_cast<int>(kind), SUCCEEDED(result) ? process_kind_name(kind) : "UNAVAILABLE",
+                    static_cast<unsigned long>(result), exit_code != 0, closing);
+                ICoreWebView2ProcessFailedEventArgs2 *detail = nullptr;
+                HRESULT detail_result = args->QueryInterface(IID_ICoreWebView2ProcessFailedEventArgs2, reinterpret_cast<void **>(&detail));
+                if (SUCCEEDED(detail_result) && detail) {
+                    COREWEBVIEW2_PROCESS_FAILED_REASON reason = COREWEBVIEW2_PROCESS_FAILED_REASON_UNEXPECTED;
+                    int status = 0; LPWSTR description = nullptr;
+                    HRESULT reason_result = detail->get_Reason(&reason);
+                    HRESULT status_result = detail->get_ExitCode(&status);
+                    HRESULT description_result = detail->get_ProcessDescription(&description);
+                    // Keep a bounded single line, never process arguments or a crash dump.
+                    if (description) for (size_t i = 0; description[i]; ++i) {
+                        if (i == 160) { description[i] = L'\0'; break; }
+                        if (description[i] < 32 || description[i] > 126) description[i] = L'?';
+                    }
+                    std::fprintf(log_file, "process_detail reason=%d reasonName=%s reasonResult=0x%08lx exitCode=0x%08x exitCodeResult=0x%08lx descriptionResult=0x%08lx description=%ls\n",
+                        static_cast<int>(reason), SUCCEEDED(reason_result) ? process_reason_name(reason) : "UNAVAILABLE",
+                        static_cast<unsigned long>(reason_result), static_cast<unsigned int>(status), static_cast<unsigned long>(status_result),
+                        static_cast<unsigned long>(description_result), description ? description : L"");
+                    CoTaskMemFree(description); detail->Release();
+                } else {
+                    std::fprintf(log_file, "process_detail unavailable: HRESULT 0x%08lx\n", static_cast<unsigned long>(detail_result));
+                }
                 std::fflush(log_file);
                 check(FAILED(result) ? result : E_FAIL, "process_failed");
                 return S_OK;

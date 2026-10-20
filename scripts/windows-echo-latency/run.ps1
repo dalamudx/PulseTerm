@@ -7,7 +7,7 @@ param(
     [switch]$DiagnoseWebGL
 )
 $ErrorActionPreference = 'Stop'
-Write-Host "echo-kit: webview2-deferred-v4"
+Write-Host "echo-kit: webview2-process-v5"
 $kit = $PSScriptRoot
 $measure = Join-Path $kit 'echo-latency.exe'
 $echo = Join-Path $kit 'echo-console.exe'

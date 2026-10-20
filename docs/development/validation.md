@@ -12,6 +12,10 @@ v3用户实机回传目标导航id2、`success=0 webErrorStatus=9`。已核对�
 
 v4恢复已成功版本相同的单renderer查询地址，导航期完全静默，宿主仅在目标NavigationCompleted成功后ExecuteScript开启诊断；脚本等待独立诊断标题。开启不得覆盖failed/lost状态；增加进程故障事件和SDK错误名／静态断言。宿主编译、核心／导航反例、真实PowerShell脚本替身和页面计数测试通过；Linux无头软件Chromium实际加载DOM／WebGL后各110次真实键入，input／write／render均110，导航阶段零消息，无页面异常。这是本机页面验证，不是Windows WebView2、真实GPU或性能通过。Windows连接中止和原样本29超时仍待实机，新包为`target/windows-echo-kit/pulseterm-echo-webgl-diagnostic-v4.zip`。
 
+v4用户实机回传：Runtime155.0.4283.62后先出现ProcessFailed kind1，再出现kind4，均未进入采样。锁定SDK核验：1=RENDER_PROCESS_EXITED，4=UTILITY_PROCESS_EXITED，6=GPU_PROCESS_EXITED。日志没有kind6，不足以归因GPU进程退出，也不能排除驱动／运行时／环境关联。旧宿主在首个事件后主动排队关闭，因此kind4是否回收伴随事件未知，不把它登记为第二个根因。
+
+v5增加ICoreWebView2ProcessFailedEventArgs2的Reason／ExitCode／有界ProcessDescription及每项HRESULT，接口缺失明确报不可用；打印进程类别名、QPC、failureQueued和closing，首错只排队关闭一次。脚本标注版本，宿主日志记录WebView2环境覆盖是否存在，不记录覆盖值，不禁用GPU／沙箱、不自动重试、不放宽测量门槛。新增真实PowerShell脚本替身反例验证采样前退出不进行测量且归档并清理；宿主严格交叉编译、像素／导航核心和页面计数回归通过。本次页面行为未改，无变化的真实Chromium110次矩阵沿用前批，不重复。Windows渲染退出、连接中止和原样本29超时均未修复，v5仅补足实际进程原因证据。
+
 新增独立`-DiagnoseWebGL`模式，只测WebGL，记录固定input／write／render／焦点／上下文丢失事件与计数；消息只接受同一页面来源、限长与条数，不记录输入正文。原生逐样本QPC与失败时的像素范围、帧数、部分样本同时保留，超时1秒和16像素增量门槛不变。测量中失焦、移动和异常标题单独拒绝，失败自动打包。主机QPC是消息接收时刻，render不是最终呈现，诊断开销不得作正常性能比较。
 
 宿主和采样器全警告为错误交叉编译、像素核心单测、PowerShell真实脚本的替身编排／仅WebGL／失败zip测试、页面110次输入计数／无日志正常模式测试通过；页面测试使用Terminal替身，不是真实渲染验证。实际Windows诊断待用户执行，GPU根因尚未修复。普通产品与根依赖未改，临时构建环境清理及证据见`target/probes/windows-echo-webgl/accepted/diagnostic-kit/verification.json`。

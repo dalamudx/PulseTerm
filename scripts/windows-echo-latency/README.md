@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 -RuntimePath "C:\Program File
 
 无论成功或失败都会生成`results-*.zip`，请发回整个包。日志仅含固定事件、计数、光标、焦点和像素数，不保存输入正文或截图。主机QPC记录的是事件消息到达原生的时间，不是浏览器事件发生的精确时间；xterm的render事件也不等于最终上屏。失败JSON保留基准／最小／最大／最新红色像素、观测帧数及已经完成的样本，但不产生完整性能统计。页面异常标题和测量中失焦会单独拒绝。
 
-v4启动时显示`echo-kit: webview2-deferred-v4`。页面始终用原先的单`renderer`查询地址加载，诊断开关通过宿主参数传递，只有目标导航成功后才显式开启；脚本等到独立诊断就绪标题再采样。日志保留导航及`process_failed`事件，打印错误符号名称。SDK错误9为`CONNECTION_ABORTED`，14才是`OPERATION_CANCELED`；连接中止不能据此归因为GPU、焦点或主动取消。若仍失败，请发回整个zip。
+v5启动时显示`echo-kit: webview2-process-v5`。沿用v4导航成功后才开启诊断的顺序，补上进程失败的符号名称、Reason和十六进制ExitCode，以及独立getter HRESULT／接口不支持提示。`failureQueued`表示首个错误已排队关闭，`closing`表示已开始Controller.Close；后续事件可能属于回收，不能只凭事件先后推断共同根因。SDK中kind1为渲染进程退出，4为工具进程退出，6才是GPU进程退出。没有kind6不能排除驱动关联，也不能把kind1直接称为GPU崩溃。进程描述限定160个单行ASCII字符，环境覆盖只记录是否存在，不记录值；不收集内存转储或关闭GPU／沙箱。请发回完整宿主日志或zip，重点看`process_detail`行。
 
 诊断日志会影响时序，因此该模式不用于延迟比较。正常模式不启用页面消息、写完成回调或逐次原生日志，默认仍测三目标两轮。阈值与1秒超时没有放宽。
 
