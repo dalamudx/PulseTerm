@@ -110,6 +110,8 @@ pub struct TerminalPatch {
     pub copy_on_select: Option<bool>,
     /// Explicit default-off right-click paste preference; no input authority.
     pub right_click_paste: Option<bool>,
+    /// Whether to confirm before closing a tab or window with active sessions; default true.
+    pub confirm_close: Option<bool>,
 }
 impl SettingsPatch {
     /// Parse a bounded sparse overlay; all fields validate before any resolution.
@@ -239,6 +241,8 @@ pub struct ResolvedSettings {
     pub copy_on_select: Setting<bool>,
     /// Trusted right-click reads still require current view input and paste approval.
     pub right_click_paste: Setting<bool>,
+    /// Confirmation before closing a tab or window with active sessions.
+    pub confirm_close: Setting<bool>,
     /// Interface appearance resolved from defaults and user preferences only.
     pub ui_appearance: Setting<UiAppearance>,
     /// Interface accent resolved independently; user-level only.
@@ -376,6 +380,13 @@ impl SettingsResolver {
                     .ok_or(SettingsError::Defaults)?,
                 source: SettingsSource::Default,
             },
+            confirm_close: Setting {
+                value: defaults
+                    .terminal
+                    .confirm_close
+                    .ok_or(SettingsError::Defaults)?,
+                source: SettingsSource::Default,
+            },
             history_limit: Setting {
                 value: defaults
                     .terminal
@@ -502,6 +513,9 @@ impl ResolvedSettings {
         }
         if let Some(value) = patch.terminal.right_click_paste {
             self.right_click_paste = Setting { value, source };
+        }
+        if let Some(value) = patch.terminal.confirm_close {
+            self.confirm_close = Setting { value, source };
         }
         if let Some(value) = patch.terminal.color_preset {
             self.terminal_preset = Setting { value, source };

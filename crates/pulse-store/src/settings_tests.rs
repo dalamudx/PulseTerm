@@ -171,6 +171,28 @@ fn right_click_paste_default_and_host_false_override() -> Result<(), SettingsErr
     assert!(SettingsPatch::parse("terminal.right_click_paste='true'").is_err());
     Ok(())
 }
+
+#[test]
+fn confirm_close_defaults_true_and_explicit_false_overrides_all_lower_layers() -> TestResult {
+    let initial = SettingsResolver::resolve(None, None, None)?;
+    assert!(initial.confirm_close.value);
+    assert_eq!(initial.confirm_close.source, SettingsSource::Default);
+    let enabled = "terminal.confirm_close=true";
+    let disabled = "terminal.confirm_close=false";
+    assert!(
+        !SettingsResolver::resolve(Some(disabled), None, None)?
+            .confirm_close
+            .value
+    );
+    let resolved = SettingsResolver::resolve(Some(disabled), Some(enabled), Some(disabled))?;
+    assert!(!resolved.confirm_close.value);
+    assert_eq!(resolved.confirm_close.source, SettingsSource::Host);
+    let resolved = SettingsResolver::resolve(Some(disabled), Some(disabled), Some(enabled))?;
+    assert!(resolved.confirm_close.value);
+    assert_eq!(resolved.confirm_close.source, SettingsSource::Host);
+    assert!(SettingsPatch::parse("terminal.confirm_close='true'").is_err());
+    Ok(())
+}
 #[test]
 fn parse_failures_do_not_echo_sensitive_or_invalid_content() {
     let text = "password='sensitive-fixture'";

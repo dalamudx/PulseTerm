@@ -202,6 +202,11 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
         ("ssh-config", "workspace.commands.ssh-config", true),
         ("split-row", "workspace.commands.split-row", false),
         ("split-column", "workspace.commands.split-column", false),
+        (
+            "duplicate-session",
+            "workspace.commands.duplicate-session",
+            false,
+        ),
     ] {
         if ssh_only && !ssh_enabled {
             continue;
@@ -342,7 +347,7 @@ mod tests {
     #[test]
     fn default_and_ssh_catalogues_expose_only_existing_ui_selection_actions()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
-        for (enabled, count) in [(false, 11), (true, 16)] {
+        for (enabled, count) in [(false, 12), (true, 17)] {
             let catalogue = catalogue(enabled).map_err(std::io::Error::other)?;
             let value = catalogue.projection(Surface::Palette)?;
             assert_eq!(value["actions"].as_array().map(Vec::len), Some(count));
@@ -360,6 +365,7 @@ mod tests {
                 ("ssh-config", true),
                 ("split-row", false),
                 ("split-column", false),
+                ("duplicate-session", false),
             ] {
                 if !ssh_only || enabled {
                     assert_eq!(

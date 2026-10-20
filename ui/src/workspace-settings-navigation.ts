@@ -53,6 +53,10 @@ const catalog = {
   term_type: ["input", "TERM 终端类型 xterm vt100"],
   copy_on_select: ["input", "选中复制 clipboard copy selection"],
   right_click_paste: ["input", "右键粘贴 clipboard paste"],
+  confirm_close: [
+    "input",
+    "关闭会话前确认 关闭确认 退出确认 confirm close session tab exit",
+  ],
   keybindings: [
     "input",
     "快捷键 键位 动作 恢复内置 shortcuts keyboard keybindings keymap",

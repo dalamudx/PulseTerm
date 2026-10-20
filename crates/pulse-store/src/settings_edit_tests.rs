@@ -153,3 +153,22 @@ fn right_click_paste_edit_and_remove_preserve_other_bytes() -> Result<(), Settin
     assert!(removed.contains("\r\n"));
     Ok(())
 }
+
+#[test]
+fn confirm_close_edit_and_remove_preserve_other_bytes() -> Result<(), SettingsError> {
+    let text = "terminal.confirm_close = true # session confirmation\r\nterminal.copy_on_select = false\r\n";
+    let disabled = set_terminal_setting(text, TerminalSettingEdit::ConfirmClose(false))?;
+    assert_eq!(disabled, text.replacen("true", "false", 1));
+    let removed = crate::settings_remove::remove_terminal_setting(
+        &disabled,
+        crate::settings_remove::TerminalSettingKey::ConfirmClose,
+    )?;
+    assert_eq!(SettingsPatch::parse(&removed)?.terminal.confirm_close, None);
+    assert_eq!(
+        SettingsPatch::parse(&removed)?.terminal.copy_on_select,
+        Some(false)
+    );
+    assert!(removed.contains("# session confirmation"));
+    assert!(removed.contains("\r\n"));
+    Ok(())
+}

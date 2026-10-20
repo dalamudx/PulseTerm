@@ -14,6 +14,19 @@ it("cancel keeps current view and root native session, never sends close", async
   ).toBe("cancelled");
   expect(close).not.toHaveBeenCalled();
 });
+it("disabled confirmation resolves true directly and closes session", async () => {
+  const close = vi.fn(async () => {});
+  expect(
+    await closeWorkspaceSession(
+      "1",
+      new AbortController().signal,
+      () => true,
+      async () => true,
+      close,
+    ),
+  ).toBe("closed");
+  expect(close).toHaveBeenCalledOnce();
+});
 it("explicit confirmation closes once, uncertain response is not retried", async () => {
   const close = vi.fn(async () => {});
   expect(

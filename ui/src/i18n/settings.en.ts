@@ -36,6 +36,7 @@ export const settingsEnglish = {
   "macOS Option 作为 Meta 键": "Use macOS Option as Meta",
   选中复制: "Copy on selection",
   右键粘贴: "Paste on right click",
+  关闭会话前确认: "Confirm before closing sessions",
   "关闭后，输入时保留回看位置；下次显示或重建视图生效":
     "When disabled, input preserves the scroll position. Applies when the view next opens.",
   用户覆盖: "User override",

@@ -138,6 +138,7 @@ const state = element("workspace-state"),
   terminal = element("workspace-terminal"),
   caption = element("workspace-title");
 const close = element("workspace-close") as HTMLButtonElement;
+const duplicate = element("workspace-duplicate") as HTMLButtonElement;
 const life = new AbortController();
 let commandPalette: WorkspaceCommandPalette | undefined;
 let hostTree: WorkspaceHostTree | undefined;
@@ -152,6 +153,10 @@ let keymapRuntime: KeybindingDispatcher | undefined;
 let keymapSource: WorkspaceKeymap | undefined;
 let keymapNonce: string | undefined;
 const viewIdentities = new WeakMap<object, number>();
+type SessionOrigin =
+  | { type: "profile"; kind: ProfileKind }
+  | { type: "custom"; id: string };
+const sessionOrigins = new Map<string, SessionOrigin>();
 let nextViewIdentity = 0;
 let catalog: readonly string[] = [];
 let labels = new Map<string, TabLabel>();
@@ -235,7 +240,8 @@ installCliNewTab(window, {
     ),
   confirmColdSsh: (selection, signal) =>
     confirmColdSsh(document, selection, signal, {
-      read: (stop) => readVaultStatus(window.__PULSE_WORKSPACE_NONCE__!, stop),
+      read: (stop) =>
+        readVaultStatus(window.__PULSE_WORKSPACE_NONCE__ ?? "", stop),
       unlock: (stop) => vaultDialog.openAndWait(stop),
     }),
   confirmSsh: (selection, signal) =>
@@ -465,6 +471,7 @@ function acceptSettings(value: WorkspaceSettings): boolean {
     cursorBlink: value.values.cursor_blink.value,
     copyOnSelect: value.values.copy_on_select.value,
     rightClickPaste: value.values.right_click_paste.value,
+    confirmClose: value.values.confirm_close?.value ?? true,
     scrollOnInput: value.values.scroll_on_input?.value ?? true,
     scrollOnOutput: value.values.scroll_on_output?.value ?? false,
     macOptionIsMeta: value.values.mac_option_as_meta?.value ?? false,
@@ -1085,6 +1092,13 @@ function controls(): void {
       catalog.find((id) => id !== active) ??
       "";
   target.disabled = busy || fitBusy;
+  duplicate.disabled =
+    busy ||
+    fitBusy ||
+    !active ||
+    !sessionOrigins.has(
+      view instanceof WorkspaceSplit ? view.focusedSession : (active ?? ""),
+    );
   (element("workspace-rename") as HTMLButtonElement).disabled =
     busy || fitBusy || !active;
   (element("workspace-history") as HTMLButtonElement).disabled =
@@ -1389,18 +1403,22 @@ async function selectSession(
   }
 }
 function startProfile(nonce: string, kind: ProfileKind): Promise<void> {
-  return startLocalProfile(nonce, () =>
-    openWorkspaceProfile(nonce, kind, (nonce, kind) =>
+  return startLocalProfile(nonce, async () => {
+    const id = await openWorkspaceProfile(nonce, kind, (nonce, kind) =>
       invoke("workspace_session_open", { nonce, selection: { kind } }),
-    ),
-  );
+    );
+    sessionOrigins.set(id, { type: "profile", kind });
+    return id;
+  });
 }
 function startCustomProfile(nonce: string, id: string): Promise<void> {
-  return startLocalProfile(nonce, () =>
-    openCustomProfile(nonce, id, (nonce, id) =>
+  return startLocalProfile(nonce, async () => {
+    const sid = await openCustomProfile(nonce, id, (nonce, id) =>
       invoke("workspace_custom_profile_open", { nonce, id }),
-    ),
-  );
+    );
+    sessionOrigins.set(sid, { type: "custom", id });
+    return sid;
+  });
 }
 async function startLocalProfile(
   nonce: string,
@@ -1672,6 +1690,12 @@ const commands: readonly WorkspaceCommand[] = (
       "上下分屏",
       "split vertical top bottom panes 上下 分屏",
       "workspace-split-column",
+    ],
+    [
+      "duplicate-session",
+      "复制当前会话",
+      "duplicate clone session 复制会话 克隆",
+      "workspace-duplicate",
     ],
     ["close-session", "关闭当前会话", "close session 关闭", "workspace-close"],
   ] as const
@@ -2211,6 +2235,26 @@ element("workspace-history").addEventListener(
   () => historyEntry.open(),
   { signal: life.signal },
 );
+duplicate.addEventListener(
+  "click",
+  () => {
+    const nonce = window.__PULSE_WORKSPACE_NONCE__,
+      id = view instanceof WorkspaceSplit ? view.focusedSession : active;
+    if (!nonce || !id || busy || fitBusy || life.signal.aborted) return;
+    const origin = sessionOrigins.get(id);
+    if (origin?.type === "profile") {
+      void startProfile(nonce, origin.kind);
+    } else if (origin?.type === "custom") {
+      void startCustomProfile(nonce, origin.id);
+    } else {
+      uiText(
+        state,
+        "当前页面尚未记录该会话来源，请从主机或 Profile 重新连接后再复制",
+      );
+    }
+  },
+  { signal: life.signal },
+);
 close.addEventListener(
   "click",
   () => {
@@ -2225,12 +2269,16 @@ close.addEventListener(
       () =>
         (view instanceof WorkspaceSplit ? view.focusedSession : active) ===
           id && window.__PULSE_WORKSPACE_NONCE__ === nonce,
-      () => confirmWorkspaceClose(terminal.ownerDocument, id, life.signal),
+      () =>
+        display?.confirmClose === false
+          ? Promise.resolve(true)
+          : confirmWorkspaceClose(terminal.ownerDocument, id, life.signal),
       async () => {
         view?.dispose();
         view = undefined;
         uiText(state, "正在关闭并回收会话…");
         await invoke("workspace_session_close", { nonce, session: id });
+        sessionOrigins.delete(id);
       },
     )
       .then(async (result) => {
@@ -2292,5 +2340,15 @@ window.addEventListener(
     view?.dispose();
   },
   { once: true },
+);
+window.addEventListener(
+  "beforeunload",
+  (event) => {
+    if (display?.confirmClose !== false && catalog.length > 0) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  },
+  { signal: life.signal },
 );
 confirmPage();

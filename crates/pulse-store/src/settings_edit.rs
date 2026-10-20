@@ -40,6 +40,8 @@ pub enum TerminalSettingEdit {
     CopyOnSelect(bool),
     /// Set explicit default-off right-click paste.
     RightClickPaste(bool),
+    /// Set the session close confirmation preference.
+    ConfirmClose(bool),
     /// Set a fixed user-level interface mode, without changing terminal colors.
     UiAppearance(crate::settings::UiAppearance),
     /// Select one fixed UI accent family; user-level only.
@@ -155,6 +157,10 @@ pub fn set_terminal_setting(
         TerminalSettingEdit::RightClickPaste(value) => {
             expected.terminal.right_click_paste = Some(value);
             ("right_click_paste", Value::from(value))
+        }
+        TerminalSettingEdit::ConfirmClose(value) => {
+            expected.terminal.confirm_close = Some(value);
+            ("confirm_close", Value::from(value))
         }
     };
     expected.validate()?;

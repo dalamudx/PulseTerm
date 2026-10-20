@@ -213,3 +213,22 @@ it.each(["split-row", "split-column"] as const)(
     expect(f.run).not.toHaveBeenCalled();
   },
 );
+
+it("duplicate-session command is available and listed with bilingual keywords", () => {
+  const f = fixture();
+  const duplicate = {
+    id: "duplicate-session" as const,
+    title: "复制当前会话",
+    keywords: "duplicate clone session 复制会话 克隆",
+    available: () => true,
+    target: () => "session-1",
+    run: f.run,
+  };
+  const capture = captureWorkspaceCommands(f.context, [duplicate]);
+  expect(capture?.list("克隆").map((v) => v.id)).toEqual(["duplicate-session"]);
+  expect(capture?.list("clone").map((v) => v.id)).toEqual([
+    "duplicate-session",
+  ]);
+  expect(capture?.execute("duplicate-session")).toBe(true);
+  expect(f.run).toHaveBeenCalledOnce();
+});

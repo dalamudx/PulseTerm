@@ -16,6 +16,7 @@ export const workspacePaletteOnlyCommandIds = [
   "ssh-config",
   "split-row",
   "split-column",
+  "duplicate-session",
 ] as const;
 export const workspaceKeybindingCommandIds = [
   "profiles",

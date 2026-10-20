@@ -83,3 +83,18 @@ it("frozen SSH behavior overrides later global preferences during recovery", () 
     deleteSend: "del",
   });
 });
+
+it("confirmClose accepts explicit booleans and rejects non-boolean values", () => {
+  expect(displayPreferences({ ...base, confirmClose: true }).confirmClose).toBe(
+    true,
+  );
+  expect(
+    displayPreferences({ ...base, confirmClose: false }).confirmClose,
+  ).toBe(false);
+  expect(displayPreferences(base).confirmClose).toBeUndefined();
+  for (const value of ["false", 0, null, 1]) {
+    expect(() => displayPreferences({ ...base, confirmClose: value })).toThrow(
+      "terminal.display_invalid",
+    );
+  }
+});

@@ -478,6 +478,8 @@ jobs:
       - name: Verify two Profile terminal tabs, keyboard selection, refresh and independent close
         if: runner.os == 'Linux'
         run: mise run probe-workspace-tabs
+      - name: Probe confirmation-free close and command-palette session duplication
+        run: mise run probe-workspace-close-duplicate
       - name: Verify natural terminal EOF drawing, disabled input, and native exit status
         if: runner.os == 'Linux'
         run: mise run probe-workspace-eof

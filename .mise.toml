@@ -797,6 +797,10 @@ description = "Validate two actual Profile PTYs with keyboard tab activation, re
 depends = ["workspace-preview-build"]
 run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-tabs-wm.log sh scripts/probe-workspace-tabs.sh"
 
+[tasks.probe-workspace-close-duplicate]
+description = "Validate command-palette session duplication from the recorded Profile source and confirmation-free close with confirm_close=false"
+depends = ["workspace-preview-build"]
+run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-close-duplicate-wm.log sh scripts/probe-workspace-close-duplicate.sh"
 [tasks.probe-workspace-eof]
 description = "Verify natural Profile PTY EOF retains the final drawn screen, disables input, and yields the independent native exit receipt"
 depends = ["workspace-preview-build"]

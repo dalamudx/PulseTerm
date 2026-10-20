@@ -35,6 +35,8 @@ export const workspaceEnglish = {
   解锁: "Unlock",
   锁定: "Lock",
   重新加载: "Reload",
+  复制当前会话: "Duplicate current session",
+  "duplicate clone session 复制会话 克隆": "duplicate clone session",
   关闭当前会话: "Close current session",
   命令面板: "Command palette",
   搜索命令: "Search commands",
@@ -188,6 +190,9 @@ export const workspaceEnglish = {
   管理保险库: "Manage Vault",
   "管理 SSH Agent 身份": "Manage SSH Agent identities",
   终端标签: "Terminal tabs",
+  复制会话: "Duplicate session",
+  "当前页面尚未记录该会话来源，请从主机或 Profile 重新连接后再复制":
+    "This page has no recorded source for the session yet. Reconnect from the host or Profile before duplicating.",
   标签名称: "Tab name",
   历史与查找: "History and search",
   查看当前窗格历史与查找: "View history and search in the current pane",

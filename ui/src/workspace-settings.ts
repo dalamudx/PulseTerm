@@ -57,6 +57,7 @@ export interface WorkspaceSettings {
     term_type?: DisplaySetting<"xterm-256color" | "xterm" | "vt100">;
     copy_on_select: DisplaySetting<boolean>;
     right_click_paste: DisplaySetting<boolean>;
+    confirm_close?: DisplaySetting<boolean>;
   }>;
 }
 export type SettingsChange = Readonly<
@@ -82,6 +83,7 @@ export type SettingsChange = Readonly<
   | { field: "mac_option_as_meta"; value: boolean }
   | { field: "copy_on_select"; value: boolean }
   | { field: "right_click_paste"; value: boolean }
+  | { field: "confirm_close"; value: boolean }
   | {
       field:
         | "reset_ui_appearance"
@@ -103,7 +105,8 @@ export type SettingsChange = Readonly<
         | "reset_delete_send"
         | "reset_term_type"
         | "reset_copy_on_select"
-        | "reset_right_click_paste";
+        | "reset_right_click_paste"
+        | "reset_confirm_close";
     }
 >;
 const uuid =
@@ -213,6 +216,11 @@ export function decodeWorkspaceSettings(input: unknown): WorkspaceSettings {
     "cursor_blink",
     "copy_on_select",
     "right_click_paste",
+    ...(r.values &&
+    typeof r.values === "object" &&
+    Object.hasOwn(r.values, "confirm_close")
+      ? ["confirm_close"]
+      : []),
     ...(r.version !== 1 ? ["line_height_percent", "letter_spacing"] : []),
     ...(r.version === 3 || r.version >= 4
       ? ["font_fallback", "font_ligatures"]
@@ -365,6 +373,14 @@ export function decodeWorkspaceSettings(input: unknown): WorkspaceSettings {
         v.right_click_paste,
         (x): x is boolean => typeof x === "boolean",
       ),
+      ...(Object.hasOwn(v, "confirm_close")
+        ? {
+            confirm_close: setting(
+              v.confirm_close,
+              (x): x is boolean => typeof x === "boolean",
+            ),
+          }
+        : {}),
     }),
   });
 }
@@ -392,7 +408,8 @@ export function validateSettingsChange(value: unknown): SettingsChange {
     field === "reset_delete_send" ||
     field === "reset_term_type" ||
     field === "reset_copy_on_select" ||
-    field === "reset_right_click_paste"
+    field === "reset_right_click_paste" ||
+    field === "reset_confirm_close"
   ) {
     record(value, ["field"]);
     return Object.freeze({ field });
@@ -440,7 +457,8 @@ export function validateSettingsChange(value: unknown): SettingsChange {
       field === "mac_option_as_meta" ||
       field === "font_ligatures" ||
       field === "copy_on_select" ||
-      field === "right_click_paste") &&
+      field === "right_click_paste" ||
+      field === "confirm_close") &&
     typeof r.value === "boolean"
   )
     return Object.freeze({ field, value: r.value });

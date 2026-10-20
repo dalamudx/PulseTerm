@@ -13,6 +13,7 @@ export interface DisplayPreferences {
   readonly deleteSend?: "csi" | "del";
   readonly copyOnSelect?: boolean;
   readonly rightClickPaste?: boolean;
+  readonly confirmClose?: boolean;
 }
 /** Validated preferences never grant view/input authorization. */
 export function displayPreferences(
@@ -39,6 +40,7 @@ export function displayPreferences(
           "deleteSend",
           "copyOnSelect",
           "rightClickPaste",
+          "confirmClose",
         ].includes(key),
     ) ||
     ["fontSize", "fontFamily", "cursorBlink"].some(
@@ -87,7 +89,8 @@ export function displayPreferences(
       r.deleteSend !== "del") ||
     (Object.hasOwn(r, "copyOnSelect") && typeof r.copyOnSelect !== "boolean") ||
     (Object.hasOwn(r, "rightClickPaste") &&
-      typeof r.rightClickPaste !== "boolean")
+      typeof r.rightClickPaste !== "boolean") ||
+    (Object.hasOwn(r, "confirmClose") && typeof r.confirmClose !== "boolean")
   )
     throw Error("terminal.display_invalid");
   return Object.freeze({
@@ -126,6 +129,9 @@ export function displayPreferences(
       : {}),
     ...(Object.hasOwn(r, "rightClickPaste")
       ? { rightClickPaste: r.rightClickPaste as boolean }
+      : {}),
+    ...(Object.hasOwn(r, "confirmClose")
+      ? { confirmClose: r.confirmClose as boolean }
       : {}),
   });
 }

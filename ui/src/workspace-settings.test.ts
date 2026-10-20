@@ -242,3 +242,25 @@ it("input scroll change accepts explicit booleans and rejects coercion", () => {
   const old = decodeWorkspaceSettings(projection());
   expect(old.values.scroll_on_input).toBeUndefined();
 });
+
+it("confirm close setting accepts explicit booleans and rejects coercion", () => {
+  expect(
+    validateSettingsChange({ field: "confirm_close", value: false }),
+  ).toEqual({ field: "confirm_close", value: false });
+  expect(validateSettingsChange({ field: "reset_confirm_close" })).toEqual({
+    field: "reset_confirm_close",
+  });
+  for (const value of [0, "false", null, undefined])
+    expect(() =>
+      validateSettingsChange({ field: "confirm_close", value }),
+    ).toThrow("settings.invalid");
+  const parsed = decodeWorkspaceSettings({
+    ...projection(),
+    values: {
+      ...projection().values,
+      confirm_close: { value: false, source: "user" },
+    },
+  });
+  expect(parsed.values.confirm_close?.value).toBe(false);
+  expect(parsed.values.confirm_close?.source).toBe("user");
+});

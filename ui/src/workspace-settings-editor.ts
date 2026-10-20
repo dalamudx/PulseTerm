@@ -316,6 +316,7 @@ export class WorkspaceSettingsEditor {
       "mac_option_as_meta",
       "copy_on_select",
       "right_click_paste",
+      "confirm_close",
     ] as const) {
       const value = projection.values[field],
         row = doc.createElement("form"),
@@ -342,6 +343,7 @@ export class WorkspaceSettingsEditor {
             mac_option_as_meta: "macOS Option 作为 Meta 键",
             copy_on_select: "选中复制",
             right_click_paste: "右键粘贴",
+            confirm_close: "关闭会话前确认",
           } as const
         )[field],
       );
@@ -352,7 +354,8 @@ export class WorkspaceSettingsEditor {
         field === "scroll_on_output" ||
         field === "mac_option_as_meta" ||
         field === "copy_on_select" ||
-        field === "right_click_paste"
+        field === "right_click_paste" ||
+        field === "confirm_close"
           ? "checkbox"
           : field === "history_limit" ||
               field === "font_size" ||
@@ -367,7 +370,8 @@ export class WorkspaceSettingsEditor {
         field === "scroll_on_output" ||
         field === "mac_option_as_meta" ||
         field === "copy_on_select" ||
-        field === "right_click_paste"
+        field === "right_click_paste" ||
+        field === "confirm_close"
       )
         input.checked = value.value === true;
       else input.value = String(value.value);

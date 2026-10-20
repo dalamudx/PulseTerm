@@ -241,6 +241,9 @@ impl ScopedSettingsEdit {
             Self::Set(TerminalSettingEdit::RightClickPaste(value)) => {
                 patch.terminal.right_click_paste = Some(value)
             }
+            Self::Set(TerminalSettingEdit::ConfirmClose(value)) => {
+                patch.terminal.confirm_close = Some(value)
+            }
             Self::Remove(TerminalSettingKey::FontSize) => patch.terminal.font_size = None,
             Self::Remove(TerminalSettingKey::FontFamily) => patch.terminal.font_family = None,
             Self::Remove(TerminalSettingKey::FontFallback) => patch.terminal.font_fallback = None,
@@ -254,6 +257,7 @@ impl ScopedSettingsEdit {
             Self::Remove(TerminalSettingKey::RightClickPaste) => {
                 patch.terminal.right_click_paste = None
             }
+            Self::Remove(TerminalSettingKey::ConfirmClose) => patch.terminal.confirm_close = None,
         }
         patch.validate().map_err(|_| StoreError::SettingsRecord)
     }

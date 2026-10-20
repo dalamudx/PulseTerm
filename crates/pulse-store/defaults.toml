@@ -20,6 +20,7 @@ delete_send = "csi"
 term_type = "xterm-256color"
 copy_on_select = false
 right_click_paste = false
+confirm_close = true
 
 [ui]
 appearance = "light"

@@ -2,6 +2,14 @@
 
 本文按批次保留验证与失败原文；较早记录中的“尚待”只描述当时状态。当前范围及后续工作以 [plan.md §15](plan.md#15-动态交付清单与当前进度) 为准，动态清单整理前的批次原文见 [交付历史](plan-history.md)。
 
+## 会话复制与关闭前确认（Linux 原生）
+
+命令面板新增 `duplicate-session`（第 17 项）：按当前页面记录的 Profile 来源重开同一 Profile，来源未知（例如页面刷新后）时按钮与命令均不可用并给出提示，不猜测目标、不自动降级到默认 Shell。设置新增 `confirm_close`（默认开启），可全局／Profile／组／SSH 入口继承；为 `false` 时点击关闭直接关闭并回收，为 `true` 时保留原有确认弹窗。
+
+`mise run probe-workspace-close-duplicate` 使用一个真实夹具 PTY：键盘选中 POSIX sh、输入并确认来源回执，随后经命令面板执行复制，得到第二个独立 PID 与 `会话 2` 标签（两次 `session_opened`、两次 `terminal_input_ready`）；保存 `confirm_close=false` 后点击关闭，无确认弹窗即出现 `session_closed`，被关闭 PTY 已回收而另一条仍存活；再次退出时残留会话被回收并记录 `shutdown_complete`／`exited`。截图核对初始、双会话与存活单会话三种画面。
+
+前端 1547 项测试、`pulse-store` 420 项（另 2／28 组）测试、`cargo xtask check-deps`、`mise run check-platform` 17 项策略、`check-core-features`、设置模式与双语校验通过；能力策略测试确认调色板目录由 11／16 变为 12／17。此前的 `probe-workspace-tabs` 在干净基线上同样停在 `terminal_input_ready`，属既存问题，与本批改动无关，未据此登记标签矩阵通过。证据见 `target/probes/workspace-close-duplicate/accepted/native/`。
+
 ## Windows 原子文件槽与精确快照（原生运行待验）
 
 沿 `pulse-platform` 私有目录／文件 lease 实现目录级固定锁、精确快照和源句柄改名提交。快照绑定目录、名称、预算、存在状态、完整文件 ID、创建／修改／变更时间和字节；跨槽和陈旧快照拒绝。三处复核原授权，暂存后重新比较；新建禁止覆盖竞争目标，既有同字节文件保持身份。提交尝试前失败回收精确暂存句柄；尝试后任何未知结果保留现场、返回 Uncertain 并要求重读，不自动重试。

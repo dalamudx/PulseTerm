@@ -41,6 +41,8 @@ pub enum TerminalSettingKey {
     CopyOnSelect,
     /// Remove the right-click paste override.
     RightClickPaste,
+    /// Remove the confirm close override.
+    ConfirmClose,
     /// Remove only the user interface appearance override.
     UiAppearance,
     /// Remove the user-level UI accent override.
@@ -145,6 +147,10 @@ pub fn remove_terminal_setting(
         TerminalSettingKey::RightClickPaste => {
             expected.terminal.right_click_paste = None;
             "right_click_paste"
+        }
+        TerminalSettingKey::ConfirmClose => {
+            expected.terminal.confirm_close = None;
+            "confirm_close"
         }
     };
     let raw = Document::parse(text).map_err(|_| SettingsError::Document)?;

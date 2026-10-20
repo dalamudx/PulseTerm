@@ -21,6 +21,7 @@
       "default": {
         "backspace_send": null,
         "color_preset": null,
+        "confirm_close": null,
         "copy_on_select": null,
         "cursor_blink": null,
         "delete_send": null,
@@ -73,6 +74,14 @@
             {
               "type": "null"
             }
+          ],
+          "default": null
+        },
+        "confirm_close": {
+          "description": "Whether to confirm before closing a tab or window with active sessions; default true.",
+          "type": [
+            "boolean",
+            "null"
           ],
           "default": null
         },
