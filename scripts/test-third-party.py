@@ -34,8 +34,7 @@ def archive(entries):
 
 class AttributionTests(unittest.TestCase):
     def setUp(self):
-        Path('/data/temp').mkdir(parents=True, exist_ok=True)
-        self.tmp = tempfile.TemporaryDirectory(prefix='third-party-tests-', dir='/data/temp')
+        self.tmp = tempfile.TemporaryDirectory(prefix='third-party-tests-')
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         for name in m.INPUTS:
@@ -192,7 +191,7 @@ class AttributionTests(unittest.TestCase):
 
 class SupplementalTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix='attribution-bindings-', dir='/data/temp')
+        self.tmp = tempfile.TemporaryDirectory(prefix='attribution-bindings-')
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         (self.root / 'third-party').mkdir()
