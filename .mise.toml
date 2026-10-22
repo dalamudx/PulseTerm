@@ -5,6 +5,7 @@ PULSETERM_POWERSHELL_TEST_VERSION = "7.6.0"
 rust = "1.95.0"
 node = "22.23.3"
 pnpm = "10.34.6"
+python = "3.12.13"
 "cargo:cargo-deny" = "0.20.2"
 
 [tasks.bootstrap]

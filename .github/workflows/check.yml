@@ -17,6 +17,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare Linux fixture storage
+        if: runner.os == 'Linux'
+        run: sudo install -d -m 1777 /data/temp
       - name: Install tools from .mise.toml
         uses: jdx/mise-action@v3
       - name: Install Linux native dependencies
@@ -60,10 +63,7 @@ jobs:
         if: runner.os == 'Linux'
         env:
           PULSE_NATIVE_PARALLEL_CYCLES: 2
-        run: |
-          sudo install -d -m 1777 /data/temp
-          mise run probe-native-parallel
-      - name: Validate bounded terminal palette conversion
+        run: mise run probe-native-parallel
         run: mise run probe-theme
       - name: Validate cross-language theme paint data
         run: mise run probe-theme-paint

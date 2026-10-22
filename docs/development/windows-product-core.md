@@ -19,7 +19,6 @@ Windows 本地、SSH 和 CLI 入口已接线并完成共享回归及 GNU 交叉�
 
 | 入口 | 执行范围 | 证据边界 |
 |---|---|---|
-| [Forgejo Linux checks](../../.forgejo/workflows/check.yml) | Ubuntu 24.04 共享核心／组件／完整桌面检查；Ubuntu 22.04 独立发行门禁 | 当前 Forgejo 入口，不执行 Windows／macOS 原生验收 |
 | [check.yml](../../.github/workflows/check.yml) | 三平台核心、平台策略、Agent；Linux／Windows CLI 组件；Windows 配置来源；Linux 产品探针 | runner 权限及虚拟显示不代表普通用户、系统 IME 或真实 GPU |
 | [windows-product.yml](../../.github/workflows/windows-product.yml) | MSVC 核心用例、PowerShell 5.1 采集、前端生成、完整桌面检查和本地工作区构建 | 可手动执行；上传逐组收据，不发布验证包或登记 GUI 通过 |
 | `mise run test-windows-product` | 固定 MSVC，逐项核对 22 项生产目录／设置／SQLite／键位／发现用例 | 零／部分／忽略／错名／重复／未知退出均失败；取消不能证明线程结束 |
@@ -28,7 +27,7 @@ Windows 本地、SSH 和 CLI 入口已接线并完成共享回归及 GNU 交叉�
 
 基础验证沿用 `mise run check`、`test`、`probe`、`audit`。组件执行器共用精确测试身份校验；Windows 核心收据保存独立 runId、源码指纹、stdout／stderr 和退出状态，失败撤销 latest 成功指针，历史批次保留。原生完成状态未知时停止后续组并保留夹具。
 
-Forgejo 远程仓库与 Linux runner 已提供，工作流接入待首次远程执行；Windows／macOS 原生 runner 仍缺。取得证据后回写本页和[验证记录](validation.md)，不以工作流存在或交叉编译替代执行。
+远程已切换为 [GitHub](https://github.com/dalamudx/PulseTerm)，使用 `.github/workflows/` 的三平台与 MSVC 入口。按实际运行收据回写本页和[验证记录](validation.md)，不以工作流存在、headless 或交叉编译替代原生实窗验收。
 
 ## 普通用户验收顺序
 
