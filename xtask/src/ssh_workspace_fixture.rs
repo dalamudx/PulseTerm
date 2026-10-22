@@ -327,6 +327,12 @@ impl server::Handler for GuiPeer {
     }
 }
 fn seed_root(directory: &std::path::Path) -> Result<&std::path::Path> {
+    seed_root_with_temp(directory, &std::env::temp_dir())
+}
+fn seed_root_with_temp<'a>(
+    directory: &'a std::path::Path,
+    task_temp: &std::path::Path,
+) -> Result<&'a std::path::Path> {
     use std::path::Path;
     ensure!(
         directory.is_absolute()
@@ -346,11 +352,10 @@ fn seed_root(directory: &std::path::Path) -> Result<&std::path::Path> {
         .and_then(|name| name.to_str())
         .and_then(|name| name.strip_prefix("pulseterm-workspace-ssh-session."))
         .context("fixture.invalid_temp_target")?;
-    let task_temp = std::env::temp_dir();
     ensure!(
         (root.parent() == Some(Path::new("/data/temp"))
-            || (task_temp.starts_with("/data/temp")
-                && root.parent() == Some(task_temp.as_path())
+            || (task_temp.is_absolute()
+                && root.parent() == Some(task_temp)
                 && task_temp.components().all(|component| {
                     matches!(
                         component,
@@ -740,6 +745,33 @@ pub(crate) fn run() -> Result<()> {
 mod seed_directory_tests {
     use super::*;
     #[test]
+    fn runner_temp_requires_exact_parent_without_traversal() -> Result<()> {
+        use std::path::Path;
+        for parent in [
+            "/home/runner/work/_temp/pulseterm.A1b2C3",
+            "/private/var/folders/task/pulseterm.A1b2C3",
+        ] {
+            let parent = Path::new(parent);
+            let root = parent.join("pulseterm-workspace-ssh-session.A1b2C3");
+            let directory = root.join("data/dev.pulseterm.workspace-preview");
+            ensure!(seed_root_with_temp(&directory, parent)? == root);
+            for foreign in [parent.with_file_name("other"), parent.join("child")] {
+                ensure!(seed_root_with_temp(&directory, &foreign).is_err());
+            }
+        }
+        let traversal = Path::new("/home/runner/work/_temp/../other");
+        ensure!(
+            seed_root_with_temp(
+                &traversal.join(
+                    "pulseterm-workspace-ssh-session.A1b2C3/data/dev.pulseterm.workspace-preview"
+                ),
+                traversal,
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+    #[test]
     fn only_exact_owned_temp_root_and_app_directory_shape_are_candidates() -> Result<()> {
         use std::path::Path;
         let valid = Path::new(
@@ -749,7 +781,7 @@ mod seed_directory_tests {
             seed_root(valid)? == Path::new("/data/temp/pulseterm-workspace-ssh-session.A1b2C3")
         );
         let task_temp = std::env::temp_dir();
-        if task_temp.starts_with("/data/temp") {
+        if task_temp.is_absolute() {
             let nested = task_temp.join("pulseterm-workspace-ssh-session.A1b2C3");
             ensure!(seed_root(&nested.join("data/dev.pulseterm.workspace-preview"))? == nested);
         }
