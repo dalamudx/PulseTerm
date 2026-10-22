@@ -74,6 +74,7 @@ jobs:
           name: terminal-probe-${{ matrix.os }}
           path: |
             target/probes/*.json
+            target/probes/profile-store/**
             target/probes/windows-product-native/**
             target/probes/windows-cli/**
             target/probes/dependency-audit/**

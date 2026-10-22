@@ -59,3 +59,48 @@ fn edit_conflict_and_final_preservation_evidence_require_literal_true() -> Resul
     }
     Ok(())
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn native_helper_diagnostics_preserve_failure_and_confirm_timeout_join() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let mut success = tokio::process::Command::new("/bin/sh");
+    success.args(["-c", "printf receipt; printf stage >&2"]);
+    let output = helper_output(&mut success, "success", dir.path(), Duration::from_secs(5)).await?;
+    assert_eq!(output.stdout, b"receipt");
+    assert_eq!(output.stderr, b"stage");
+    let mut failure = tokio::process::Command::new("/bin/sh");
+    failure.args(["-c", "printf refused >&2; exit 7"]);
+    assert!(
+        helper_output(&mut failure, "failure", dir.path(), Duration::from_secs(5))
+            .await
+            .is_err()
+    );
+    let failed: Value = serde_json::from_slice(&std::fs::read(dir.path().join("failure.json"))?)?;
+    assert_eq!(failed["exitCode"], 7);
+    assert_eq!(failed["processJoined"], true);
+    assert_eq!(
+        std::fs::read(dir.path().join("failure-stderr.log"))?,
+        b"refused"
+    );
+    let mut stalled = tokio::process::Command::new("/bin/sh");
+    stalled.args(["-c", "exec sleep 30"]);
+    assert!(
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            helper_output(
+                &mut stalled,
+                "stalled",
+                dir.path(),
+                Duration::from_millis(20)
+            ),
+        )
+        .await?
+        .is_err()
+    );
+    let timed: Value = serde_json::from_slice(&std::fs::read(dir.path().join("stalled.json"))?)?;
+    assert_eq!(timed["timedOut"], true);
+    assert_eq!(timed["processJoined"], true);
+    assert!(dir.path().join("success.json").is_file());
+    Ok(())
+}

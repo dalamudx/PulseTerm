@@ -30,6 +30,7 @@ pub(super) fn helper() -> Result<()> {
     let r = tokio::runtime::Runtime::new()?;
     let receipt = r.block_on(async {
         let (store, task) = StateStore::open(path).await?;
+        eprintln!("profile-store.{mode}.store_opened");
         let mut expected = AutoProfilePreferences::default();
         expected.set_hidden(AutomaticShell::Bash, true)?;
         expected.suppress(AutomaticShell::Zsh);
@@ -76,8 +77,10 @@ pub(super) fn helper() -> Result<()> {
             }
             json!({"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true,"atomicEditsPreserved":true})
         };
+        eprintln!("profile-store.{mode}.operation_complete");
         drop(store);
         task.join().await?;
+        eprintln!("profile-store.{mode}.worker_joined");
         Ok::<_, anyhow::Error>(
             json!({"mode":mode,"pid":std::process::id(),"workerJoined":true,"receipt":receipt}),
         )
@@ -85,19 +88,63 @@ pub(super) fn helper() -> Result<()> {
     println!("{receipt}");
     Ok(())
 }
-async fn child(mode: &str, path: &Path) -> Result<Value> {
-    let mut command = tokio::process::Command::new(std::env::current_exe()?);
+async fn helper_output(
+    command: &mut tokio::process::Command,
+    mode: &str,
+    evidence: &Path,
+    deadline: Duration,
+) -> Result<std::process::Output> {
+    let stdout = evidence.join(format!("{mode}-stdout.log"));
+    let stderr = evidence.join(format!("{mode}-stderr.log"));
     command
-        .arg("profile-store-helper")
-        .arg(mode)
-        .arg(path)
+        .stdout(std::fs::File::create(&stdout)?)
+        .stderr(std::fs::File::create(&stderr)?)
         .kill_on_drop(true);
-    let output = tokio::time::timeout(Duration::from_secs(5), command.output())
-        .await
-        .context("profile store helper timed out")??;
-    if !output.status.success() || output.stdout.len() > 2048 || output.stderr.len() > 2048 {
-        bail!("profile store helper failed");
+    let mut process = command
+        .spawn()
+        .with_context(|| format!("spawn profile helper {mode}"))?;
+    let pid = process.id();
+    let waited = tokio::time::timeout(deadline, process.wait()).await;
+    let timed_out = waited.is_err();
+    let status = match waited {
+        Ok(status) => status?,
+        Err(_) => {
+            process.start_kill()?;
+            process.wait().await?
+        }
+    };
+    std::fs::write(
+        evidence.join(format!("{mode}.json")),
+        serde_json::to_vec_pretty(&json!({
+            "mode":mode,"pid":pid,"timedOut":timed_out,
+            "processJoined":true,"exitCode":status.code(),
+        }))?,
+    )?;
+    if timed_out {
+        bail!(
+            "profile store helper {mode} timed out; process joined; logs: {}",
+            evidence.display()
+        );
     }
+    if !status.success()
+        || std::fs::metadata(&stdout)?.len() > 2048
+        || std::fs::metadata(&stderr)?.len() > 2048
+    {
+        bail!(
+            "profile store helper {mode} failed; status={status}; logs: {}",
+            evidence.display()
+        );
+    }
+    Ok(std::process::Output {
+        status,
+        stdout: std::fs::read(stdout)?,
+        stderr: std::fs::read(stderr)?,
+    })
+}
+async fn child(mode: &str, path: &Path, evidence: &Path) -> Result<Value> {
+    let mut command = tokio::process::Command::new(std::env::current_exe()?);
+    command.arg("profile-store-helper").arg(mode).arg(path);
+    let output = helper_output(&mut command, mode, evidence, Duration::from_secs(5)).await?;
     let v: Value = serde_json::from_slice(&output.stdout)?;
     if v["mode"] != mode || v["workerJoined"] != true || v["pid"].as_u64().is_none() {
         bail!("invalid helper receipt");
@@ -143,6 +190,14 @@ fn verify(
 }
 
 pub(super) fn run() -> Result<()> {
+    match std::fs::remove_file("target/probes/profile-store.json") {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let evidence =
+        PathBuf::from("target/probes/profile-store").join(uuid::Uuid::now_v7().to_string());
+    std::fs::create_dir_all(&evidence)?;
     let dir = tempfile::tempdir()?;
     #[cfg(unix)]
     {
@@ -152,11 +207,11 @@ pub(super) fn run() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let receipt = runtime.block_on(async {
         let path=dir.path().join("pulse.db");
-        let writer=child("write",&path).await?;
-        let (fish,sh)=tokio::join!(child("edit-fish",&path),child("edit-sh",&path));
+        let writer=child("write",&path,&evidence).await?;
+        let (fish,sh)=tokio::join!(child("edit-fish",&path,&evidence),child("edit-sh",&path,&evidence));
         let fish=fish?;let sh=sh?;
-        let conflict=child("conflict",&path).await?;
-        let reader=child("read",&path).await?;
+        let conflict=child("conflict",&path,&evidence).await?;
+        let reader=child("read",&path,&evidence).await?;
         verify(&writer,&fish,&sh,&conflict,&reader)?;
         Ok::<_,anyhow::Error>(json!({"schemaVersion":2,"independentProcesses":5,"concurrentEditors":2,"atomicEditsPreserved":true,"staleSnapshotRejected":true,"hiddenRestored":true,"deletedSuppressed":true,"delayedDiscoveryRetained":true,"workerJoined":true,"candidateExecuted":false}))
     })?;
