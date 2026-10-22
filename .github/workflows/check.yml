@@ -81,6 +81,7 @@ jobs:
             target/probes/workspace-*.log
             target/probes/workspace-profiles-round-*.png
             target/probes/workspace-fingerprint-*
+            target/probes/workspace-close-duplicate-*.png
             target/probes/window-manager.log
             target/probes/window-external-actions.log
           if-no-files-found: ignore

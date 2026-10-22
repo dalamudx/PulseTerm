@@ -2,8 +2,8 @@
 # One fixture PTY, command-palette duplication and confirmation-free close.
 set -eu
 umask 077
-mkdir -p target/probes /data/temp
-fixture=$(mktemp -d /data/temp/pt-workspace-close-dup.XXXXXX)
+mkdir -p target/probes
+fixture=$(mktemp -d "${TMPDIR:-/data/temp}/pt-workspace-close-dup.XXXXXX")
 export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 export TMPDIR="$fixture" TMP="$fixture" TEMP="$fixture"
 mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$fixture/bin" "$fixture/children"
@@ -22,9 +22,21 @@ done
 SHELL
 chmod 700 "$fixture/bin/sh"
 log=target/probes/workspace-close-duplicate-native.log
-PULSETERM_TAB_FIXTURE="$fixture/children" PATH="$fixture/bin" SHELL="$fixture/bin/sh" target/debug/pulseterm-workspace > "$log" 2>&1 &
+printf 'GDK_BACKEND=%s\nLIBGL_ALWAYS_SOFTWARE=%s\nWEBKIT_DISABLE_DMABUF_RENDERER=%s\n' \
+  "${GDK_BACKEND:-unset}" "${LIBGL_ALWAYS_SOFTWARE:-unset}" "${WEBKIT_DISABLE_DMABUF_RENDERER:-unset}" \
+  > target/probes/workspace-close-duplicate-environment.log
+PULSETERM_TAB_FIXTURE="$fixture/children" PATH="$fixture/bin" SHELL="$fixture/bin/sh" "${PULSE_WORKSPACE_BINARY:-${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace}" > "$log" 2>&1 &
 app=$!
-cleanup(){ kill "$app" 2>/dev/null || true; wait "$app" 2>/dev/null || true; rm -rf "$fixture"; }
+cleanup(){
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    tail -40 "$log" >&2
+    timeout 3s import -window root target/probes/workspace-close-duplicate-failure.png || true
+  fi
+  kill "$app" 2>/dev/null || true
+  wait "$app" 2>/dev/null || true
+  rm -rf "$fixture"
+}
 trap cleanup EXIT
 count(){ grep -c "^workspace.$1$" "$log" || true; }
 await_count(){ step=$1; expected=$2; attempt=0; while [ "$(count "$step")" -lt "$expected" ]; do kill -0 "$app" 2>/dev/null || { echo workspace.close_dup_early_exit >&2; exit 1; }; if grep -q '^workspace.terminal_failure.' "$log"; then echo workspace.close_dup_surface_failed >&2; exit 1; fi; [ "$attempt" -lt 80 ] || { echo "workspace.close_dup_timeout.$step" >&2; exit 1; }; attempt=$((attempt+1)); sleep 0.1; done; }
@@ -39,6 +51,7 @@ while :; do
   colors=$(convert target/probes/workspace-close-duplicate-initial.png -format '%k' info:)
   [ "$colors" -gt 10 ] && break
   [ "$paint" -lt 10 ] || { echo workspace.close_dup_initial_paint_timeout >&2; exit 1; }
+  paint=$((paint+1)); sleep 0.1
 done
 timeout 2s xdotool key --clearmodifiers Tab Return
 await_count terminal_input_ready 1
