@@ -1,6 +1,7 @@
 {
   "name": "pulseterm",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "check": "pnpm --filter ui check",
     "test": "pnpm --filter ui test",

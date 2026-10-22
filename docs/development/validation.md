@@ -58,7 +58,7 @@ v3 管理员回传 39/39（17 项策略＋22 项 Windows）已逐名复核，发
 
 ## 八项精确版本许可例外启用（维护公告与发布门禁仍失败）
 
-用户确认本项目保持 MIT（`MIT OR Apache-2.0`）开源即可，据此批准此前审查的八项例外，仅写入根 `deny.toml` 的 `[licenses].exceptions`；全局 allow、置信度、bans、sources 与公告门禁逐项不变，未加任何 ignore，依赖版本和锁文件未改。独立候选文件已删除，以根配置为准。
+用户确认本项目采用 MIT 开源许可，据此批准此前审查的八项例外，仅写入根 `deny.toml` 的 `[licenses].exceptions`；全局 allow、置信度、bans、sources 与公告门禁逐项不变，未加任何 ignore，依赖版本和锁文件未改。独立候选文件已删除，以根配置为准。
 
 联网 `mise run audit`：Rust 许可拒绝 8→0，五项维护公告（paste、proc-macro-error、zbus_names、zvariant、zvariant_derive）保留，Rust 退出1；JavaScript 审计通过。署名生成与39项离线校验通过，清单仅 `deny.toml` 输入摘要变化，769组件／21项完整文本缺口不变；发布文本门禁仍按规则退出1，releaseApproved=false。MPL 覆盖代码随可执行形式分发时的源码获取渠道尚未落实，列为发行门禁。证据见 `target/probes/license-policy-review/accepted/enabled/verification.json`；临时目录已清理。
 

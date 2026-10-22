@@ -20,4 +20,4 @@ mise run audit
 
 ## 许可证
 
-MIT OR Apache-2.0。第三方声明见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+[MIT](LICENSE-MIT)。第三方声明见 [THIRD_PARTY.md](THIRD_PARTY.md)。

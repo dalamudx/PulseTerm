@@ -24,7 +24,7 @@
 | ADR-016 | 窗口材质由 `pulse-platform::backdrop` 按系统版本自动选择并降级；Win10 默认纯色；Acrylic 只在 22H2 及以上开放；终端区域默认不透明 | Accepted | window-vibrancy 已知问题：Acrylic/Blur 在部分版本拖动和缩放时卡顿 |
 | ADR-017 | `pulse-app` 及其下层都不依赖 Tauri，为将来的 mux 守护进程和无界面测试留出空间 | Accepted | overview.md §3 |
 | ADR-018 | 前后端的类型定义由工具生成（tauri-specta，备选 ts-rs），禁止手写重复的类型定义 | **Proposed**（S21 已取得 Linux 命令/事件/Raw Channel 证据；RC 依赖门禁与三平台验证待完成） | — |
-| ADR-019 | 项目许可证采用 MIT OR Apache-2.0；禁止引入 GPL 依赖；参考 Netcatty 时遵守 clean-room 约束 | Accepted（2026-10 确认） | 主要依赖均为 MIT/Apache；Netcatty 为 GPL-3.0 |
+| ADR-019 | 项目许可证采用 MIT；禁止引入 GPL 依赖；参考 Netcatty 时遵守 clean-room 约束 | Accepted（2026-10 确认） | 主要依赖均为 MIT/Apache；Netcatty 为 GPL-3.0 |
 | ADR-020 | 产品范围约束：不做 shell、脚本语言、X Server、SPICE/NX，也不内置大型 AI Agent | Accepted | features.md §20 |
 | ADR-021 | 产品名定为 **PulseTerm**（原名 AstraTerm 弃用）；crate 前缀 `pulse-`，命令 `pulseterm`，URL 协议 `pulseterm://`，环境变量前缀 `PULSE_` | Accepted（2026-10 确认） | 同领域已有名为 AstraTerm 的 SSH/AI 运维终端（2026-06 上线）；`astra` 与 DataStax 的 Homebrew `astra` CLI 重名。PulseTerm 在 crates.io、npm、Homebrew、Debian 均无同名包，GitHub 上只有几个零星个人仓库 |
 | ADR-022 | 内嵌 RDP（RDP-01~08）和内嵌 VNC（VNC-01~03）属于 v1.0 必须交付范围 | Accepted（2026-10 确认） | 三平台开源产品中“SSH 工作台 + 内嵌远程桌面”是主要差异化；S14/S15 未通过的功能由外部客户端（RDP-08）兜底，不再调整范围 |
@@ -59,7 +59,7 @@
 |---|---|---|
 | 产品名 | PulseTerm（ADR-021） | 2026-10 |
 | 内嵌 RDP/VNC 是否进 v1.0 | 进入 v1.0（ADR-022） | 2026-10 |
-| 项目许可证 | MIT OR Apache-2.0（ADR-019） | 2026-10 |
+| 项目许可证 | MIT（ADR-019） | 2026-10 |
 | 前端框架 | React 19（ADR-015） | 2026-10 |
 | 是否上架 Mac App Store | 不上架（ADR-023） | 2026-10 |
 | 崩溃报告方案 | Sentry 协议 + minidump，默认关闭，可自托管（ADR-024） | 2026-10 |
