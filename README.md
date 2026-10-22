@@ -20,6 +20,10 @@ mise run audit             # 维护公告与完整发行材料仍阻断，见依
 
 工具版本统一由 `.mise.toml` 管理；Rust/JS 库依赖分别由 Cargo 和 pnpm manifests/lockfiles 管理。探针输出位于 `target/probes/`，不会提交到仓库。
 
+## Forgejo CI
+
+[Linux 工作流](.forgejo/workflows/check.yml) 使用 `ubuntu-24.04` 做基础／组件／完整桌面检查，`ubuntu-22.04` 独立运行依赖审计与完整许可门禁；失败保留原始日志，不能据其他 job 通过绕过。当前没有 Windows／macOS runner，相关原生验收保持待执行。
+
 ## 原生数据通道验证
 
 安装平台开发依赖后：

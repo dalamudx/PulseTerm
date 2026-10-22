@@ -323,11 +323,13 @@ pnpm tauri build                   # 本地打包
 
 | 已实现工作流 | 触发方式 | 范围与证据 |
 |---|---|---|
+| [Forgejo Linux checks](../../.forgejo/workflows/check.yml) | PR／push／手动 | `ubuntu-24.04` 执行基础／组件／完整桌面检查，`ubuntu-22.04` 独立运行审计与完整许可门禁，上传各 job 的原始记录 |
 | [check.yml](../../.github/workflows/check.yml) | PR／push／手动 | 三平台核心与组件、Linux 产品实窗、release 负载；依赖审计和完整许可门禁保留，上传各自探针证据 |
 | [windows-product.yml](../../.github/workflows/windows-product.yml) | 相关路径 PR／手动 | MSVC 精确原生用例、PS5.1 采集回归、完整桌面检查与本地工作区构建，上传逐组原始日志 |
 
-接入远程后先运行这两个入口，按具体 job／步骤／收据判断，不以整个 workflow 的存在代替执行。当前审计与完整许可检查预计仍会失败；保留失败，禁止通过忽略步骤或删除依赖范围获得绿色状态。远程首次执行与普通用户 GUI／真实 GPU 验收分别登记。
+当前远端为 Forgejo，工作流入口是 `.forgejo/workflows/check.yml`，使用现有 `ubuntu-24.04`／`ubuntu-22.04` 标签；`ubuntu-latest` 也是可用标签。两项 job 独立判定，现有维护公告与许可原文缺口会继续使发行门禁失败。工作流通过 Forgejo v3 artifact 接口上传证据，并关闭 mise 的 GitHub cache／token 默认值，避免把 Forgejo 自动 token 发给 GitHub。首次远程执行尚待完成。
 
+`.github/workflows/` 保留 GitHub 三平台及 MSVC 验收定义；当前 Forgejo runner 均为 Linux，不调度 `windows-latest`／`macos-latest`。Linux headless／交叉检查不能替代对应原生、GUI、IME 和真实 GPU 验收。
 `interop.yml`、`bench.yml`、`e2e.yml` 和签名／公证／更新的 `release.yml` 尚未实现；它们属于计划目标，不是当前可运行 CI。发布前补齐真实平台、互通、性能、密钥配置及失败恢复，见[下一阶段计划](next-stage-plan.md)。
 
 ## 7. 发布
