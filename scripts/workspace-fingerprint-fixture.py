@@ -1,12 +1,12 @@
 """Probe-owned public pin checks only. Never create or edit a user database."""
-import pathlib, sqlite3, sys
+import pathlib, sqlite3, sys, tempfile
 path, mode, key_path, port = sys.argv[1:]
 p = pathlib.Path(path).resolve(strict=True)
-root = pathlib.Path.cwd() / "target"
-assert p.is_relative_to(root) and any(part.startswith("workspace-fingerprint.") for part in p.parts)
+root = pathlib.Path(tempfile.gettempdir()).resolve(strict=True)
+assert p.is_relative_to(root) and any(part.startswith("workspace-fingerprint.") for part in p.relative_to(root).parts)
 key = " ".join(pathlib.Path(key_path).read_text().split()[:2])
-with sqlite3.connect(p.as_uri()+"?mode=rw", uri=True) as c:
-    assert c.execute("pragma user_version").fetchone()[0] == 4
+with sqlite3.connect(p.as_uri()+"?mode=ro", uri=True) as c:
+    assert c.execute("pragma user_version").fetchone()[0] == 5
     revision = c.execute("select revision from known_hosts_state").fetchone()[0]
     rows = c.execute("select id,created_at,hlc,deleted,host,port,key from known_hosts").fetchall()
     if mode == "empty":

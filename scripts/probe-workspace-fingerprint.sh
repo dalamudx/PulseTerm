@@ -3,33 +3,37 @@
 set -eu
 umask 077
 mkdir -p target/probes
-fixture=$(mktemp -d "$PWD/target/workspace-fingerprint.XXXXXX")
+fixture=$(mktemp -d "${TMPDIR:-/data/temp}/workspace-fingerprint.XXXXXX")
 export HOME="$fixture/home" XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$HOME" "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 app=;server=
-cleanup(){ if [ -n "$app" ];then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi;if [ -n "$server" ];then kill "$server" 2>/dev/null||true;wait "$server" 2>/dev/null||true;fi;rm -rf "$fixture"; }
+cleanup(){ status=$?;if [ "$status" -ne 0 ] && [ -n "${xid:-}" ];then shot failure||true;fi;if [ -n "$app" ];then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi;if [ -n "$server" ];then kill "$server" 2>/dev/null||true;wait "$server" 2>/dev/null||true;fi;rm -rf "$fixture"; }
 trap cleanup EXIT
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture/x11-status" $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 port=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
 ssh-keygen -q -t ed25519 -N '' -f "$fixture/key"
 ssh-keygen -q -t ed25519 -N '' -f "$fixture/changed-key"
 start_server(){ round=$1;hostkey=$2;serverlog="target/probes/workspace-fingerprint-sshd-$round.log";printf 'ListenAddress 127.0.0.1\nPort %s\nHostKey %s\nPidFile %s\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication no\nPermitRootLogin no\nUsePAM no\nAllowTcpForwarding no\nPermitTTY no\nLogLevel DEBUG2\n' "$port" "$hostkey" "$fixture/sshd.pid" > "$fixture/sshd.conf";/usr/sbin/sshd -D -e -f "$fixture/sshd.conf" > "$serverlog" 2>&1 & server=$!;attempt=0;while ! grep -F 'Server listening' "$serverlog" >/dev/null;do kill -0 "$server";[ "$attempt" -lt 80 ];attempt=$((attempt+1));sleep 0.1;done; }
 count(){ grep -c "^workspace.$1$" "$log"||true; }
 await_count(){ step=$1;expected=$2;attempt=0;while [ "$(count "$step")" -lt "$expected" ];do if ! kill -0 "$app" 2>/dev/null;then echo "workspace.fingerprint_native_exit.$step" >&2;tail -15 "$log" >&2;exit 1;fi;[ "$attempt" -lt 80 ]||{ echo "workspace.fingerprint_timeout.$step" >&2;tail -15 "$log" >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done; }
-start_app(){ round=$1;log="target/probes/workspace-fingerprint-native-$round.log";target/debug/pulseterm-workspace > "$log" 2>&1 & app=$!;await_count profiles_listed 1;xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true);[ "$(printf '%s\n' "$xid"|awk 'NF{n++}END{print n+0}')" -eq 1 ];[ "$(xdotool getwindowpid "$xid")" = "$app" ];timeout 2s xdotool windowactivate --sync "$xid"; }
+start_app(){ round=$1;log="target/probes/workspace-fingerprint-native-$round.log";"${PULSE_WORKSPACE_BINARY:-${CARGO_TARGET_DIR:-target}/debug/pulseterm-workspace}" > "$log" 2>&1 & app=$!;await_count profiles_listed 1;xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true);[ "$(printf '%s\n' "$xid"|awk 'NF{n++}END{print n+0}')" -eq 1 ];[ "$(xdotool getwindowpid "$xid")" = "$app" ];timeout 2s xdotool windowactivate --sync "$xid"; }
 shot(){ timeout 3s import -window "$xid" "target/probes/workspace-fingerprint-$1.png"; }
 keys(){ timeout 3s xdotool key --clearmodifiers "$@"; }
 type(){ timeout 3s xdotool type --clearmodifiers --delay 1 "$1"; }
-open_hosts(){ n=$1;paint=0;while :;do shot sidebar;[ "$(convert target/probes/workspace-fingerprint-sidebar.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ];paint=$((paint+1));sleep 0.1;done;timeout 3s tesseract target/probes/workspace-fingerprint-sidebar.png target/probes/workspace-fingerprint-sidebar --psm 11 tsv 2>/dev/null;y=$(awk -F '\t' '$12~/^SSH/&&$7<80&&$8>150{n++;if(n==1)y=int($8+$10/2)}END{if(n==2)print y}' target/probes/workspace-fingerprint-sidebar.tsv);[ -n "$y" ];timeout 2s xdotool mousemove --window "$xid" 151 "$y" click 1;await_count hosts_operation_confirmed "$n";sleep 0.2; }
-open_fingerprint(){ n=$1;keys shift+Tab shift+Tab Return;await_count ssh_fingerprint_prepared "$n"; }
+open_hosts(){ n=$1;shot sidebar;timeout 3s "$fixture/x11-status" "$app" '管理 SSH 主机' activate;await_count hosts_operation_confirmed "$n";sleep 0.2; }
+open_fingerprint(){ n=$1;timeout 3s "$fixture/x11-status" "$app" '核对指纹' focus;keys space;await_count ssh_fingerprint_prepared "$n"; }
 visible(){ name=$1;shift;shot "$name";timeout 3s tesseract "target/probes/workspace-fingerprint-$name.png" "target/probes/workspace-fingerprint-$name" --psm 11 2>/dev/null;for text in "$@";do grep -F "$text" "target/probes/workspace-fingerprint-$name.txt" >/dev/null||{ echo "workspace.fingerprint_not_drawn.$name" >&2;exit 1;};done; }
 check(){ python3 scripts/workspace-fingerprint-fixture.py "$XDG_DATA_HOME/dev.pulseterm.workspace-preview/state.db" "$1" "$fixture/key.pub" "$port"; }
 close_app(){ [ "$(count session_opened)" -eq 0 ];keys alt+F4;await_count exited 1;wait "$app";app=; }
 start_server 1 "$fixture/key"
 start_app 1;open_hosts 1
-keys shift+Tab shift+Tab shift+Tab shift+Tab shift+Tab ctrl+a
-type FINGERPRINT;keys Tab ctrl+a;type 127.0.0.1;keys Tab ctrl+a;type "$port";keys Tab ctrl+a;type fixed;keys Tab Return
+timeout 3s "$fixture/x11-status" "$app" '显示名称' focus;keys ctrl+a;type FINGERPRINT
+timeout 3s "$fixture/x11-status" "$app" '主机地址' focus;keys ctrl+a;type 127.0.0.1
+timeout 3s "$fixture/x11-status" "$app" '端口' focus;keys ctrl+a;type "$port"
+timeout 3s "$fixture/x11-status" "$app" '用户名' focus;keys ctrl+a;type fixed
+timeout 3s "$fixture/x11-status" "$app" '添加' activate
 await_count hosts_operation_confirmed 2;sleep 0.2
-# Save receipt focuses Done; two reverse tabs reach the distinct fingerprint action.
+# Focus the distinct fingerprint action before opening its original-page approval.
 open_fingerprint 1;await_count ssh_fingerprint_observed.unknown 1;sleep 0.2
 visible unknown FINGERPRINT 127.0.0.1 ssh-ed25519 SHA256
 # Default Cancel (Space), not implicit trust or authentication.
