@@ -335,6 +335,7 @@ pub fn worker() -> Result<()> {
     );
     let mut count = 0;
     let expected_suffix = b"\r\nFLOOD_DONE\r\n";
+    let mut next_pause = CHUNK;
     while let Some(chunk) = pump.next()? {
         for byte in chunk {
             let expected = if count < FLOOD {
@@ -350,10 +351,18 @@ pub fn worker() -> Result<()> {
             );
             count += 1;
         }
-        thread::sleep(Duration::from_millis(1));
+        if count >= next_pause {
+            thread::sleep(Duration::from_millis(1));
+            next_pause = (count / CHUNK + 1) * CHUNK;
+        }
     }
-    ensure!(count == FLOOD + expected_suffix.len(), "truncated flood");
-    ensure!(flood.wait()?.success(), "flood failed");
+    let flood_exit = flood.wait()?;
+    ensure!(
+        count == FLOOD + expected_suffix.len(),
+        "truncated flood: received {count}, expected {}; child flood_exit: {flood_exit}",
+        FLOOD + expected_suffix.len()
+    );
+    ensure!(flood_exit.success(), "flood failed: {flood_exit}");
     pump.join()?;
     drop(flood);
 

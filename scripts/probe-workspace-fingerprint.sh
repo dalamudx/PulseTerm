@@ -20,6 +20,13 @@ start_app(){ round=$1;log="target/probes/workspace-fingerprint-native-$round.log
 shot(){ timeout 3s import -window "$xid" "target/probes/workspace-fingerprint-$1.png"; }
 keys(){ timeout 3s xdotool key --clearmodifiers "$@"; }
 type(){ timeout 3s xdotool type --clearmodifiers --delay 1 "$1"; }
+focus(){
+  label=$1;started=$(date +%s)
+  while ! timeout 1s "$fixture/x11-status" "$app" "$label" focus;do
+    [ "$(( $(date +%s) - started ))" -lt 8 ]||{ echo "workspace.fingerprint_focus_timeout.$label" >&2;return 1; }
+    sleep 0.1
+  done
+}
 open_hosts(){ n=$1;shot sidebar;timeout 3s "$fixture/x11-status" "$app" '管理 SSH 主机' activate;await_count hosts_operation_confirmed "$n";sleep 0.2; }
 open_fingerprint(){ n=$1;timeout 3s "$fixture/x11-status" "$app" '核对指纹' focus;keys space;await_count ssh_fingerprint_prepared "$n"; }
 visible(){ name=$1;shift;shot "$name";timeout 3s tesseract "target/probes/workspace-fingerprint-$name.png" "target/probes/workspace-fingerprint-$name" --psm 11 2>/dev/null;for text in "$@";do grep -F "$text" "target/probes/workspace-fingerprint-$name.txt" >/dev/null||{ echo "workspace.fingerprint_not_drawn.$name" >&2;exit 1;};done; }
@@ -27,10 +34,10 @@ check(){ python3 scripts/workspace-fingerprint-fixture.py "$XDG_DATA_HOME/dev.pu
 close_app(){ [ "$(count session_opened)" -eq 0 ];keys alt+F4;await_count exited 1;wait "$app";app=; }
 start_server 1 "$fixture/key"
 start_app 1;open_hosts 1
-timeout 3s "$fixture/x11-status" "$app" '显示名称' focus;keys ctrl+a;type FINGERPRINT
-timeout 3s "$fixture/x11-status" "$app" '主机地址' focus;keys ctrl+a;type 127.0.0.1
-timeout 3s "$fixture/x11-status" "$app" '端口' focus;keys ctrl+a;type "$port"
-timeout 3s "$fixture/x11-status" "$app" '用户名' focus;keys ctrl+a;type fixed
+focus '显示名称';keys ctrl+a;type FINGERPRINT
+focus '主机地址';keys ctrl+a;type 127.0.0.1
+focus '端口';keys ctrl+a;type "$port"
+focus '用户名';keys ctrl+a;type fixed
 timeout 3s "$fixture/x11-status" "$app" '添加' activate
 await_count hosts_operation_confirmed 2;sleep 0.2
 # Focus the distinct fingerprint action before opening its original-page approval.

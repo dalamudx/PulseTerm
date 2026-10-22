@@ -339,6 +339,7 @@ run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features wo
 [tasks.probe-workspace-fingerprint]
 description = "Verify explicit fingerprint cancel/approve/matched/changed/reload/reopen against independent OpenSSH with zero authentication"
 depends = ["workspace-ssh-preview-build"]
+env = { GDK_BACKEND = "x11", LIBGL_ALWAYS_SOFTWARE = "1", WEBKIT_DISABLE_DMABUF_RENDERER = "1" }
 run = "timeout --kill-after=5s 80s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-fingerprint-wm.log sh scripts/probe-workspace-fingerprint.sh"
 
 [tasks.probe-workspace-ssh-session]

@@ -56,20 +56,20 @@ async fn independent_workers_concurrently_edit_different_fields_without_loss() -
     let path = dir.path().join("state.db");
     let (a, ta) = StateStore::open(path.clone())
         .await
-        .map_err(|_| "settings.concurrent.open_a")?;
+        .map_err(|error| format!("settings.concurrent.open_a: {error}"))?;
     let (b, tb) = StateStore::open(path)
         .await
-        .map_err(|_| "settings.concurrent.open_b")?;
+        .map_err(|error| format!("settings.concurrent.open_b: {error}"))?;
     let (one, two) = tokio::join!(
         a.edit_scoped_settings(group(), size(18)),
         b.edit_scoped_settings(group(), ScopedSettingsEdit::Set(Set::CursorBlink(false)))
     );
-    one.map_err(|_| "settings.concurrent.edit_a")?;
-    two.map_err(|_| "settings.concurrent.edit_b")?;
+    one.map_err(|error| format!("settings.concurrent.edit_a: {error}"))?;
+    two.map_err(|error| format!("settings.concurrent.edit_b: {error}"))?;
     let snapshot = a
         .load_scoped_settings(group())
         .await
-        .map_err(|_| "settings.concurrent.load")?;
+        .map_err(|error| format!("settings.concurrent.load: {error}"))?;
     assert_eq!(snapshot.revision(), 2);
     assert_eq!(snapshot.patch().terminal.font_size, Some(18));
     assert_eq!(snapshot.patch().terminal.cursor_blink, Some(false));
