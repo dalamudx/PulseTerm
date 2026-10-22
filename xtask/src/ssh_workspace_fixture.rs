@@ -346,8 +346,17 @@ fn seed_root(directory: &std::path::Path) -> Result<&std::path::Path> {
         .and_then(|name| name.to_str())
         .and_then(|name| name.strip_prefix("pulseterm-workspace-ssh-session."))
         .context("fixture.invalid_temp_target")?;
+    let task_temp = std::env::temp_dir();
     ensure!(
-        root.parent() == Some(Path::new("/data/temp"))
+        (root.parent() == Some(Path::new("/data/temp"))
+            || (task_temp.starts_with("/data/temp")
+                && root.parent() == Some(task_temp.as_path())
+                && task_temp.components().all(|component| {
+                    matches!(
+                        component,
+                        std::path::Component::RootDir | std::path::Component::Normal(_)
+                    )
+                })))
             && suffix.len() == 6
             && suffix.bytes().all(|byte| byte.is_ascii_alphanumeric()),
         "fixture.only_owned_temp_target_allowed"
@@ -739,6 +748,11 @@ mod seed_directory_tests {
         ensure!(
             seed_root(valid)? == Path::new("/data/temp/pulseterm-workspace-ssh-session.A1b2C3")
         );
+        let task_temp = std::env::temp_dir();
+        if task_temp.starts_with("/data/temp") {
+            let nested = task_temp.join("pulseterm-workspace-ssh-session.A1b2C3");
+            ensure!(seed_root(&nested.join("data/dev.pulseterm.workspace-preview"))? == nested);
+        }
         for path in [
             "/tmp/pulseterm-workspace-ssh-session.A1b2C3/data/dev.pulseterm.workspace-preview",
             "/data/temp/foreign.A1b2C3/data/dev.pulseterm.workspace-preview",

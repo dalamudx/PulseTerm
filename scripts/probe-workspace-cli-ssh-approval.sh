@@ -2,7 +2,7 @@
 cli_requests=0
 cli_ask(){
  cli_requests=$((cli_requests+1))
- target/debug/pulse ssh "$host_id" --identity "$identity_id" > "target/probes/workspace-cli-ssh-result-$probe_mode-$cli_requests.txt" 2>&1 & cli_request=$!
+ "$probe_bin/pulse" ssh "$host_id" --identity "$identity_id" > "target/probes/workspace-cli-ssh-result-$probe_mode-$cli_requests.txt" 2>&1 & cli_request=$!
  await_count cli_ssh_approval_requested "$cli_requests"
  timeout 2s xdotool windowactivate --sync "$xid"
  attempt=0
@@ -29,7 +29,7 @@ cli_ask;kill "$cli_request";wait "$cli_request" 2>/dev/null||true;cli_request=;s
 cli_ask;profiles=$(count profiles_listed);keys ctrl+shift+r;await_count profiles_listed "$((profiles+1))";cli_rejected
 # The approving page cannot authorize an obsolete saved-source snapshot.
 cli_ask
-target/debug/xtask serve-workspace-ssh-fixture "$XDG_DATA_HOME/dev.pulseterm.workspace-preview" mutate-host > target/probes/workspace-cli-ssh-source-mutation-$probe_mode.log 2>&1
+"$probe_bin/xtask" serve-workspace-ssh-fixture "$XDG_DATA_HOME/dev.pulseterm.workspace-preview" mutate-host > target/probes/workspace-cli-ssh-source-mutation-$probe_mode.log 2>&1
 grep -Fx fixture.ssh_gui_source_changed target/probes/workspace-cli-ssh-source-mutation-$probe_mode.log >/dev/null
 keys Tab Return;cli_rejected
 # Slow human consent is separate from the original native 5s startup deadline.

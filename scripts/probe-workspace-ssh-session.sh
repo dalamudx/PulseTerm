@@ -4,13 +4,15 @@ set -eu
 umask 077
 # Bound observer CPU use; preserve all existing OCR, native and outer deadlines.
 export OMP_THREAD_LIMIT=1 MAGICK_THREAD_LIMIT=1
+probe_bin="${CARGO_TARGET_DIR:-target}/debug"
+export GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
 probe_mode=${1:-window};mode=$probe_mode;private_key=0;authenticated=ssh_password_authenticated
 case "$mode" in key-*)private_key=1;mode=${mode#key-};authenticated=ssh_public_key_authenticated;;esac
 case "$mode" in window|close|eof|cancel|commands|cli);;*)echo workspace.ssh_invalid_probe_mode >&2;exit 2;;esac
 if [ "$private_key" -eq 1 ];then case "$mode" in window|close|eof|cancel|cli);;*)echo workspace.ssh_invalid_private_key_probe_mode >&2;exit 2;;esac;fi
 mkdir -p target/probes
 mkdir -p /data/temp
-fixture=$(mktemp -d /data/temp/pulseterm-workspace-ssh-session.XXXXXX)
+fixture=$(mktemp -d "${TMPDIR:-/data/temp}/pulseterm-workspace-ssh-session.XXXXXX")
 printf 'owned-fixture-v1' > "$fixture/owned-workspace-ssh-session.fixture"
 export XDG_DATA_HOME="$fixture/data" XDG_CONFIG_HOME="$fixture/config" XDG_CACHE_HOME="$fixture/cache"
 mkdir -m 700 "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
@@ -23,8 +25,10 @@ if [ "$mode" = cli ];then
 fi
 log="target/probes/workspace-ssh-session-native-$probe_mode.log"
 peerlog="target/probes/workspace-ssh-session-peer-$probe_mode.log"
-cleanup(){ if [ -n "$cli_request" ];then kill "$cli_request" 2>/dev/null||true;wait "$cli_request" 2>/dev/null||true;fi;if [ -n "$app" ];then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi;if [ -n "$peer" ];then kill "$peer" 2>/dev/null||true;wait "$peer" 2>/dev/null||true;fi;rm -rf "$fixture"; }
+: > "$log";: > "$peerlog"
+cleanup(){ status=$?;if [ "$status" -ne 0 ];then if [ -n "$xid" ];then shot "failure-$probe_mode"||true;fi;tail -18 "$log" >&2||true;tail -8 "$peerlog" >&2||true;fi;if [ -n "$cli_request" ];then kill "$cli_request" 2>/dev/null||true;wait "$cli_request" 2>/dev/null||true;fi;if [ -n "$app" ];then kill "$app" 2>/dev/null||true;wait "$app" 2>/dev/null||true;fi;if [ -n "$peer" ];then kill "$peer" 2>/dev/null||true;wait "$peer" 2>/dev/null||true;fi;rm -rf "$fixture"; }
 trap cleanup EXIT
+cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture/x11-status" $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 count(){ grep -c "^workspace.$1$" "$log"||true; }
 peer_count(){ grep -c "^fixture.$1$" "$peerlog"||true; }
 shot(){ timeout 3s import -window "$xid" "target/probes/workspace-ssh-session-$1.png"; }
@@ -58,22 +62,40 @@ await_count(){
  done
 }
 await_peer(){ step=$1;expected=$2;attempt=0;while [ "$(peer_count "$step")" -lt "$expected" ];do kill -0 "$peer";[ "$attempt" -lt 80 ]||{ echo "fixture.ssh_session_timeout.$step" >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done; }
-sidebar(){ paint=0;while :;do shot sidebar;[ "$(convert target/probes/workspace-ssh-session-sidebar.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ];paint=$((paint+1));sleep 0.1;done;convert target/probes/workspace-ssh-session-sidebar.png -crop 180x640+0+0 -resize 400% target/probes/workspace-ssh-session-sidebar-ocr.png;timeout 3s tesseract target/probes/workspace-ssh-session-sidebar-ocr.png target/probes/workspace-ssh-session-sidebar --psm 11 tsv 2>/dev/null; }
-click_sidebar(){ kind=$1;sidebar;y=$(awk -F '\t' -v kind="$kind" '$12~/^SSH/&&$7<320&&$8>600{n++;if(n==1)first=int(($8+$10/2)/4);second=int(($8+$10/2)/4)}END{if(n==2){if(kind=="host")print first;else print second+52}}' target/probes/workspace-ssh-session-sidebar.tsv);[ -n "$y" ]||{ echo "workspace.ssh_sidebar_anchor_not_drawn.$kind" >&2;exit 1;};timeout 3s xdotool mousemove --window "$xid" 150 "$y" click 1; }
-visible(){ name=$1;shift;shot "$name";if [ "$name" = selection ];then : > "target/probes/workspace-ssh-session-$name.txt";for top in 262 334;do convert "target/probes/workspace-ssh-session-$name.png" -crop "485x22+229+$top" -resize 400% "target/probes/workspace-ssh-session-select-$top.png";timeout 3s tesseract "target/probes/workspace-ssh-session-select-$top.png" stdout --psm 7 2>/dev/null >> "target/probes/workspace-ssh-session-$name.txt";done;else convert "target/probes/workspace-ssh-session-$name.png" -crop 780x120+200+149 -resize 400% "target/probes/workspace-ssh-session-$name-ocr.png";timeout 3s tesseract "target/probes/workspace-ssh-session-$name-ocr.png" "target/probes/workspace-ssh-session-$name" --psm 6 2>/dev/null;fi;for text in "$@";do grep -Fi "$text" "target/probes/workspace-ssh-session-$name.txt" >/dev/null||{ echo "workspace.ssh_session_not_drawn.$name.$text" >&2;exit 1;};done; }
+click_sidebar(){
+ case "$1" in host)label='管理 SSH 主机';direction=4;;vault)label='管理保险库';direction=5;;*)return 2;;esac
+ timeout 3s xdotool mousemove --window "$xid" 150 400 click --repeat 12 --delay 10 "$direction"
+ shot sidebar
+ timeout 3s "$fixture/x11-status" "$app" "$label" focus
+ keys space
+}
+visible(){
+ name=$1;shift;shot "$name"
+ if [ "$name" = selection ];then
+  : > "target/probes/workspace-ssh-session-$name.txt"
+  for top in 258 330;do
+   convert "target/probes/workspace-ssh-session-$name.png" -crop "485x30+229+$top" -resize 400% "target/probes/workspace-ssh-session-select-$top.png"
+   timeout 3s tesseract "target/probes/workspace-ssh-session-select-$top.png" stdout --psm 7 2>/dev/null >> "target/probes/workspace-ssh-session-$name.txt"
+  done
+ else
+  convert "target/probes/workspace-ssh-session-$name.png" -crop 780x120+200+149 -resize 400% "target/probes/workspace-ssh-session-$name-ocr.png"
+  timeout 3s tesseract "target/probes/workspace-ssh-session-$name-ocr.png" "target/probes/workspace-ssh-session-$name" --psm 6 2>/dev/null
+ fi
+ for text in "$@";do grep -Fi "$text" "target/probes/workspace-ssh-session-$name.txt" >/dev/null||{ echo "workspace.ssh_session_not_drawn.$name.$text" >&2;exit 1;};done
+}
 # Seed fresh private app ciphertext and known pin via backend fixture, never page-side key or approval injection.
 peer_mode=normal;[ "$mode" != cancel ]||peer_mode=stall
 if [ "$private_key" -eq 1 ];then peer_mode=key;[ "$mode" != cancel ]||peer_mode=key-stall;fi
-target/debug/xtask serve-workspace-ssh-fixture "$XDG_DATA_HOME/dev.pulseterm.workspace-preview" "$peer_mode" > "$peerlog" 2>&1 & peer=$!
+"$probe_bin/xtask" serve-workspace-ssh-fixture "$XDG_DATA_HOME/dev.pulseterm.workspace-preview" "$peer_mode" > "$peerlog" 2>&1 & peer=$!
 attempt=0;while ! grep -F fixture.ssh_gui_seeded_listening "$peerlog" >/dev/null;do kill -0 "$peer";[ "$attempt" -lt 200 ]||{ tail -15 "$peerlog" >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done
-target/debug/pulseterm-workspace > "$log" 2>&1 & app=$!
+"$probe_bin/pulseterm-workspace" > "$log" 2>&1 & app=$!
 await_count profiles_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null||true)
 [ "$(printf '%s\n' "$xid"|awk 'NF{n++}END{print n+0}')" -eq 1 ];[ "$(xdotool getwindowpid "$xid")" = "$app" ];timeout 2s xdotool windowactivate --sync "$xid"
 if [ "$mode" = cli ];then
  host_id=$(sed -n 's/^fixture.ssh_gui_host_id.//p' "$peerlog")
  identity_id=$(sed -n 's/^fixture.ssh_gui_identity_id.//p' "$peerlog")
- status=0;target/debug/pulse ssh "$host_id" --identity "$identity_id" > target/probes/workspace-cli-ssh-locked.txt 2>&1 || status=$?
+ status=0;"$probe_bin/pulse" ssh "$host_id" --identity "$identity_id" > target/probes/workspace-cli-ssh-locked.txt 2>&1 || status=$?
  [ "$status" -eq 1 ];[ "$(count cli_ssh_approval_requested)" -eq 0 ];[ "$(peer_count "$authenticated")" -eq 0 ]
 fi
 # Unlock only through the existing master-password UI with actual keyboard and frontend confirmation.
@@ -87,9 +109,11 @@ else
 click_sidebar host;await_count hosts_operation_confirmed 1;keys Escape
 if [ "$mode" = commands ];then keys ctrl+shift+p;sleep 0.2;type connect;keys Return;else keys shift+Tab Return;fi
 sleep 0.2
+# Saved hosts without a default identity require an explicit selection.
+keys Tab Home Tab;sleep 0.2
 # Full identity label is visible in the retained raw screenshot; OCR adds L at I_ glyph.
 visible selection GUI_HOST IDENTITY
-keys Tab Tab Tab Return
+keys Tab Tab Return
 fi
 if [ "$mode" = cancel ];then
  await_peer ssh_handshake_stream_owned 1
@@ -98,7 +122,7 @@ if [ "$mode" = cancel ];then
  [ "$(count "$opened")" -eq 0 ];[ "$(peer_count "$authenticated")" -eq 0 ]
  # Reuse admission only after actual I/O exit; no re-unlock or new epoch is granted.
  click_sidebar host;await_count hosts_operation_confirmed 3;keys Escape shift+Tab Return;sleep 0.2
- keys Tab Tab Tab Return;await_peer ssh_handshake_stream_owned 2
+ keys Tab Home Tab Tab Tab Return;await_peer ssh_handshake_stream_owned 2
  keys ctrl+shift+r
  attempt=0;while [ "$(peer_count ssh_handshake_stream_exited)" -lt 2 ];do [ "$attempt" -lt 20 ]||{ echo fixture.ssh_navigation_exit_exceeded_two_seconds >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done
  await_count profiles_listed 2
