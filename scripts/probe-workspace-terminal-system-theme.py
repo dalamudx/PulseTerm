@@ -151,7 +151,7 @@ def verify(c):
         image = out / (tag + '.png')
         def pixels():
             run('/usr/bin/import', '-window', c['xid'], image)
-            histogram = run('/usr/bin/magick', image, '-crop', '600x60+220+150', '+repage', '-depth', '8', '-format', '%c', 'histogram:info:').stdout
+            histogram = run('/usr/bin/convert', image, '-crop', '600x60+220+150', '+repage', '-depth', '8', '-format', '%c', 'histogram:info:').stdout
             counts = {color.lower(): int(count) for count, color in re.findall(r'^\s*(\d+):.*?#([0-9a-fA-F]{6})(?:\s|$)', histogram, re.M)}
             return counts.get(bg, 0) > 10000 and counts.get(fg, 0) > 5
         wait(pixels, 'paint_' + tag)

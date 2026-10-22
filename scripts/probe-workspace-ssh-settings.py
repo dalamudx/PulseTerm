@@ -45,7 +45,7 @@ def verify(s):
         image = evidence / (prefix + '-' + tag + '.png')
         def drawn():
             s['run'](['/usr/bin/import', '-window', s['xid'], image])
-            histogram = s['run'](['/usr/bin/magick', image, '-crop', '600x60+220+150', '+repage',
+            histogram = s['run'](['/usr/bin/convert', image, '-crop', '600x60+220+150', '+repage',
                                   '-depth', '8', '-format', '%c', 'histogram:info:']).stdout
             colors = {color.lower(): int(count) for count, color in re.findall(
                 r'^\s*(\d+):.*?#([0-9a-fA-F]{6})(?:\s|$)', histogram, re.M)}

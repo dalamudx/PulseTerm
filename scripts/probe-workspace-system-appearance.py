@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='pt-appearance.', dir='/data/temp') as t
         assert width_match is not None and height_match is not None, 'appearance.window_geometry'
         width = int(width_match[1])
         height = int(height_match[1])
-        value = run('/usr/bin/magick', str(fixture / 'current.png'), '-crop',
+        value = run('/usr/bin/convert', str(fixture / 'current.png'), '-crop',
                     f'8x8+{width-24}+{height-24}', '+repage', '-format',
                     '%[fx:mean]', 'info:').stdout
         return float(value)

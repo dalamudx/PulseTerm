@@ -112,7 +112,7 @@ xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工�
 [ "$(xdotool getwindowpid "$xid")" = "$app" ]
 timeout 2s xdotool windowactivate --sync "$xid"
 paint=0
-while :;do timeout 3s import -window "$xid" target/probes/workspace-settings-start.png;[ "$(magick target/probes/workspace-settings-start.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ]||exit 1;paint=$((paint+1));sleep 0.1;done
+while :;do timeout 3s import -window "$xid" target/probes/workspace-settings-start.png;[ "$(convert target/probes/workspace-settings-start.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ]||exit 1;paint=$((paint+1));sleep 0.1;done
 # No file yet: UI must report compiled 14/default rather than replacing a target.
 file="$XDG_CONFIG_HOME/dev.pulseterm.workspace-preview/settings.toml"
 [ ! -e "$file" ]

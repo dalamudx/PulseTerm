@@ -296,6 +296,19 @@ impl ResolvedConfig {
         self.identities_only
     }
 }
+// rustix does not expose mkfifoat on macOS; keep the same FIFO fixtures on Unix.
+#[cfg(all(test, unix))]
+fn mkfifo(path: &std::path::Path) -> std::io::Result<()> {
+    let status = std::process::Command::new("/usr/bin/mkfifo")
+        .args(["-m", "600"])
+        .arg(path)
+        .status()?;
+    if !status.success() {
+        return Err(std::io::Error::other("config.fifo_fixture_failed"));
+    }
+    Ok(())
+}
+
 #[cfg(all(test, unix))]
 #[path = "config_openssh_tests.rs"]
 mod openssh_tests;

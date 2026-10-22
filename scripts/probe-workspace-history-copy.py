@@ -63,7 +63,7 @@ def painted(marker, row):
         image = fixture / 'paint.png'
         crop = fixture / 'paint-row.png'
         run(['/usr/bin/import', '-window', xid, str(image)])
-        run(['/usr/bin/magick', str(image), '-crop', '300x15+200+' + str(149 + row * 15), '+repage', '-resize', '400%', str(crop)])
+        run(['/usr/bin/convert', str(image), '-crop', '300x15+200+' + str(149 + row * 15), '+repage', '-resize', '400%', str(crop)])
         text = run(['/usr/bin/tesseract', str(crop), 'stdout', '-l', 'eng', '--psm', '7']).stdout.decode()
         return marker in ' '.join(text.split())
     wait_for(matches, 'visible_' + marker.replace(' ', '_'))

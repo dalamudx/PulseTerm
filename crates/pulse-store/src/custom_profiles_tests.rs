@@ -3,7 +3,12 @@ type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
 fn draft() -> CustomProfileDraft {
     CustomProfileDraft {
         name: "保存 🌍".into(),
-        executable: "/usr/bin/sh".into(),
+        executable: if cfg!(windows) {
+            r"C:\tools\sh.exe"
+        } else {
+            "/usr/bin/sh"
+        }
+        .into(),
         hidden: false,
         config: ProfileConfig {
             args: vec!["".into(), "literal ; $(text)".into()],

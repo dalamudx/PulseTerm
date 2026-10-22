@@ -17,7 +17,12 @@ async fn custom_default_reopens_and_directory_changes_reject_stale_saves() -> Te
             empty,
             CustomProfileEdit::Create(CustomProfileDraft {
                 name: "保存 🌍".into(),
-                executable: "/usr/bin/sh".into(),
+                executable: if cfg!(windows) {
+                    r"C:\tools\sh.exe"
+                } else {
+                    "/usr/bin/sh"
+                }
+                .into(),
                 hidden: false,
                 config: Default::default(),
             }),

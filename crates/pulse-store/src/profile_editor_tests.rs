@@ -5,7 +5,7 @@ type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
 fn config() -> ProfileConfig {
     ProfileConfig {
         args: vec!["".into(), " ; $(literal) 中文🌍 ".into()],
-        cwd: Some("/data".into()),
+        cwd: Some(if cfg!(windows) { r"C:\data" } else { "/data" }.into()),
         env: vec![("PROFILE_VALUE".into(), "space = 中文".into())],
         env_remove: vec!["INHERITED_VALUE".into()],
         appearance: ProfileAppearance {

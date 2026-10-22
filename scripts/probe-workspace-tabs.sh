@@ -58,7 +58,7 @@ sidebar_action(){
 paint=0
 while :; do
   timeout 3s import -window "$xid" target/probes/workspace-tabs-initial.png
-  colors=$(magick target/probes/workspace-tabs-initial.png -format '%k' info:)
+  colors=$(convert target/probes/workspace-tabs-initial.png -format '%k' info:)
   [ "$colors" -gt 10 ] && break
   [ "$paint" -lt 10 ] || { echo workspace.tabs_initial_paint_timeout >&2; exit 1; }
   paint=$((paint+1)); sleep 0.1
@@ -82,10 +82,10 @@ drawn(){
     # Compare every character after echo:, and reject an all-blank reference.
     width=$(( ${#text} * 8 ))
     line=${3:-3}; x=${4:-200}; base_y=${5:-149}; y=$((base_y+(line*2-1)*15)); echo_y=$((y+15)); echo_x=$((x+40))
-    magick "$image" -crop "${width}x15+${x}+${y}" +repage target/probes/workspace-tabs-typed.png
-    magick "$image" -crop "${width}x15+${echo_x}+${echo_y}" +repage target/probes/workspace-tabs-echo.png
-    colors=$(magick target/probes/workspace-tabs-typed.png -format '%k' info:)
-    if [ "$colors" -gt 10 ] && magick compare -metric AE target/probes/workspace-tabs-typed.png target/probes/workspace-tabs-echo.png null: 2>/dev/null; then return; fi
+    convert "$image" -crop "${width}x15+${x}+${y}" +repage target/probes/workspace-tabs-typed.png
+    convert "$image" -crop "${width}x15+${echo_x}+${echo_y}" +repage target/probes/workspace-tabs-echo.png
+    colors=$(convert target/probes/workspace-tabs-typed.png -format '%k' info:)
+    if [ "$colors" -gt 10 ] && compare -metric AE target/probes/workspace-tabs-typed.png target/probes/workspace-tabs-echo.png null: 2>/dev/null; then return; fi
     [ "$(( $(date +%s) - start ))" -lt 8 ] || { echo workspace.tabs_drawn_echo_timeout >&2; exit 1; }
     sleep 0.1
   done
@@ -151,14 +151,14 @@ if [ "$mode" = labels ]; then
   timeout 2s xdotool key --clearmodifiers Tab Home Down Tab Return
   sleep 0.2
   timeout 3s import -window "$xid" target/probes/workspace-labels-saved.png
-  [ "$(magick target/probes/workspace-labels-saved.png -format '%[pixel:p{284,81}]' info:)" = 'srgb(0,162,199)' ] || { echo workspace.label_color_missing >&2;exit 1; }
+  [ "$(convert target/probes/workspace-labels-saved.png -format '%[pixel:p{284,81}]' info:)" = 'srgb(0,162,199)' ] || { echo workspace.label_color_missing >&2;exit 1; }
   [ "$(wc -l < "$fixture/children/$b.input")" -eq 1 ]; [ "$(wc -l < "$fixture/children/$a.input")" -eq 1 ]
   timeout 2s xdotool key --clearmodifiers ctrl+shift+r
   await_count document_confirmed 2
   await_count terminal_input_ready 3
   sleep 0.2
   timeout 3s import -window "$xid" target/probes/workspace-labels-refresh.png
-  [ "$(magick target/probes/workspace-labels-refresh.png -format '%[pixel:p{284,81}]' info:)" = 'srgb(0,162,199)' ] || { echo workspace.label_color_not_restored >&2;exit 1; }
+  [ "$(convert target/probes/workspace-labels-refresh.png -format '%[pixel:p{284,81}]' info:)" = 'srgb(0,162,199)' ] || { echo workspace.label_color_not_restored >&2;exit 1; }
   [ "$(count session_opened)" -eq 2 ]; kill -0 "$a"; kill -0 "$b"
   input "$b" LABEL_B_AFTER_REFRESH 2
   [ "$(wc -l < "$fixture/children/$a.input")" -eq 1 ]
@@ -210,7 +210,7 @@ if [ "$mode" = split-adjust ]; then
   [ "$(tail -1 "$fixture/children/$a.size" | awk '{print $2}')" -eq 92 ]
   [ "$(tail -1 "$fixture/children/$b.size" | awk '{print $2}')" -eq 92 ]
   timeout 3s import -window "$xid" target/probes/workspace-split-adjust-column.png
-  lower_y=$(magick target/probes/workspace-split-adjust-column.png -crop 1x480+939+140 +repage txt:- |
+  lower_y=$(convert target/probes/workspace-split-adjust-column.png -crop 1x480+939+140 +repage txt:- |
     awk -F ': ' '/^[0-9]/ { split($1,p,","); black=($2 ~ /#000000 /); if (black && !last) {runs++; if (runs==2) print p[2]+140;} last=black } END {if(runs!=2) exit 1}')
   [ "$lower_y" -gt 350 ] && [ "$lower_y" -lt 450 ]
   drawn COLUMN_NAV_A target/probes/workspace-split-adjust-column.png 4 200 "$lower_y"

@@ -55,11 +55,7 @@ fn inactive_includes_and_identity_hints_never_open_unreferenced_fifo_or_invalid_
         b"Host other\nInclude absent/*.conf\nHost prod\nIdentityFile id_ed25519\nUser alice\n",
     )?;
     put(root.path(), "parts/a.conf", b"\xff not a config")?;
-    rustix::fs::mkfifoat(
-        rustix::fs::CWD,
-        root.path().join("id_ed25519"),
-        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
-    )?;
+    crate::config::mkfifo(&root.path().join("id_ed25519"))?;
     let reader = ConfigDirectoryReader::open(root.path())?;
     let snapshot = reader.capture_discovered(&query()?)?;
     assert_eq!(snapshot.sources.len(), 1);
@@ -122,11 +118,7 @@ fn selected_links_fifo_and_unsafe_directories_reject_without_repair() -> TestRes
         Some(ConfigError::SourceUnavailable)
     );
     fs::remove_file(root.path().join("parts/hard.conf"))?;
-    rustix::fs::mkfifoat(
-        rustix::fs::CWD,
-        root.path().join("parts/fifo.conf"),
-        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
-    )?;
+    crate::config::mkfifo(&root.path().join("parts/fifo.conf"))?;
     assert_eq!(
         reader.capture_discovered(&query()?).err(),
         Some(ConfigError::SourceUnavailable)

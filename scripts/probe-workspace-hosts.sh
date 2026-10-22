@@ -19,11 +19,11 @@ open(){
   n=$1;paint=0
   while :;do
     shot sidebar
-    [ "$(magick target/probes/workspace-hosts-sidebar.png -format '%k' info:)" -gt 10 ]&&break
+    [ "$(convert target/probes/workspace-hosts-sidebar.png -format '%k' info:)" -gt 10 ]&&break
     [ "$paint" -lt 10 ]||{ echo workspace.hosts_paint_timeout >&2;exit 1; }
     paint=$((paint+1));sleep 0.1
   done
-  magick target/probes/workspace-hosts-sidebar.png -crop 180x640+0+0 -resize 400% target/probes/workspace-hosts-sidebar-ocr.png
+  convert target/probes/workspace-hosts-sidebar.png -crop 180x640+0+0 -resize 400% target/probes/workspace-hosts-sidebar-ocr.png
   timeout 3s tesseract target/probes/workspace-hosts-sidebar-ocr.png target/probes/workspace-hosts-sidebar --psm 11 tsv 2>/dev/null
   y=$(awk -F '\t' '$12~/^SSH/&&$7<320&&$8>600{n++;if(n==1)y=int(($8+$10/2)/4)}END{if(n==2)print y}' target/probes/workspace-hosts-sidebar.tsv)
   [ -n "$y" ]||{ echo workspace.hosts_heading_not_drawn >&2;exit 1; }

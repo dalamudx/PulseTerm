@@ -100,7 +100,7 @@ def painted(receipt, name):
     def matches():
         run(['/usr/bin/import', '-window', xid, str(image)])
         crop = fixture / 'paint.png'
-        run(['/usr/bin/magick', str(image), '-crop', '300x15+200+584', '+repage', '-resize', '400%', str(crop)])
+        run(['/usr/bin/convert', str(image), '-crop', '300x15+200+584', '+repage', '-resize', '400%', str(crop)])
         text = run(['/usr/bin/tesseract', str(crop), 'stdout', '-l', 'eng', '--psm', '7']).stdout.decode()
         return marker in ' '.join(text.split())
     wait_for(matches, 'visible_application_receipt')

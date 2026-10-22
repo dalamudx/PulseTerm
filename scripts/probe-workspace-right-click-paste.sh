@@ -40,7 +40,7 @@ await_count sessions_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null || true)
 [ "$(printf '%s\n' "$xid" | awk 'NF {n++} END {print n+0}')" -eq 1 ]; [ "$(xdotool getwindowpid "$xid")" = "$app" ]
 timeout 2s xdotool windowactivate --sync "$xid"
-paint=0; while :; do timeout 3s import -window "$xid" target/probes/workspace-right-click-paste-initial.png; colors=$(magick target/probes/workspace-right-click-paste-initial.png -format '%k' info:); [ "$colors" -gt 10 ] && break; [ "$paint" -lt 10 ] || exit 1; paint=$((paint+1)); sleep 0.1; done
+paint=0; while :; do timeout 3s import -window "$xid" target/probes/workspace-right-click-paste-initial.png; colors=$(convert target/probes/workspace-right-click-paste-initial.png -format '%k' info:); [ "$colors" -gt 10 ] && break; [ "$paint" -lt 10 ] || exit 1; paint=$((paint+1)); sleep 0.1; done
 timeout 2s xdotool mousemove --window "$xid" 80 164 click 1
 await_count terminal_input_ready 1
 pid=$(cat "$fixture/native.pid")
@@ -71,7 +71,7 @@ visible_mode(){
   esac
   while :; do
     timeout 3s import -window "$xid" "$fixture/mode.png"
-    magick "$fixture/mode.png" -crop "$crop" +repage -resize 400% "$fixture/mode-terminal.png"
+    convert "$fixture/mode.png" -crop "$crop" +repage -resize 400% "$fixture/mode-terminal.png"
     timeout 3s tesseract "$fixture/mode-terminal.png" "$fixture/mode" -l eng --psm 7 >/dev/null 2>&1
     grep -q "$marker" "$fixture/mode.txt" && break
     [ "$attempt" -lt 80 ] || { cp "$fixture/mode.png" "target/probes/workspace-right-click-paste-mode-timeout.png"; echo workspace.right_paste_mode_not_drawn >&2; exit 1; }

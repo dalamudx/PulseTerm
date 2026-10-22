@@ -8,7 +8,7 @@ cli_ask(){
  attempt=0
  while :;do
   shot "cli-approval-$probe_mode-$cli_requests"
-  magick "target/probes/workspace-ssh-session-cli-approval-$probe_mode-$cli_requests.png" -resize 200% "$fixture/cli-approval-ocr.png"
+  convert "target/probes/workspace-ssh-session-cli-approval-$probe_mode-$cli_requests.png" -resize 200% "$fixture/cli-approval-ocr.png"
   timeout 3s tesseract "$fixture/cli-approval-ocr.png" "$fixture/cli-approval-ocr" --psm 11 2>/dev/null
   if grep -F GUI_HOST "$fixture/cli-approval-ocr.txt" >/dev/null && grep -F IDENTITY "$fixture/cli-approval-ocr.txt" >/dev/null;then break;fi
   kill -0 "$cli_request";[ "$attempt" -lt 15 ]||{ echo workspace.cli_ssh_modal_not_drawn >&2;exit 1;}

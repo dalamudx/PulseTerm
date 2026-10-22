@@ -1622,7 +1622,6 @@ run = [
   "mise run settings-schema-check",
   "mise run bindings-check",
   "mise exec -- cargo test -p pulseterm-desktop --features desktop --locked",
-  "mise run probe-workspace-close-duplicate",
 ]
 
 [tasks.ci-unix]
@@ -1685,6 +1684,7 @@ run = [
 [tasks.ci-workspace]
 description = "Linux workspace integration"
 run = [
+  "mise run probe-workspace-close-duplicate",
   "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked",
   "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked",
   "mise run probe-workspace-fingerprint",

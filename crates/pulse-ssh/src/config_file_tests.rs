@@ -135,21 +135,14 @@ fn fifo_directory_oversize_and_invalid_text_fail_without_blocking() -> TestResul
         Some(ConfigError::SourceUnavailable)
     );
     fs::remove_dir(root.path().join("config"))?;
-    #[cfg(not(any(target_vendor = "apple", target_os = "redox", target_os = "wasi")))]
-    {
-        sys::mkfifoat(
-            sys::CWD,
-            root.path().join("config"),
-            Mode::RUSR | Mode::WUSR,
-        )?;
-        let start = Instant::now();
-        assert_eq!(
-            load(root.path(), &[]).err(),
-            Some(ConfigError::SourceUnavailable)
-        );
-        assert!(start.elapsed() < std::time::Duration::from_secs(1));
-        fs::remove_file(root.path().join("config"))?;
-    }
+    crate::config::mkfifo(&root.path().join("config"))?;
+    let start = Instant::now();
+    assert_eq!(
+        load(root.path(), &[]).err(),
+        Some(ConfigError::SourceUnavailable)
+    );
+    assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    fs::remove_file(root.path().join("config"))?;
     write(root.path(), &vec![b'#'; MAX_SOURCE + 1])?;
     assert_eq!(
         load(root.path(), &[]).err(),

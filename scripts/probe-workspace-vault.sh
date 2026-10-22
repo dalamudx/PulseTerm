@@ -16,7 +16,7 @@ start(){ round=$1;log="target/probes/workspace-vault-native-$round.log";target/d
 shot(){ timeout 3s import -window "$xid" "target/probes/workspace-vault-$1.png"; }
 keys(){ timeout 3s xdotool key --clearmodifiers "$@"; }
 type(){ timeout 3s xdotool type --clearmodifiers --delay 1 "$1"; }
-open(){ paint=0;while :;do shot sidebar;[ "$(magick target/probes/workspace-vault-sidebar.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ]||{ echo workspace.vault_sidebar_paint_timeout >&2;exit 1;};paint=$((paint+1));sleep 0.1;done;timeout 3s tesseract target/probes/workspace-vault-sidebar.png target/probes/workspace-vault-sidebar --psm 11 tsv 2>/dev/null;y=$(awk -F '\t' '$12=="SSH" && $7<170 && $8>150 {n++;y=int($8+$10/2)}END{if(n==2)print y+52}' target/probes/workspace-vault-sidebar.tsv);[ -n "$y" ]||{ echo workspace.vault_sidebar_anchor_not_drawn >&2;exit 1;};timeout 3s xdotool mousemove --window "$xid" 150 "$y" click 1; }
+open(){ paint=0;while :;do shot sidebar;[ "$(convert target/probes/workspace-vault-sidebar.png -format '%k' info:)" -gt 10 ]&&break;[ "$paint" -lt 10 ]||{ echo workspace.vault_sidebar_paint_timeout >&2;exit 1;};paint=$((paint+1));sleep 0.1;done;timeout 3s tesseract target/probes/workspace-vault-sidebar.png target/probes/workspace-vault-sidebar --psm 11 tsv 2>/dev/null;y=$(awk -F '\t' '$12=="SSH" && $7<170 && $8>150 {n++;y=int($8+$10/2)}END{if(n==2)print y+52}' target/probes/workspace-vault-sidebar.tsv);[ -n "$y" ]||{ echo workspace.vault_sidebar_anchor_not_drawn >&2;exit 1;};timeout 3s xdotool mousemove --window "$xid" 150 "$y" click 1; }
 read(){ keys shift+Tab Return; }
 close_app(){ [ "$(count session_opened)" -eq 0 ];keys alt+F4;await_count exited 1;wait "$app";app=; }
 start 1

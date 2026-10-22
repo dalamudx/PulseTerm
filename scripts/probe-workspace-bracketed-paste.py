@@ -136,7 +136,7 @@ def switch(mode):
         image = fixture / 'mode.png'
         crop = fixture / 'mode-terminal.png'
         run(['/usr/bin/import', '-window', xid, str(image)])
-        run(['/usr/bin/magick', str(image), '-crop', '300x150+200+464', '+repage', '-resize', '300%', str(crop)])
+        run(['/usr/bin/convert', str(image), '-crop', '300x150+200+464', '+repage', '-resize', '300%', str(crop)])
         text = run(['/usr/bin/tesseract', str(crop), 'stdout', '-l', 'eng', '--psm', '6']).stdout.decode()
         return marker in ' '.join(text.split())
     wait_for(painted, 'mode_rendered_' + mode)
@@ -236,7 +236,7 @@ try:
         image = fixture / 'final.png'
         crop = fixture / 'final-terminal.png'
         run(['/usr/bin/import', '-window', xid, str(image)])
-        run(['/usr/bin/magick', str(image), '-crop', '300x150+200+464', '+repage', '-resize', '300%', str(crop)])
+        run(['/usr/bin/convert', str(image), '-crop', '300x150+200+464', '+repage', '-resize', '300%', str(crop)])
         text = run(['/usr/bin/tesseract', str(crop), 'stdout', '-l', 'eng', '--psm', '6']).stdout.decode()
         if 'APPLICATION RECEIPT 13' not in ' '.join(text.split()):
             return False

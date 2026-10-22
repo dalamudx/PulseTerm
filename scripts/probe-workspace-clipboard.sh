@@ -39,7 +39,7 @@ await_count sessions_listed 1
 xid=$(xdotool search --onlyvisible --all --pid "$app" --name '^PulseTerm · 工作区预览$' 2>/dev/null || true)
 [ "$(printf '%s\n' "$xid" | awk 'NF {n++} END {print n+0}')" -eq 1 ]; [ "$(xdotool getwindowpid "$xid")" = "$app" ]
 timeout 2s xdotool windowactivate --sync "$xid"
-paint=0; while :; do timeout 3s import -window "$xid" target/probes/workspace-clipboard-initial.png; colors=$(magick target/probes/workspace-clipboard-initial.png -format '%k' info:); [ "$colors" -gt 10 ] && break; [ "$paint" -lt 10 ] || exit 1; paint=$((paint+1)); sleep 0.1; done
+paint=0; while :; do timeout 3s import -window "$xid" target/probes/workspace-clipboard-initial.png; colors=$(convert target/probes/workspace-clipboard-initial.png -format '%k' info:); [ "$colors" -gt 10 ] && break; [ "$paint" -lt 10 ] || exit 1; paint=$((paint+1)); sleep 0.1; done
 timeout 2s xdotool mousemove --window "$xid" 80 164 click 1
 await_count terminal_input_ready 1
 [ "$(grep -c '^workspace.profile_selected.sh$' "$log")" -eq 1 ]

@@ -36,7 +36,7 @@ timeout 2s xdotool windowactivate --sync "$xid"
 paint=0
 while :; do
   timeout 3s import -window "$xid" target/probes/workspace-close-duplicate-initial.png
-  colors=$(magick target/probes/workspace-close-duplicate-initial.png -format '%k' info:)
+  colors=$(convert target/probes/workspace-close-duplicate-initial.png -format '%k' info:)
   [ "$colors" -gt 10 ] && break
   [ "$paint" -lt 10 ] || { echo workspace.close_dup_initial_paint_timeout >&2; exit 1; }
 done

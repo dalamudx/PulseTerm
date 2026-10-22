@@ -1,5 +1,4 @@
 use super::*;
-use rustix::fs::{self as sys, Mode};
 use std::{
     fs,
     os::unix::fs::{PermissionsExt, symlink},
@@ -138,18 +137,11 @@ fn unsafe_include_symlink_hardlink_fifo_and_permissions_fail_closed() -> TestRes
         reader.capture(&["parts/hard.conf"]).err(),
         Some(ConfigError::SourceUnavailable)
     );
-    #[cfg(not(any(target_vendor = "apple", target_os = "redox", target_os = "wasi")))]
-    {
-        sys::mkfifoat(
-            sys::CWD,
-            root.path().join("parts/fifo.conf"),
-            Mode::RUSR | Mode::WUSR,
-        )?;
-        assert_eq!(
-            reader.capture(&["parts/fifo.conf"]).err(),
-            Some(ConfigError::SourceUnavailable)
-        );
-    }
+    crate::config::mkfifo(&root.path().join("parts/fifo.conf"))?;
+    assert_eq!(
+        reader.capture(&["parts/fifo.conf"]).err(),
+        Some(ConfigError::SourceUnavailable)
+    );
     fs::set_permissions(
         root.path().join("parts/a.conf"),
         fs::Permissions::from_mode(0o666),
