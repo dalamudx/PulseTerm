@@ -1,0 +1,65 @@
+name: Windows product core
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-product.yml'
+      - '.mise.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'apps/desktop/**'
+      - 'ui/**'
+      - 'xtask/**'
+      - 'scripts/verify-native-tests.mjs'
+      - 'scripts/windows-product-probe/**'
+permissions:
+  contents: read
+jobs:
+  native-msvc:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+      - run: mise run bootstrap
+      - name: Check native acceptance receipt behavior
+        run: mise run check-windows-product-runner
+      - name: Native storage, Profile and keymap cases
+        shell: pwsh
+        run: |
+          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'pulse-product-core'
+          New-Item -ItemType Directory -Force -Path $env:TMPDIR | Out-Null
+          $env:TEMP = $env:TMPDIR
+          $env:TMP = $env:TMPDIR
+          try {
+            mise run test-windows-product
+            if ($LASTEXITCODE -ne 0) { throw 'Native product cases failed.' }
+            mise run test-windows-product-runner
+            if ($LASTEXITCODE -ne 0) { throw 'PowerShell 5.1 capture regression failed.' }
+          } finally {
+            $receipt = 'target/probes/windows-product-native.json'
+            $completed = $false
+            if (Test-Path -LiteralPath $receipt) {
+              $summary = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+              $completed = $summary.nativeProcessCompletionConfirmed -eq $true
+            }
+            if ($completed) { Remove-Item -LiteralPath $env:TMPDIR -Recurse -Force }
+            else { Write-Warning "Native completion unconfirmed; fixture retained: $env:TMPDIR" }
+          }
+      - name: Build real frontend before native context generation
+        run: mise exec -- pnpm --filter ui build
+      - name: Compile complete Windows targets with native MSVC
+        run: mise exec -- cargo check -p pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets --locked
+      - name: Build native workspace
+        run: mise exec -- cargo build -p pulseterm-desktop --features workspace --bin pulseterm-workspace --locked
+      - name: Preserve native core receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-product-native-receipt
+          path: |
+            target/probes/windows-product-native.json
+            target/probes/windows-product-native/
+          if-no-files-found: warn
+      # GUI/ordinary-user/WSL/performance acceptance remains separate; no binary release here.

@@ -90,10 +90,11 @@ int main(void) {
                     printf("\r\nECHO COMPLETE\r\n"); return 0;
                 }
                 if (key != 'x' && key != 'o') return 84;
+                uint64_t write_started = nanos();
                 printf("\033[3;1H%c", key == 'x' ? 'X' : 'O');
                 uint64_t written = nanos();
                 int added = snprintf(samples + used, sizeof(samples) - used,
-                    "%s{\"receivedNs\":%" PRIu64 ",\"writtenNs\":%" PRIu64 "}", i ? "," : "", received, written);
+                    "%s{\"receivedNs\":%" PRIu64 ",\"writeStartedNs\":%" PRIu64 ",\"writtenNs\":%" PRIu64 "}", i ? "," : "", received, write_started, written);
                 if (added < 0 || (size_t)added >= sizeof(samples) - used - 2) return 86;
                 used += (size_t)added;
             }

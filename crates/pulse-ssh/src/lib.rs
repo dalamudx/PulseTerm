@@ -1,7 +1,7 @@
 //! Backend-only SSH host identity admission: no writes or implicit trust on first contact.
 /// Local Agent discovery and one independently authorized selected-key authentication.
 pub mod agent;
-/// Bounded OpenSSH metadata parsing and explicit Unix read-only sources; no execution authority.
+/// Bounded OpenSSH metadata parsing and explicit read-only platform sources; no execution authority.
 pub mod config;
 mod known_hosts;
 #[cfg(unix)]

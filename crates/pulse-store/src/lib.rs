@@ -4,6 +4,8 @@ pub mod catalogue_organization;
 /// Independently identified local executable Profiles; saved metadata grants no launch permission.
 pub mod custom_profiles;
 mod database;
+/// Native database admission supplied by the trusted upper platform adapter.
+pub mod database_admission;
 /// Independent host/endpoint/Profile migration and validated snapshots; no launch authority.
 pub mod host_catalogue;
 #[cfg(test)]
@@ -423,47 +425,99 @@ pub struct StateStoreTask {
     task: Option<tokio::task::JoinHandle<Result<()>>>,
     cancellation: CancellationToken,
 }
+type AdmissionFactory = Box<
+    dyn FnOnce(&std::path::Path) -> Result<Box<dyn database_admission::DatabaseAdmission>> + Send,
+>;
 impl StateStore {
     /// Open a database in a caller-provisioned trusted private directory.
     /// Unix requires private directory/file modes and no database symlink; Windows
     /// ACL provisioning is the trusted platform adapter's responsibility.
     pub async fn open(path: PathBuf) -> Result<(Self, StateStoreTask)> {
+        Self::open_worker(path, None, Box::new(())).await
+    }
+    /// Run native admission on the SQLite worker and keep its guard until the connection exits.
+    /// The trusted factory must bind the exact path; this does not grant page or credential authority.
+    /// Initialization credit stays on the native worker through success or physical failure cleanup.
+    pub async fn open_admitted(
+        path: PathBuf,
+        admit: impl FnOnce(&std::path::Path) -> Result<Box<dyn database_admission::DatabaseAdmission>>
+        + Send
+        + 'static,
+        initialization_credit: impl Send + 'static,
+    ) -> Result<(Self, StateStoreTask)> {
+        Self::open_worker(path, Some(Box::new(admit)), Box::new(initialization_credit)).await
+    }
+    async fn open_worker(
+        path: PathBuf,
+        admit: Option<AdmissionFactory>,
+        initialization_credit: Box<dyn Send>,
+    ) -> Result<(Self, StateStoreTask)> {
         let (requests, mut inbox) = mpsc::channel(REQUEST_LIMIT);
         let (ready, initialized) = oneshot::channel();
+        let (accepted, acceptance) = oneshot::channel();
         let cancellation = CancellationToken::new();
         let worker_cancellation = cancellation.clone();
         let runtime = tokio::runtime::Handle::current();
         let task = tokio::task::spawn_blocking(move || {
-            let connection = match database::open(&path) {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = ready.send(Err(e));
-                    return Err(e);
+            let prepared: Result<_> = (|| {
+                let admission = admit.map(|factory| factory(&path)).transpose()?;
+                if let Some(guard) = admission.as_deref() {
+                    guard.validate()?;
+                }
+                let connection = match admission.as_deref() {
+                    Some(guard) => database::open_admitted(&path, Some(guard))?,
+                    None => database::open(&path)?,
+                };
+                if let Some(guard) = admission.as_deref() {
+                    guard.validate()?;
+                }
+                Ok((connection, admission))
+            })();
+            let (connection, admission) = match prepared {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    let _ = ready.send(Err(error));
+                    return Err(error);
                 }
             };
-            if ready.send(Ok(())).is_err() {
+            if ready.send(Ok(())).is_err() || acceptance.blocking_recv().is_err() {
+                connection.close().map_err(|_| StoreError::Database)?;
                 return Ok(());
             }
-            serve(connection, &mut inbox, &worker_cancellation, &runtime)
+            drop(initialization_credit);
+            serve(
+                connection,
+                &mut inbox,
+                &worker_cancellation,
+                &runtime,
+                admission.as_deref(),
+            )
         });
         match initialized.await.map_err(|_| StoreError::Closed)? {
-            Ok(()) => Ok((
-                Self {
-                    requests,
-                    host_owner: uuid::Uuid::new_v4(),
-                    cancellation: cancellation.clone(),
-                    #[cfg(feature = "ssh-trust")]
-                    trust_owner: uuid::Uuid::new_v4(),
-                },
-                StateStoreTask {
-                    task: Some(task),
-                    cancellation,
-                },
-            )),
-            Err(e) => {
+            Ok(()) => {
+                let result = (
+                    Self {
+                        requests,
+                        host_owner: uuid::Uuid::new_v4(),
+                        cancellation: cancellation.clone(),
+                        #[cfg(feature = "ssh-trust")]
+                        trust_owner: uuid::Uuid::new_v4(),
+                    },
+                    StateStoreTask {
+                        task: Some(task),
+                        cancellation,
+                    },
+                );
+                if accepted.send(()).is_err() {
+                    result.1.shutdown().await?;
+                    return Err(StoreError::Closed);
+                }
+                Ok(result)
+            }
+            Err(error) => {
                 drop(requests);
                 let _ = task.await;
-                Err(e)
+                Err(error)
             }
         }
     }
@@ -560,7 +614,9 @@ fn serve(
     inbox: &mut mpsc::Receiver<Request>,
     cancellation: &CancellationToken,
     runtime: &tokio::runtime::Handle,
+    admission: Option<&dyn database_admission::DatabaseAdmission>,
 ) -> Result<()> {
+    let mut outcome = Ok(());
     loop {
         let request=runtime.block_on(async {
             tokio::select! { biased; _=cancellation.cancelled()=>None, request=inbox.recv()=>request }
@@ -571,9 +627,20 @@ fn serve(
         if cancellation.is_cancelled() {
             break;
         }
+        if let Some(guard) = admission
+            && let Err(error) = guard.validate()
+        {
+            drop(request);
+            outcome = Err(error);
+            break;
+        }
         dispatch(&connection, request);
     }
-    connection.close().map_err(|_| StoreError::Database)
+    connection.close().map_err(|_| StoreError::Database)?;
+    if let Some(guard) = admission {
+        guard.validate()?;
+    }
+    outcome
 }
 
 fn dispatch(connection: &rusqlite::Connection, request: Request) {

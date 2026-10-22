@@ -34,6 +34,6 @@ async fn physical(reader: Arc<ProfileReader>) -> Result<()> {
     // A window's completed I/O is not permission to cancel or join the shared worker.
     Ok(())
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_shutdown_tests.rs"]
 mod tests;

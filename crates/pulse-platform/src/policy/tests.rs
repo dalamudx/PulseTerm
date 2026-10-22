@@ -28,6 +28,32 @@ fn acl(aces: &[Vec<u8>]) -> Vec<u8> {
     a
 }
 #[test]
+fn sqlite_sidecars_only_allow_private_protected_or_fully_inherited_acl() {
+    let u = user();
+    let direct = acl(&[ace(&u, 0x1f01ff, 0, 0)]);
+    let inherited = acl(&[ace(&u, 0x1f01ff, 0, 0x10)]);
+    assert!(sqlite_sidecar_acl(&u, &u, Some(&direct), true).is_ok());
+    assert_eq!(
+        sqlite_sidecar_acl(&u, &u, Some(&direct), false),
+        Err(Location)
+    );
+    assert!(sqlite_sidecar_acl(&u, &u, Some(&inherited), false).is_ok());
+    assert_eq!(
+        admit_acl(&u, &u, Some(&inherited), false, true),
+        Err(Location)
+    );
+    let broad = acl(&[ace(&u, 0x1f01ff, 0, 0x10), ace(&everyone(), 1, 0, 0x10)]);
+    assert_eq!(
+        sqlite_sidecar_acl(&u, &u, Some(&broad), false),
+        Err(Location)
+    );
+    assert_eq!(
+        sqlite_sidecar_acl(&everyone(), &u, Some(&inherited), false),
+        Err(Location)
+    );
+    assert_eq!(sqlite_sidecar_acl(&u, &u, None, false), Err(Location));
+}
+#[test]
 fn owner_full_protected_is_private() {
     let u = user();
     let a = acl(&[ace(&u, 0x1f01ff, 0, 3)]);
@@ -46,6 +72,45 @@ fn null_empty_unprotected_and_foreign_owner_reject() {
         assert_eq!(admit_acl(o, &u, d.as_deref(), p, true), Err(Location));
     }
 }
+#[test]
+fn program_acl_distinguishes_read_execution_from_file_and_directory_writes() {
+    let u = user();
+    let read = acl(&[ace(&everyone(), 0xa01200a9, 0, 0)]);
+    assert!(program_acl(&u, &u, Some(&read), false).is_ok());
+    for mask in [
+        2, 4, 0x10, 0x40, 0x100, 0x10000, 0x40000, 0x80000, 0x40000000, 0x10000000,
+    ] {
+        for flags in [0, 0x0b] {
+            let a = acl(&[ace(&everyone(), mask, 0, flags)]);
+            assert_eq!(program_acl(&u, &u, Some(&a), false), Err(Location));
+        }
+    }
+    let a = acl(&[ace(&everyone(), 2, 0, 0)]);
+    assert!(admit_acl(&u, &u, Some(&a), false, false).is_ok());
+    assert_eq!(
+        program_acl(&everyone(), &u, Some(&read), false),
+        Err(Location)
+    );
+    assert_eq!(program_acl(&u, &u, None, false), Err(Location));
+}
+
+#[test]
+fn program_acl_keeps_trusted_install_and_creator_owner_inheritance() {
+    let u = user();
+    let creator = [1, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0];
+    let a = acl(&[
+        ace(&u, 0x1f01ff, 0, 0),
+        ace(&creator, 0x1f01ff, 0, 0x0b),
+        ace(&everyone(), 0xa01200a9, 0, 0x13),
+    ]);
+    assert!(program_acl(&u, &u, Some(&a), false).is_ok());
+    let a = acl(&[ace(&creator, 0x1f01ff, 0, 0)]);
+    assert_eq!(program_acl(&u, &u, Some(&a), false), Err(Location));
+    let mut malformed = a;
+    malformed[10..12].copy_from_slice(&u16::MAX.to_le_bytes());
+    assert_eq!(program_acl(&u, &u, Some(&malformed), false), Err(Location));
+}
+
 #[test]
 fn broad_leaf_rejects_and_parent_write_is_not_read_only() {
     let u = user();

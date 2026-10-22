@@ -1,7 +1,7 @@
 //! Single-flight, supervised Profile reads. All paths and discovery inputs are backend-owned.
 use super::{ProfileOfferDto, Result};
 use pulse_app::registry::{PageLaunchScope, SessionRegistry};
-use pulse_pty::profiles::{ShellCandidate, discover_unix_shells};
+use pulse_pty::profiles::ShellCandidate;
 use pulse_store::{StateStore, StateStoreTask};
 use std::{
     ffi::OsString,
@@ -603,6 +603,11 @@ impl ProfileReader {
                 pulse_pty::profiles::ShellKind::Fish => pulse_store::profiles::AutomaticShell::Fish,
                 pulse_pty::profiles::ShellKind::Sh => pulse_store::profiles::AutomaticShell::Sh,
                 pulse_pty::profiles::ShellKind::Pwsh => pulse_store::profiles::AutomaticShell::Pwsh,
+                pulse_pty::profiles::ShellKind::PowerShell => {
+                    pulse_store::profiles::AutomaticShell::PowerShell
+                }
+                pulse_pty::profiles::ShellKind::Cmd => pulse_store::profiles::AutomaticShell::Cmd,
+                pulse_pty::profiles::ShellKind::Wsl => pulse_store::profiles::AutomaticShell::Wsl,
             };
             reader.check(&registry, &page)?;
             let gate_reader = reader.clone();
@@ -696,7 +701,24 @@ impl ProfileReader {
             .prepare_store(registry, page, directory, credit.clone())
             .await?;
         let candidates = blocking(credit, move || {
-            discover_unix_shells(&path, shell.as_deref()).map_err(|_| "workspace.unavailable")
+            #[cfg(unix)]
+            let candidates = pulse_pty::profiles::discover_unix_shells(&path, shell.as_deref());
+            #[cfg(windows)]
+            let candidates = {
+                let _ = (path, shell);
+                let system = pulse_platform::windows::system_directory()
+                    .map_err(|_| "workspace.unavailable")?;
+                let programs = std::env::var_os("ProgramFiles").map(PathBuf::from);
+                let distribution = pulse_platform::windows::default_wsl_distribution()
+                    .ok()
+                    .flatten();
+                pulse_pty::profiles::discover_current_windows_shells(
+                    &system,
+                    programs.as_deref(),
+                    distribution.as_deref(),
+                )
+            };
+            candidates.map_err(|_| "workspace.unavailable")
         })
         .await?;
         self.check(registry, page)?;
@@ -716,15 +738,19 @@ impl ProfileReader {
         let store = self
             .store
             .get_or_try_init(|| async {
-                let directory = blocking(credit.clone(), move || {
-                    pulse_store::state_directory::prepare(&directory)
-                        .map_err(|_| "workspace.unavailable")
-                })
-                .await?;
+                let directory =
+                    blocking(credit.clone(), move || super::app_data::prepare(&directory)).await?;
                 self.check(registry, page)?;
-                let (store, task) = StateStore::open(directory.join("state.db"))
-                    .await
-                    .map_err(|_| "workspace.unavailable")?;
+                #[cfg(unix)]
+                let opened = StateStore::open(directory.join("state.db")).await;
+                #[cfg(windows)]
+                let opened = StateStore::open_admitted(
+                    directory.join("state.db"),
+                    super::database_native::admit,
+                    credit.clone(),
+                )
+                .await;
+                let (store, task) = opened.map_err(|_| "workspace.unavailable")?;
                 if self.closed.load(Ordering::SeqCst) || self.storage.is_closed() {
                     task.shutdown().await.map_err(|_| "workspace.unavailable")?;
                     return Err("workspace.denied");
@@ -748,34 +774,34 @@ impl ProfileReader {
 mod admission_tests;
 #[path = "product_profiles_agent_identities.rs"]
 mod agent_identity_service;
-#[cfg(feature = "workspace-ssh")]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 #[path = "product_profiles_config.rs"]
 mod config_service;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_hosts_source_tests.rs"]
 mod hosts_source_tests;
 #[path = "product_profiles_key_identities.rs"]
 mod key_identity_service;
-#[cfg(feature = "workspace-ssh")]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 pub(super) use config_service::{ConfigImportCapture, ImportControl};
-#[cfg(feature = "workspace-ssh")]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 pub(super) use config_service::{ConfigReadRequest, PageConfigCapture};
-#[cfg(feature = "workspace-ssh")]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 #[path = "product_profiles_key_write.rs"]
 mod key_write_service;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_launch_tests.rs"]
 mod launch_tests;
 #[path = "product_profiles_password.rs"]
 mod password_service;
 #[path = "product_profiles_shutdown.rs"]
 mod shutdown;
-#[cfg(feature = "workspace-ssh")]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 #[path = "product_profiles_ssh.rs"]
 mod ssh_service;
 #[path = "product_profiles_storage.rs"]
 mod storage;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_tests.rs"]
 mod tests;
 #[path = "product_profiles_vault.rs"]

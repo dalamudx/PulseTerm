@@ -2,9 +2,19 @@
 //! Discovery and signing use separate revocable grants. No socket paths, private keys or generic
 //! signing interface are issued to the frontend; untrusted Agent frames are bounded before parsing.
 use pulse_core::ssh_agent_identity::SshAgentIdentity;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use russh::keys::PublicKey;
 use std::sync::Arc;
+#[cfg(unix)]
+type AgentStream = tokio::net::UnixStream;
+#[cfg(windows)]
+type AgentStream = tokio::net::windows::named_pipe::NamedPipeClient;
+#[cfg(any(windows, test))]
+#[path = "agent_connection.rs"]
+mod connection;
+#[cfg(all(test, windows))]
+#[path = "agent_windows_tests.rs"]
+mod windows_tests;
 /// Independent original-page discovery or actual-peer signing grant.
 pub type Authorize = Arc<dyn Fn() -> bool + Send + Sync>;
 /// Fixed errors never contain Agent payloads, key material or local socket paths.
@@ -33,7 +43,7 @@ impl From<russh::SendError> for AgentError {
 }
 /// Drawing-only discovered public-key metadata. Comments from the Agent are never projected.
 pub struct AgentPublicKey {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     key: PublicKey,
     algorithm: String,
     fingerprint: String,
@@ -53,14 +63,14 @@ impl AgentPublicKey {
 /// fn dump(v: pulse_ssh::agent::AgentConnection) { println!("{v:?}"); }
 /// ```
 pub struct AgentConnection {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     wire: wire::Wire,
     keys: Vec<AgentPublicKey>,
     discovery: Authorize,
 }
 impl AgentConnection {
-    /// Discover only the backend's SSH_AUTH_SOCK. Socket owner and actual peer uid must match.
-    /// Never accepts a frontend path and never adds keys or requests Agent forwarding.
+    /// Discover the backend UNIX socket (matching owner/peer uid) or fixed local Windows OpenSSH pipe.
+    /// Never accepts a frontend path; listing keys does not authorize signatures or forwarding.
     pub async fn discover(discovery: Authorize) -> Result<Self, AgentError> {
         if !discovery() {
             return Err(AgentError::Denied);
@@ -96,16 +106,18 @@ impl AgentConnection {
             }
             Self::read_stream(stream, discovery).await
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let stream = connection::connect(discovery.clone()).await?;
+            Self::read_stream(stream, discovery).await
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             Err(AgentError::Unsupported)
         }
     }
-    #[cfg(unix)]
-    async fn read_stream(
-        stream: tokio::net::UnixStream,
-        discovery: Authorize,
-    ) -> Result<Self, AgentError> {
+    #[cfg(any(unix, windows))]
+    async fn read_stream(stream: AgentStream, discovery: Authorize) -> Result<Self, AgentError> {
         let mut wire = wire::Wire::new(stream);
         let response = wire.packet(&[11], &discovery).await?;
         let keys = wire::decode_keys(&response)?;
@@ -164,7 +176,7 @@ impl AgentConnection {
         if matching.next().is_some() {
             return Err(AgentError::Protocol);
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let public = chosen.key.clone();
             let hash = if public.algorithm().is_rsa() {
@@ -196,7 +208,7 @@ impl AgentConnection {
             }
             Ok((result, signer.used))
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (handle, chosen);
             Err(AgentError::Unsupported)
@@ -206,6 +218,6 @@ impl AgentConnection {
 #[cfg(all(test, unix))]
 #[path = "agent_tests.rs"]
 mod tests;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[path = "agent_wire.rs"]
 mod wire;

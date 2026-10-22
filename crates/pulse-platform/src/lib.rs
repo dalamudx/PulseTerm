@@ -1,10 +1,14 @@
-//! Native filesystem primitives; no window, page, credential or execution authority.
+//! Native filesystem and restricted web handoff primitives; no page or credential authority.
 #![deny(unsafe_code)]
 
 #[cfg(any(windows, test))]
 mod file_state;
+#[cfg(target_os = "macos")]
+pub mod macos;
 #[cfg(any(windows, test))]
 mod policy;
+#[cfg(any(windows, target_os = "macos", test))]
+mod web_link;
 #[cfg(windows)]
 pub mod windows;
 

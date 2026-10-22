@@ -1,4 +1,4 @@
-//! Validation-only Windows settings adapter. Not registered in production commands.
+//! Windows settings adapter; production uses the original page-bound SettingsOwner supervision.
 //! Platform handles live above store; application page/Vault authority stays with the caller.
 use pulse_store::{
     settings::{SETTINGS_TEXT_LIMIT, SettingsError, SettingsPatch},
@@ -46,15 +46,15 @@ mod native {
 
     // No Debug/serde: exact document comments must not enter diagnostic logs.
     #[derive(Clone, PartialEq, Eq)]
-    pub(super) struct Snapshot {
+    pub(crate) struct Snapshot {
         file: FileSnapshot,
         text: String,
     }
     impl Snapshot {
-        pub(super) fn text(&self) -> &str {
+        pub(crate) fn text(&self) -> &str {
             &self.text
         }
-        pub(super) fn exists(&self) -> bool {
+        pub(crate) fn exists(&self) -> bool {
             self.file.exists()
         }
         fn decode(file: FileSnapshot) -> Result<Self> {
@@ -65,16 +65,16 @@ mod native {
 
     /// Synchronous: caller must keep its physical I/O reservation until this operation exits.
     /// Only an existing admitted directory is accepted; no permission repair or default reset.
-    pub(super) struct SettingsFile {
+    pub(crate) struct SettingsFile {
         directory: PrivateDirectory,
     }
     impl SettingsFile {
-        pub(super) fn open_private(path: PathBuf) -> Result<Self> {
+        pub(crate) fn open_private(path: PathBuf) -> Result<Self> {
             Ok(Self {
                 directory: PrivateDirectory::open(path).map_err(|_| Error::Location)?,
             })
         }
-        pub(super) fn load(&self) -> Result<Snapshot> {
+        pub(crate) fn load(&self) -> Result<Snapshot> {
             let slot = self
                 .directory
                 .atomic_file("settings.toml", SETTINGS_TEXT_LIMIT)
@@ -83,7 +83,7 @@ mod native {
         }
         /// Only typed edits, checked under the original caller's authorization; no raw text save.
         /// Post-commit uncertainty requires reload. No directory crash-durability guarantee.
-        pub(super) fn save_authorized(
+        pub(crate) fn save_authorized(
             &self,
             expected: &Snapshot,
             mutation: SettingsMutation,
@@ -107,6 +107,9 @@ mod native {
         }
     }
 }
+
+#[cfg(windows)]
+pub(super) use native::{SettingsFile, Snapshot as SettingsSnapshot};
 
 #[cfg(all(windows, test))]
 #[path = "settings_file_windows_native_tests.rs"]

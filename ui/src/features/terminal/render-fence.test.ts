@@ -1,6 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type FrameClock, renderFence } from "./render-fence";
 
+it("reports existing animation opportunities without adding or skipping a fence", async () => {
+  const c = clock();
+  const opportunity = vi.fn();
+  let done = false;
+  const pending = renderFence(
+    new AbortController().signal,
+    () => true,
+    c,
+    () => true,
+    opportunity,
+  ).then(() => {
+    done = true;
+  });
+  c.tick();
+  await Promise.resolve();
+  expect(opportunity).toHaveBeenCalledTimes(1);
+  expect(done).toBe(false);
+  c.tick();
+  await pending;
+  expect(opportunity).toHaveBeenCalledTimes(2);
+  expect(done).toBe(true);
+});
 function clock() {
   let id = 0;
   const callbacks = new Map<number, FrameRequestCallback>();
@@ -220,5 +242,92 @@ describe("DOM frame fence", () => {
     c.tick();
     await failure;
     expect(c.callbacks.size).toBe(0);
+  });
+  it("task completion still needs two frames and a later task", async () => {
+    vi.useFakeTimers();
+    const c = clock();
+    let done = false;
+    const pending = renderFence(
+      new AbortController().signal,
+      () => true,
+      c,
+      () => true,
+      undefined,
+      true,
+    ).then(() => {
+      done = true;
+    });
+    c.tick();
+    c.tick();
+    await Promise.resolve();
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+    expect(done).toBe(true);
+  });
+  it.each(["abort", "hide", "detach", "deadline"])(
+    "task completion rejects %s between the second frame and its task",
+    async (mode) => {
+      vi.useFakeTimers();
+      const c = clock(),
+        life = new AbortController();
+      let visible = true,
+        connected = true,
+        now = 0;
+      const pending = renderFence(
+        life.signal,
+        () => connected,
+        { ...c, now: () => now, visible: () => visible },
+        () => true,
+        undefined,
+        true,
+      );
+      const rejected = expect(pending).rejects.toThrow(
+        mode === "abort"
+          ? "cancelled"
+          : mode === "deadline"
+            ? "timeout"
+            : "unavailable",
+      );
+      c.tick();
+      c.tick();
+      if (mode === "abort") life.abort();
+      if (mode === "hide") visible = false;
+      if (mode === "detach") connected = false;
+      if (mode === "deadline") now = 1000;
+      await vi.advanceTimersByTimeAsync(0);
+      await rejected;
+      expect(c.callbacks.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+  it("viewport change before task completion requires two fresh frames", async () => {
+    vi.useFakeTimers();
+    const c = clock();
+    let stable = true,
+      done = false;
+    const pending = renderFence(
+      new AbortController().signal,
+      () => true,
+      c,
+      () => stable,
+      undefined,
+      true,
+    ).then(() => {
+      done = true;
+    });
+    c.tick();
+    c.tick();
+    stable = false;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(done).toBe(false);
+    stable = true;
+    c.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(done).toBe(false);
+    c.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    await pending;
+    expect(done).toBe(true);
   });
 });

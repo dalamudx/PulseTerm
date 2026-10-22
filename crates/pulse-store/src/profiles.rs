@@ -1,7 +1,7 @@
 use crate::{Result, StoreError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-/// Stable automatic Unix shell identity; never an executable filename or WSL name.
+/// Stable automatic shell identity; never an executable filename or WSL distribution name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AutomaticShell {
@@ -13,8 +13,14 @@ pub enum AutomaticShell {
     Fish,
     /// Generic sh automatic profile.
     Sh,
-    /// PowerShell discovered on Unix.
+    /// PowerShell 7/Core discovered by the backend.
     Pwsh,
+    /// Windows PowerShell 5.1.
+    PowerShell,
+    /// Native Windows command processor.
+    Cmd,
+    /// Backend-discovered WSL default, with launch arguments resolved separately.
+    Wsl,
 }
 /// Versioned non-secret preferences. Invalid import never mutates a live catalog.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -97,7 +103,7 @@ impl AutoProfilePreferences {
             return Err(StoreError::Record);
         }
         let d: Document = serde_json::from_str(text).map_err(|_| StoreError::Record)?;
-        if d.schema_version != 1 || d.hidden.len() > 5 || d.deleted.len() > 5 {
+        if d.schema_version != 1 || d.hidden.len() > 8 || d.deleted.len() > 8 {
             return Err(StoreError::Record);
         }
         let hidden: BTreeSet<_> = d.hidden.iter().copied().collect();

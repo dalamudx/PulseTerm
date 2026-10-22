@@ -1,25 +1,41 @@
-# 依赖审计执行与发布阻断
+# 依赖审计与发布阻断
 
-`mise run audit` 必须完成 Rust 与 JavaScript 两项检查；Rust 的许可证或维护策略失败不能跳过前端安全审计。统一入口为 `scripts/audit-dependencies.mjs`，使用 `.mise.toml` 已固定的 Node，不安装额外工具或依赖。
+`mise run audit` 独立完成 Rust 与 JavaScript 检查，任一失败都阻断发行。入口为 `scripts/audit-dependencies.mjs`，工具版本由 `.mise.toml` 管理。审计通过也不能代替实际发行组件、完整许可文本及源码渠道审查。
 
-## 执行和回执
+## 执行和证据
 
-- Rust 保持 `cargo deny --all-features --locked check`，使用原 `deny.toml`；JavaScript 保持 moderate 阈值，执行 `pnpm audit --audit-level moderate --json`，不排除开发依赖。
-- 每次启动先使旧的通过报告失效；两项都尝试执行并分别记录 stdout、stderr、实际退出码、信号和执行错误。命令不存在或子命令非零不能阻止另一项执行。
-- `target/probes/dependency-audit/summary.json` 的 `completed` 表示两项执行已结束，`passed` 才表示本次门检查通过。缺少命令、信号退出、无效前端 JSON／严重级别统计、成功退出却包含 moderate 及以上告警均不能通过。
-- 原始非零退出码保留；如子命令没有可用非零码，则统一失败为 1。若两项都失败，以第一项的非零码退出，同时完整保留两项结果。
-- 记录并比较锁文件、策略、根 manifest 和前端 manifest 的执行前后 SHA。列出的输入在执行中改变会阻断通过；这不是完整 SBOM 或文件系统事务证明。
-- 两项原始日志与报告保存在 `target/probes/dependency-audit/`。Linux CI 在作业未取消时执行审计，前面步骤失败也不跳过；`always()` 上传该目录。CI 配置尚无远端执行证据。
+- Rust 执行 `cargo deny --all-features --locked check`，保留 `deny.toml`；JavaScript 执行 `pnpm audit --audit-level moderate --json`，不排除开发依赖。
+- 每次先将 latest 标记为未完成／未通过，再读取输入、建立独立 `target/probes/dependency-audit/runs/<UUID>/`。每批保留摘要及两项检查各自的 stdout／stderr、退出码、信号和执行错误，不覆盖旧批次。
+- `summary.json` 为 schema 2，含 `runId`、`runDirectory`；日志路径相对审计根目录。`completed` 只表示两项已结束，`passed` 才表示通过。
+- Rust 失败仍执行 JavaScript；命令缺失、未知退出、损坏／矛盾 JSON、moderate 及以上漏洞、输入指纹变化均失败。保留原非零退出码，无可用非零码时返回 1。
+- CI 在作业未取消时执行审计，前序失败不跳过，并上传整个审计目录。工作流配置与远程实际执行分别记录。
 
-## 本轮验证
+10 项执行器回归覆盖真实子进程、两项独立执行、信号／未知退出、矛盾统计、输入变化、后轮不改旧证据及早期失败撤销旧成功。复现：`mise run audit-check`；联网更新公告：`mise run audit`。离线缓存不能冒充最新公告。
 
-`mise run audit-check` 的七项实际 Node 子进程反例通过：Rust 失败后仍执行前端、前端漏洞阻断、缺少命令覆盖旧成功、无效／矛盾 JSON 拒绝、low 告警保持现有阈值、输入变更阻断和子进程信号退出。临时夹具仅在本任务拥有的 `/data/temp` 目录创建并在子进程退出后删除。
+## 当前维护链
 
-真实 `mise run audit` 两项均完成：Rust 退出 5，仍有 8 项许可证和 2 项维护策略错误；前端退出 0，info／low／moderate／high／critical 均为 0。总结果退出 5，`completed=true`、`passed=false`。依赖、锁文件及 `deny.toml` 未变更，未新增允许项或忽略公告。JavaScript Astrolabe 诊断为 Unknown（TypeScript 安装定位失败），不计为通过；未安装语言服务器。仅在当前 Linux 环境验证，Windows/macOS 不计通过。
+最近已核验批次的 Rust 审计退出 1，包含五项维护公告；JavaScript 退出 0，各严重级别计数为零。此结果有固定源码／输入范围，不代表之后任意依赖状态。
 
-## 仍未解除的阻断
+| 公告 | 锁定组件 | 依赖入口与迁移边界 |
+|---|---|---|
+| [RUSTSEC-2024-0436](https://rustsec.org/advisories/RUSTSEC-2024-0436) | `paste 1.0.15` | Specta 2.0.0-rc.25 及 Tauri 类型接线 |
+| [RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370) | `proc-macro-error 1.0.4` | GTK 0.18 的 GLib／GTK 宏，随 WebKit／Tauri 引入 |
+| [RUSTSEC-2026-0371](https://rustsec.org/advisories/RUSTSEC-2026-0371) | `zbus_names 4.3.4` | `zbus 5.19.0` 及稳定单实例插件 |
+| [RUSTSEC-2026-0370](https://rustsec.org/advisories/RUSTSEC-2026-0370) | `zvariant 5.15.0` | 同一 D-Bus 链 |
+| [RUSTSEC-2026-0372](https://rustsec.org/advisories/RUSTSEC-2026-0372) | `zvariant_derive 5.15.0` | 同一 D-Bus 链 |
 
-- `paste 1.0.15` 经 Specta function 支持引入，`proc-macro-error 1.0.4` 经 GTK／GLib 宏引入。当前 Specta 固定版本与本轮注册表查询结果相同；未验证兼容的上游替换，不迁移到 Tauri 3 预览版。
-- 许可证错误涉及 `bitflags`、`dtoa`、`dtoa-short`、`option-ext`、`r-efi`、`selectors`、`webpki-root-certs`、`zerocopy` 的 SPDX 表达式与现有允许集。接受新许可证或例外需要独立审查，不能由脚本改变。
-- `NOTICE`／`THIRD_PARTY.md` 已生成工作区级材料，原文和来源摘要见 `third-party/`。首批记录为 99 项独立原文缺项；最新材料仍有 22 项完整文本缺口，另须按实际发行内容审查。当前数量和来源以[第三方署名材料](third-party-attribution.md)为准，不能视为发布署名已齐全。
-- 29 份最终 SHA 证据见 `target/probes/dependency-audit-acceptance.json`；归档前已确认相关进程退出，`clean-dev` 成功（移除 0 文件），本批独占临时目录清空。Alpha 发布门仍阻断；本轮补齐审计覆盖，不代表依赖合规或发布验收完成。
+`zbus 6` 将后三项整合为内部模块／宏，但插件 2.5.3 的 Linux manifest 仍要求 zbus 5；只升级本项目直接依赖不能清除旧链。迁移须覆盖插件 API、实际 bus-name／PID、生命周期、冷启动转发和原页面授权。最近查询 Tauri 2.12.4、插件 2.5.3 和 Specta rc.25 未发现可直接替换的兼容组合；上游版本变化后重查，不自动添加公告 ignore 或宏 vendor。
+
+## 许可与发行
+
+八项精确版本许可例外已获批准并启用，不能再写为未批准的八项许可拒绝；范围见[原生依赖评审](dependency-review.md)和[许可策略](license-policy-review.md)。最新完整工作区材料仍缺 21 项独立原文，另有 MPL 源码获取渠道、实际系统／编译器组件及发行范围待审查。GNU Windows 包的目标 winapi 归档缺口继续阻断组包；MSVC 构建不自动解除义务。
+
+当前归属数量和来源以[署名材料](third-party-attribution.md)、`THIRD_PARTY.md` 和 `third-party/inventory.json` 为准。下载、摘要或完整文本失败继续阻断发布，不以测试通过、SPDX 元数据或部分通知代替原文。
+
+## 本地历史证据
+
+收据均位于被 Git 忽略的 `target/probes/`，远程 CI 重新生成并上传本次证据：
+
+- `dependency-audit/runs/87c8cb59-1c5f-4caa-ab95-156ad3921f07/`：最近核验的五公告／零 JavaScript 漏洞批次。
+- `dependency-audit/maintenance-review-v1/`：输入指纹、来源、回归及独立日志布局核验；`before-runner-fix/` 保留 schema 1 原始失败。
+- `dependency-audit-acceptance.json`：初始执行器的历史范围。旧的 8 项许可／2 项维护结果不能覆盖当前状态。

@@ -3737,6 +3737,9 @@ name = "pulse-platform"
 version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "tempfile",
  "thiserror 2.0.21",
  "windows-sys 0.61.2",
@@ -3747,6 +3750,7 @@ name = "pulse-pty"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "log",
  "portable-pty",
  "pulse-core",
  "tempfile",
@@ -3830,16 +3834,19 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "gtk",
+ "interprocess",
  "pkcs8",
  "pulse-app",
  "pulse-cap",
  "pulse-core",
  "pulse-ipc",
+ "pulse-platform",
  "pulse-pty",
  "pulse-ssh",
  "pulse-store",
  "pulse-term",
  "rand 0.10.3",
+ "rusqlite",
  "russh",
  "rustix",
  "schemars 1.2.2",
@@ -3858,6 +3865,7 @@ dependencies = [
  "tokio-util",
  "uuid",
  "webkit2gtk",
+ "widestring",
  "zbus",
  "zeroize",
 ]
@@ -6597,6 +6605,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "encoding_rs",
+ "interprocess",
  "pkcs8",
  "portable-pty",
  "pulse-app",
@@ -6609,6 +6618,7 @@ dependencies = [
  "pulse-store",
  "pulse-term",
  "rand 0.10.3",
+ "rusqlite",
  "russh",
  "serde",
  "serde_json",
@@ -6616,6 +6626,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "widestring",
  "zeroize",
 ]
 

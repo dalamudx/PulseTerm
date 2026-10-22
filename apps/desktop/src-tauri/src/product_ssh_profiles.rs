@@ -119,12 +119,12 @@ async fn operation(
     nonce: String,
     change: Option<(String, Change)>,
 ) -> Result<View> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, change);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, page) = session::page(&window, &state, &nonce)?;
         let change = if let Some((token, change)) = change {

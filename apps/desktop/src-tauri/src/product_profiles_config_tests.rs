@@ -5,7 +5,7 @@ type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
 fn fixture() -> TestResultFixture {
     let directory = tempfile::Builder::new()
         .prefix("pt-page-config.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
     fs::create_dir(directory.path().join("parts"))?;
     fs::set_permissions(

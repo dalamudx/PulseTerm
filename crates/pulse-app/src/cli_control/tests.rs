@@ -1,4 +1,7 @@
 use super::*;
+use interprocess::local_socket::GenericFilePath;
+use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::{
     os::unix::fs::PermissionsExt,
     sync::atomic::{AtomicUsize, Ordering},
@@ -54,13 +57,14 @@ fn directory() -> std::io::Result<tempfile::TempDir> {
     Ok(directory)
 }
 async fn raw(directory: &Path) -> Result<Stream> {
-    Stream::connect(
+    IpcStream::connect(
         directory
             .join("control.sock")
             .to_fs_name::<GenericFilePath>()
             .map_err(|_| Error)?,
     )
     .await
+    .map(Stream)
     .map_err(|_| Error)
 }
 async fn hello(stream: &Stream, directory: &Path) -> Result<()> {

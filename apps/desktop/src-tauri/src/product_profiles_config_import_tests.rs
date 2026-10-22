@@ -20,7 +20,7 @@ fn write(path: &std::path::Path, body: &[u8]) -> TestResult {
 fn fixture() -> std::result::Result<Fixture, Box<dyn std::error::Error>> {
     let directory = tempfile::Builder::new()
         .prefix("pt-config-import.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
     fs::create_dir(directory.path().join("database"))?;
     fs::set_permissions(

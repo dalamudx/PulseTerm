@@ -20,9 +20,9 @@ pub(super) enum Stage {
     DocumentConfirmEntered,
     DocumentConfirmed,
     VisibilityRead,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     ProfilesRequested,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     ProfilesListed,
     CliPageReady,
     VisibilityInstalled,

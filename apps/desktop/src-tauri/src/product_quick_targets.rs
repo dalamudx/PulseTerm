@@ -6,7 +6,7 @@ use super::State;
 use super::{Result, Workspace, session};
 use serde::{Deserialize, Serialize};
 use tauri::WebviewWindow;
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 use {
     pulse_app::registry::{PageLaunchScope, SessionRegistry},
     pulse_store::ssh_target_source::TemporarySshTarget,
@@ -40,7 +40,7 @@ pub(super) struct EndpointDto {
     port: u16,
     username: String,
 }
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 struct Entry {
     registered: Option<pulse_app::registry::SessionId>,
     saving: bool,
@@ -49,11 +49,11 @@ struct Entry {
     target: TemporarySshTarget,
     expires: Instant,
 }
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 pub(super) struct QuickTargets {
     entry: Mutex<Option<Entry>>,
 }
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 impl QuickTargets {
     pub(super) fn new() -> Self {
         Self {
@@ -179,7 +179,7 @@ impl QuickTargets {
         Ok(())
     }
 }
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 impl Drop for QuickTargets {
     fn drop(&mut self) {
         self.retire();
@@ -194,12 +194,12 @@ pub(super) async fn workspace_quick_target_prepare(
     value: TargetArgs,
 ) -> Result<TargetDto> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (page, value);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         let endpoint = pulse_core::ssh_endpoint::SshEndpoint::new(
             &value.label,
@@ -253,12 +253,12 @@ pub(super) async fn workspace_quick_target_save(
     label: String,
 ) -> Result<SavedTargetDto> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (page, token, label);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         let parsed = Uuid::parse_str(&token).map_err(|_| "workspace.denied")?;
         if parsed.to_string() != token
@@ -306,12 +306,12 @@ pub(super) fn workspace_quick_target_cancel(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         let parsed = Uuid::parse_str(&token).map_err(|_| "workspace.denied")?;
         if parsed.to_string() != token

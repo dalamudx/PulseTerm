@@ -11,6 +11,14 @@ import time
 
 fixture = Path(sys.argv[1])
 evidence = Path('target/probes')
+binary = Path(os.environ.get('PULSE_HISTORY_COPY_BINARY', 'target/debug/pulseterm-workspace'))
+helper = Path(os.environ.get('PULSE_NATIVE_HELPER', str(evidence / 'x11-status')))
+clipboard = Path(os.environ.get('PULSE_HISTORY_COPY_CLIPBOARD', str(evidence / 'x11-clipboard')))
+copy_run = os.environ.get('PULSE_HISTORY_COPY_RUN')
+if copy_run is not None:
+    assert 1 <= len(copy_run) <= 80 and all(c in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-' for c in copy_run), 'history_copy.invalid_run_label'
+    evidence /= copy_run
+    evidence.mkdir(parents=True, exist_ok=False)
 log = evidence / 'workspace-history-copy-native.log'
 app = owner = xid = native_pid = None
 stage = 'startup'
@@ -47,7 +55,7 @@ def count(label):
 
 
 def accessible(text):
-    return run([str(evidence / 'x11-status'), str(active_app().pid), text], timeout=2, check=False).returncode == 0
+    return run([str(helper), str(active_app().pid), text], timeout=2, check=False).returncode == 0
 
 
 def painted(marker, row):
@@ -73,10 +81,10 @@ def reset_clipboard():
     sentinel = fixture / 'sentinel.txt'
     sentinel.write_text('HISTORY_COPY_SENTINEL')
     with (fixture / 'clipboard.log').open('wb') as output:
-        owner = subprocess.Popen([str(evidence / 'x11-clipboard'), str(sentinel)], stdout=output, stderr=output)
+        owner = subprocess.Popen([str(clipboard), str(sentinel)], stdout=output, stderr=output)
     wait_for(lambda: 'clipboard.ready' in (fixture / 'clipboard.log').read_text(), 'clipboard_owner')
     probe = fixture / 'sentinel-read.txt'
-    run([str(evidence / 'x11-clipboard'), 'read', str(probe)])
+    run([str(clipboard), 'read', str(probe)])
     if probe.read_bytes() != sentinel.read_bytes():
         raise RuntimeError('workspace.history_copy.sentinel_not_current')
 
@@ -98,7 +106,7 @@ def copy_history(name):
     copied = fixture / 'copied.txt'
     expected = (fixture / 'expected.txt').read_bytes()
     def exact():
-        result = run([str(evidence / 'x11-clipboard'), 'read', str(copied)], timeout=3, check=False)
+        result = run([str(clipboard), 'read', str(copied)], timeout=3, check=False)
         return result.returncode == 0 and copied.read_bytes() == expected
     wait_for(exact, 'exact_system_clipboard_' + name)
     os.kill(pid, 0)
@@ -116,7 +124,7 @@ def interrupted(signum, _frame):
 signal.signal(signal.SIGTERM, interrupted)
 try:
     with log.open('wb') as output:
-        app = subprocess.Popen(['target/debug/pulseterm-workspace'], stdout=output, stderr=output)
+        app = subprocess.Popen([str(binary)], stdout=output, stderr=output)
     wait_for(lambda: count('sessions_listed') == 1, 'first_page')
     def find_window():
         global xid
@@ -169,7 +177,7 @@ try:
     if 'workspace.terminal_failure' in log.read_text():
         raise RuntimeError('workspace.history_copy.terminal_failure')
     checks.append(stage)
-    (evidence / 'workspace-history-copy-result.json').write_text(json.dumps({'schema': 1, 'checks': checks, 'logical_rows': 600, 'copied_utf8_bytes': byte_count, 'sha256': digest, 'live_and_refresh_equal': True, 'native_exit': True, 'limits': ['Within existing retained history', 'Not 4 MiB boundary or cross-platform acceptance']}, indent=2) + '\n')
+    (evidence / 'workspace-history-copy-result.json').write_text(json.dumps({'schema': 1, 'runLabel': copy_run, 'binary': str(binary), 'checks': checks, 'logical_rows': 600, 'copied_utf8_bytes': byte_count, 'sha256': digest, 'live_and_refresh_equal': True, 'native_exit': True, 'limits': ['Within existing retained history', 'Not 4 MiB boundary or cross-platform acceptance']}, indent=2) + '\n')
     print('workspace.history_copy_actual_600_wrapped_unicode_rows_live_refresh_clipboard_exact_no_pty_input_native_exit_confirmed')
 except BaseException:
     (evidence / 'workspace-history-copy-failure.json').write_text(json.dumps({'stage': stage}, indent=2) + '\n')

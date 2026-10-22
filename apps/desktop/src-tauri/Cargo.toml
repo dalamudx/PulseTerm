@@ -24,9 +24,11 @@ workspace-startup-diagnostics = ["workspace-cli"]
 # Delayed display receipts for Linux native acceptance only; never production.
 workspace-readiness-probe = ["workspace-startup-diagnostics"]
 # Ordered screen verification commands; absent from ordinary production builds.
-workspace-load-state-probe = ["workspace-cli"]
+workspace-load-state-probe = ["workspace-cli", "rustix/time"]
+# Same native services with an authority-free blank page for Linux memory diagnosis only.
+workspace-runtime-memory-probe = ["workspace-cli"]
 # Opt-in Linux CLI; single-instance/startup foundation never enters default/probe builds.
-workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix"]
+workspace-cli = ["workspace", "pulse-app/cli-control", "dep:tauri-plugin-single-instance", "dep:zbus", "dep:rustix", "dep:interprocess", "dep:widestring"]
 # Opt-in saved-host/identity SSH trust and supervised session entry; default stays network-free.
 workspace-ssh = ["workspace", "dep:pulse-ssh", "dep:russh", "dep:pkcs8", "pulse-ssh/managed-store", "pulse-store/ssh-trust", "pulse-app/ssh-use"]
 # Fixed public-canvas observer only; never part of default or production builds.
@@ -74,10 +76,19 @@ specta = { workspace = true, optional = true }
 tauri-specta = { workspace = true, optional = true }
 specta-typescript = { workspace = true, optional = true }
 
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+pulse-platform.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+interprocess = { workspace = true, optional = true }
+widestring = { version = "=1.2.1", optional = true }
+
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { workspace = true, optional = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "=0.18.2", optional = true }
 webkit2gtk = { version = "=2.0.2", features = ["v2_28"], optional = true }
-tauri-plugin-single-instance = { workspace = true, optional = true }
 zbus = { workspace = true, optional = true }
 rustix = { workspace = true, optional = true }
 [build-dependencies]
@@ -86,6 +97,9 @@ tauri-build = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile.workspace = true
 rand = "=0.10.3"
+
+[target.'cfg(windows)'.dev-dependencies]
+rusqlite.workspace = true
 
 [lints]
 workspace = true

@@ -55,15 +55,22 @@ pub(super) fn system_dark(window: &tauri::WebviewWindow) -> bool {
     }
 }
 use pulse_app::registry::PageLaunchScope;
+#[cfg(windows)]
+#[path = "settings_file_windows.rs"]
+mod windows_file;
+#[cfg(not(windows))]
+use pulse_store::settings_file::{SettingsFile, SettingsSnapshot};
 use pulse_store::{
     settings::{ResolvedSettings, SettingsResolver},
     settings_edit::TerminalSettingEdit as Edit,
-    settings_file::{SettingsFile, SettingsMutation, SettingsSnapshot},
+    settings_file::SettingsMutation,
     settings_remove::TerminalSettingKey as Key,
 };
 pub(super) use shared_io::SettingsIo;
 use std::{path::PathBuf, sync::Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
+#[cfg(windows)]
+use windows_file::{SettingsFile, SettingsSnapshot};
 #[derive(serde::Deserialize)]
 #[serde(
     tag = "field",
@@ -317,7 +324,7 @@ impl SettingsOwner {
         self.io(move |owner| {
             owner.check(&registry, &page)?;
             owner.location(&directory)?;
-            let directory = pulse_store::state_directory::prepare(&directory)
+            let directory = super::app_data::prepare(&directory)
                 .map_err(|_| "workspace.settings_unavailable")?;
             owner.check(&registry, &page)?;
             let file = SettingsFile::open_private(directory)
@@ -350,7 +357,7 @@ impl SettingsOwner {
         self.io(move |owner| {
             owner.check(&registry, &page)?;
             owner.location(&directory)?;
-            let directory = pulse_store::state_directory::prepare(&directory)
+            let directory = super::app_data::prepare(&directory)
                 .map_err(|_| "workspace.settings_unavailable")?;
             let file = SettingsFile::open_private(directory)
                 .map_err(|_| "workspace.settings_unavailable")?;
@@ -363,7 +370,7 @@ impl SettingsOwner {
         })
         .await
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) async fn terminal_startup(
         self: &Arc<Self>,
         registry: SessionRegistry,

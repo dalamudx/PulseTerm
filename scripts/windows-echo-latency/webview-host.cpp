@@ -20,6 +20,7 @@ static std::wstring uri;
 static EchoNavigation navigation;
 static bool diagnostic;
 static bool closing;
+static bool memory_probe;
 
 #ifdef __MINGW32__
 // The SDK's MIDL uuid attributes are MSVC-only; bind the same published interface IDs.
@@ -137,13 +138,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
         else if (flag == L"--runtime") runtime = argv[i + 1];
         else if (flag == L"--log") log_path = argv[i + 1];
         else if (flag == L"--diagnostic" && std::wstring(argv[i + 1]) == L"1") diagnostic = true;
+        else if (flag == L"--startup-memory" && std::wstring(argv[i + 1]) == L"1") memory_probe = true;
         else { LocalFree(argv); return 1; }
     }
     LocalFree(argv);
-    if (uri.rfind(L"file:///", 0) != 0 || profile.empty() || log_path.empty()) return 1;
+    if ((memory_probe ? uri != L"about:blank" || diagnostic : uri.rfind(L"file:///", 0) != 0) || profile.empty() || log_path.empty()) return 1;
     log_file = _wfopen(log_path.c_str(), L"w");
     if (!log_file) return 1;
-    navigation.select(uri);
+    if (memory_probe) navigation.select_memory(); else navigation.select(uri);
     std::fprintf(log_file, "navigation_request uri=%ls\n", uri.c_str()); std::fflush(log_file);
     std::fprintf(log_file, "host_pid=%lu diagnostic=%d\n", GetCurrentProcessId(), diagnostic);
     for (const wchar_t *name : {L"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", L"WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", L"WEBVIEW2_USER_DATA_FOLDER"}) {
@@ -191,6 +193,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             if (FAILED(status) || !ctrl) { check(FAILED(status) ? status : E_FAIL, "create_controller"); return S_OK; }
             controller = ctrl; controller->AddRef();
             check(controller->get_CoreWebView2(&webview), "get_webview");
+            if (webview) {
+                UINT32 pid = 0;
+                HRESULT pid_result = webview->get_BrowserProcessId(&pid);
+                HANDLE process = SUCCEEDED(pid_result) ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+                wchar_t image[32768]{}; DWORD count = 32768;
+                DWORD error = FAILED(pid_result) ? 0 : process ? (QueryFullProcessImageNameW(process, 0, image, &count) ? 0 : GetLastError()) : GetLastError();
+                std::fprintf(log_file, "browser_process pid=%u result=0x%08lx imageError=%lu\nruntime_image=%ls\n", pid, static_cast<unsigned long>(pid_result), error, image);
+                std::fflush(log_file);
+                if (process) CloseHandle(process);
+            }
             if (!webview) return S_OK;
             RECT bounds; GetClientRect(window, &bounds);
             check(controller->put_Bounds(bounds), "bounds");
@@ -283,6 +295,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
                 if (FAILED(id_result) || FAILED(success_result)) {check(FAILED(id_result) ? id_result : success_result, "navigation_complete_properties");return S_OK;}
                 if (!target) return S_OK;
                 if (!success) {check(E_FAIL, "navigate");return S_OK;}
+                if (memory_probe) { SetWindowTextW(window, L"echo-startup-ready"); return S_OK; }
                 SetForegroundWindow(window);
                 check(controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC), "focus");
                 if (diagnostic) {
@@ -301,7 +314,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
             });
             check(webview->add_NavigationCompleted(navigated, &token), "navigation_handler");
             navigated->Release();
-            check(webview->Navigate(uri.c_str()), "navigate_start");
+            if (memory_probe) {
+                check(webview->NavigateToString(echo_memory_html), "navigate_memory_start");
+            } else { check(webview->Navigate(uri.c_str()), "navigate_start"); }
             return S_OK;
         });
         check(environment->CreateCoreWebView2Controller(window, created), "create_controller_start");

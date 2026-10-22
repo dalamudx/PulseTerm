@@ -195,6 +195,6 @@ impl ProfileReader {
         }
     }
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_config_import_tests.rs"]
 mod tests;

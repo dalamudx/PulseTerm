@@ -3,10 +3,10 @@
 #[path = "product_ssh_trust_tests.rs"]
 mod tests;
 use super::*;
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 use pulse_app::registry::trust_action::{TrustActionOperation, TrustActionRevocation};
 use pulse_app::registry::{PageLaunchScope, trust_action::PageTrustActions};
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 use pulse_ssh::{
     managed_store::{FirstPinApproval, FirstPinObservation},
     peer::{ObservedHostKey, OfferedKeyStatus},
@@ -37,28 +37,28 @@ pub(super) struct RevisionDto {
 }
 pub(super) struct TrustBank {
     actions: PageTrustActions,
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     pending: Mutex<Option<Entry>>,
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 struct Ready {
     action: TrustActionOperation,
     source: pulse_store::ssh_target_source::SshTargetSource,
     endpoint: pulse_core::ssh_endpoint::SshEndpoint,
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 struct Approval {
     action: TrustActionOperation,
     prompt: Box<FirstPinApproval>,
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 enum Stage {
     Ready(Box<Ready>),
     Observing(TrustActionRevocation),
     Confirming(TrustActionRevocation),
     Approval(Box<Approval>),
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 struct Entry {
     page: Arc<PageLaunchScope>,
     token: Uuid,
@@ -69,13 +69,13 @@ impl TrustBank {
     pub(super) fn new(registry: SessionRegistry, window: WindowToken) -> Self {
         Self {
             actions: PageTrustActions::new(registry, window),
-            #[cfg(all(feature = "workspace-ssh", unix))]
+            #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
             pending: Mutex::new(None),
         }
     }
     pub(super) fn retire(&self) {
         self.actions.retire();
-        #[cfg(all(feature = "workspace-ssh", unix))]
+        #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
         {
             let previous = self
                 .pending
@@ -96,7 +96,7 @@ impl TrustBank {
             .await
             .map_err(|_| "workspace.ssh_shutdown_failed")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn remove(&self, token: Uuid, ready_only: bool) {
         let previous = {
             let mut guard = self.pending.lock().unwrap_or_else(|p| p.into_inner());
@@ -117,7 +117,7 @@ impl TrustBank {
         }
         drop(previous);
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn publish(self: &Arc<Self>, page: Arc<PageLaunchScope>, ready: Ready) -> Result<TicketDto> {
         if !ready.action.is_current() {
             return Err("workspace.denied");
@@ -156,7 +156,7 @@ impl TrustBank {
             token: token.to_string(),
         })
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn observe(&self, page: &Arc<PageLaunchScope>, token: Uuid) -> Result<Box<Ready>> {
         let mut guard = self.pending.lock().map_err(|_| "workspace.ssh_failed")?;
         let entry = guard.as_mut().ok_or("workspace.denied")?;
@@ -178,7 +178,7 @@ impl TrustBank {
             _ => Err("workspace.denied"),
         }
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn approve_ready(
         &self,
         page: &Arc<PageLaunchScope>,
@@ -200,7 +200,7 @@ impl TrustBank {
         drop(previous);
         Ok(())
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn take_approval(&self, page: &Arc<PageLaunchScope>, token: Uuid) -> Result<Box<Approval>> {
         let previous = {
             let mut guard = self.pending.lock().map_err(|_| "workspace.ssh_failed")?;
@@ -222,7 +222,7 @@ impl TrustBank {
             _ => Err("workspace.denied"),
         }
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn complete(&self, token: Uuid) -> Result<()> {
         let previous = {
             let mut guard = self.pending.lock().map_err(|_| "workspace.ssh_failed")?;
@@ -238,7 +238,7 @@ impl TrustBank {
         drop(previous);
         Ok(())
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     fn cancel(&self, page: &Arc<PageLaunchScope>, token: Uuid) -> Result<()> {
         {
             let guard = self.pending.lock().map_err(|_| "workspace.ssh_failed")?;
@@ -251,12 +251,12 @@ impl TrustBank {
         Ok(())
     }
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 struct CancelOnDrop {
     revoke: TrustActionRevocation,
     armed: bool,
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         if self.armed {
@@ -271,7 +271,7 @@ fn checked(window: &WebviewWindow, state: &Workspace, nonce: &str) -> Result<Arc
     let url = window.url().map_err(|_| "workspace.denied")?;
     current_document(&state.0.documents, state.0.owner, &url, nonce).map(|(_, page)| page)
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 fn identity(text: &str, version: usize) -> Result<Uuid> {
     let id = Uuid::parse_str(text).map_err(|_| "workspace.denied")?;
     if id.get_version_num() != version
@@ -282,7 +282,7 @@ fn identity(text: &str, version: usize) -> Result<Uuid> {
     }
     Ok(id)
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 fn projection(
     key: &ObservedHostKey,
     endpoint: &pulse_core::ssh_endpoint::SshEndpoint,
@@ -307,7 +307,7 @@ fn projection(
         source: "application_only",
     }
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 async fn dial(
     endpoint: &pulse_core::ssh_endpoint::SshEndpoint,
     native: Arc<dyn Fn() -> bool + Send + Sync>,
@@ -357,12 +357,12 @@ pub(super) async fn workspace_ssh_fingerprint_prepare(
     host: String,
 ) -> Result<TicketDto> {
     let page = checked(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, host);
         Err("workspace.ssh_unavailable")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let action = state
             .0
@@ -429,12 +429,12 @@ pub(super) async fn workspace_ssh_fingerprint_observe(
     token: String,
 ) -> Result<FingerprintDto> {
     let page = checked(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_unavailable")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = identity(&token, 4)?;
         let Ready {
@@ -495,12 +495,12 @@ pub(super) async fn workspace_ssh_fingerprint_confirm(
     token: String,
 ) -> Result<RevisionDto> {
     let page = checked(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_unavailable")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let Approval { action, prompt } = *state
             .0
@@ -546,12 +546,12 @@ pub(super) fn workspace_ssh_fingerprint_cancel(
     token: String,
 ) -> Result<()> {
     let page = checked(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_unavailable")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         state.0.ssh_trust.cancel(&page, identity(&token, 4)?)?;
         eprintln!("workspace.ssh_fingerprint_cancelled");

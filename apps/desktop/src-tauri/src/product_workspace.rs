@@ -4,10 +4,12 @@ use pulse_app::{
     product_document::ProductDocuments,
     registry::{SessionRegistry, WindowToken},
 };
-#[cfg(unix)]
 #[path = "product_app_data.rs"]
 mod app_data;
-#[cfg(unix)]
+#[cfg(windows)]
+#[path = "database_windows.rs"]
+mod database_native;
+#[cfg(any(unix, windows))]
 #[path = "product_profiles.rs"]
 mod profiles;
 #[path = "product_ssh_config.rs"]
@@ -19,12 +21,12 @@ mod agent_identities;
 mod app;
 #[path = "product_capabilities.rs"]
 mod capabilities;
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[path = "product_cli.rs"]
 mod cli;
 #[path = "product_cli_answer.rs"]
 mod cli_answer;
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 #[path = "product_config_import_bank.rs"]
 mod config_imports;
 #[path = "product_workspace_exit.rs"]
@@ -41,6 +43,9 @@ mod identity_password;
 mod key_identities;
 #[path = "product_keymap.rs"]
 mod keymap;
+#[cfg(windows)]
+#[path = "keymap_file_windows.rs"]
+mod windows_keymap;
 use app::Application;
 #[path = "product_metadata_captures.rs"]
 mod metadata_captures;
@@ -57,7 +62,7 @@ mod readiness_probe;
 mod session;
 #[path = "product_settings.rs"]
 mod settings;
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[path = "product_cli_single_instance.rs"]
 mod single_instance;
 #[path = "product_ssh_session.rs"]
@@ -85,9 +90,12 @@ use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEven
 use uuid::Uuid;
 use window_state::State;
 
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[path = "product_workspace_new_window.rs"]
 mod new_window;
+#[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+#[path = "runtime_memory_probe.rs"]
+mod runtime_memory;
 const LABEL: &str = "workspace";
 const PAGE: &str = "/workspace.html";
 const WORKSPACE_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:";
@@ -114,13 +122,13 @@ struct Inner {
     password_writes: pulse_app::vault_password_handoff::PasswordWriteBank,
     private_key_writes: pulse_app::vault_key_write_handoff::PrivateKeyWriteBank,
     owner: WindowToken,
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     bootstrap: crate::cli_bootstrap::Bank,
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     presentation: crate::cli_presentation::Presentation,
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     selections: Arc<crate::cli_selection::Selections>,
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     cli_approvals: Arc<cli::Approvals>,
     terminals: Arc<terminal::TerminalBank>,
     visibility: Arc<crate::native_visibility::NativeWatcher>,
@@ -128,18 +136,18 @@ struct Inner {
     keymaps: Arc<keymap::KeymapOwner>,
     hosts: hosts::captures::HostCaptures,
     ssh_profiles: metadata_captures::MetadataCaptures<pulse_store::ssh_profiles::ProfileSnapshot>,
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     quick_targets: quick_targets::QuickTargets,
     organization: metadata_captures::MetadataCaptures<organization::OrganizationCapture>,
     identities: metadata_captures::MetadataCaptures<pulse_store::ssh_identities::IdentitySnapshot>,
     key_identities:
         metadata_captures::MetadataCaptures<pulse_store::ssh_key_identities::KeyIdentitySnapshot>,
     agent_identities: agent_identities::AgentBank,
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     configs: metadata_captures::MetadataCaptures<Arc<profiles::PageConfigCapture>>,
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     config_imports: config_imports::ConfigImportBank,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     profiles: Arc<profiles::ProfileReader>,
 }
 impl std::ops::Deref for Inner {
@@ -187,22 +195,22 @@ impl Workspace {
         match event {
             PageLoadEvent::Started => {
                 record_startup(StartupStage::PageStarted);
-                #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
                 self.0.bootstrap.started().map_err(|_| "workspace.denied")?;
                 self.0
                     .documents
                     .started(self.0.owner)
                     .map_err(|_| "workspace.denied")?;
-                #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
                 self.0
                     .presentation
                     .navigation()
                     .map_err(|_| "workspace.denied")?;
-                #[cfg(unix)]
+                #[cfg(any(unix, windows))]
                 self.0.profiles.retire_read_waiters();
-                #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
                 cli::retire(self);
-                #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
                 self.0.selections.retire();
                 self.0.ssh_trust.retire();
                 self.0.ssh_sessions.retire();
@@ -210,15 +218,15 @@ impl Workspace {
                 self.0.keymaps.retire();
                 self.0.hosts.retire();
                 self.0.ssh_profiles.retire();
-                #[cfg(all(unix, feature = "workspace-ssh"))]
+                #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
                 self.0.quick_targets.retire();
                 self.0.organization.retire();
                 self.0.identities.retire();
                 self.0.key_identities.retire();
                 self.0.agent_identities.retire();
-                #[cfg(all(unix, feature = "workspace-ssh"))]
+                #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
                 self.0.configs.retire();
-                #[cfg(all(unix, feature = "workspace-ssh"))]
+                #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
                 self.0.config_imports.retire();
                 self.0
                     .password_writes
@@ -255,7 +263,7 @@ impl Workspace {
                     .documents
                     .finished(self.0.owner)
                     .map_err(|_| "workspace.denied")?;
-                #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
                 self.0
                     .bootstrap
                     .finished(&self.0.documents, self.0.owner)
@@ -265,7 +273,7 @@ impl Workspace {
                 let script = format!(
                     "window.__PULSE_WORKSPACE_NONCE__={};window.__PULSE_WORKSPACE_SSH_FINGERPRINT__={};window.__PULSE_WORKSPACE_SSH_CONNECTION__={1};window.dispatchEvent(new Event('pulseterm:workspace-ready'));",
                     serde_json::to_string(&nonce.to_string()).map_err(|_| "workspace.denied")?,
-                    cfg!(all(feature = "workspace-ssh", unix))
+                    cfg!(all(feature = "workspace-ssh", any(unix, windows)))
                 );
                 window.eval(&script).map_err(|_| "workspace.denied")?;
                 record_startup(StartupStage::NonceInjected);
@@ -377,13 +385,13 @@ fn workspace_cli_ready_impl(
     }
     let url = window.url().map_err(|_| "workspace.denied")?;
     let (_, scope) = current_document(&state.0.documents, state.0.owner, &url, &nonce)?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     state
         .0
         .presentation
         .mark(&state.0.documents, state.0.owner, scope)
         .map_err(|_| "workspace.denied")?;
-    #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+    #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
     drop(scope);
     eprintln!("workspace.cli_presentation_ready");
     record_startup(StartupStage::CliPageReady);
@@ -402,12 +410,12 @@ async fn workspace_profiles(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<Vec<ProfileOfferDto>> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         if state.native_label().ok() != Some(window.label()) {
             return Err("workspace.denied");
@@ -465,7 +473,7 @@ pub fn run() {
             registry.clone(),
             runtime.clone(),
         )));
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         let profiles = Arc::new(profiles::ProfileReader::new());
         let application = Arc::new(Application {
             registry,
@@ -476,15 +484,15 @@ pub fn run() {
             exit: exit::ExitGate::new(),
             settings_io: Arc::new(settings::SettingsIo::new()),
             window_drains: Arc::new(app::WindowDrains::new()),
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             cli: Mutex::new(None),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             profile_storage: profiles.shared_storage(),
         });
         Workspace::from_native(
             application,
             native,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             profiles,
         )
     })();
@@ -497,7 +505,7 @@ pub fn run() {
         }
     };
     record_startup(StartupStage::ServicesReady);
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     let unsupported_startup = match crate::cli_startup::from_args(std::env::args_os().skip(1)) {
         Ok(Some(action)) if action.supports_cold_transport() => {
             if state.0.bootstrap.enqueue_first(action).is_err() {
@@ -523,7 +531,7 @@ pub fn run() {
     let on_close = state.clone();
     let builder = tauri::Builder::default();
     // The upstream plugin must run before workspace setup or endpoint creation.
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     let builder = builder.plugin(single_instance::plugin());
     record_startup(StartupStage::RuntimeBuildStarted);
     let result = builder
@@ -633,6 +641,8 @@ pub fn run() {
             terminal::load_state::workspace_terminal_load_marker,
             #[cfg(feature = "workspace-load-state-probe")]
             terminal::load_state::workspace_terminal_load_compare,
+            #[cfg(feature = "workspace-load-state-probe")]
+            terminal::load_state::workspace_terminal_load_timings,
             terminal::workspace_terminal_enable_input,
             terminal::workspace_terminal_input_ready,
             terminal::workspace_terminal_report_failure,
@@ -648,36 +658,63 @@ pub fn run() {
         ])
         .setup(move |app| {
             record_startup(StartupStage::SetupEntered);
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             single_instance::verify_owner(app.handle())?;
             record_startup(StartupStage::InstanceVerified);
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             if unsupported_startup {
                 return Err("workspace.startup_unavailable".into());
             }
             // WebKit uses app_data_dir for its storage and otherwise creates it
             // with the process umask (typically 0755). Admit/create it privately
             // before constructing any WebView. Never chmod an existing directory.
-            #[cfg(unix)]
             let _admitted_data = app_data::prepare(&app.path().app_data_dir()?)?;
             record_startup(StartupStage::DataPrepared);
             #[cfg(target_os = "linux")]
             settings::observe_system_appearance(app)?;
             record_startup(StartupStage::WindowBuildStarted);
-            let window =
-                WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("workspace.html".into()))
-                    .title("PulseTerm · 工作区预览")
-                    .inner_size(960.0, 640.0)
-                    .on_page_load(move |window, payload| {
-                        if on_load
-                            .on_page_load(&window, payload.event(), payload.url())
-                            .is_err()
+            #[cfg(not(all(feature = "workspace-runtime-memory-probe", target_os = "linux")))]
+            let page_url = WebviewUrl::App("workspace.html".into());
+            #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+            let memory_page = runtime_memory::Page::selected()?;
+            #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+            let page_url = memory_page.url()?;
+            let window = WebviewWindowBuilder::new(app, LABEL, page_url)
+                .title("PulseTerm · 工作区预览")
+                .inner_size(960.0, 640.0)
+                .on_page_load(move |window, payload| {
+                    #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+                    if memory_page == runtime_memory::Page::Blank {
+                        if runtime_memory::blank_load(
+                            &on_load,
+                            &window,
+                            payload.event(),
+                            payload.url(),
+                        )
+                        .is_err()
                         {
                             record_startup(StartupStage::PageRejected);
                             let _ = window.close();
                         }
-                    })
-                    .build()?;
+                        return;
+                    }
+                    let accepted = on_load
+                        .on_page_load(&window, payload.event(), payload.url())
+                        .is_ok();
+                    if !accepted {
+                        record_startup(StartupStage::PageRejected);
+                        let _ = window.close();
+                    }
+                    #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+                    if accepted
+                        && matches!(payload.event(), PageLoadEvent::Finished)
+                        && local_workspace_url(payload.url())
+                        && local_workspace(&window)
+                    {
+                        eprintln!("workspace.runtime_memory.page.workspace");
+                    }
+                })
+                .build()?;
             record_startup(StartupStage::WindowBuilt);
             window.on_window_event(move |event| {
                 if matches!(event, WindowEvent::Destroyed) {
@@ -701,11 +738,22 @@ pub fn run() {
                 .ok_or("workspace.denied")?
                 .publish()?;
             record_startup(StartupStage::WindowPublished);
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             {
                 let server = cli::start(app.handle(), (*state).clone())?;
                 *state.0.cli.lock().map_err(|_| "workspace.cli_failed")? = Some(server);
                 record_startup(StartupStage::EndpointPublished);
+            }
+            #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
+            if memory_page == runtime_memory::Page::Blank {
+                window.with_webview(|native| {
+                    use webkit2gtk::WebViewExt;
+                    // Explicit navigation guarantees a load event for the default blank document.
+                    native.inner().load_html(
+                        "<!doctype html><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'\"><title>Memory fixture</title>",
+                        Some("about:blank"),
+                    );
+                })?;
             }
             record_startup(StartupStage::SetupFinished);
             Ok(())
@@ -751,6 +799,13 @@ mod tests {
         documents.install(foreign).unwrap();
         let local = tauri::Url::parse("http://tauri.localhost/workspace.html").unwrap();
         let remote = tauri::Url::parse("https://example.com/workspace.html").unwrap();
+        for source in ["about:blank", "about:blank#x", "data:text/html,blank"] {
+            let url = tauri::Url::parse(source).unwrap();
+            let nonce = Uuid::new_v4().to_string();
+            assert!(!local_workspace_url(&url));
+            assert!(confirm_current_document(&documents, owner, &url, &nonce).is_err());
+            assert!(current_document(&documents, owner, &url, &nonce).is_err());
+        }
         documents.started(owner).unwrap();
         let first = documents.finished(owner).unwrap();
         assert_eq!(
@@ -819,7 +874,7 @@ mod tests {
         assert!(!isolated_config(&bad));
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn profile_reads_use_ready_document_without_consuming_confirmation_again() {
         let registry = SessionRegistry::new();

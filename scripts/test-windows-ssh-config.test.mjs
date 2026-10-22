@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { expectedTests, nativeSourcesPassed } from './test-windows-ssh-config.mjs';
+const valid = () => ({ error: undefined, signal: null, status: 0,
+  stdout: expectedTests.map(name => `test ${name} ... ok`).join('\n') + '\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n' });
+test('accepts all four exact native identities', () => assert.equal(nativeSourcesPassed(valid(), 'win32'), true));
+test('accepts native CRLF output', () => { const r = valid(); r.stdout = r.stdout.replaceAll('\n', '\r\n'); assert.equal(nativeSourcesPassed(r, 'win32'), true); });
+test('rejects other platforms', () => assert.equal(nativeSourcesPassed(valid(), 'linux'), false));
+test('rejects zero tests', () => { const r = valid(); r.stdout = 'test result: ok. 0 passed; 0 failed; 0 ignored;'; assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects same count with a foreign identity', () => { const r = valid(); r.stdout = r.stdout.replace(expectedTests[0], 'windows_config::tests::unrelated'); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects duplicated identity', () => { const r = valid(); r.stdout = r.stdout.replace(expectedTests[0], expectedTests[1]); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects missing test row', () => { const r = valid(); r.stdout = r.stdout.slice(r.stdout.indexOf('\n') + 1); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects ignored result', () => { const r = valid(); r.stdout = r.stdout.replace('... ok', '... ignored'); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects failure result', () => { const r = valid(); r.stdout = r.stdout.replace('... ok', '... FAILED'); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects multiple summaries', () => { const r = valid(); r.stdout += 'test result: ok. 4 passed; 0 failed; 0 ignored;\n'; assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects ignored summary', () => { const r = valid(); r.stdout = r.stdout.replace('0 ignored', '1 ignored'); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects failed summary', () => { const r = valid(); r.stdout = r.stdout.replace('0 failed', '1 failed'); assert.equal(nativeSourcesPassed(r, 'win32'), false); });
+test('rejects nonzero status', () => assert.equal(nativeSourcesPassed({ ...valid(), status: 101 }, 'win32'), false));
+test('rejects unknown status', () => assert.equal(nativeSourcesPassed({ ...valid(), status: null }, 'win32'), false));
+test('rejects signal', () => assert.equal(nativeSourcesPassed({ ...valid(), signal: 'SIGTERM' }, 'win32'), false));
+test('rejects timeout or spawn error despite old success text', () => assert.equal(nativeSourcesPassed({ ...valid(), error: new Error('fixture timeout') }, 'win32'), false));

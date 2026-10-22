@@ -8,7 +8,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn fixture() -> Result<tempfile::TempDir, std::io::Error> {
     let root = tempfile::Builder::new()
         .prefix("pt-config-file.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))?;
     Ok(root)
 }

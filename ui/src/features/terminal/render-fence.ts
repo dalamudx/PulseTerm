@@ -20,10 +20,13 @@ export function renderFence(
   connected: () => boolean,
   clock: FrameClock = browser,
   current: () => boolean = () => true,
+  opportunity?: () => void,
+  deferCompletion = false,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let frame: number | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let completionTask: ReturnType<typeof setTimeout> | undefined;
     const started = clock.now?.() ?? performance.now();
     let count = 0;
     let done = false;
@@ -32,6 +35,7 @@ export function renderFence(
       done = true;
       if (frame !== undefined) clock.cancel(frame);
       clearTimeout(timer);
+      clearTimeout(completionTask);
       signal.removeEventListener("abort", abort);
       if (error) reject(error);
       else resolve();
@@ -44,6 +48,33 @@ export function renderFence(
           `terminal.render_timeout.frames=${count}.visible=${clock.visible()}.connected=${connected()}.elapsedMs=${Math.max(0, Math.round(elapsed()))}.focused=${clock.focused?.() ?? "unknown"}`,
         ),
       );
+    const completeAfterTask = () => {
+      completionTask = undefined;
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+      if (!clock.visible() || !connected()) {
+        finish(new Error("terminal.render_unavailable"));
+        return;
+      }
+      if (elapsed() >= 1000) {
+        timeout();
+        return;
+      }
+      try {
+        if (!current()) {
+          count = 0;
+          frame = clock.request(step);
+        } else finish();
+      } catch (error) {
+        finish(
+          error instanceof Error
+            ? error
+            : new Error("terminal.render_unavailable"),
+        );
+      }
+    };
     const step = () => {
       frame = undefined;
       if (signal.aborted) {
@@ -60,11 +91,14 @@ export function renderFence(
         return;
       }
       try {
+        opportunity?.();
         if (!current()) {
           // Repaint a moved viewport without extending the original deadline.
           count = 0;
         } else if (++count === 2) {
-          finish();
+          if (deferCompletion)
+            completionTask = setTimeout(completeAfterTask, 0);
+          else finish();
           return;
         }
       } catch (error) {

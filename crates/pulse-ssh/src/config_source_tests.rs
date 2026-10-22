@@ -1,4 +1,5 @@
 use super::*;
+use rustix::fs::{self as sys, Mode};
 use std::{
     fs,
     os::unix::fs::{PermissionsExt, symlink},
@@ -7,7 +8,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn fixture() -> Result<tempfile::TempDir, std::io::Error> {
     let root = tempfile::Builder::new()
         .prefix("pt-config-source.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))?;
     fs::create_dir(root.path().join("parts"))?;
     fs::set_permissions(root.path().join("parts"), fs::Permissions::from_mode(0o700))?;
@@ -212,7 +213,7 @@ fn catalog_paths_are_prevalidated_and_budgeted_without_escape_or_expansion() -> 
 fn root_directory_replacement_requires_new_reader_not_implicit_rebinding() -> TestResult {
     let parent = tempfile::Builder::new()
         .prefix("pt-config-source-root.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     let path = parent.path().join("ssh");
     fs::create_dir(&path)?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;

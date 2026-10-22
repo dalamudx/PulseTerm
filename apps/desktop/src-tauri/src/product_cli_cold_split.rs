@@ -7,6 +7,22 @@ pub(super) async fn run(
     original: Arc<PageLaunchScope>,
     cancelled: CancellationToken,
 ) -> cli_control::Result<Value> {
+    // Freeze the saved identity once, so both cold-start approvals use the same Profile.
+    let request = if request.params().contains_key("profile") {
+        request
+    } else {
+        let profile = saved_default(
+            actions.app.clone(),
+            actions.state.clone(),
+            original.clone(),
+            cancelled.clone(),
+        )
+        .await?;
+        let mut params = request.params().clone();
+        params.insert("profile".into(), json!(profile));
+        let wire = serde_json::to_vec(&json!({"jsonrpc":"2.0", "id":request.id(), "method":request.method(), "params":params})).map_err(|_| cli_control::Error)?;
+        Request::parse(&wire).map_err(|_| cli_control::Error)?
+    };
     let profile = request
         .params()
         .get("profile")

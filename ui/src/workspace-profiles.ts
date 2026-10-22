@@ -1,24 +1,40 @@
 import { isWorkspaceNonce } from "./workspace-readiness";
 
-export type ProfileKind = "bash" | "zsh" | "fish" | "sh" | "pwsh";
+export const PROFILE_KINDS = [
+  "bash",
+  "zsh",
+  "fish",
+  "sh",
+  "pwsh",
+  "powershell",
+  "cmd",
+  "wsl",
+] as const;
+export type ProfileKind = (typeof PROFILE_KINDS)[number];
 export interface WorkspaceProfile {
   readonly kind: ProfileKind;
   readonly hidden: boolean;
 }
-const KINDS = new Set<string>(["bash", "zsh", "fish", "sh", "pwsh"]);
+const KINDS = new Set<string>(PROFILE_KINDS);
+export function isProfileKind(value: unknown): value is ProfileKind {
+  return typeof value === "string" && KINDS.has(value);
+}
 const LABELS: Record<ProfileKind, string> = {
   bash: "Bash",
   zsh: "Zsh",
   fish: "Fish",
   sh: "POSIX sh",
-  pwsh: "PowerShell",
+  pwsh: "PowerShell (pwsh)",
+  powershell: "Windows PowerShell",
+  cmd: "Command Prompt",
+  wsl: "WSL (default distribution)",
 };
 
 /** Path-free snapshot only; never a launch receipt. Malformed native results are not empty catalogs. */
 export function decodeWorkspaceProfiles(
   input: unknown,
 ): readonly WorkspaceProfile[] {
-  if (!Array.isArray(input) || input.length > 5)
+  if (!Array.isArray(input) || input.length > PROFILE_KINDS.length)
     throw new Error("workspace.profiles_invalid");
   const seen = new Set<string>();
   return Array.from(input, (value: unknown) => {

@@ -31,6 +31,113 @@ fn fixture() -> std::io::Result<(tempfile::TempDir, PathBuf, OsString)> {
     let dir = root.path().join("state");
     Ok((root, dir, bin.into_os_string()))
 }
+
+#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[tokio::test]
+async fn cli_default_reads_do_not_replace_gui_ticket_or_choose_an_unsaved_shell() -> TestResult {
+    let (_root, dir, path) = fixture()?;
+    let (registry, documents, owner, page) = page()?;
+    let reader = Arc::new(ProfileReader::new());
+    let offer = reader
+        .default_read(
+            registry.clone(),
+            page.clone(),
+            dir.clone(),
+            path.clone(),
+            None,
+        )
+        .await?;
+    assert_eq!(
+        reader
+            .default_selection(
+                registry.clone(),
+                page.clone(),
+                dir.clone(),
+                path.clone(),
+                None
+            )
+            .await?,
+        None
+    );
+    assert_eq!(
+        reader
+            .default_ticket
+            .lock()
+            .map_err(|_| "poisoned")?
+            .as_ref()
+            .map(|ticket| ticket.id),
+        Some(offer.ticket)
+    );
+    reader
+        .default_save(
+            registry.clone(),
+            page.clone(),
+            (dir.clone(), path.clone(), None),
+            offer.ticket,
+            Some(AutomaticShell::Sh),
+        )
+        .await?;
+    assert_eq!(
+        reader
+            .default_selection(
+                registry.clone(),
+                page.clone(),
+                dir.clone(),
+                path.clone(),
+                None
+            )
+            .await?,
+        Some(pulse_store::profile_default::DefaultProfileSelection::Automatic(AutomaticShell::Sh))
+    );
+    let offer = reader
+        .default_read(
+            registry.clone(),
+            page.clone(),
+            dir.clone(),
+            path.clone(),
+            None,
+        )
+        .await?;
+    reader
+        .default_selection(
+            registry.clone(),
+            page.clone(),
+            dir.clone(),
+            path.clone(),
+            None,
+        )
+        .await?;
+    reader
+        .default_save(
+            registry.clone(),
+            page.clone(),
+            (dir.clone(), path.clone(), None),
+            offer.ticket,
+            None,
+        )
+        .await?;
+    assert_eq!(
+        reader
+            .default_selection(
+                registry.clone(),
+                page.clone(),
+                dir.clone(),
+                path.clone(),
+                None
+            )
+            .await?,
+        None
+    );
+    documents.started(owner)?;
+    assert!(
+        reader
+            .default_selection(registry, page, dir, path, None)
+            .await
+            .is_err()
+    );
+    reader.shutdown().await?;
+    Ok(())
+}
 #[tokio::test]
 async fn default_metadata_save_is_single_use_and_missing_hidden_defaults_do_not_fallback()
 -> TestResult {

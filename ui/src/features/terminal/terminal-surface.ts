@@ -387,6 +387,7 @@ export class TerminalSurface implements ViewResource {
     this.check();
     if (this.writing) throw new Error("terminal.write_busy");
     this.decoder = new Utf8Stream();
+    this.requestedViewport = undefined;
   }
   private writeText(text: string, bellSignal?: AbortSignal): Promise<void> {
     if (text.length === 0) return Promise.resolve();
@@ -430,10 +431,11 @@ export class TerminalSurface implements ViewResource {
       }
     });
   }
-  /** Schedule only this renderer's rows; does not touch parser/history/palette. */
+  /** Preserve xterm dirty DOM rows; repaint changed viewports and GPU evidence fully. */
   prepareDraw(): void {
     this.check();
     if (this.writing) throw new Error("terminal.write_busy");
+    const fullRefresh = !!this.webgl || !this.drawIsCurrent();
     this.webgl?.prepare();
     const buffer = this.terminal.buffer.active;
     this.requestedViewport = {
@@ -444,7 +446,7 @@ export class TerminalSurface implements ViewResource {
       rows: this.terminal.rows,
       scrollToken: this.scrollToken,
     };
-    this.terminal.refresh(0, this.terminal.rows - 1);
+    if (fullRefresh) this.terminal.refresh(0, this.terminal.rows - 1);
   }
   /** A scroll can invalidate a pending paint even when it returns to the same row. */
   drawIsCurrent(): boolean {

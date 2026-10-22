@@ -62,7 +62,7 @@ impl<T> MetadataCaptures<T> {
         }
         Ok(slot.take().ok_or("workspace.denied")?.snapshot)
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     pub(super) fn borrow(
         &self,
         registry: &SessionRegistry,

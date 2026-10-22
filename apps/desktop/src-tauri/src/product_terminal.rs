@@ -14,6 +14,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, oneshot, watch};
 const MAX_VIEWS: usize = 64;
 const CONNECT_DEADLINE: Duration = Duration::from_secs(3);
 struct Entry {
+    #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+    native_timing: Option<Arc<load_state::NativeTiming>>,
     nonce: Uuid,
     capture: pulse_term::session::SessionState,
     deadline: tokio::time::Instant,
@@ -130,6 +132,8 @@ impl TerminalBank {
         let (connect, receiver) = oneshot::channel();
         let (cancel, cancelled) = watch::channel(false);
         let entry = Arc::new(Entry {
+            #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+            native_timing: load_state::NativeTiming::new(binding.generation()),
             nonce,
             capture,
             deadline: tokio::time::Instant::now() + CONNECT_DEADLINE,
@@ -167,7 +171,7 @@ impl TerminalBank {
             ticket: ticket.to_string(),
             generation,
             palette,
-            history: 10_000,
+            history: pulse_term::MAX_RECENT_ROWS,
             ended,
             appearance: Default::default(),
         })
@@ -181,13 +185,26 @@ impl TerminalBank {
         mut cancelled: watch::Receiver<bool>,
     ) {
         let deadline = entry.deadline;
+        #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+        let native_timing = entry.native_timing.clone();
         let work = async move {
             let channel = tokio::time::timeout_at(deadline, receiver)
                 .await
                 .map_err(|_| ())?
                 .map_err(|_| ())?;
             let receipt = delivery
-                .forward(|bytes| channel.send(RawFrame(bytes)).is_ok())
+                .forward(|bytes| {
+                    #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+                    let sequence = native_timing
+                        .as_ref()
+                        .and_then(|timing| timing.sending(&bytes));
+                    let success = channel.send(RawFrame(bytes)).is_ok();
+                    #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+                    if let Some(timing) = &native_timing {
+                        timing.sent(sequence, success);
+                    }
+                    success
+                })
                 .await
                 .map_err(|_| ())?;
             let ended = receipt.boundary.lifecycle == pulse_term::session::Lifecycle::Ended;
@@ -460,10 +477,21 @@ impl TerminalBank {
         .map_err(|_| "workspace.unavailable")?
     }
     fn ack(&self, nonce: Uuid, ticket: Uuid, sequence: u32) -> Result<()> {
-        self.entry(nonce, ticket)?
+        let entry = self.entry(nonce, ticket)?;
+        #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+        let now = entry
+            .native_timing
+            .as_ref()
+            .map(|_| load_state::NativeTiming::now());
+        entry
             .binding
             .acknowledge(sequence)
-            .map_err(|_| "workspace.denied")
+            .map_err(|_| "workspace.denied")?;
+        #[cfg(all(feature = "workspace-load-state-probe", target_os = "linux"))]
+        if let (Some(timing), Some(now)) = (&entry.native_timing, now) {
+            timing.acknowledged(sequence, now);
+        }
+        Ok(())
     }
     fn detach(&self, nonce: Uuid, ticket: Uuid) -> Result<()> {
         let entry = self.retained_entry(nonce, ticket)?;

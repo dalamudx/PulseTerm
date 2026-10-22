@@ -22,7 +22,16 @@ pub(super) fn parse(args: impl IntoIterator<Item = OsString>) -> Option<Vec<Step
             "new-tab" | "focus-tab" => 2,
             "open" if args.get(cursor + prefix + 1)? == OsStr::new("--host") => 3,
             "open" => 2,
-            "split" | "split-pane" => 3,
+            "split" | "split-pane" => {
+                if args
+                    .get(cursor + prefix + 2)
+                    .is_none_or(|arg| matches!(arg.to_str(), Some("." | ";")))
+                {
+                    2
+                } else {
+                    3
+                }
+            }
             "ssh"
                 if args.get(cursor + prefix + 4).is_some_and(|arg| {
                     matches!(

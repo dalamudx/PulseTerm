@@ -1,8 +1,14 @@
 //! Original-page config sources; blocking work owns the shared read credit until exit.
 use super::*;
-use pulse_ssh::config::{
-    ConfigDirectoryReader, ConfigError, ConfigFileSnapshot, ConfigQuery, ResolvedConfig,
-};
+#[cfg(windows)]
+use crate::native_ssh_config_windows::{ConfigDirectoryReader, ConfigFileSnapshot, open_reader};
+#[cfg(unix)]
+use pulse_ssh::config::{ConfigDirectoryReader, ConfigFileSnapshot};
+use pulse_ssh::config::{ConfigError, ConfigQuery, ResolvedConfig};
+#[cfg(unix)]
+fn open_reader(path: &std::path::Path) -> std::result::Result<ConfigDirectoryReader, ConfigError> {
+    ConfigDirectoryReader::open(path)
+}
 use std::sync::Weak;
 
 pub(in super::super) struct ConfigReadRequest {
@@ -56,7 +62,7 @@ impl ProfileReader {
         let owner = self.clone();
         blocking(credit, move || {
             owner.check(&registry, &page)?;
-            let reader = ConfigDirectoryReader::open(&request.directory).map_err(config_error)?;
+            let reader = open_reader(&request.directory).map_err(config_error)?;
             let query = ConfigQuery::new(&request.alias, &request.local_user, None, None)
                 .map_err(config_error)?;
             // Empty backend catalog selects bounded discovery; page callers cannot supply this catalog.
@@ -117,6 +123,6 @@ impl ProfileReader {
 #[path = "product_profiles_config_import.rs"]
 mod imports;
 pub(in super::super) use imports::{ConfigImportCapture, ImportControl};
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_config_tests.rs"]
 mod tests;

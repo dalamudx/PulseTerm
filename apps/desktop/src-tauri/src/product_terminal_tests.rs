@@ -87,6 +87,8 @@ async fn raw_channel_bootstrap_waits_for_explicit_ack_and_connect_is_one_shot() 
     let f = Fixture::new();
     let prepared = f.prepare().await;
     assert!(prepared.palette.contains("\"version\":1"));
+    assert_eq!(prepared.history, pulse_term::MAX_RECENT_ROWS);
+    assert_eq!(serde_json::to_value(&prepared).unwrap()["history"], 2000);
     assert_eq!(f.bank.credit.available_permits(), MAX_VIEWS - 1);
     let ticket = ticket(&prepared.ticket).unwrap();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel(); // Test observation only.

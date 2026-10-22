@@ -16,6 +16,28 @@ v4用户实机回传：Runtime155.0.4283.62后先出现ProcessFailed kind1，再
 
 v5增加ICoreWebView2ProcessFailedEventArgs2的Reason／ExitCode／有界ProcessDescription及每项HRESULT，接口缺失明确报不可用；打印进程类别名、QPC、failureQueued和closing，首错只排队关闭一次。脚本标注版本，宿主日志记录WebView2环境覆盖是否存在，不记录覆盖值，不禁用GPU／沙箱、不自动重试、不放宽测量门槛。新增真实PowerShell脚本替身反例验证采样前退出不进行测量且归档并清理；宿主严格交叉编译、像素／导航核心和页面计数回归通过。本次页面行为未改，无变化的真实Chromium110次矩阵沿用前批，不重复。Windows渲染退出、连接中止和原样本29超时均未修复，v5仅补足实际进程原因证据。
 
+v5／v6 的 Windows 回传确认 Runtime 155.0.4283.62 子进程启动失败：v5 为 `CRASHED / 0xc0000022`，v6 内存页、DOM、WebGL 均为 `LAUNCH_FAILED / 0x28`，并有 Storage Service 拒绝访问。四个事件通道无匹配不排除系统拦截；改用 LocalAppData Temp 后仍失败。Chromium 将 40 定义为沙箱拦截桩初始化错误，这是阶段线索，不等于闭源 Runtime 根因证明，也不与原 WebGL 样本 29 合并定因。
+
+独立 `collect-startup.ps1` 仅启用 Chromium 文件日志，采集有界模块／缓解策略，保持 GPU／沙箱和系统策略不变。首轮实际日志出现 GPU 启动 error 40，同时见 MacType、ESET、部分 ASUS OSD。后轮七份快照无 MacType、仍有 ASUS，ESET 仅见宿主；内存页导航成功，error 40 消失，进程及 Profile 回收确认。这支持注入兼容性关联，不能唯一归因 MacType；模块快照不是完整加载或签名跟踪。
+
+v6 将成功 `NavigateToString` 的 `data:` 文档错判为未就绪；v7 仅在明确内存模式接受固定 HTML 的精确 data／about:blank，继续校验导航 ID、模式重选和来源，不开放其他 data 内容。旧拒绝已复现，导航／像素回归、严格交叉构建、锁定 SDK 摘要及包完整性通过；这些本机检查不替代 Windows 原生执行。诊断启动对照不发键、不产生性能成绩，失败继续归档；脚本权限／日志不可用和清理未确认单独记录。
+
+随后正常回传两轮共 600 正式样本（每目标 200），缺失呈现时间为零，四个 WebView 宿主成功导航并退出 0。环境为 RTX2080Ti／143.998Hz／2560×1440／DPI120，Runtime 155.0.4283.62，诊断关闭：
+
+| 目标 | p50 ms | p95 ms | p99 ms | 最大 ms |
+|---|---:|---:|---:|---:|
+| Windows Terminal | 16.902 | 32.024 | 42.498 | 75.674 |
+| WebView2 DOM | 17.409 | 32.588 | 63.061 | 79.425 |
+| WebView2 WebGL | 18.355 | 32.966 | 54.214 | 63.286 |
+
+全部慢样本保留，独立重算分位数一致。窗口区域不同，WT 经 ConPTY、WebView2 为页面本地回显；两轮未证明 WebGL 优势，也不代表完整产品 p95<16ms 达标。原无标记故障本轮未复现，仍未登记根治。原 ZIP 与复核见 `target/probes/windows-echo-webgl/accepted/windows-normal-two-rounds/`；v6／v7、模块对照及原始失败在同级批次保留。
+
+存储前置的三次原生回传分开登记：v1 只发现 39 项、未执行，退出码未保存，不能算存储失败；v2 真实执行 39 项，37 通过，符号链接夹具错误 1314、持有句柄时目录仍可改名；v3 为目录读取访问补 `FILE_LIST_DIRECTORY`，强化持有时拒绝改名／删除和释放后成功，运行器采用持有的 .NET Process、UTF-8 与明确权限上下文。真实 PowerShell 编排覆盖未知／非零退出、超时和清理失败，不以替身作为原生通过。
+
+v3 管理员回传 39/39（17 项策略＋22 项 Windows）已逐名复核，发现／执行退出 0、无失败／忽略／过滤、夹具已清理；原目录与符号链接回归均通过。它只证明该管理员环境的存储基础，原 v1／v2 失败保留。收据在 `target/probes/windows-storage-kit/accepted/v3/native-elevated/verification.json`，前置包命令为 `mise run windows-storage-kit`，不启动产品或证明普通用户生产链。
+
+后续生产设置／Profile／SQLite、本地 Shell、SSH 和 CLI 已接线；当前状态与原生入口统一见[Windows 生产链](windows-product-core.md)，Linux 完整回显与内存见[性能评估](linux-runtime-performance-review.md)。历史 Unsupported 状态不再代表当前代码，尚未原生验收的范围仍保留。
+
 新增独立`-DiagnoseWebGL`模式，只测WebGL，记录固定input／write／render／焦点／上下文丢失事件与计数；消息只接受同一页面来源、限长与条数，不记录输入正文。原生逐样本QPC与失败时的像素范围、帧数、部分样本同时保留，超时1秒和16像素增量门槛不变。测量中失焦、移动和异常标题单独拒绝，失败自动打包。主机QPC是消息接收时刻，render不是最终呈现，诊断开销不得作正常性能比较。
 
 宿主和采样器全警告为错误交叉编译、像素核心单测、PowerShell真实脚本的替身编排／仅WebGL／失败zip测试、页面110次输入计数／无日志正常模式测试通过；页面测试使用Terminal替身，不是真实渲染验证。实际Windows诊断待用户执行，GPU根因尚未修复。普通产品与根依赖未改，临时构建环境清理及证据见`target/probes/windows-echo-webgl/accepted/diagnostic-kit/verification.json`。

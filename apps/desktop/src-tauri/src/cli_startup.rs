@@ -39,7 +39,8 @@ impl StartupAction {
         let fields: &[&str] = match request.method() {
             "workspace.focus" | "workspace.profiles" => &[],
             "workspace.new-tab" => &["profile"],
-            "workspace.split" => &["profile", "direction"],
+            "workspace.split" if params.contains_key("profile") => &["profile", "direction"],
+            "workspace.split" => &["direction"],
             "workspace.ssh" if params.contains_key("alias") => &["alias"],
             "workspace.ssh" if params.contains_key("authentication") => {
                 &["host", "identity", "authentication"]
@@ -52,9 +53,13 @@ impl StartupAction {
         }
         match request.method() {
             "workspace.new-tab" | "workspace.split" => {
-                let profile = params.get("profile").and_then(Value::as_str).ok_or(Error)?;
-                if pulse_store::profile_default::DefaultProfileSelection::parse(profile).is_none() {
-                    return Err(Error);
+                if let Some(value) = params.get("profile") {
+                    let profile = value.as_str().ok_or(Error)?;
+                    if pulse_store::profile_default::DefaultProfileSelection::parse(profile)
+                        .is_none()
+                    {
+                        return Err(Error);
+                    }
                 }
                 if request.method() == "workspace.split"
                     && !matches!(
@@ -128,7 +133,7 @@ impl StartupAction {
     }
     /// Closed cold-start transport support; never admission or execution authority.
     /// New-tab and SSH require original-page presentation and separate explicit GUI approval.
-    /// Secondary GUI forwarding remains limited to `supports_cold_readonly_transport`.
+    /// Linux secondary GUI forwarding is read-only; Windows forwards no startup actions.
     pub fn supports_cold_transport(&self) -> bool {
         self.supports_cold_readonly_transport()
             || matches!(

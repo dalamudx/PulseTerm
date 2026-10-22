@@ -8,9 +8,9 @@ use pulse_store::{
     vault_password_ingress::PasswordIngress, vault_private_key_ingress::PrivateKeyIngress,
 };
 use serde::Serialize;
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 use std::sync::Arc;
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 use tauri::Manager;
 use tauri::WebviewWindow;
 type Result<T> = std::result::Result<T, &'static str>;
@@ -37,7 +37,7 @@ pub(super) fn workspace_identity_key_available(
     let _ = page(&window, &state, &nonce)?;
     Ok(Availability {
         version: 1,
-        enabled: cfg!(all(unix, feature = "workspace-ssh")),
+        enabled: cfg!(all(any(unix, windows), feature = "workspace-ssh")),
     })
 }
 #[tauri::command]
@@ -47,12 +47,12 @@ pub(super) async fn workspace_identity_key_prepare(
     nonce: String,
     identity: String,
 ) -> Result<Ticket> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, identity);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         let scope = page(&window, &state, &nonce)?;
         let identity = canonical(&identity)?;
@@ -97,12 +97,12 @@ pub(super) async fn workspace_identity_key_submit(
     private_key: PrivateKeyIngress,
     passphrase: Option<PasswordIngress>,
 ) -> Result<Saved> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, ticket, private_key, passphrase);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         let scope = page(&window, &state, &nonce)?;
         let id = canonical(&ticket)?;

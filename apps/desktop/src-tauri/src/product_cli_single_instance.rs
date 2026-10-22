@@ -8,6 +8,9 @@ use tauri::{AppHandle, Manager, Wry, plugin::TauriPlugin};
 pub(super) fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_single_instance::init(|app, args, _cwd| {
         if args.len() != 1 {
+            if !cfg!(target_os = "linux") {
+                return;
+            }
             let accepted = (|| {
                 let action = crate::cli_startup::from_args(
                     args.into_iter().skip(1).map(std::ffi::OsString::from),
@@ -66,10 +69,17 @@ pub(super) fn plugin() -> TauriPlugin<Wry> {
         });
     })
 }
+#[cfg(target_os = "linux")]
 pub(super) fn verify_owner(app: &AppHandle) -> Result<(), &'static str> {
     let name = format!("{}.SingleInstance", app.config().identifier);
     verify_name(&name, std::process::id())
 }
+#[cfg(windows)]
+pub(super) fn verify_owner(app: &AppHandle) -> Result<(), &'static str> {
+    pulse_platform::windows::verify_single_instance_owner(&app.config().identifier)
+        .map_err(|_| "workspace.single_instance_denied")
+}
+#[cfg(target_os = "linux")]
 fn verify_name(name: &str, expected_pid: u32) -> Result<(), &'static str> {
     if expected_pid == 0 {
         return Err("workspace.single_instance_denied");
@@ -97,6 +107,7 @@ fn verify_name(name: &str, expected_pid: u32) -> Result<(), &'static str> {
     }
     Ok(())
 }
+#[cfg(target_os = "linux")]
 #[cfg(test)]
 mod tests {
     use super::*;

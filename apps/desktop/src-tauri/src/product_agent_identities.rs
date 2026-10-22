@@ -263,12 +263,12 @@ pub(super) async fn workspace_agent_identities(
     nonce: String,
     discover: bool,
 ) -> Result<CatalogueDto> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, discover);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -318,12 +318,12 @@ pub(super) async fn workspace_agent_identity_save(
     token: String,
     change: Change,
 ) -> Result<CatalogueDto> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, token, change);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");

@@ -14,6 +14,7 @@ import { InputQueue } from "./input-queue";
 import { parseLayoutReceipt } from "./layout-receipt";
 import { LoadStateProbe } from "./load-state-probe";
 import { parseQueryPaletteData } from "./query-palette";
+import { TerminalOutputTiming } from "./terminal-output-timing";
 import type { TerminalPasteOptions } from "./terminal-surface";
 import {
   type DrawnBoundary,
@@ -238,6 +239,7 @@ export class WorkspaceTerminalConnection {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly rpc: TerminalConnectionRpc;
   private loadProbe: LoadStateProbe | undefined;
+  private outputTiming: TerminalOutputTiming | undefined;
   private readonly generation: bigint;
   private readonly linkNonce: string;
   private readonly aborted = () => this.dispose();
@@ -276,6 +278,7 @@ export class WorkspaceTerminalConnection {
   }
   private receive(wire: ArrayBuffer): void {
     if (this.closed || this.resizing || this.options.signal.aborted) return;
+    const arrivedMs = this.outputTiming?.now();
     try {
       this.checkDeadline();
       if (!(wire instanceof ArrayBuffer))
@@ -304,6 +307,14 @@ export class WorkspaceTerminalConnection {
             failed: (error) => this.fail(error),
           });
           scope.own(this.loadProbe);
+        }
+        if (import.meta.env.VITE_ECHO_TIMING_PROBE === "1") {
+          this.outputTiming = new TerminalOutputTiming();
+          this.outputTiming.bindControl(
+            this.options.element,
+            this.options.signal,
+          );
+          scope.own(this.outputTiming);
         }
         this.stream = new TerminalViewStream(
           scope,
@@ -371,6 +382,15 @@ export class WorkspaceTerminalConnection {
                   this.resolve();
                 }
               }
+              if (boundary.kind === "end" && this.outputTiming) {
+                await invoke("workspace_terminal_load_timings", {
+                  nonce: this.options.nonce,
+                  connection: this.capture.ticket,
+                  timing: JSON.stringify(this.outputTiming.snapshot()),
+                });
+                if (this.closed || signal.aborted)
+                  throw new Error("view.retired");
+              }
               await this.loadProbe?.observe(boundary);
               this.options.observed?.(boundary);
             },
@@ -379,10 +399,11 @@ export class WorkspaceTerminalConnection {
           this.capture.appearance
             ? profileDisplay(this.options.display, this.capture.appearance)
             : this.options.display,
+          this.outputTiming,
         );
       }
       void this.stream
-        .enqueue(wire)
+        .enqueue(wire, arrivedMs)
         .then(async (receipt) => {
           if (receipt?.event.kind !== "ready" || this.resizing) return;
           if (this.ended) {

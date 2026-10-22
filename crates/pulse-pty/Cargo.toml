@@ -10,6 +10,11 @@ portable-pty.workspace = true
 pulse-core.workspace = true
 thiserror.workspace = true
 
+# portable-pty 0.9 logs registry environment values at trace while building a Windows command.
+# Compile those records out even when a caller enables a trace logger (also affects other log targets).
+[target.'cfg(windows)'.dependencies]
+log = { workspace = true, features = ["max_level_debug"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 

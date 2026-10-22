@@ -55,8 +55,41 @@ fn as_shell(kind: pulse_pty::profiles::ShellKind) -> AutomaticShell {
         ShellKind::Fish => AutomaticShell::Fish,
         ShellKind::Sh => AutomaticShell::Sh,
         ShellKind::Pwsh => AutomaticShell::Pwsh,
+        ShellKind::PowerShell => AutomaticShell::PowerShell,
+        ShellKind::Cmd => AutomaticShell::Cmd,
+        ShellKind::Wsl => AutomaticShell::Wsl,
     }
 }
+// Native CLI reads do not replace a GUI editor's default-selection ticket.
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+impl ProfileReader {
+    pub(in super::super) async fn default_selection(
+        self: &Arc<Self>,
+        registry: SessionRegistry,
+        page: Arc<PageLaunchScope>,
+        directory: PathBuf,
+        path: OsString,
+        shell: Option<PathBuf>,
+    ) -> Result<Option<pulse_store::profile_default::DefaultProfileSelection>> {
+        self.check(&registry, &page)?;
+        let credit = self.reserve_list(&registry, &page).await?;
+        let reader = self.clone();
+        tokio::spawn(async move {
+            let (store, _) = reader
+                .prepare(&registry, &page, directory, path, shell, credit.clone())
+                .await?;
+            let snapshot = store
+                .load_default_profile_retaining(credit.clone())
+                .await
+                .map_err(|_| "workspace.unavailable")?;
+            reader.check(&registry, &page)?;
+            Ok(snapshot.selection())
+        })
+        .await
+        .map_err(|_| "workspace.unavailable")?
+    }
+}
+
 impl ProfileReader {
     pub(in super::super) async fn default_read(
         self: &Arc<Self>,
@@ -316,6 +349,6 @@ impl ProfileReader {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_default_tests.rs"]
 mod tests;

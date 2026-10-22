@@ -38,12 +38,12 @@ pub(super) async fn workspace_identity_password_prepare(
     nonce: String,
     identity: String,
 ) -> Result<Ticket> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, identity);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let scope = page(&window, &state, &nonce)?;
         let id = canonical(&identity)?;
@@ -91,12 +91,12 @@ pub(super) async fn workspace_identity_password_submit(
     ticket: String,
     password: PasswordIngress,
 ) -> Result<Saved> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket, password);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let scope = page(&window, &state, &nonce)?;
         let id = canonical(&ticket)?;

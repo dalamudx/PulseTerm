@@ -1,8 +1,8 @@
 //! Runtime-neutral application composition for supervised local terminal sessions.
 #![forbid(unsafe_code)]
 pub mod attachment;
-/// Opt-in Linux local control transport; caller authentication is not effect authorization.
-#[cfg(all(feature = "cli-control", target_os = "linux"))]
+/// Opt-in Linux/Windows local control transport; authentication is not effect authorization.
+#[cfg(all(feature = "cli-control", any(target_os = "linux", windows)))]
 pub mod cli_control;
 /// Trusted runtime scheduling for a registered local PTY; no frontend command surface.
 pub mod local_launch;
@@ -39,7 +39,7 @@ pub mod vault_password_handoff;
 pub mod window_action;
 /// Native-only multiwindow routing and lifecycle; labels never grant page authority.
 pub mod window_directory;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) static VAULT_CRYPTO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// Rust-only current-page Vault operations; no password IPC or SecretRef-use permission.
 pub mod vault_owner;

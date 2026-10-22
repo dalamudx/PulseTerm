@@ -16,6 +16,77 @@ def wait(predicate, tag, seconds=10):
         time.sleep(.05)
 
 
+def _window(app, xdo):
+    try:
+        matches = [item for item in xdo('search', '--onlyvisible', '--pid', app).splitlines()
+                   if xdo('getwindowname', item) == 'PulseTerm · 工作区预览']
+        return matches[0] if len(matches) == 1 else None
+    except subprocess.CalledProcessError:
+        return None
+
+
+def _accessible(app, name, action=None):
+    command = ['target/probes/x11-status', str(app), name]
+    if action:
+        command.append(action)
+    return subprocess.run(command, text=True, capture_output=True, timeout=3).returncode == 0
+
+
+def _close(app, runtime, owned_guis, xdo):
+    xid = wait(lambda: _window(app, xdo), 'window_before_close')
+    xdo('windowactivate', '--sync', xid)
+    xdo('key', '--clearmodifiers', 'alt+F4')
+    def exited():
+        waited, status = os.waitpid(app, os.WNOHANG)
+        if waited:
+            assert os.waitstatus_to_exitcode(status) == 0
+            return True
+        return False
+    wait(exited, 'physical_exit')
+    assert not owned_guis()
+    assert not (runtime / 'control.sock').exists() and not (runtime / 'control.token').exists()
+
+
+def prepare_default(pulse, root, env, runtime, evidence, owned_guis, xdo):
+    # Persist the default through the real GUI; never manufacture a database row.
+    reply = subprocess.run([str(pulse), 'profiles'], env=env, capture_output=True, text=True, timeout=15)
+    assert reply.returncode == 0 and 'sh' in json.loads(reply.stdout)['profiles']
+    app = wait(lambda: (owned_guis() or [None])[0], 'default_gui')
+    assert owned_guis() == [app]
+    xid = wait(lambda: _window(app, xdo), 'default_window')
+    xdo('windowactivate', '--sync', xid)
+    wait(lambda: _accessible(app, '管理', 'focus'), 'default_manager')
+    xdo('key', '--clearmodifiers', 'space')
+    wait(lambda: _accessible(app, '尚未设置默认 Profile。'), 'default_initially_unset')
+    wait(lambda: _accessible(app, '默认 Profile', 'focus'), 'default_selection')
+    xdo("key", "--clearmodifiers", "Home", "End")  # Return reopens the native popup and consumes the next activation.
+    subprocess.run(["/usr/bin/import", "-window", xid, str(evidence / "default-before-save.png")], check=True, timeout=3)
+    assert _accessible(app, '保存默认选择', 'focus')
+    xdo('key', '--clearmodifiers', 'space')
+    try:
+        wait(lambda: _accessible(app, "默认选择已保存"), "default_saved")
+    finally:
+        subprocess.run(["/usr/bin/import", "-window", xid, str(evidence / "default-after-save.png")], check=True, timeout=3)
+    assert not (root / 'unexpected-pty').exists(), 'default_save_started_native'
+    subprocess.run(['/usr/bin/import', '-window', xid, str(evidence / 'default-saved-without-launch.png')], check=True, timeout=3)
+    _close(app, runtime, owned_guis, xdo)
+    (evidence / 'default-prepare-result.json').write_text(json.dumps(dict(actual_gui_save=True, selected='sh', native_starts=0, physical_exit=True, endpoints_drained=True))+'\n')
+
+
+def verify_missing_default(client, root, runtime, evidence, owned_guis, xdo):
+    output, error = client.communicate(timeout=15)
+    (evidence / 'default-unset-client.log').write_text(output + error)
+    assert client.returncode == 1 and not output
+    app = wait(lambda: (owned_guis() or [None])[0], 'default_unset_gui')
+    assert owned_guis() == [app]
+    wait(lambda: _accessible(app, '管理'), 'default_unset_page')
+    assert not (root / 'unexpected-pty').exists(), 'default_unset_fell_back_to_shell'
+    assert not _accessible(app, '为冷分屏创建首个终端？')
+    assert not _accessible(app, '允许 CLI 创建分屏终端？')
+    _close(app, runtime, owned_guis, xdo)
+    (evidence / 'default-unset-result.json').write_text(json.dumps(dict(rejected=True, native_starts=0, no_fallback=True, physical_exit=True, endpoints_drained=True))+'\n')
+
+
 def verify(mode, client, pulse, root, env, runtime, evidence, owned_guis, xdo, identity):
     _, direction, scenario = mode.split('-')
     chain = mode.startswith("chain-")
@@ -24,23 +95,11 @@ def verify(mode, client, pulse, root, env, runtime, evidence, owned_guis, xdo, i
     app = wait(lambda: (owned_guis() or [None])[0], 'gui')
     assert owned_guis() == [app]
 
-    def window():
-        try:
-            matches = [item for item in xdo('search', '--onlyvisible', '--pid', app).splitlines()
-                       if xdo('getwindowname', item) == 'PulseTerm · 工作区预览']
-            return matches[0] if len(matches) == 1 else None
-        except subprocess.CalledProcessError:
-            return None
-
-    xid = wait(window, 'window')
+    xid = wait(lambda: _window(app, xdo), "window")
     xdo('windowactivate', '--sync', xid)
 
     def accessible(name, action=None):
-        command = ['target/probes/x11-status', str(app), name]
-        if action:
-            command.append(action)
-        result = subprocess.run(command, text=True, capture_output=True, timeout=3)
-        return result.returncode == 0
+        return _accessible(app, name, action)
 
     def consent(title):
         wait(lambda: accessible(title), title)

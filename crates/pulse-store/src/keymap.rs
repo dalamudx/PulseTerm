@@ -255,6 +255,15 @@ fn validate_binding(binding: &KeymapBinding) -> Result<ParsedBinding, KeymapErro
     Ok((sequence, when))
 }
 impl KeymapPatch {
+    /// Validate and encode a bounded canonical document without granting file or execution access.
+    pub fn to_toml(&self) -> Result<String, KeymapError> {
+        self.resolve()?;
+        let text = toml::to_string(self).map_err(|_| KeymapError::Document)?;
+        if text.len() > KEYMAP_TEXT_LIMIT {
+            return Err(KeymapError::Size);
+        }
+        Ok(text)
+    }
     /// Parse and resolve the complete bounded source, rejecting invalid merges.
     pub fn parse(text: &str) -> Result<Self, KeymapError> {
         if text.len() > KEYMAP_TEXT_LIMIT {

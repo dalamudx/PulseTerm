@@ -1,4 +1,4 @@
-import type { ProfileKind } from "./workspace-profiles";
+import { isProfileKind, type ProfileKind } from "./workspace-profiles";
 import { isWorkspaceNonce } from "./workspace-readiness";
 export function decodeWorkspaceSessions(value: unknown): readonly string[] {
   if (!Array.isArray(value) || value.length > 64)
@@ -22,10 +22,7 @@ export async function openWorkspaceProfile(
   kind: ProfileKind,
   send: (nonce: string, kind: ProfileKind) => Promise<unknown>,
 ): Promise<string> {
-  if (
-    !isWorkspaceNonce(nonce) ||
-    !["bash", "zsh", "fish", "sh", "pwsh"].includes(kind)
-  )
+  if (!isWorkspaceNonce(nonce) || !isProfileKind(kind))
     throw new Error("workspace.denied");
   const id = decodeWorkspaceSessions([await send(nonce, kind)])[0];
   if (!id) throw new Error("workspace.sessions_invalid");

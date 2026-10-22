@@ -1,12 +1,15 @@
-//! Linux CLI with bounded warm actions and separately authorized cold startup.
-use std::{ffi::OsStr, path::PathBuf, process::ExitCode};
-#[cfg(any(target_os = "linux", test))]
+//! Bounded Linux/Windows CLI; cold actions retain original-page admission and explicit GUI approval.
+use std::{ffi::OsStr, process::ExitCode};
 mod cli_profiles;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", windows, test))]
 mod cli_windows;
 #[cfg(target_os = "linux")]
 mod pulse_cold;
+#[cfg(windows)]
+#[path = "pulse_warm_windows.rs"]
+mod pulse_cold;
 
+mod cli_information;
 #[cfg(test)]
 mod pulse_agent_interactive_tests;
 mod pulse_chain;
@@ -155,7 +158,7 @@ fn base_request(args: Vec<std::ffi::OsString>) -> Option<(&'static str, serde_js
         .first()
         .is_some_and(|arg| arg == OsStr::new("split") || arg == OsStr::new("split-pane"))
     {
-        if args.len() != 3 {
+        if !(2..=3).contains(&args.len()) {
             return None;
         }
         let direction = match args[1].to_str()? {
@@ -163,14 +166,15 @@ fn base_request(args: Vec<std::ffi::OsString>) -> Option<(&'static str, serde_js
             "-h" => "column",
             _ => return None,
         };
-        let profile = args[2].to_str()?;
-        if !cli_profiles::valid(profile) {
-            return None;
+        let mut params = serde_json::json!({"direction":direction});
+        if let Some(value) = args.get(2) {
+            let profile = value.to_str()?;
+            if !cli_profiles::valid(profile) {
+                return None;
+            }
+            params["profile"] = serde_json::Value::String(profile.to_owned());
         }
-        Some((
-            "workspace.split",
-            serde_json::json!({"profile":profile,"direction":direction}),
-        ))
+        Some(("workspace.split", params))
     } else if args
         .first()
         .is_some_and(|arg| arg == OsStr::new("new-tab") || arg == OsStr::new("open"))
@@ -202,7 +206,7 @@ fn session(value: &serde_json::Value) -> Option<String> {
     }
     Some(id.to_owned())
 }
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", windows, test))]
 fn selected(value: &serde_json::Value, expected: &str) -> bool {
     let Some(object) = value.as_object() else {
         return false;
@@ -215,7 +219,7 @@ fn selected(value: &serde_json::Value, expected: &str) -> bool {
         && object.get("session").and_then(serde_json::Value::as_str) == Some(expected)
         && session(&serde_json::json!({"session":expected})).is_some()
 }
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", windows, test))]
 fn receipt(method: &str, params: &serde_json::Value, value: serde_json::Value) -> Option<String> {
     match method {
         "workspace.focus" if value == serde_json::json!({"focusRequested":true}) => {
@@ -256,19 +260,21 @@ fn receipt(method: &str, params: &serde_json::Value, value: serde_json::Value) -
 }
 #[tokio::main]
 async fn main() -> ExitCode {
+    let args: Vec<_> = std::env::args_os().skip(1).take(65).collect();
+    if let Some(text) = cli_information::output(&args) {
+        print!("{text}");
+        return ExitCode::SUCCESS;
+    }
     // Validate every step before touching endpoints, spawning a window, or authenticating.
-    let Some(steps) = pulse_chain::parse(std::env::args_os().skip(1)) else {
+    let Some(steps) = pulse_chain::parse(args) else {
         eprintln!(
-            "usage: pulse [-w <window-label>] <action> [ . | ';' <action> ] (up to 8 actions); actions: windows, focus, profiles, new-window (running GUI), focus-tab <id>, new-tab|open <profile>, open --host <saved-entry-name>, split|split-pane <-v|-h> <profile>, ssh <saved-host-id> --identity <saved-identity-id> [--interactive|--key-interactive|--agent-interactive|--password-interactive]"
+            "pulse: invalid or unavailable action; run 'pulse --help' or 'pulse --help=zh-CN'"
         );
         return ExitCode::from(2);
     };
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     {
-        let Some(directory) = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .map(|root| root.join("pulseterm-workspace-cli"))
-        else {
+        let Ok(directory) = pulseterm_desktop::cli_paths::directory() else {
             eprintln!("pulse: no private runtime directory");
             return ExitCode::FAILURE;
         };
@@ -303,9 +309,9 @@ async fn main() -> ExitCode {
         }
         ExitCode::SUCCESS
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
-        let _ = (steps, PathBuf::new());
+        let _ = steps;
         eprintln!("pulse: CLI is not available on this platform");
         ExitCode::FAILURE
     }
@@ -314,6 +320,27 @@ async fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn both_help_languages_use_examples_accepted_by_the_actual_chain_parser() {
+        for flag in ["--help", "--help=zh-CN"] {
+            let Some(text) = cli_information::output(&[flag.into()]) else {
+                panic!("fixture.help_missing")
+            };
+            let mut examples = 0;
+            for line in text
+                .lines()
+                .filter_map(|line| line.strip_prefix("  $ pulse "))
+            {
+                assert!(
+                    pulse_chain::parse(line.split_whitespace().map(std::ffi::OsString::from))
+                        .is_some()
+                );
+                examples += 1;
+            }
+            assert_eq!(examples, 3);
+        }
+    }
     #[test]
     fn only_exact_closed_commands_are_accepted() {
         for (input, expected) in [
@@ -375,10 +402,19 @@ mod tests {
                 args["direction"],
                 if direction == "-v" { "row" } else { "column" }
             );
+            let (_, default_args) = request(
+                ["split", direction]
+                    .into_iter()
+                    .map(std::ffi::OsString::from),
+            )
+            .ok_or("missing default split")?;
+            assert_eq!(
+                default_args,
+                serde_json::json!({"direction":if direction == "-v" {"row"} else {"column"}})
+            );
         }
         for input in [
             vec!["split"],
-            vec!["split", "-v"],
             vec!["split", "-x", "sh"],
             vec!["split", "-v", "/bin/sh"],
             vec!["split", "-v", "sh", "--env=PATH=x"],
@@ -475,7 +511,6 @@ mod tests {
             vec!["open", "SH"],
             vec!["open", "sh\ncmd"],
             vec!["open", "sh;focus"],
-            vec!["split-pane", "-v"],
             vec!["split-pane", "-v", "/bin/sh"],
             vec!["split-pane", "-x", "sh"],
             vec!["split-pane", "-h", "sh", "--login"],

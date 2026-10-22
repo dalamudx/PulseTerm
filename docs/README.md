@@ -2,11 +2,13 @@
 
 > 产品名 **PulseTerm**，命令行入口是 `pulseterm`（可选别名 `pulse`）。
 > 技术栈：Rust（tokio）+ Tauri 2 + React 19 / TypeScript + xterm.js。
+> 当前显式 `workspace-cli` 开发构建产物名为 `pulse`／`pulse.exe`；正式安装的命令名和别名仍待发行验收。
 
 ## 阅读顺序
 
 | 文档 | 面向 | 内容 |
 |---|---|---|
+| [user/cli.md](./user/cli.md) · [English](./user/cli.en.md) | 使用者 | 当前 CLI 命令、冷暖启动、窗口选择、批准、失败处理及离线帮助 |
 | [product/features.md](./product/features.md) | 全员 | 功能规格（带编号和阶段）、非功能指标、平台支持、不做的事项、里程碑 |
 | [architecture/overview.md](./architecture/overview.md) | 全员 | 设计原则、进程模型、分层、核心概念、关键流程、IPC 规范 |
 | [architecture/backend.md](./architecture/backend.md) | Rust 开发 | Cargo workspace、会话与传输、终端和桌面的数据管线、Vault 存储、安全、Capability 层、CLI 通信 |
@@ -17,7 +19,11 @@
 | [architecture/terminal-layout-authorization.md](./architecture/terminal-layout-authorization.md) | 终端开发 | 布局专用 resize 授权、输入确认门禁、原生 ACK 与取消后的实际 I/O 信用 |
 | [architecture/decisions.md](./architecture/decisions.md) | 全员 | 架构决策记录（ADR）、待决事项、技术验证清单（S1–S21） |
 | [development/plan.md](./development/plan.md) | 全员 | v1.0 开发计划：时间线、分工、关键路径、完成标准及动态交付清单／当前进度 |
+| [development/next-stage-plan.md](./development/next-stage-plan.md) | 全员 | 已批准的近期实施顺序、跨平台补齐、Alpha 退出条件及后续 P1 |
 | [development/guide.md](./development/guide.md) | 开发 | 环境、构建、测试、代码规范、CI、发布、合规红线、安全要求、开源协作 |
+| [development/windows-product-core.md](./development/windows-product-core.md) | 平台开发／验收 | 当前 Windows 接线、普通用户退出条件、原生 CI 与本地证据索引 |
+| [development/linux-runtime-performance-review.md](./development/linux-runtime-performance-review.md) | 性能开发 | 完整产品回显／内存、候选结论、测量口径和证据索引 |
+| [development/dependency-audit.md](./development/dependency-audit.md) | 开发／发行 | 当前维护链、许可阻塞、审计执行与独立批次证据 |
 
 当前已实现范围及验证结果见 [development/validation.md](./development/validation.md)，原生依赖门禁见 [development/dependency-review.md](./development/dependency-review.md)。
 

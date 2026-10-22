@@ -100,6 +100,28 @@ impl<'a> AtomicFile<'a> {
         self.validate_lock(&lock)?;
         Ok(snapshot)
     }
+    /// Confirm the exact original image and caller authorization under the cooperative lock.
+    /// This is a point-in-time check, not a lease against uncooperative external editors.
+    pub fn confirm_current_authorized(
+        &self,
+        expected: &FileSnapshot,
+        authorize: impl Fn() -> bool,
+    ) -> Result<()> {
+        let directory = self.directory.chain.last().ok_or(Error::Location)?.identity;
+        if !expected.belongs_to(directory, &self.name, self.limit) {
+            return Err(Error::Location);
+        }
+        let lock = self.lock()?;
+        if self.capture()? != *expected {
+            return Err(Error::Conflict);
+        }
+        if !authorized(&authorize) {
+            return Err(Error::Revoked);
+        }
+        self.validate_lock(&lock)?;
+        Ok(())
+    }
+
     fn stage(&self, data: &[u8]) -> Result<PrivateFile<'a>> {
         for _ in 0..3 {
             let mut random = [0u8; 16];

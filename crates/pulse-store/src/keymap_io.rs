@@ -5,6 +5,49 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tokio::{runtime::Handle, sync::oneshot, task::JoinHandle};
+/// Trusted native file adapter. Implementations retain their own private handles and exact CAS.
+/// This is not a serialized interface or an execution/page authorization grant.
+pub trait KeymapBackend: Send + Sync + 'static {
+    /// Opaque exact source image; no Debug/serde bound permits accidental content logging.
+    type Snapshot: Clone + Send + Sync + 'static;
+    /// Read and validate the bounded complete document.
+    fn load(&self) -> Result<Self::Snapshot, KeymapFileError>;
+    /// Confirm the original image and caller authority under the cooperating lock.
+    fn confirm_current_authorized(
+        &self,
+        expected: &Self::Snapshot,
+        authorize: impl Fn() -> bool,
+    ) -> Result<(), KeymapFileError>;
+    /// Apply one typed edit with CAS and commit-boundary authorization checks.
+    fn save_authorized(
+        &self,
+        expected: &Self::Snapshot,
+        mutation: KeymapMutation,
+        authorize: impl Fn() -> bool,
+    ) -> Result<Self::Snapshot, KeymapFileError>;
+}
+impl KeymapBackend for KeymapFile {
+    type Snapshot = KeymapSnapshot;
+    fn load(&self) -> Result<KeymapSnapshot, KeymapFileError> {
+        self.load()
+    }
+    fn confirm_current_authorized(
+        &self,
+        expected: &KeymapSnapshot,
+        authorize: impl Fn() -> bool,
+    ) -> Result<(), KeymapFileError> {
+        self.confirm_current_authorized(expected, authorize)
+    }
+    fn save_authorized(
+        &self,
+        expected: &KeymapSnapshot,
+        mutation: KeymapMutation,
+        authorize: impl Fn() -> bool,
+    ) -> Result<KeymapSnapshot, KeymapFileError> {
+        self.save_authorized(expected, mutation, authorize)
+    }
+}
+
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 struct Quota;
 impl Quota {
@@ -36,24 +79,23 @@ pub enum KeymapIoError {
     #[error(transparent)]
     File(#[from] KeymapFileError),
 }
-struct Shared {
-    file: KeymapFile,
+struct Shared<B: KeymapBackend> {
+    file: B,
     runtime: Handle,
     closed: AtomicBool,
 }
 /// Non-Clone owner of an already-opened backend file and explicit application runtime.
 /// Does not discover paths, grant page permission, or abort active native operations on close.
-pub struct KeymapIoOwner {
-    shared: Arc<Shared>,
+pub struct KeymapIoOwner<B: KeymapBackend = KeymapFile> {
+    shared: Arc<Shared<B>>,
 }
 /// Weak backend-only handle; cannot retain or resurrect the owner.
-#[derive(Clone)]
-pub struct KeymapIoHandle {
-    shared: Weak<Shared>,
+pub struct KeymapIoHandle<B: KeymapBackend = KeymapFile> {
+    shared: Weak<Shared<B>>,
 }
-impl KeymapIoOwner {
+impl<B: KeymapBackend> KeymapIoOwner<B> {
     /// Bind a file opened on supervised blocking work; no implicit Tokio context is required.
-    pub fn new(file: KeymapFile, runtime: Handle) -> Self {
+    pub fn new(file: B, runtime: Handle) -> Self {
         Self {
             shared: Arc::new(Shared {
                 file,
@@ -63,7 +105,7 @@ impl KeymapIoOwner {
         }
     }
     /// Weak backend handle, never an IPC authorization token.
-    pub fn handle(&self) -> KeymapIoHandle {
+    pub fn handle(&self) -> KeymapIoHandle<B> {
         KeymapIoHandle {
             shared: Arc::downgrade(&self.shared),
         }
@@ -73,16 +115,16 @@ impl KeymapIoOwner {
         self.shared.closed.store(true, Ordering::Release);
     }
 }
-impl Drop for KeymapIoOwner {
+impl<B: KeymapBackend> Drop for KeymapIoOwner<B> {
     fn drop(&mut self) {
         self.close();
     }
 }
 /// Single-use receipt. Dropping a wait suppresses delivery, never releases active native quota.
-pub struct KeymapIoRequest {
-    receiver: oneshot::Receiver<Result<KeymapSnapshot, KeymapIoError>>,
+pub struct KeymapIoRequest<B: KeymapBackend = KeymapFile> {
+    receiver: oneshot::Receiver<Result<B::Snapshot, KeymapIoError>>,
     task: JoinHandle<()>,
-    shared: Weak<Shared>,
+    shared: Weak<Shared<B>>,
 }
 /// Join observation only. Dropping it detaches the worker, not its reservation.
 pub struct CancelledKeymapIo {
@@ -94,9 +136,9 @@ impl CancelledKeymapIo {
         self.task.await.map_err(|_| KeymapIoError::Worker)
     }
 }
-impl KeymapIoRequest {
+impl<B: KeymapBackend> KeymapIoRequest<B> {
     /// Deliver only after closure exit and original-owner liveness validation.
-    pub async fn ready(self) -> Result<KeymapSnapshot, KeymapIoError> {
+    pub async fn ready(self) -> Result<B::Snapshot, KeymapIoError> {
         let result = self.receiver.await;
         self.task.await.map_err(|_| KeymapIoError::Worker)?;
         let state = self.shared.upgrade().ok_or(KeymapIoError::Closed)?;
@@ -111,7 +153,7 @@ impl KeymapIoRequest {
         CancelledKeymapIo { task: self.task }
     }
 }
-impl KeymapIoHandle {
+impl<B: KeymapBackend> KeymapIoHandle<B> {
     /// Identity only, not a permission or proof of source freshness.
     pub fn same_source(&self, other: &Self) -> bool {
         Weak::ptr_eq(&self.shared, &other.shared)
@@ -123,24 +165,24 @@ impl KeymapIoHandle {
             .is_some_and(|state| !state.closed.load(Ordering::Acquire))
     }
     /// Load using an explicit runtime; invalid existing files do not become defaults.
-    pub fn begin_load(&self) -> Result<KeymapIoRequest, KeymapIoError> {
+    pub fn begin_load(&self) -> Result<KeymapIoRequest<B>, KeymapIoError> {
         self.begin_load_retaining(())
     }
     /// Keep a trusted caller's resource guard in the blocking closure until actual exit.
     pub fn begin_load_retaining<G: Send + 'static>(
         &self,
         guard: G,
-    ) -> Result<KeymapIoRequest, KeymapIoError> {
+    ) -> Result<KeymapIoRequest<B>, KeymapIoError> {
         dispatch(self, guard, |state, _| Ok(state.file.load()?))
     }
     /// Jointly check a captured file image and trusted context inside the native file lock.
     /// Returns the same captured snapshot after actual exit; never a page or Capability grant.
     pub fn begin_confirm_retaining<G, F>(
         &self,
-        expected: KeymapSnapshot,
+        expected: B::Snapshot,
         authorize: F,
         guard: G,
-    ) -> Result<KeymapIoRequest, KeymapIoError>
+    ) -> Result<KeymapIoRequest<B>, KeymapIoError>
     where
         G: Send + 'static,
         F: Fn() -> bool + Send + 'static,
@@ -157,11 +199,11 @@ impl KeymapIoHandle {
     /// Authorization is backend-only and rechecked before install; a committed write may lose its receipt.
     pub fn begin_save_retaining<G, F>(
         &self,
-        expected: KeymapSnapshot,
+        expected: B::Snapshot,
         mutation: KeymapMutation,
         authorize: F,
         guard: G,
-    ) -> Result<KeymapIoRequest, KeymapIoError>
+    ) -> Result<KeymapIoRequest<B>, KeymapIoError>
     where
         G: Send + 'static,
         F: Fn() -> bool + Send + 'static,
@@ -173,15 +215,15 @@ impl KeymapIoHandle {
         })
     }
 }
-type Sender = oneshot::Sender<Result<KeymapSnapshot, KeymapIoError>>;
-fn dispatch<G, F>(
-    handle: &KeymapIoHandle,
+type Sender<B> = oneshot::Sender<Result<<B as KeymapBackend>::Snapshot, KeymapIoError>>;
+fn dispatch<G, F, B: KeymapBackend>(
+    handle: &KeymapIoHandle<B>,
     guard: G,
     operation: F,
-) -> Result<KeymapIoRequest, KeymapIoError>
+) -> Result<KeymapIoRequest<B>, KeymapIoError>
 where
     G: Send + 'static,
-    F: FnOnce(&Shared, &Sender) -> Result<KeymapSnapshot, KeymapIoError> + Send + 'static,
+    F: FnOnce(&Shared<B>, &Sender<B>) -> Result<B::Snapshot, KeymapIoError> + Send + 'static,
 {
     let state = handle.shared.upgrade().ok_or(KeymapIoError::Closed)?;
     if state.closed.load(Ordering::Acquire) {
@@ -209,3 +251,11 @@ where
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 #[path = "keymap_io_tests.rs"]
 mod tests;
+
+impl<B: KeymapBackend> Clone for KeymapIoHandle<B> {
+    fn clone(&self) -> Self {
+        Self {
+            shared: self.shared.clone(),
+        }
+    }
+}

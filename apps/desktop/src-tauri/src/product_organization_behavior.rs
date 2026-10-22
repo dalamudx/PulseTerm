@@ -37,12 +37,12 @@ pub(super) async fn workspace_organization_behavior(
     target: Target,
     change: Option<Change>,
 ) -> Result<serde_json::Value, &'static str> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, target, change);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");

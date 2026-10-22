@@ -44,6 +44,9 @@ fn kind(shell: AutomaticShell) -> pulse_pty::profiles::ShellKind {
         AutomaticShell::Fish => ShellKind::Fish,
         AutomaticShell::Sh => ShellKind::Sh,
         AutomaticShell::Pwsh => ShellKind::Pwsh,
+        AutomaticShell::PowerShell => ShellKind::PowerShell,
+        AutomaticShell::Cmd => ShellKind::Cmd,
+        AutomaticShell::Wsl => ShellKind::Wsl,
     }
 }
 fn options(config: &ProfileConfig) -> pulse_pty::profiles::AutoProfileLaunch {

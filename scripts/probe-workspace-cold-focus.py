@@ -15,6 +15,8 @@ import time
 assert ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) == 0
 cold_action = sys.argv[1] if len(sys.argv) == 2 else "focus"
 assert len(sys.argv) <= 2 and (cold_action in {"focus", "profiles", "new-tab-cancel", "new-tab-disconnect", "new-tab-refresh", "new-tab-approve", "open-cancel", "open-disconnect", "open-refresh", "open-approve", "concurrent-ff", "concurrent-pp", "concurrent-fp", "sensitive-cancel", "sensitive-disconnect", "sensitive-refresh", "sensitive-approve", "chain-syntax", "multiwindow"} or cold_action in {f"{kind}-{direction}-{scenario}" for kind in ["split", "chain"] for direction in ["row", "column"] for scenario in ["cancel", "partial", "disconnect", "refresh", "approve"]})
+default_split = os.environ.get("PULSE_CLI_PROBE_SPLIT_DEFAULT")
+assert default_split is None or (default_split == "saved" and cold_action.startswith(("split-", "chain-"))) or (default_split == "unset" and cold_action.startswith("split-")), "cold.invalid_default_split_mode"
 evidence_prefix = f"cli-cold-{cold_action}"
 
 def profiles_receipt(text):
@@ -27,21 +29,26 @@ def profiles_receipt(text):
     assert set(profiles) <= {"bash", "zsh", "fish", "sh", "pwsh"}
     return profiles
 
+source = Path(os.environ.get("PULSE_CLI_PROBE_BIN_DIR", "target/debug")).resolve(strict=True)
+assert all((source / name).is_file() for name in ["pulse", "pulseterm-workspace"]), "cold.fixture_missing_binary"
+evidence = Path("target/probes")
+run_tag = os.environ.get("PULSE_CLI_PROBE_RUN")
+if run_tag is not None:
+    assert 0 < len(run_tag) <= 80 and run_tag not in {".", ".."} and all(c.isascii() and (c.isalnum() or c in "._-") for c in run_tag), "cold.invalid_run_tag"
+    evidence = evidence / "windows-cli" / run_tag / cold_action
+evidence.mkdir(parents=True, exist_ok=run_tag is None)
 root = Path(tempfile.mkdtemp(prefix="c.", dir=os.environ["TMPDIR"]))
 assert root.is_relative_to(Path("/data/temp"))
 root.chmod(0o700)
 # Cargo debug ELF names hard-link its deps artifact. Exercise the exact same
 # compiled production binaries in an install-like private, single-link layout;
 # do not relax the launcher's rejection or use a alternate mock executable.
-source = Path("target/debug").resolve()
 bundle = root / "bundle"
 bundle.mkdir(mode=0o700)
 for name in ["pulse", "pulseterm-workspace"]:
     shutil.copy2(source / name, bundle / name)
 pulse = bundle / "pulse"
 gui = bundle / "pulseterm-workspace"
-evidence = Path("target/probes")
-evidence.mkdir(parents=True, exist_ok=True)
 env = os.environ.copy()
 for name, directory in [("HOME", "home"), ("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_CACHE_HOME", "cache"), ("XDG_RUNTIME_DIR", "runtime")]:
     path = root / directory
@@ -83,6 +90,13 @@ def identity(path):
     stat = path.lstat()
     return stat.st_dev, stat.st_ino, stat.st_uid, stat.st_mode, stat.st_nlink
 
+def interrupted(number, _frame):
+    raise SystemExit(128 + number)
+
+
+signal.signal(signal.SIGTERM, interrupted)
+
+
 try:
     assert not owned_guis() and not runtime.exists()
     decoy = subprocess.Popen(["/usr/bin/xmessage", "-title", "PulseTerm cold focus decoy", "isolated observer"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -114,11 +128,18 @@ try:
     if cold_action.startswith(("split-", "chain-")):
         import runpy
         controller = runpy.run_path("scripts/probe-workspace-cold-split.py")
+        if default_split == "saved":
+            controller["prepare_default"](pulse, root, env, runtime, evidence, owned_guis, xdo)
         _, direction, scenario = cold_action.split("-")
         arguments = ["new-tab", "sh", ".", "split", "-v" if direction == "row" else "-h", "sh", ";", "profiles"] if cold_action.startswith("chain-") else ["split", "-v" if direction == "row" else "-h", "sh"]
+        if default_split is not None:
+            arguments.pop(5 if cold_action.startswith("chain-") else -1)  # Resolve the saved default at the product boundary.
         client = subprocess.Popen([str(pulse), *arguments], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
-            controller["verify"](cold_action, client, pulse, root, env, runtime, evidence, owned_guis, xdo, identity)
+            if default_split == "unset":
+                controller["verify_missing_default"](client, root, runtime, evidence, owned_guis, xdo)
+            else:
+                controller["verify"](cold_action, client, pulse, root, env, runtime, evidence, owned_guis, xdo, identity)
         except Exception:
             for owner in owned_guis():
                 try:
@@ -134,7 +155,7 @@ try:
             else:
                 (evidence / f"{evidence_prefix}-client.log").write_text("client still waiting at failure observation\n")
             raise
-        print(f"workspace.cli_cold_{cold_action}_two_explicit_consents_bound_target_independent_pty_refresh_native_exit_confirmed")
+        print("workspace.cli_default_unset_no_fallback_no_pty_native_exit_confirmed" if default_split == "unset" else f"workspace.cli_cold_{cold_action}_two_explicit_consents_bound_target_independent_pty_refresh_native_exit_confirmed")
         sys.exit(0)
     if cold_action.startswith("sensitive-"):
         import runpy

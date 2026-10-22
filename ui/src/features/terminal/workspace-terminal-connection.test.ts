@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { afterEach, expect, it, vi } from "vitest";
 import { GenerationViewHost } from "./view-host";
 import {
   prepareWorkspaceTerminal,
@@ -7,6 +8,12 @@ import {
   type TerminalConnectionRpc,
   TerminalLayoutChanged,
 } from "./workspace-terminal-connection";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: vi.fn() }));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.mocked(invoke).mockReset();
+});
 
 const wires = readFileSync(
   new URL(
@@ -95,7 +102,7 @@ function fixture() {
   const options: TerminalConnectionOptions = {
     nonce: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     session: "1",
-    element: {} as HTMLElement,
+    element: new EventTarget() as HTMLElement,
     host,
     signal: abort.signal,
     failed: vi.fn(),
@@ -120,6 +127,60 @@ function fixture() {
     receive: (wire: ArrayBuffer) => receive(wire),
   };
 }
+it("only the explicit timing bundle exports once at EOF under the original page and connection", async () => {
+  vi.stubEnv("VITE_ECHO_TIMING_PROBE", "1");
+  vi.mocked(invoke).mockResolvedValue(undefined);
+  const f = fixture();
+  const c = await prepareWorkspaceTerminal(f.options);
+  for (let i = 0; i < 3; i++) f.send(i);
+  await c.ready;
+  expect(invoke).not.toHaveBeenCalled();
+  f.send(3);
+  const eof = frame(3);
+  new Uint8Array(eof)[7] = 7;
+  new DataView(eof).setUint32(2, 4, true);
+  f.receive(eof);
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+  const [command, args] = vi.mocked(invoke).mock.calls[0] ?? [];
+  expect(command).toBe("workspace_terminal_load_timings");
+  expect(args).toMatchObject({
+    nonce: f.options.nonce,
+    connection: f.meta.ticket,
+  });
+  expect(
+    JSON.parse(String((args as Record<string, unknown>).timing)),
+  ).toMatchObject({
+    schemaVersion: 1,
+    overflow: false,
+  });
+  await vi.waitFor(() =>
+    expect(f.rpc.acknowledge).toHaveBeenCalledWith(
+      f.options.nonce,
+      f.meta.ticket,
+      4,
+    ),
+  );
+  c.dispose();
+});
+it("ordinary builds and retired timing generations never publish diagnostics", async () => {
+  for (const active of [false, true]) {
+    vi.stubEnv("VITE_ECHO_TIMING_PROBE", active ? "1" : "0");
+    const f = fixture();
+    const c = await prepareWorkspaceTerminal(f.options);
+    for (let i = 0; i < 3; i++) f.send(i);
+    await c.ready;
+    f.send(3);
+    if (active) c.dispose();
+    const eof = frame(3);
+    new Uint8Array(eof)[7] = 7;
+    new DataView(eof).setUint32(2, 4, true);
+    f.receive(eof);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(invoke).not.toHaveBeenCalled();
+    c.dispose();
+  }
+});
+
 it("authorized Raw Begin uses sparse Profile overrides and retains clipboard settings", async () => {
   const f = fixture();
   const appearance = {

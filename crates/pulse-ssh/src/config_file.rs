@@ -11,7 +11,7 @@ const OPEN: OFlags = OFlags::CLOEXEC
     .union(OFlags::NOFOLLOW)
     .union(OFlags::NONBLOCK)
     .union(OFlags::RDONLY);
-fn directory(path: &Path) -> Result<File, ConfigError> {
+pub(super) fn directory(path: &Path) -> Result<File, ConfigError> {
     if !path.is_absolute() {
         return Err(ConfigError::SourceUnavailable);
     }
@@ -38,13 +38,13 @@ fn directory(path: &Path) -> Result<File, ConfigError> {
     }
     Ok(current)
 }
-fn private_directory(metadata: &Metadata) -> bool {
+pub(super) fn private_directory(metadata: &Metadata) -> bool {
     metadata.is_dir()
         && metadata.uid() == rustix::process::geteuid().as_raw()
         && metadata.mode() & 0o077 == 0
         && metadata.mode() & 0o500 == 0o500
 }
-fn regular(metadata: &Metadata) -> bool {
+pub(super) fn regular(metadata: &Metadata) -> bool {
     metadata.is_file()
         && metadata.uid() == rustix::process::geteuid().as_raw()
         && metadata.mode() & 0o022 == 0
@@ -52,7 +52,7 @@ fn regular(metadata: &Metadata) -> bool {
         && metadata.nlink() == 1
         && metadata.len() <= MAX_SOURCE as u64
 }
-fn stamp(metadata: &Metadata) -> (u64, u64, u64, i64, i64, i64, i64) {
+pub(super) fn stamp(metadata: &Metadata) -> (u64, u64, u64, i64, i64, i64, i64) {
     (
         metadata.dev(),
         metadata.ino(),
@@ -110,8 +110,6 @@ pub(super) fn load(
     }
     ConfigBundle::parse(&bytes, sources)
 }
-#[path = "config_source.rs"]
-pub(super) mod sources;
 #[cfg(test)]
 #[path = "config_file_tests.rs"]
 mod tests;

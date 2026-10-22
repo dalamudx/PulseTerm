@@ -1,7 +1,10 @@
-import type { ProfileKind } from "./workspace-profiles";
+import {
+  isProfileKind,
+  PROFILE_KINDS,
+  type ProfileKind,
+} from "./workspace-profiles";
 import { isWorkspaceNonce } from "./workspace-readiness";
 
-const KINDS = new Set(["bash", "zsh", "fish", "sh", "pwsh"]);
 export type LifecycleAction = "delete" | "restore";
 export type LifecycleOffer = Readonly<{
   ticket: string;
@@ -22,8 +25,8 @@ export interface ProfileLifecycleNative {
 export function decodeDeletedProfiles(value: unknown): readonly ProfileKind[] {
   if (
     !Array.isArray(value) ||
-    value.length > 5 ||
-    value.some((v) => typeof v !== "string" || !KINDS.has(v)) ||
+    value.length > PROFILE_KINDS.length ||
+    value.some((v) => !isProfileKind(v)) ||
     new Set(value).size !== value.length
   )
     throw Error("workspace.profiles_invalid");
@@ -38,7 +41,7 @@ export function decodeLifecycleOffer(value: unknown): LifecycleOffer {
     typeof v.ticket !== "string" ||
     !isWorkspaceNonce(v.ticket) ||
     typeof v.shell !== "string" ||
-    !KINDS.has(v.shell) ||
+    !isProfileKind(v.shell) ||
     (v.action !== "delete" && v.action !== "restore") ||
     typeof v.isDefault !== "boolean"
   )

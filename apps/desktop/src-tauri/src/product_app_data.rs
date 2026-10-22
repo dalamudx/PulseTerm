@@ -1,12 +1,29 @@
-//! Primary setup only: prepare OS-selected private storage before WebKit creates it.
+//! Prepare OS-selected private storage before the native WebView creates it.
 //! No page path, SQLite open, permission repair, or asynchronous cancellation boundary.
 use std::path::{Path, PathBuf};
 
 pub(super) fn prepare(directory: &Path) -> Result<PathBuf, &'static str> {
-    pulse_store::state_directory::prepare(directory).map_err(|_| "workspace.unavailable")
+    #[cfg(unix)]
+    {
+        pulse_store::state_directory::prepare(directory).map_err(|_| "workspace.unavailable")
+    }
+    #[cfg(windows)]
+    {
+        pulse_platform::windows::PrivateDirectory::prepare(directory)
+            .map_err(|_| "workspace.unavailable")?;
+        Ok(directory.to_owned())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = directory;
+        Err("workspace.unavailable")
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
+#[path = "product_app_data_windows_tests.rs"]
+mod windows_tests;
+#[cfg(all(test, unix))]
 mod tests {
     use super::prepare;
     use std::{

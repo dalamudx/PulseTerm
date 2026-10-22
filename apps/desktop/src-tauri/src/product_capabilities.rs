@@ -15,19 +15,19 @@ impl ActionArgs for EmptyArgs {
         Ok(())
     }
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct NewTabArgs {
     profile: String,
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct SelectionArgs {
     session: String,
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl ActionArgs for SelectionArgs {
     fn validate(&self) -> std::result::Result<(), pulse_cap::Error> {
         let id = self
@@ -40,7 +40,7 @@ impl ActionArgs for SelectionArgs {
         Ok(())
     }
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl ActionArgs for NewTabArgs {
     fn validate(&self) -> std::result::Result<(), pulse_cap::Error> {
         pulse_store::profile_default::DefaultProfileSelection::parse(&self.profile)
@@ -48,30 +48,41 @@ impl ActionArgs for NewTabArgs {
             .ok_or(pulse_cap::Error::Args)
     }
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 enum SplitDirection {
     Row,
     Column,
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+fn optional_cli_profile<'de, D: serde::Deserializer<'de>>(
+    value: D,
+) -> std::result::Result<Option<String>, D::Error> {
+    String::deserialize(value).map(Some)
+}
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct SplitArgs {
-    profile: String,
+    #[serde(default, deserialize_with = "optional_cli_profile")]
+    #[schemars(with = "String")]
+    profile: Option<String>,
     direction: SplitDirection,
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl ActionArgs for SplitArgs {
     fn validate(&self) -> std::result::Result<(), pulse_cap::Error> {
         let _ = &self.direction;
-        pulse_store::profile_default::DefaultProfileSelection::parse(&self.profile)
-            .map(|_| ())
-            .ok_or(pulse_cap::Error::Args)
+        match self.profile.as_deref() {
+            Some(profile) => pulse_store::profile_default::DefaultProfileSelection::parse(profile)
+                .map(|_| ())
+                .ok_or(pulse_cap::Error::Args),
+            None => Ok(()),
+        }
     }
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 enum SshAuthentication {
@@ -83,7 +94,7 @@ enum SshAuthentication {
     #[serde(rename = "password-interactive")]
     PasswordInteractive,
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl SshAuthentication {
     fn present<'de, D: serde::Deserializer<'de>>(
         value: D,
@@ -91,7 +102,7 @@ impl SshAuthentication {
         Self::deserialize(value).map(Some)
     }
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
 #[serde(untagged, deny_unknown_fields)]
 #[schemars(transform = closed_saved_ssh_schema)]
@@ -106,7 +117,7 @@ enum SavedSshArgs {
         alias: String,
     },
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 fn closed_saved_ssh_schema(schema: &mut schemars::Schema) {
     // The catalogue requires an object root. Preserve the generated closed alternatives
     // while declaring their full property union on the equally closed object envelope.
@@ -122,7 +133,7 @@ fn closed_saved_ssh_schema(schema: &mut schemars::Schema) {
         }),
     );
 }
-#[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl ActionArgs for SavedSshArgs {
     fn validate(&self) -> std::result::Result<(), pulse_cap::Error> {
         match self {
@@ -230,7 +241,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Keybinding],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     builder
         .register::<EmptyArgs>(ActionDef {
             id: "workspace.windows",
@@ -240,7 +251,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Cli],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     for (id, title) in [
         ("workspace.focus", "workspace.commands.focus"),
         ("workspace.profiles", "workspace.commands.profiles"),
@@ -255,7 +266,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             })
             .map_err(|_| "workspace.cap_unavailable")?;
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     builder
         .register::<EmptyArgs>(ActionDef {
             id: "workspace.new-window",
@@ -265,7 +276,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Cli],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     builder
         .register::<SelectionArgs>(ActionDef {
             id: "workspace.focus-tab",
@@ -275,7 +286,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Cli],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     builder
         .register::<NewTabArgs>(ActionDef {
             id: "workspace.new-tab",
@@ -285,7 +296,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Cli],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     builder
         .register::<SplitArgs>(ActionDef {
             id: "workspace.split",
@@ -295,7 +306,7 @@ pub(super) fn catalogue(ssh_enabled: bool) -> Result<Catalogue> {
             surfaces: &[Surface::Cli],
         })
         .map_err(|_| "workspace.cap_unavailable")?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     if ssh_enabled {
         builder
             .register::<SavedSshArgs>(ActionDef {
@@ -389,7 +400,7 @@ mod tests {
                 assert!(catalogue.policy(id, Surface::Keybinding).is_err());
             }
             let cli = catalogue.projection(Surface::Cli)?;
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             {
                 // This factory test explicitly supplies availability; production
                 // callers instead pass cfg!(feature = "workspace-ssh").
@@ -465,7 +476,7 @@ mod tests {
                     Err(pulse_cap::Error::Unavailable)
                 );
             }
-            #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+            #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
             assert_eq!(cli["actions"], serde_json::json!([]));
             assert_eq!(
                 catalogue.validate_args("settings", Surface::Cli, serde_json::json!({})),
@@ -486,7 +497,7 @@ mod tests {
         }
         Ok(())
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     fn actual_build_catalogue_has_no_bootstrap_capability_or_disabled_ssh_action()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -512,7 +523,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     fn saved_alias_is_confirm_only_closed_metadata_with_no_identity_or_raw_target_mix()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -552,7 +563,7 @@ mod tests {
         }
         Ok(())
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     fn cli_interactive_is_explicit_saved_ids_only_and_keeps_confirmation()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -606,7 +617,7 @@ mod tests {
         }
         Ok(())
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     fn focus_tab_is_cli_safe_canonical_target_only_and_never_launch_authority()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -679,7 +690,7 @@ mod tests {
         );
         Ok(())
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     #[allow(clippy::unwrap_used)]
     fn new_window_requires_separate_confirmation_and_accepts_no_launch_or_transfer_parameters() {
@@ -713,7 +724,7 @@ mod tests {
                 .is_err()
         );
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     #[allow(clippy::unwrap_used)]
     fn split_is_separate_confirm_action_with_closed_profile_direction() {
@@ -732,9 +743,20 @@ mod tests {
                     )
                     .is_ok()
             );
+            assert!(
+                catalogue
+                    .validate_args(
+                        "workspace.split",
+                        Surface::Cli,
+                        serde_json::json!({"direction":direction})
+                    )
+                    .is_ok()
+            );
         }
         for args in [
             serde_json::json!({"profile":"sh"}),
+            serde_json::json!({"profile":null,"direction":"row"}),
+            serde_json::json!({"profile":"","direction":"row"}),
             serde_json::json!({"profile":"/bin/sh","direction":"row"}),
             serde_json::json!({"profile":"sh","direction":"diagonal"}),
             serde_json::json!({"profile":"sh","direction":"row","program":"sh"}),
@@ -757,7 +779,7 @@ mod tests {
             Err(pulse_cap::Error::Unavailable)
         );
     }
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     #[test]
     fn cli_ssh_requires_enabled_surface_explicit_confirmation_and_only_saved_ids()
     -> std::result::Result<(), Box<dyn std::error::Error>> {

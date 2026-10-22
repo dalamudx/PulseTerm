@@ -215,6 +215,7 @@ impl KeymapFile {
         }
     }
 }
+
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 #[path = "keymap_file_tests.rs"]
 mod tests;

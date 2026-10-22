@@ -5,7 +5,7 @@ use super::*;
 pub(super) struct Selection {
     kind: String,
 }
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn kind(value: &str) -> Result<pulse_pty::profiles::ShellKind> {
     use pulse_pty::profiles::ShellKind;
     match value {
@@ -14,6 +14,9 @@ pub(super) fn kind(value: &str) -> Result<pulse_pty::profiles::ShellKind> {
         "fish" => Ok(ShellKind::Fish),
         "sh" => Ok(ShellKind::Sh),
         "pwsh" => Ok(ShellKind::Pwsh),
+        "powershell" => Ok(ShellKind::PowerShell),
+        "cmd" => Ok(ShellKind::Cmd),
+        "wsl" => Ok(ShellKind::Wsl),
         _ => Err("workspace.denied"),
     }
 }
@@ -39,12 +42,12 @@ pub(super) async fn workspace_profile_editor_read(
     nonce: String,
     shell: pulse_store::profiles::AutomaticShell,
 ) -> Result<serde_json::Value> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, shell);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let offer = state
@@ -69,12 +72,12 @@ pub(super) async fn workspace_profile_editor_save(
     ticket: Uuid,
     config: pulse_store::profile_editor::ProfileConfig,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket, config);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -94,12 +97,12 @@ pub(super) fn workspace_profile_editor_cancel(
     nonce: String,
     ticket: Uuid,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -115,12 +118,12 @@ pub(super) async fn workspace_custom_profile_open(
     nonce: String,
     id: Uuid,
 ) -> Result<String> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, id);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let source = profile_source(&window)?;
@@ -163,12 +166,12 @@ pub(super) async fn workspace_custom_profile_list(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<serde_json::Value> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let result = state
@@ -185,12 +188,12 @@ pub(super) async fn workspace_custom_profile_read(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<serde_json::Value> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let offer = state
@@ -210,12 +213,12 @@ pub(super) async fn workspace_custom_profile_save(
     ticket: Uuid,
     change: profiles::custom_service::CustomAction,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket, change);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -234,12 +237,12 @@ pub(super) fn workspace_custom_profile_cancel(
     nonce: String,
     ticket: Uuid,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -255,12 +258,12 @@ pub(super) async fn workspace_profile_default_read(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<serde_json::Value> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let offer = state
@@ -289,12 +292,12 @@ pub(super) async fn workspace_profile_default_save(
     ticket: Uuid,
     selected: Option<pulse_store::profile_default::DefaultProfileSelection>,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket, selected);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let source = (
@@ -323,12 +326,12 @@ pub(super) fn workspace_profile_default_cancel(
     nonce: String,
     ticket: Uuid,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -343,7 +346,7 @@ pub(super) enum LifecycleAction {
     Delete,
     Restore,
 }
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn profile_source(
     window: &WebviewWindow,
 ) -> Result<(
@@ -368,12 +371,12 @@ pub(super) async fn workspace_profile_deleted(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<Vec<pulse_store::profiles::AutomaticShell>> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -391,12 +394,12 @@ pub(super) async fn workspace_profile_lifecycle_prepare(
     shell: pulse_store::profiles::AutomaticShell,
     action: LifecycleAction,
 ) -> Result<serde_json::Value> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, shell, action);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         use pulse_store::profile_default::ProfileLifecycleEdit;
@@ -424,12 +427,12 @@ pub(super) async fn workspace_profile_lifecycle_commit(
     nonce: String,
     ticket: Uuid,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -449,12 +452,12 @@ pub(super) fn workspace_profile_lifecycle_cancel(
     nonce: String,
     ticket: Uuid,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, ticket);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         state
@@ -473,12 +476,12 @@ pub(super) async fn workspace_profile_visibility(
     profile: String,
     hidden: bool,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, profile, hidden);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let source = super::profiles::ProfileStart {
@@ -510,12 +513,12 @@ pub(super) async fn workspace_session_open(
     nonce: String,
     selection: Selection,
 ) -> Result<String> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, selection);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let (nonce, scope) = page(&window, &state, &nonce)?;
         let kind = kind(&selection.kind)?;
@@ -659,7 +662,7 @@ mod tests {
             assert!(serde_json::from_value::<Selection>(value).is_err());
         }
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn literal_discovery_kind_is_not_a_command_or_path() {
         for value in ["/bin/sh", "sh -c", "bash;true", "SH", "", "unknown"] {

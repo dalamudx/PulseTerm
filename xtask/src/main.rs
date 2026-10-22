@@ -13,6 +13,9 @@ mod gbk_probe;
 mod local_session_probe;
 mod login_arguments_probe;
 mod login_probe;
+#[cfg(test)]
+#[path = "../../apps/desktop/src-tauri/src/output_timing_probe.rs"]
+mod output_timing_probe;
 mod portable_pty_probe;
 mod profile_probe;
 mod profile_session_probe;
@@ -63,9 +66,24 @@ mod theme_file_probe;
 mod theme_probe;
 mod unicode_probe;
 mod unicode_table;
+#[cfg(all(test, windows, feature = "windows-cli-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/native_cli_windows.rs"]
+mod windows_cli;
+#[cfg(all(test, windows, feature = "windows-config-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/native_ssh_config_windows.rs"]
+mod windows_config;
+#[cfg(all(test, windows, feature = "windows-settings-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/keymap_file_windows.rs"]
+mod windows_keymap;
 #[cfg(all(test, feature = "windows-settings-probe"))]
 #[path = "../../apps/desktop/src-tauri/src/settings_file_windows.rs"]
 mod windows_settings;
+#[cfg(all(test, feature = "windows-settings-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/product_app_data.rs"]
+mod workspace_app_data;
+#[cfg(all(test, windows, feature = "windows-settings-probe"))]
+#[path = "../../apps/desktop/src-tauri/src/database_windows.rs"]
+mod workspace_database;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -76,10 +94,24 @@ use pulse_term::TerminalProbe;
 use serde_json::{Value, json};
 
 fn root() -> Result<PathBuf> {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .map(Path::to_path_buf)
-        .context("workspace root unavailable")
+    #[cfg(all(windows, feature = "windows-product-probe"))]
+    {
+        let root = std::env::var_os("PULSETERM_PRODUCT_PROBE_ROOT")
+            .map(PathBuf::from)
+            .context("standalone probe requires a runner-owned output directory")?;
+        anyhow::ensure!(
+            root.is_absolute() && root.is_dir(),
+            "invalid standalone output directory"
+        );
+        Ok(root)
+    }
+    #[cfg(not(all(windows, feature = "windows-product-probe")))]
+    {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .map(Path::to_path_buf)
+            .context("workspace root unavailable")
+    }
 }
 
 fn main() -> Result<()> {

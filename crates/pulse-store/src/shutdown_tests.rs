@@ -77,7 +77,7 @@ async fn full_queue_cancellation_wakes_without_credit_and_never_executes_pending
     let (start, wait) = std::sync::mpsc::channel();
     let task = tokio::task::spawn_blocking(move || {
         wait.recv().map_err(|_| StoreError::Closed)?;
-        serve(connection, &mut inbox, &worker_cancel, &runtime)
+        serve(connection, &mut inbox, &worker_cancel, &runtime, None)
     });
     let task = StateStoreTask {
         task: Some(task),

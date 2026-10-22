@@ -8,12 +8,17 @@ import {
 import type { DisplayPreferences } from "./display-preferences";
 import type { Geometry } from "./fit-scheduler";
 import { renderFence } from "./render-fence";
+import type {
+  OutputBatchTiming,
+  TerminalOutputTiming,
+} from "./terminal-output-timing";
 import {
   createTerminalSurface,
   type SurfaceGeometry,
   type TerminalPasteOptions,
   type TerminalSurface,
 } from "./terminal-surface";
+
 import type { ViewResource, ViewScope } from "./view-host";
 
 type Checkpoint = Extract<V2Event, { kind: "checkpoint" | "marker" | "end" }>;
@@ -75,6 +80,7 @@ class SurfaceSink implements V2Sink {
     private readonly beforeDraw: (() => void) | undefined,
     private readonly display: DisplayPreferences | undefined,
     private readonly openLink: TerminalStreamCallbacks["openLink"],
+    private readonly timing?: TerminalOutputTiming,
   ) {}
   private check(signal: AbortSignal): void {
     if (this.closed || signal.aborted || !this.scope.isCurrent())
@@ -131,6 +137,7 @@ class SurfaceSink implements V2Sink {
         offset += chunk.length;
       }
     }
+    const timing = notifyBell ? this.timing?.begin(bytes.length) : undefined;
     for (let offset = 0; offset < bytes.length; offset += 65536) {
       this.check(signal);
       await surface.writeParsed(
@@ -139,18 +146,25 @@ class SurfaceSink implements V2Sink {
       );
       this.check(signal);
     }
-    await this.draw(signal);
+    this.timing?.mark(timing, "parsedMs");
+    await this.draw(signal, timing);
+    this.timing?.complete(timing);
   }
-  private async draw(signal: AbortSignal): Promise<void> {
+  private async draw(
+    signal: AbortSignal,
+    timing?: OutputBatchTiming,
+  ): Promise<void> {
     this.beforeDraw?.();
     const surface = this.get(signal);
     surface.prepareDraw();
+    this.timing?.mark(timing, "preparedMs");
     await this.renderer.draw(() => {
       this.check(signal);
       if (surface.drawIsCurrent?.() !== false) return true;
       surface.prepareDraw();
       return false;
     });
+    this.timing?.mark(timing, "fencedMs");
     this.beforeDraw?.();
     this.check(signal);
     await surface.verifyDraw();
@@ -160,6 +174,7 @@ class SurfaceSink implements V2Sink {
     await this.report("capture", boundary, signal);
     this.committed();
     this.live = true;
+    this.timing?.ready(boundary.utf8Bytes);
   }
   async repair(
     boundary: V2Boundary,
@@ -260,9 +275,12 @@ export class TerminalViewStream implements ViewResource {
           () => scope.isCurrent() && element.isConnected,
           undefined,
           current,
+          timing?.opportunity,
+          timing?.yieldAfterFence === true,
         ),
     },
     display?: DisplayPreferences,
+    private readonly timing?: TerminalOutputTiming,
   ) {
     this.sink = new SurfaceSink(
       scope,
@@ -279,12 +297,14 @@ export class TerminalViewStream implements ViewResource {
       callbacks.beforeDraw,
       display,
       callbacks.openLink,
+      timing,
     );
     this.consumer = new AttachmentV2Consumer(
       scope.generation,
       this.sink,
       async (generation, sequence) => {
         this.check();
+        timing?.acknowledging(sequence);
         await callbacks.acknowledge(generation, sequence);
         this.check();
       },
@@ -301,12 +321,16 @@ export class TerminalViewStream implements ViewResource {
     if (!this.ready && performance.now() - this.started >= 3000)
       throw new Error("terminal.bootstrap_timeout");
   }
-  async enqueue(wire: ArrayBuffer | Uint8Array): Promise<V2Receipt | null> {
+  async enqueue(
+    wire: ArrayBuffer | Uint8Array,
+    arrivedMs = this.timing?.now(),
+  ): Promise<V2Receipt | null> {
     try {
       this.check();
       const receipt = await this.consumer.enqueue(
         wire instanceof Uint8Array ? wire : new Uint8Array(wire),
       );
+      if (arrivedMs !== undefined) this.timing?.receipt(receipt, arrivedMs);
       this.check();
       return receipt;
     } catch (error) {
@@ -370,5 +394,6 @@ export class TerminalViewStream implements ViewResource {
     clearTimeout(this.timer);
     this.consumer.cancel(new Error("view.retired"));
     this.sink.dispose();
+    this.timing?.dispose();
   }
 }

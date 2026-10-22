@@ -53,6 +53,8 @@ fn closed_actions_roundtrip_without_changing_correlation() -> Result<(), Error> 
         ("workspace.focus", json!({})),
         ("workspace.profiles", json!({})),
         ("workspace.new-tab", json!({"profile":"sh"})),
+        ("workspace.split", json!({"direction":"row"})),
+        ("workspace.split", json!({"direction":"column"})),
         (
             "workspace.split",
             json!({"profile":"bash","direction":"row"}),

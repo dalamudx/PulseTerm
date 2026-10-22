@@ -74,6 +74,24 @@ fn non_unicode_later_step_rejects_whole_chain() {
 }
 
 #[test]
+fn default_split_omits_identity_without_consuming_separators_or_next_actions() {
+    for action in ["split", "split-pane"] {
+        let steps = parse_text(&["-w", "workspace", action, "-v", ".", "profiles"]).unwrap();
+        assert_eq!(
+            steps[0].1,
+            serde_json::json!({"direction":"row", "window":"workspace"})
+        );
+        assert_eq!(steps[1].0, "workspace.profiles");
+        assert_eq!(
+            parse_text(&[action, "-h"]).unwrap()[0].1,
+            serde_json::json!({"direction":"column"})
+        );
+        assert!(parse_text(&[action, "-v", "--program=sh"]).is_none());
+        assert!(parse_text(&[action, "-v", ".", "new-tab", "/bin/sh"]).is_none());
+    }
+}
+
+#[test]
 fn interactive_ssh_chain_uses_one_explicit_extra_token() {
     let host = "01956c1c-1a90-7000-8000-000000000011";
     let id = "01956c1c-1a90-7000-8000-000000000012";

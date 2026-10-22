@@ -6,6 +6,28 @@ pub(super) mod tests;
 
 #[path = "product_workspace_window_drains.rs"]
 mod windows;
+
+#[cfg(all(test, any(unix, windows)))]
+pub(crate) fn test_application() -> Arc<Application> {
+    let registry = SessionRegistry::new();
+    let directory = pulse_app::window_directory::WindowDirectory::new(registry.clone());
+    Arc::new(Application {
+        documents: directory.documents(),
+        directory,
+        sessions: Arc::new(Mutex::new(pulse_app::local_session_root::SessionRoot::new(
+            registry.clone(),
+            tokio::runtime::Handle::current(),
+        ))),
+        registry,
+        runtime: tokio::runtime::Handle::current(),
+        exit: exit::ExitGate::new(),
+        settings_io: Arc::new(settings::SettingsIo::new()),
+        window_drains: Arc::new(WindowDrains::new()),
+        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+        cli: Mutex::new(None),
+        profile_storage: Arc::new(profiles::ProfileStorage::new()),
+    })
+}
 pub(super) use windows::{Retirement, WindowDrains};
 #[path = "product_workspace_native_window.rs"]
 mod native;
@@ -19,9 +41,9 @@ pub(super) struct Application {
     pub(super) exit: exit::ExitGate,
     pub(super) settings_io: Arc<settings::SettingsIo>,
     pub(super) window_drains: Arc<WindowDrains>,
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     pub(super) cli: Mutex<Option<Arc<pulse_app::cli_control::Server>>>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) profile_storage: Arc<profiles::ProfileStorage>,
 }
 
@@ -30,20 +52,20 @@ impl Workspace {
     pub(super) fn from_application(
         application: Arc<Application>,
         owner: WindowToken,
-        #[cfg(unix)] profiles: Arc<profiles::ProfileReader>,
+        #[cfg(any(unix, windows))] profiles: Arc<profiles::ProfileReader>,
     ) -> Result<Self> {
         Self::construct(
             application,
             owner,
             None,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             profiles,
         )
     }
     pub(super) fn from_native(
         application: Arc<Application>,
         native: Arc<NativeBinding>,
-        #[cfg(unix)] profiles: Arc<profiles::ProfileReader>,
+        #[cfg(any(unix, windows))] profiles: Arc<profiles::ProfileReader>,
     ) -> Result<Self> {
         if !Arc::ptr_eq(&native.documents(), &application.documents)
             || !Arc::ptr_eq(&application.directory.documents(), &application.documents)
@@ -55,7 +77,7 @@ impl Workspace {
             application,
             owner,
             Some(native),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             profiles,
         )
     }
@@ -63,17 +85,17 @@ impl Workspace {
         application: Arc<Application>,
         owner: WindowToken,
         native: Option<Arc<NativeBinding>>,
-        #[cfg(unix)] profiles: Arc<profiles::ProfileReader>,
+        #[cfg(any(unix, windows))] profiles: Arc<profiles::ProfileReader>,
     ) -> Result<Self> {
         if !application.exit.accepting_windows() || !application.window_drains.accepting() {
             return Err("workspace.denied");
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if !Arc::ptr_eq(&profiles.shared_storage(), &application.profile_storage) {
             return Err("workspace.denied");
         }
         let registry = application.registry.clone();
-        #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
         let documents = application.documents.clone();
         let vault = pulse_app::vault_owner::PageVaultOwner::new(registry.clone());
         let vault_handoff = pulse_app::vault_handoff::VaultHandoffBank::new(&vault);
@@ -95,23 +117,23 @@ impl Workspace {
             vault_handoff,
             password_writes,
             private_key_writes,
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             bootstrap: crate::cli_bootstrap::Bank::default(),
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             presentation: crate::cli_presentation::Presentation::default(),
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             selections: Arc::new(crate::cli_selection::Selections::new(documents, owner)),
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             cli_approvals: Arc::new(cli::Approvals::default()),
             terminals: Arc::new(terminal::TerminalBank::new()),
             visibility: crate::native_visibility::NativeWatcher::new(),
             settings,
             keymaps,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             profiles,
             hosts: hosts::captures::HostCaptures::new(),
             ssh_profiles: metadata_captures::MetadataCaptures::new("workspace.ssh_profiles_failed"),
-            #[cfg(all(unix, feature = "workspace-ssh"))]
+            #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
             quick_targets: quick_targets::QuickTargets::new(),
             organization: metadata_captures::MetadataCaptures::new("workspace.organization_failed"),
             identities: metadata_captures::MetadataCaptures::new("workspace.identities_failed"),
@@ -119,9 +141,9 @@ impl Workspace {
                 "workspace.key_identities_failed",
             ),
             agent_identities: agent_identities::AgentBank::new(),
-            #[cfg(all(unix, feature = "workspace-ssh"))]
+            #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
             configs: metadata_captures::MetadataCaptures::new("workspace.config_unavailable"),
-            #[cfg(all(unix, feature = "workspace-ssh"))]
+            #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
             config_imports: config_imports::ConfigImportBank::new(),
         }));
         context.0.window_drains.install(context.clone())?;
@@ -134,14 +156,14 @@ impl Workspace {
 
     fn revoke_window(&self) -> Result<()> {
         self.0.visibility.close();
-        #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
         {
             let _ = self.0.bootstrap.close();
             let _ = self.0.presentation.close();
             self.0.selections.close();
             cli::retire(self);
         }
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         self.0.profiles.close();
         self.0.ssh_trust.close();
         self.0.ssh_sessions.close();

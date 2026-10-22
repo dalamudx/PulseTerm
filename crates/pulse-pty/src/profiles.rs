@@ -7,15 +7,20 @@ use std::path::{Path, PathBuf};
 #[path = "profile_launch.rs"]
 mod launch;
 pub use launch::{AutoProfileLaunch, ProfileLaunchError};
+#[cfg(any(windows, test))]
+#[path = "profiles_windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub use windows::{discover_current_windows_shells, discover_windows_shells};
 
-/// Maximum supported Unix shell kinds in one discovery snapshot.
-pub const MAX_SHELLS: usize = 5;
+/// Maximum supported automatic shell identities across platform snapshots.
+pub const MAX_SHELLS: usize = 8;
 /// Maximum PATH components considered by a Unix discovery pass.
 pub const MAX_PATH_COMPONENTS: usize = 64;
 /// Maximum encoded bytes in one executable path.
 pub const MAX_EXECUTABLE_BYTES: usize = 4096;
 
-/// A stable automatic Unix profile identity, independent of symlinks and PATH order.
+/// Stable automatic profile identity, independent of paths and PATH ordering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ShellKind {
     /// Bourne Again Shell.
@@ -28,6 +33,12 @@ pub enum ShellKind {
     Sh,
     /// PowerShell Core, not Windows PowerShell.
     Pwsh,
+    /// Windows PowerShell 5.1, separate from PowerShell 7/Core.
+    PowerShell,
+    /// Native Windows command processor.
+    Cmd,
+    /// WSL with the backend-discovered default distribution captured as literal argv.
+    Wsl,
 }
 impl ShellKind {
     /// Literal discovery filename, not a shell command.
@@ -38,11 +49,14 @@ impl ShellKind {
             Self::Fish => "fish",
             Self::Sh => "sh",
             Self::Pwsh => "pwsh",
+            Self::PowerShell => "powershell",
+            Self::Cmd => "cmd",
+            Self::Wsl => "wsl",
         }
     }
 }
 #[cfg(unix)]
-const KINDS: [ShellKind; MAX_SHELLS] = [
+const KINDS: [ShellKind; 5] = [
     ShellKind::Bash,
     ShellKind::Zsh,
     ShellKind::Fish,
@@ -55,6 +69,7 @@ const KINDS: [ShellKind; MAX_SHELLS] = [
 pub struct ShellCandidate {
     kind: ShellKind,
     executable: PathBuf,
+    discovered_args: Vec<std::ffi::OsString>,
 }
 impl ShellCandidate {
     /// Check a trusted discovery result before reconciling profiles. No I/O.
@@ -65,7 +80,24 @@ impl ShellCandidate {
         {
             return Err(ProfileError::InvalidExecutable);
         }
-        Ok(Self { kind, executable })
+        Ok(Self {
+            kind,
+            executable,
+            discovered_args: Vec::new(),
+        })
+    }
+    /// Construct a trusted WSL discovery result with its exact distribution fixed in argv.
+    /// The name must come from backend metadata, never from a startup IPC payload.
+    pub fn windows_wsl(executable: PathBuf, distribution: &str) -> Result<Self, ProfileError> {
+        if distribution.is_empty()
+            || distribution.len() > 256
+            || distribution.chars().any(char::is_control)
+        {
+            return Err(ProfileError::InvalidExecutable);
+        }
+        let mut candidate = Self::new(ShellKind::Wsl, executable)?;
+        candidate.discovered_args = vec!["--distribution".into(), distribution.into()];
+        Ok(candidate)
     }
     /// Stable automatic identity.
     pub fn kind(&self) -> ShellKind {
@@ -130,7 +162,9 @@ impl AutoProfile {
         if !self.available {
             return Err(ProfileError::Unavailable);
         }
-        Ok(PtyCommand::new(self.candidate.executable.clone()))
+        let mut command = PtyCommand::new(self.candidate.executable.clone());
+        command.args = self.candidate.discovered_args.clone();
+        Ok(command)
     }
 }
 

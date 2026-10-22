@@ -10,7 +10,7 @@ pub(super) struct ConfigPreview {
     username: String,
     identity_file_count: usize,
 }
-#[cfg(all(unix, feature = "workspace-ssh"))]
+#[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
 fn token(value: &str) -> Result<Uuid> {
     let token = Uuid::parse_str(value).map_err(|_| "workspace.denied")?;
     if token.get_version_num() != 4
@@ -28,12 +28,12 @@ pub(super) async fn workspace_ssh_config_preview(
     nonce: String,
     alias: String,
 ) -> Result<ConfigPreview> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, alias);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -49,7 +49,8 @@ pub(super) async fn workspace_ssh_config_preview(
                 .map_err(|_| "workspace.config_unavailable")?
                 .join(".ssh"),
         };
-        let local_user = std::env::var("USER").map_err(|_| "workspace.config_unavailable")?;
+        let local_user = std::env::var(if cfg!(windows) { "USERNAME" } else { "USER" })
+            .map_err(|_| "workspace.config_unavailable")?;
         // Include discovery remains bounded and backend-owned; the page supplies only an alias.
         let capture = state
             .0
@@ -94,12 +95,12 @@ pub(super) async fn workspace_ssh_config_confirm(
     nonce: String,
     token_value: String,
 ) -> Result<()> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, token_value);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -138,12 +139,12 @@ pub(super) async fn workspace_ssh_config_status(
     nonce: String,
     token_value: String,
 ) -> Result<ConfigSourceStatus> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, token_value);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -192,12 +193,12 @@ pub(super) async fn workspace_ssh_config_import_prepare(
     token_value: String,
     label: String,
 ) -> Result<ConfigImportPreview> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, token_value, label);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -248,12 +249,12 @@ pub(super) async fn workspace_ssh_config_import_save(
     nonce: String,
     token_value: String,
 ) -> Result<String> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, token_value);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");
@@ -297,12 +298,12 @@ pub(super) fn workspace_ssh_config_import_cancel(
     nonce: String,
     token_value: String,
 ) -> Result<()> {
-    #[cfg(not(all(unix, feature = "workspace-ssh")))]
+    #[cfg(not(all(any(unix, windows), feature = "workspace-ssh")))]
     {
         let _ = (window, state, nonce, token_value);
         Err("workspace.unavailable")
     }
-    #[cfg(all(unix, feature = "workspace-ssh"))]
+    #[cfg(all(any(unix, windows), feature = "workspace-ssh"))]
     {
         if window.label() != state.native_label()? {
             return Err("workspace.denied");

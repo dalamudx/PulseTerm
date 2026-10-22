@@ -12,8 +12,14 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / 'target' / 'probes' / 'workspace-performance'
-EVIDENCE.mkdir(parents=True, exist_ok=True)
-REPORT = EVIDENCE / os.environ.get('PULSE_PERFORMANCE_OUTPUT', 'result.json')
+run_label = os.environ.get('PULSE_PERFORMANCE_RUN')
+if run_label is not None:
+    assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,79}', run_label), 'performance.invalid_run_label'
+    EVIDENCE /= run_label
+EVIDENCE.mkdir(parents=True, exist_ok=run_label is None)
+output_name = os.environ.get('PULSE_PERFORMANCE_OUTPUT', 'result.json')
+assert Path(output_name).name == output_name and output_name.endswith('.json'), 'performance.invalid_output_name'
+REPORT = EVIDENCE / output_name
 REPORT.unlink(missing_ok=True)
 assert sys.platform == 'linux', 'performance.requires_linux_procfs'
 PROFILE = os.environ.get('PULSE_PERFORMANCE_PROFILE', 'dev')
@@ -180,6 +186,7 @@ done
             assert not any(process_identity(pid) == identity for pid, identity in owned.items()), 'performance.native_processes_not_drained'
             report = {'schemaVersion': 1, 'measurementsComplete': True, 'platform': 'linux',
                       'build': BUILD, 'display': 'X11 Xvfb with software rendering',
+                      "runLabel": run_label,
                       'memoryUnit': 'bytes; MB targets use 1000000 bytes', 'sampleStatistic': 'median of three total PSS samples',
                       'firstInputReadyMsIncludingEmptySample': first_input_ready_ms,
                       'historyRetainedObservationMs': history_retained_ms,

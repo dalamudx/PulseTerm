@@ -9,12 +9,12 @@ pub(in super::super) async fn workspace_vault_submit(
     mode: Mode,
     password: pulse_store::vault_password_ingress::PasswordIngress,
 ) -> Result<Status> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, token, kind, mode, password);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let scope = page(&window, &state, &nonce)?;
         let id = ticket(&token)?;
@@ -92,7 +92,7 @@ pub(in super::super) struct Ticket {
     token: String,
     kind: &'static str,
 }
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn page(
     window: &WebviewWindow,
     state: &Workspace,
@@ -104,7 +104,7 @@ fn page(
     let url = window.url().map_err(|_| "workspace.denied")?;
     current_document(&state.0.documents, state.0.owner, &url, nonce).map(|(_, scope)| scope)
 }
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn ticket(value: &str) -> Result<Uuid> {
     if value.len() != 36 {
         return Err("workspace.vault_denied");
@@ -122,12 +122,12 @@ pub(in super::super) async fn workspace_vault_prepare(
     nonce: String,
     kind: Kind,
 ) -> Result<Ticket> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, kind);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let root = (*state).clone();
         let status = run(window.clone(), state, nonce.clone(), Intent::Status).await?;
@@ -156,12 +156,12 @@ pub(in super::super) fn workspace_vault_confirm(
     nonce: String,
     token: String,
 ) -> Result<Status> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, token);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let scope = page(&window, &state, &nonce)?;
         state
@@ -183,12 +183,12 @@ pub(in super::super) fn workspace_vault_cancel(
     nonce: String,
     token: String,
 ) -> Result<()> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce, token);
         Err("workspace.unavailable")
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let scope = page(&window, &state, &nonce)?;
         state

@@ -969,7 +969,7 @@ impl SessionRegistry {
         }
         Ok(())
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn test_registered_session_count(&self) -> Result<usize, RegistryError> {
         Ok(self.lock()?.sessions.len())
     }

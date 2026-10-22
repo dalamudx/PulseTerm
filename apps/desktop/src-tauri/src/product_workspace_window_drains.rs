@@ -181,9 +181,9 @@ impl WindowDrains {
     }
 }
 async fn physical_window(context: &Workspace) -> Result<()> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     let profiles = context.0.profiles.drain_window();
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     let profiles = std::future::ready(Ok::<_, &'static str>(()));
     let (profiles, terminals, settings, keymaps, trust, ssh, visibility) = tokio::join!(
         profiles,

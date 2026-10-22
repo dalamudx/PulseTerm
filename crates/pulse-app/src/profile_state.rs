@@ -10,6 +10,9 @@ fn to_kind(shell: AutomaticShell) -> ShellKind {
         AutomaticShell::Fish => ShellKind::Fish,
         AutomaticShell::Sh => ShellKind::Sh,
         AutomaticShell::Pwsh => ShellKind::Pwsh,
+        AutomaticShell::PowerShell => ShellKind::PowerShell,
+        AutomaticShell::Cmd => ShellKind::Cmd,
+        AutomaticShell::Wsl => ShellKind::Wsl,
     }
 }
 fn to_shell(kind: ShellKind) -> AutomaticShell {
@@ -19,6 +22,9 @@ fn to_shell(kind: ShellKind) -> AutomaticShell {
         ShellKind::Fish => AutomaticShell::Fish,
         ShellKind::Sh => AutomaticShell::Sh,
         ShellKind::Pwsh => AutomaticShell::Pwsh,
+        ShellKind::PowerShell => AutomaticShell::PowerShell,
+        ShellKind::Cmd => AutomaticShell::Cmd,
+        ShellKind::Wsl => AutomaticShell::Wsl,
     }
 }
 /// Rebuild from validated local metadata and trusted fresh discovery only.

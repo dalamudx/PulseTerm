@@ -1,13 +1,13 @@
 use super::*;
 use std::{
     fs,
-    os::unix::fs::{PermissionsExt, symlink},
+    os::unix::fs::{MetadataExt, PermissionsExt, symlink},
 };
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn fixture() -> Result<tempfile::TempDir, std::io::Error> {
     let root = tempfile::Builder::new()
         .prefix("pt-config-discovery.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))?;
     fs::create_dir(root.path().join("parts"))?;
     fs::set_permissions(root.path().join("parts"), fs::Permissions::from_mode(0o700))?;

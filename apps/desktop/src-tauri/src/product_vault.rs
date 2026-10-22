@@ -3,7 +3,7 @@
 pub(super) mod handoff;
 use super::*;
 use serde::Serialize;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) enum Intent {
     Status,
     Lock,
@@ -16,7 +16,7 @@ pub(super) struct Status {
     state: &'static str,
 }
 impl Status {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn from_key(key: Option<pulse_store::vault_lifecycle::KeyStatus>) -> Self {
         use pulse_store::vault_lifecycle::KeyStatus;
         Self {
@@ -30,7 +30,7 @@ impl Status {
         }
     }
 }
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 async fn run(
     window: WebviewWindow,
     state: State<'_, Workspace>,
@@ -73,11 +73,11 @@ pub(super) async fn workspace_vault_status(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<Status> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         run(window, state, nonce, Intent::Status).await
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")
@@ -89,11 +89,11 @@ pub(super) async fn workspace_vault_lock(
     state: State<'_, Workspace>,
     nonce: String,
 ) -> Result<Status> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         run(window, state, nonce, Intent::Lock).await
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (window, state, nonce);
         Err("workspace.unavailable")

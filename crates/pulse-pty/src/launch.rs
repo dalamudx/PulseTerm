@@ -129,7 +129,7 @@ pub fn prepare_local_command(
         ("TERM_PROGRAM".into(), "PulseTerm".into()),
         ("TERM_PROGRAM_VERSION".into(), version.into()),
     ];
-    if shell == Some(ShellKind::Pwsh) {
+    if matches!(shell, Some(ShellKind::Pwsh | ShellKind::PowerShell)) {
         if !command.args.first().is_some_and(|arg| {
             arg.to_str()
                 .is_some_and(|arg| arg.eq_ignore_ascii_case("-NoLogo"))

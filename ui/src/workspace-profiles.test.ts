@@ -6,8 +6,17 @@ import {
 
 const nonce = "eb8c9c2a-5ca5-42a7-91f3-2950e523719b";
 describe("read-only workspace profiles", () => {
-  it("accepts only the five identities and explicit hidden state", () => {
-    const values = ["bash", "zsh", "fish", "sh", "pwsh"].map((kind) => ({
+  it("accepts the supported platform identities and explicit hidden state", () => {
+    const values = [
+      "bash",
+      "zsh",
+      "fish",
+      "sh",
+      "pwsh",
+      "powershell",
+      "cmd",
+      "wsl",
+    ].map((kind) => ({
       kind,
       hidden: false,
     }));

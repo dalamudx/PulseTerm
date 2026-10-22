@@ -47,7 +47,7 @@ async fn close(
 #[tokio::test]
 async fn list_is_safe_closed_metadata_even_with_multiple_windows_and_no_page_approval() -> TestResult
 {
-    let application = super::super::super::app::tests::application();
+    let application = super::super::super::app::test_application();
     let contexts = super::super::super::window_state::Contexts::new();
     let a = window(&application, &contexts, true);
     let b = window(&application, &contexts, false);
@@ -91,7 +91,7 @@ async fn list_is_safe_closed_metadata_even_with_multiple_windows_and_no_page_app
 #[tokio::test]
 async fn exact_selector_routes_original_page_and_strips_metadata_without_consuming_approval()
 -> TestResult {
-    let application = super::super::super::app::tests::application();
+    let application = super::super::super::app::test_application();
     let contexts = super::super::super::window_state::Contexts::new();
     let a = window(&application, &contexts, true);
     assert!(
@@ -160,7 +160,7 @@ async fn exact_selector_routes_original_page_and_strips_metadata_without_consumi
 }
 #[tokio::test]
 async fn unknown_invalid_retired_and_foreign_context_cannot_fall_back() -> TestResult {
-    let application = super::super::super::app::tests::application();
+    let application = super::super::super::app::test_application();
     let contexts = super::super::super::window_state::Contexts::new();
     let a = window(&application, &contexts, true);
     let b = window(&application, &contexts, false);
@@ -179,7 +179,7 @@ async fn unknown_invalid_retired_and_foreign_context_cannot_fall_back() -> TestR
             .is_err()
         );
     }
-    let foreign_application = super::super::super::app::tests::application();
+    let foreign_application = super::super::super::app::test_application();
     let foreign_contexts = super::super::super::window_state::Contexts::new();
     let foreign = window(&foreign_application, &foreign_contexts, true);
     assert!(

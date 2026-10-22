@@ -57,7 +57,7 @@ impl AutoProfileCatalog {
     ) -> Result<PtyCommand, ProfileLaunchError> {
         let profile = self.profile(kind).ok_or(ProfileError::NotFound)?;
         let mut command = profile.command()?;
-        command.args = options.args;
+        command.args.extend(options.args);
         command.cwd = options.cwd;
         command.env = options.env;
         command.env_remove = options.env_remove;

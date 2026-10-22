@@ -4,7 +4,17 @@ Agent 身份只保存名称、用户名、算法和完整 SHA256 公钥指纹，
 
 目录通过共享 SQLite worker 读取与 CAS 保存，旧数据库只读时不初始化 Agent 表。明确保存才在同一事务建立版本化目录，ID 为后端 UUIDv7，保留时间、HLC、修订和删除墓碑。完整记录比较拒绝同修订替换、外国实例及陈旧来源，最终撤权回滚。活动 SSH Profile 引用的身份不能删除；Profile CAS 同时比较密码、私钥与 Agent 三类目录。
 
-原页面发现能力只使用后端 `SSH_AUTH_SOCK`；Unix 路径须为绝对 socket，文件 owner 和实际 peer uid 须匹配当前用户。请求及响应有界，Agent comments 不投射到页面。发现、元数据保存和实际 peer 签名分别授权。用户明确保存一把公钥后，只尝试保存的算法／SHA256 指纹，签名接口不向页面公开。Agent 拒签、取消、换页、epoch 失效或来源变化均失败，不回退密码、私钥或其他钥匙。
+Unix 原页面发现只使用后端 `SSH_AUTH_SOCK`，路径须为绝对 socket，文件 owner 和实际 peer uid 须匹配当前用户。请求及响应有界，Agent comments 不投射到页面。发现、元数据保存和实际 peer 签名分别授权。用户明确保存一把公钥后，只尝试保存的算法／SHA256 指纹，签名接口不向页面公开。Agent 拒签、取消、换页、epoch 失效或来源变化均失败，不回退密码、私钥或其他钥匙。
+
+## Windows OpenSSH Agent 底层传输
+
+`pulse-ssh::agent::AgentConnection` 的 Windows 发现只连接固定本机 `\\.\pipe\openssh-ssh-agent`，不读取页面路径或 Windows `SSH_AUTH_SOCK`，不支持 Pageant、自定义／远程管道或候选遍历。它复用已有有界帧（256KiB、128 keys、单字段16KiB）、公钥指纹计算和单次所选密钥签名验真；Agent 返回的 comments 不投影。不向页面增加通用签名接口。
+
+使用锁定 Tokio 的异步命名管道客户端，保留默认 `SECURITY_IDENTIFICATION | SECURITY_SQOS_PRESENT`，不允许服务端冒用客户端身份；不把管道存在当作服务端身份已证明或 SSH 信任。只有 `ERROR_PIPE_BUSY` 异步重试，每次10ms、总期限三秒，连接前／成功后及每次重试检查发现授权。其他打开错误直接失败，取消／期限失败丢弃连接，不切换路径或其他认证方式。协议 I/O 继续使用原有五秒上限和读取前后撤销检查；窗口和 peer 签名授权仍由上层监督，底层发现不授予连接或签名权限。
+
+`mise run test-ssh-agent-transport` 已接入既有三平台 CI。共有连接回归覆盖未授权零打开、忙后成功、非忙错误不重试、重试／连接成功后的撤销和总期限；Windows 三个自有管道夹具覆盖精确指纹与关闭、超量长度与撤销、外来 key 拒绝及所选 Ed25519 单次有效签名。这些夹具使用独占、拒绝远程连接的任务自有管道，不修改用户 OpenSSH 服务。原 managed-store 的 Unix 私有数据库测试只在 Unix 注册；不把它当作 Windows 数据库验证。
+
+最终源码7项Agent专项回归（含真实Unix所选密钥SSH认证）、Linux库全部特性／全部目标严格检查、Linux正式产品组合严格检查及基础check通过；Windows库及全部测试目标严格交叉检查通过，3项原生管道夹具完成编译，结果与清理记录归档到 `target/probes/windows-ssh-agent/verification-v1.json`。Windows 自有管道测试尚未原生执行，真实 OpenSSH 服务／ACL／硬件令牌也未验证，远程 CI 尚未触发。后续批次已将完整 Windows SSH 产品入口接入显式 `workspace-ssh` 构建，含SSH及不含SSH的Windows完整目标交叉检查通过；Linux回归仍待完成，详见[Windows产品SSH接线](windows-ssh-product.md)，原生trust／Vault／认证／关闭仍需验收；本次底层能力不改变已有 Linux 证明范围。
 
 原页管理、共享启动槽、直接终端与跳板 driver 已接入。冻结路线包含三类身份，在每跳实际 fingerprint 批准后独立使用对应身份。Agent 中间用途只能转发到冻结下一目标，不能申请 PTY、shell 或任意地址；Agent 叶由终端 supervisor 注册及回收。根手势继承原页面／epoch／期限，保持到叶及父连接真正退出。
 

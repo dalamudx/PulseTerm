@@ -7,6 +7,7 @@ if ([IO.File]::ReadAllBytes($Script) | Where-Object { $_ -gt 127 }) { throw 'run
 # Run the real orchestration, mocking only Windows operations and the native measurement call.
 $mocked = [IO.File]::ReadAllText($Script).Replace('& $measure ', 'Invoke-TestMeasurement ')
 New-Item -ItemType Directory -Force $TestRoot | Out-Null
+Copy-Item (Join-Path (Split-Path $Script) 'startup-diagnostics.ps1') $TestRoot
 $runner = Join-Path $TestRoot 'run.ps1'
 [IO.File]::WriteAllText($runner, $mocked)
 foreach ($name in 'echo-latency.exe','echo-console.exe','echo-webview2.exe','WebView2Loader.dll','echo.html') {
@@ -17,16 +18,23 @@ New-Item -ItemType Directory $runtime | Out-Null
 [IO.File]::WriteAllText((Join-Path $runtime 'msedgewebview2.exe'), 'synthetic fixture')
 $env:TEMP = $TestRoot
 $global:EchoRunnerTest = [pscustomobject]@{ launches = [Collections.Generic.List[object]]::new(); measurements = 0; mismatch = $false }
-function Get-Command { param($Name, $CommandType, $ErrorAction) [pscustomobject]@{ Source = '/fixture/wt.exe' } }
+function Get-Command {
+    param($Name, $CommandType, $ErrorAction)
+    if ($global:EchoRunnerTest.noWt) { throw 'diagnostics unexpectedly required Windows Terminal' }
+    [pscustomobject]@{ Source = '/fixture/wt.exe' }
+}
 function Start-Process {
     param($FilePath, $ArgumentList, [switch]$PassThru)
     $global:EchoRunnerTest.launches.Add([pscustomobject]@{ File = $FilePath; Arguments = @($ArgumentList) })
     if ($PassThru) {
-        if ($global:EchoRunnerTest.hostFailure) {
+        $log = [string]$ArgumentList[[Array]::IndexOf($ArgumentList, '--log') + 1]
+        ('runtime_image=' + (Join-Path $TestRoot 'runtime-actual/msedgewebview2.exe')) | Set-Content -LiteralPath $log.Trim('"')
+        if ($global:EchoRunnerTest.launchFailure) { throw 'fixture launch denied' }
+        if ($global:EchoRunnerTest.hostFailure -or ($global:EchoRunnerTest.failRenderer -and ($ArgumentList -join ' ') -match ('renderer=' + $global:EchoRunnerTest.failRenderer))) {
             $process = [Diagnostics.Process]::Start('/bin/false')
             $process.WaitForExit()
         } else { $process = [Diagnostics.Process]::Start('/bin/sleep', '60') }
-        $title = if (($ArgumentList -join ' ') -match 'renderer=webgl') { 'echo-webgl' } else { 'echo-dom' }
+        $title = if (($ArgumentList -join ' ') -match '--startup-memory 1') { 'echo-startup-ready' } elseif (($ArgumentList -join ' ') -match 'renderer=webgl') { 'echo-webgl' } else { 'echo-dom' }
         if (($ArgumentList -join ' ') -match '--diagnostic 1') { $title += '-diagnostic' }
         $process | Add-Member -NotePropertyName MainWindowTitle -NotePropertyValue $title -Force
         $process | Add-Member -MemberType ScriptMethod -Name CloseMainWindow -Value { $this.Kill(); return $true } -Force
@@ -35,6 +43,24 @@ function Start-Process {
 }
 function Start-Sleep { param($Seconds, $Milliseconds) }
 function Get-CimInstance { param($ClassName, $Filter) @() }
+function Get-Acl {
+    param($LiteralPath, $ErrorAction)
+    if ($LiteralPath -like '*runtime-actual*') { Write-Error 'fixture ACL denied' -ErrorId 'FixtureAclDenied' -ErrorAction Stop }
+    [pscustomobject]@{ Sddl='fixture-sddl' }
+}
+function Get-WinEvent {
+    param($FilterHashtable, $MaxEvents, $ErrorAction)
+    if ($MaxEvents -ne 128 -or !$FilterHashtable.StartTime -or !$FilterHashtable.EndTime) { throw 'unbounded event query' }
+    if ($FilterHashtable.LogName -like '*CodeIntegrity*') { Write-Error 'fixture denied' -ErrorId 'FixtureDenied' -ErrorAction Stop }
+    if ($FilterHashtable.LogName -like '*AppLocker*') { Write-Error 'fixture empty' -ErrorId 'NoMatchingEventsFound' -ErrorAction Stop }
+    foreach ($app in 'unrelated.exe', 'msedgewebview2.exe') {
+        $event = [pscustomobject]@{ Id=1000; ProviderName='fixture'; TimeCreated=(Get-Date); App=$app }
+        $event | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
+            return '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="AppName">' + $this.App + '</Data><Data Name="ExceptionCode">c0000022</Data><Data Name="CommandLine">do-not-export-secret</Data></EventData></Event>'
+        }
+        $event
+    }
+}
 function Invoke-TestMeasurement {
     param([Parameter(ValueFromRemainingArguments=$true)][object[]]$Rest)
     $global:EchoRunnerTest.measurements++
@@ -86,4 +112,43 @@ foreach ($item in $allFailures) {
     if (!(Test-Path ($item.Directory.FullName + '.zip'))) { throw 'failure archive missing' }
 }
 if (Get-ChildItem $TestRoot -Directory -Filter 'pulseterm-echo-*') { throw 'profile not removed' }
-Write-Host 'runner: parsing, no-Edge launch flow, quoted RuntimePath, summary, display mismatch and preflight passed (mock Windows operations)'
+$global:EchoRunnerTest | Add-Member -NotePropertyName noWt -NotePropertyValue $true
+$before = $global:EchoRunnerTest.measurements
+$launchesBefore = $global:EchoRunnerTest.launches.Count
+try { & $runner -Rounds 1 -DiagnoseStartup; throw 'missing startup control failure' }
+catch { if ($_.Exception.Message -notlike 'Startup probes failed*') { throw } }
+if ($global:EchoRunnerTest.launches.Count -ne $launchesBefore + 3) { throw 'startup failure stopped independent controls' }
+$startup = Get-ChildItem $TestRoot -Recurse -Filter startup-summary.json | Select-Object -First 1
+$probes = Get-Content $startup.FullName -Raw | ConvertFrom-Json
+if ($probes.probes.Count -ne 3 -or @($probes.probes | Where-Object ready).Count) { throw 'failed startup results lost' }
+if (!(Test-Path ($startup.Directory.FullName + '.zip'))) { throw 'startup failure archive missing' }
+$systemFile = Join-Path $startup.Directory.FullName 'startup-system.json'
+$system = Get-Content $systemFile -Raw | ConvertFrom-Json
+if ($system.acls.Count -lt 5 -or $system.events.Count -ne 2) { throw 'system evidence missing or unrelated events included' }
+if (@($system.acls | Where-Object { $_.path -like '*runtime-actual*' -and $_.status -eq 'unavailable' }).Count -ne 2) { throw 'actual runtime ancestry or ACL denial missing' }
+if (($system.events[0].data | Where-Object name -eq 'ExceptionCode').value -ne 'c0000022') { throw 'event fields not extracted' }
+if (($system.eventQueries | Where-Object log -like '*CodeIntegrity*').status -ne 'unavailable') { throw 'event permission denial not reported' }
+if (($system.eventQueries | Where-Object log -like '*AppLocker*').status -ne 'no-events') { throw 'empty event query not distinguished' }
+if ((Get-Content $systemFile -Raw) -match 'do-not-export-secret|unrelated.exe') { throw 'unapproved event data exported' }
+$global:EchoRunnerTest.hostFailure = $false
+$global:EchoRunnerTest | Add-Member -NotePropertyName launchFailure -NotePropertyValue $true
+$launchesBefore = $global:EchoRunnerTest.launches.Count
+try { & $runner -Rounds 1 -DiagnoseStartup; throw 'missing launch failure' }
+catch { if ($_.Exception.Message -notlike 'Startup probes failed*') { throw } }
+if ($global:EchoRunnerTest.launches.Count -ne $launchesBefore + 3) { throw 'launch failure stopped independent controls' }
+$global:EchoRunnerTest.launchFailure = $false
+$global:EchoRunnerTest | Add-Member -NotePropertyName failRenderer -NotePropertyValue 'webgl'
+try { & $runner -Rounds 1 -DiagnoseStartup; throw 'missing mixed startup failure' }
+catch { if ($_.Exception.Message -notlike 'Startup probes failed*') { throw } }
+$global:EchoRunnerTest.failRenderer = $null
+& $runner -Rounds 1 -DiagnoseStartup
+$allStartup = @(Get-ChildItem $TestRoot -Recurse -Filter startup-summary.json)
+$readyCounts = @($allStartup | ForEach-Object { @((Get-Content $_.FullName -Raw | ConvertFrom-Json).probes | Where-Object ready).Count } | Sort-Object)
+if (($readyCounts -join ',') -ne '0,0,2,3') { throw 'all-failed, mixed, and successful startup outcomes not preserved' }
+$controls = @($global:EchoRunnerTest.launches | Where-Object { ($_.Arguments -join ' ') -match '--startup-memory 1' })
+if ($controls.Count -ne 4 -or @( $controls | Where-Object { ($_.Arguments -join ' ') -match '--diagnostic' }).Count) { throw 'memory control enabled xterm diagnostics' }
+if ($global:EchoRunnerTest.measurements -ne $before) { throw 'startup controls performed sampling' }
+if (Get-ChildItem $TestRoot -Directory -Filter 'pulseterm-echo-*') { throw 'startup profiles not removed' }
+try { & $runner -DiagnoseWebGL -DiagnoseStartup; throw 'conflicting diagnostic modes accepted' }
+catch { if ($_.Exception.Message -notlike 'Choose DiagnoseWebGL*') { throw } }
+Write-Host 'runner: existing measurement flow plus independent startup controls, evidence filtering, failures, archives and cleanup passed (mock Windows operations)'

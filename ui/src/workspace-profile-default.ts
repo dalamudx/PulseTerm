@@ -2,12 +2,15 @@ import {
   type CustomProfileId,
   isCustomProfileId,
 } from "./workspace-custom-profiles";
-import type { ProfileKind } from "./workspace-profiles";
+import {
+  isProfileKind,
+  PROFILE_KINDS,
+  type ProfileKind,
+} from "./workspace-profiles";
 export type DefaultProfileId = ProfileKind | CustomProfileId;
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const KINDS = new Set(["bash", "zsh", "fish", "sh", "pwsh"]);
 export type DefaultProfileOffer = Readonly<{
   ticket: string;
   selected: DefaultProfileId | null;
@@ -38,12 +41,11 @@ export function decodeDefaultProfile(value: unknown): DefaultProfileOffer {
       .join(",") !== "available,offered,selected,ticket" ||
     typeof v.ticket !== "string" ||
     !UUID.test(v.ticket) ||
-    (v.selected !== null &&
-      (typeof v.selected !== "string" || !KINDS.has(v.selected))) ||
+    (v.selected !== null && !isProfileKind(v.selected)) ||
     typeof v.available !== "boolean" ||
     !Array.isArray(v.offered) ||
-    v.offered.length > 5 ||
-    v.offered.some((kind) => typeof kind !== "string" || !KINDS.has(kind)) ||
+    v.offered.length > PROFILE_KINDS.length ||
+    v.offered.some((kind) => !isProfileKind(kind)) ||
     new Set(v.offered).size !== v.offered.length ||
     (v.customSelected === undefined &&
       v.available !== (v.selected !== null && v.offered.includes(v.selected)))

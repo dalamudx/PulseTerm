@@ -804,7 +804,7 @@ Supplemental texts bind a published clean Cargo VCS commit, a locked npm parent 
 | npm:tsx@4.23.15 | MIT | [LICENSE](third-party/licenses/8dded67841a9261a622c739fb61c81785e93765de852828ceeb9403d20a74581.txt) | Published archive |
 | npm:typescript@5.9.3 | Apache-2.0 | [LICENSE.txt](third-party/licenses/a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47.txt) | Published archive |
 | npm:undici-types@6.21.0 | MIT | [LICENSE](third-party/licenses/a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27.txt) | Published archive |
-| npm:vite@8.3.2 | MIT | [LICENSE.md](third-party/licenses/a47172e44a86a7e2cd1c16282341f7726ec60caafe3a6166fe3e0602005b6fa6.txt) | Published archive |
+| npm:vite@8.3.3 | MIT | [LICENSE.md](third-party/licenses/a47172e44a86a7e2cd1c16282341f7726ec60caafe3a6166fe3e0602005b6fa6.txt) | Published archive |
 | npm:vitest@5.0.5 | MIT | [LICENSE.md](third-party/licenses/78fbac9e571c2ee260deb2a1941a8a18f0a85e3f39c23d08e2dcee6da4841998.txt) | Published archive |
 | npm:why-is-node-running@3.2.1 | MIT | [LICENSE](third-party/licenses/6a134e51aa31496c15a741592fc5d782b2dbf8d8b6b8524e15c8520ae0cd6374.txt) | Published archive |
 

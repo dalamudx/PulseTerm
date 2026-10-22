@@ -16,7 +16,7 @@ pub(crate) fn workspace_ssh_route_begin(
     nonce: String,
     selection: Selection,
 ) -> Result<Ticket> {
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let page = session::page(&window, &state, &nonce)?.1;
         if selection.agent && selection.private_key {
@@ -90,7 +90,7 @@ pub(crate) fn workspace_ssh_route_begin(
         );
         Ok(ticket)
     }
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (window, state, nonce, selection);
         Err("workspace.ssh_unavailable")
@@ -103,7 +103,7 @@ pub(crate) async fn workspace_ssh_route_wait(
     nonce: String,
     token: String,
 ) -> Result<serde_json::Value> {
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let page = session::page(&window, &state, &nonce)?.1;
         let reply = state
@@ -114,7 +114,7 @@ pub(crate) async fn workspace_ssh_route_wait(
             .await?;
         serde_json::to_value(reply).map_err(|_| "workspace.ssh_failed")
     }
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (window, state, nonce, token);
         Err("workspace.ssh_unavailable")
@@ -129,7 +129,7 @@ pub(crate) async fn workspace_ssh_route_confirm(
     challenge: String,
     approved: serde_json::Value,
 ) -> Result<serde_json::Value> {
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let page = session::page(&window, &state, &nonce)?.1;
         let token = canonical(&token, 4)?;
@@ -143,7 +143,7 @@ pub(crate) async fn workspace_ssh_route_confirm(
         let reply = state.0.ssh_sessions.routes.wait(&page, token).await?;
         serde_json::to_value(reply).map_err(|_| "workspace.ssh_failed")
     }
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (window, state, nonce, token, challenge, approved);
         Err("workspace.ssh_unavailable")
@@ -156,7 +156,7 @@ pub(crate) fn workspace_ssh_route_cancel(
     nonce: String,
     token: String,
 ) -> Result<()> {
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let page = session::page(&window, &state, &nonce)?.1;
         state
@@ -165,7 +165,7 @@ pub(crate) fn workspace_ssh_route_cancel(
             .routes
             .cancel(&page, canonical(&token, 4)?)
     }
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (window, state, nonce, token);
         Err("workspace.ssh_unavailable")
@@ -181,7 +181,7 @@ pub(crate) async fn workspace_ssh_route_answer(
     answers: Vec<String>,
 ) -> Result<serde_json::Value> {
     let answers = zeroize::Zeroizing::new(answers);
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let page = session::page(&window, &state, &nonce)?.1;
         let token = canonical(&token, 4)?;
@@ -194,7 +194,7 @@ pub(crate) async fn workspace_ssh_route_answer(
         let reply = state.0.ssh_sessions.routes.wait(&page, token).await?;
         serde_json::to_value(reply).map_err(|_| "workspace.ssh_failed")
     }
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (window, state, nonce, token, round, answers);
         Err("workspace.ssh_unavailable")

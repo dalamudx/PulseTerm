@@ -1,42 +1,72 @@
-//! Explicitly admitted Include files and reader-bound source confirmation.
-use super::{File, Metadata, OPEN, directory, private_directory, regular, stamp};
+//! Bounded, reader-bound source snapshots with trusted synchronous filesystem adapters.
 use crate::config::{
     ConfigBundle, ConfigError, ConfigQuery, MAX_DEPTH, MAX_SOURCE, MAX_SOURCES, MAX_TOTAL,
     ProvidedConfigSource, ResolvedConfig,
 };
-use rustix::fs::{self as sys, Mode, OFlags};
-use std::os::unix::fs::MetadataExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::Read,
-    path::{Path, PathBuf},
     sync::Arc,
 };
-type Stamp = (u64, u64, u64, i64, i64, i64, i64);
-struct Source {
+
+/// Trusted backend filesystem, never a page-supplied path or execution capability.
+/// Opening must revalidate the original directory identity and all platform admission rules.
+/// Every operation is synchronous; the caller retains native I/O credit through actual exit.
+pub trait ConfigSourceFilesystem: Send + Sync + 'static {
+    /// A directory lease that keeps admitted ancestors alive until its last operation exits.
+    type Directory: ConfigSourceDirectory;
+    /// Reopen only the originally selected directory; replacement must be rejected.
+    fn open(&self) -> Result<Self::Directory, ConfigError>;
+}
+/// Read-only directory operations provided only by trusted platform adapters.
+/// Implementations reject links, unsafe permissions and nonregular or multiply linked files.
+pub trait ConfigSourceDirectory: Sized + Send + Sync + 'static {
+    /// Exact identity and mutation metadata; not content, authorization or a serialized token.
+    type Stamp: Clone + Eq + Send + Sync + 'static;
+    /// Revalidate this directory and capture exact metadata.
+    fn stamp(&self) -> Result<Self::Stamp, ConfigError>;
+    /// Duplicate this lease without losing its admitted identity or ancestors.
+    fn duplicate(&self) -> Result<Self, ConfigError>;
+    /// Open one relative component, preserving all original ancestors.
+    fn child(&self, name: &str) -> Result<Self, ConfigError>;
+    /// Enumerate names only, enforcing both budgets while iterating; omit dot entries.
+    fn members(&self, entries: usize, bytes: usize) -> Result<Vec<Vec<u8>>, ConfigError>;
+    /// Read one regular basename, enforcing the byte limit and checking before/after metadata.
+    fn source(
+        &self,
+        name: &str,
+        limit: usize,
+    ) -> Result<ConfigSourceFile<Self::Stamp>, ConfigError>;
+}
+/// An adapter's bounded bytes and exact native identity/mutation stamp. No Debug or serialization.
+pub struct ConfigSourceFile<S> {
+    /// The selected source bytes; never identity-file contents obtained from a hint.
+    pub bytes: Vec<u8>,
+    /// Native metadata for the same read lease, captured after a stable bounded read.
+    pub stamp: S,
+}
+type StampOf<B> = <<B as ConfigSourceFilesystem>::Directory as ConfigSourceDirectory>::Stamp;
+struct Source<S> {
     name: String,
     bytes: Vec<u8>,
-    stamp: Stamp,
+    stamp: S,
 }
-/// Backend-selected private directory. Opening it grants neither page nor connection authority.
-/// Every operation is synchronous: callers retain admission through the actual blocking exit.
-pub struct ConfigDirectoryReader {
-    path: PathBuf,
-    identity: (u64, u64),
+/// Original backend directory and reader identity; opening grants no page or SSH authority.
+pub struct SourceDirectoryReader<B: ConfigSourceFilesystem> {
+    filesystem: B,
     instance: Arc<()>,
 }
-/// Immutable metadata and sources captured by exactly one reader instance.
-/// No Debug, serialization or clone; resolve is inert and confirmation grants no SSH authority.
-pub struct ConfigFileSnapshot {
+/// Immutable captured sources bound to the original reader and, for discovery, exact query.
+/// No Debug, serialization or clone; confirmation is not a lasting freshness guarantee.
+pub struct SourceFileSnapshot<B: ConfigSourceFilesystem> {
     bundle: ConfigBundle,
-    sources: Vec<Source>,
-    dirs: BTreeMap<String, Stamp>,
+    sources: Vec<Source<StampOf<B>>>,
+    dirs: BTreeMap<String, StampOf<B>>,
     members: BTreeMap<String, Vec<Vec<u8>>>,
     instance: Arc<()>,
     query: Option<QueryBinding>,
 }
-impl ConfigFileSnapshot {
-    /// Resolve the immutable captured text; this does not establish current source freshness.
+impl<B: ConfigSourceFilesystem> SourceFileSnapshot<B> {
+    /// Resolve only the original query when capture used automatic discovery.
     pub fn resolve(&self, query: &ConfigQuery<'_>) -> Result<ResolvedConfig, ConfigError> {
         if self
             .query
@@ -48,29 +78,23 @@ impl ConfigFileSnapshot {
         self.bundle.resolve(query)
     }
 }
-impl ConfigDirectoryReader {
-    /// Select a private backend directory with no-follow admission for every parent component.
-    pub fn open(path: &Path) -> Result<Self, ConfigError> {
-        let opened = directory(path)?;
-        let stat = metadata(&opened)?;
-        Ok(Self {
-            path: path.to_owned(),
-            identity: (stat.dev(), stat.ino()),
+impl<B: ConfigSourceFilesystem> SourceDirectoryReader<B> {
+    /// Bind one trusted backend adapter; its open operation must enforce original identity.
+    pub fn from_filesystem(filesystem: B) -> Self {
+        Self {
+            filesystem,
             instance: Arc::new(()),
-        })
-    }
-    fn current(&self) -> Result<File, ConfigError> {
-        let opened = directory(&self.path)?;
-        let stat = metadata(&opened)?;
-        if (stat.dev(), stat.ino()) != self.identity {
-            return Err(ConfigError::SourceChanged);
         }
-        Ok(opened)
     }
-    /// Read fixed `config` plus at most 32 explicitly approved relative Include names.
-    /// Wildcards do not discover files; names are a backend admission catalog, not page paths.
-    /// All nested directories remain private, regular files single-linked and byte/work bounded.
-    pub fn capture(&self, approved_includes: &[&str]) -> Result<ConfigFileSnapshot, ConfigError> {
+    fn current(&self) -> Result<B::Directory, ConfigError> {
+        self.filesystem.open()
+    }
+    /// Capture fixed config plus at most 32 backend-approved relative Include names.
+    /// The catalog is never accepted from the page; all source and directory budgets apply.
+    pub fn capture(
+        &self,
+        approved_includes: &[&str],
+    ) -> Result<SourceFileSnapshot<B>, ConfigError> {
         if approved_includes.len() > MAX_SOURCES {
             return Err(ConfigError::Limit);
         }
@@ -82,7 +106,7 @@ impl ConfigDirectoryReader {
             }
         }
         let opened = self.current()?;
-        let mut dirs = BTreeMap::from([(String::new(), stamp(&metadata(&opened)?))]);
+        let mut dirs = BTreeMap::from([(String::new(), opened.stamp()?)]);
         let mut total = 0;
         let mut sources = Vec::with_capacity(approved_includes.len() + 1);
         for name in std::iter::once("config").chain(approved_includes.iter().copied()) {
@@ -95,7 +119,7 @@ impl ConfigDirectoryReader {
             .collect();
         let bundle = ConfigBundle::parse(&sources[0].bytes, &provided)?;
         let members = read_members(&opened, &dirs)?;
-        let snapshot = ConfigFileSnapshot {
+        let snapshot = SourceFileSnapshot {
             bundle,
             sources,
             dirs,
@@ -106,18 +130,16 @@ impl ConfigDirectoryReader {
         self.confirm(&snapshot)?;
         Ok(snapshot)
     }
-    /// Discover only active relative Includes using the same bounded Host/Match interpreter.
-    /// IdentityFile hints cause no reads. Sources are bound to this query and the original reader.
-    /// Missing, unsafe or unsupported matches reject; this never grants key or connection access.
+    /// Discover metadata only, then read only sources selected by the exact active query.
     pub fn capture_discovered(
         &self,
         query: &ConfigQuery<'_>,
-    ) -> Result<ConfigFileSnapshot, ConfigError> {
+    ) -> Result<SourceFileSnapshot<B>, ConfigError> {
         discovery::capture(self, query)
     }
-    /// Recheck the original instance, all source bytes and stamps, and traversed directory stamps.
-    /// Any failed comparison is a rejection; this is not a lock, atomic snapshot or lasting grant.
-    pub fn confirm(&self, snapshot: &ConfigFileSnapshot) -> Result<(), ConfigError> {
+    /// Revalidate source bytes, identities, directory stamps and membership before and after reads.
+    /// This is not an atomic filesystem snapshot, database transaction or SSH authorization.
+    pub fn confirm(&self, snapshot: &SourceFileSnapshot<B>) -> Result<(), ConfigError> {
         if !Arc::ptr_eq(&self.instance, &snapshot.instance) {
             return Err(ConfigError::SourceChanged);
         }
@@ -143,9 +165,6 @@ impl ConfigDirectoryReader {
         Ok(())
     }
 }
-fn metadata(file: &File) -> Result<Metadata, ConfigError> {
-    file.metadata().map_err(|_| ConfigError::SourceUnavailable)
-}
 fn valid_name(name: &str) -> Result<(), ConfigError> {
     if name.is_empty()
         || name.len() > 512
@@ -165,73 +184,56 @@ fn valid_name(name: &str) -> Result<(), ConfigError> {
     }
     Ok(())
 }
-fn child(parent: &File, name: &str) -> Result<File, ConfigError> {
-    let opened: File = sys::openat(parent, name, OPEN | OFlags::DIRECTORY, Mode::empty())
-        .map_err(|_| ConfigError::SourceUnavailable)?
-        .into();
-    if !private_directory(&metadata(&opened)?) {
-        return Err(ConfigError::SourceUnavailable);
-    }
-    Ok(opened)
-}
-fn relative_dir(root: &File, name: &str) -> Result<File, ConfigError> {
-    let mut current = root
-        .try_clone()
-        .map_err(|_| ConfigError::SourceUnavailable)?;
+fn relative_dir<D: ConfigSourceDirectory>(root: &D, name: &str) -> Result<D, ConfigError> {
+    let mut current = root.duplicate()?;
     if !name.is_empty() {
         for component in name.split('/') {
-            current = child(&current, component)?;
+            current = current.child(component)?;
         }
     }
     Ok(current)
 }
-fn check_dirs(root: &File, expected: &BTreeMap<String, Stamp>) -> Result<(), ConfigError> {
+fn check_dirs<D: ConfigSourceDirectory>(
+    root: &D,
+    expected: &BTreeMap<String, D::Stamp>,
+) -> Result<(), ConfigError> {
     for (name, expected_stamp) in expected {
-        if stamp(&metadata(&relative_dir(root, name)?)?) != *expected_stamp {
+        if relative_dir(root, name)?.stamp()? != *expected_stamp {
             return Err(ConfigError::SourceChanged);
         }
     }
     Ok(())
 }
-fn read_members(
-    root: &File,
-    dirs: &BTreeMap<String, Stamp>,
+fn read_members<D: ConfigSourceDirectory>(
+    root: &D,
+    dirs: &BTreeMap<String, D::Stamp>,
 ) -> Result<BTreeMap<String, Vec<Vec<u8>>>, ConfigError> {
     let mut all = BTreeMap::new();
     let mut count: usize = 0;
     let mut bytes: usize = 0;
     for name in dirs.keys() {
         let opened = relative_dir(root, name)?;
-        let mut entries =
-            sys::Dir::read_from(&opened).map_err(|_| ConfigError::SourceUnavailable)?;
-        let mut names = Vec::new();
-        while let Some(entry) = entries.read() {
-            let entry = entry.map_err(|_| ConfigError::SourceUnavailable)?;
-            let value = entry.file_name().to_bytes();
-            if value == b"." || value == b".." {
-                continue;
-            }
+        let mut names = opened.members(4096 - count, MAX_TOTAL - bytes)?;
+        for value in &names {
             count = count.checked_add(1).ok_or(ConfigError::Limit)?;
             bytes = bytes.checked_add(value.len()).ok_or(ConfigError::Limit)?;
             if count > 4096 || bytes > MAX_TOTAL {
                 return Err(ConfigError::Limit);
             }
-            names.push(value.to_vec());
         }
         names.sort();
         all.insert(name.clone(), names);
     }
     Ok(all)
 }
-fn read_source(
-    root: &File,
+fn read_source<D: ConfigSourceDirectory>(
+    root: &D,
     name: &str,
-    dirs: &mut BTreeMap<String, Stamp>,
+    dirs: &mut BTreeMap<String, D::Stamp>,
     total: &mut usize,
-) -> Result<Source, ConfigError> {
-    let mut current = root
-        .try_clone()
-        .map_err(|_| ConfigError::SourceUnavailable)?;
+) -> Result<Source<D::Stamp>, ConfigError> {
+    valid_name(name)?;
+    let mut current = root.duplicate()?;
     let mut parts = name.split('/').peekable();
     let mut parent_name = String::new();
     let mut leaf = "";
@@ -240,54 +242,51 @@ fn read_source(
             leaf = part;
             break;
         }
-        current = child(&current, part)?;
+        current = current.child(part)?;
         if !parent_name.is_empty() {
             parent_name.push('/');
         }
         parent_name.push_str(part);
-        let current_stamp = stamp(&metadata(&current)?);
-        if let Some(previous) = dirs.insert(parent_name.clone(), current_stamp)
+        let current_stamp = current.stamp()?;
+        if let Some(previous) = dirs.insert(parent_name.clone(), current_stamp.clone())
             && previous != current_stamp
         {
             return Err(ConfigError::SourceChanged);
         }
     }
-    let file: File = sys::openat(&current, leaf, OPEN, Mode::empty())
-        .map_err(|_| ConfigError::SourceUnavailable)?
-        .into();
-    let before = metadata(&file)?;
-    if !regular(&before) {
-        return Err(ConfigError::SourceUnavailable);
-    }
-    let remaining = MAX_TOTAL.checked_sub(*total).ok_or(ConfigError::Limit)?;
-    if before.len() > remaining as u64 {
+    let limit = MAX_SOURCE.min(MAX_TOTAL.checked_sub(*total).ok_or(ConfigError::Limit)?);
+    let result = current.source(leaf, limit)?;
+    if result.bytes.len() > limit {
         return Err(ConfigError::Limit);
     }
-    let mut bytes = Vec::new();
-    (&file)
-        .take(MAX_SOURCE.min(remaining) as u64 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| ConfigError::SourceUnavailable)?;
-    if bytes.len() > MAX_SOURCE.min(remaining) {
-        return Err(ConfigError::Limit);
-    }
-    let after = metadata(&file)?;
-    if !regular(&after) || stamp(&before) != stamp(&after) {
-        return Err(ConfigError::SourceChanged);
-    }
-    *total = total.checked_add(bytes.len()).ok_or(ConfigError::Limit)?;
+    *total = total
+        .checked_add(result.bytes.len())
+        .ok_or(ConfigError::Limit)?;
     Ok(Source {
         name: name.to_owned(),
-        bytes,
-        stamp: stamp(&after),
+        bytes: result.bytes,
+        stamp: result.stamp,
     })
 }
 #[path = "config_discovery.rs"]
 mod discovery;
 use discovery::QueryBinding;
-#[cfg(test)]
+#[cfg(unix)]
+#[path = "config_source_unix.rs"]
+mod native;
+/// Unix backend reader, retaining descriptor-relative admission and original identity checks.
+#[cfg(unix)]
+pub type ConfigDirectoryReader = SourceDirectoryReader<native::UnixConfigFilesystem>;
+/// Immutable Unix source snapshot; no Debug, serialization or connection authority.
+#[cfg(unix)]
+pub type ConfigFileSnapshot = SourceFileSnapshot<native::UnixConfigFilesystem>;
+#[cfg(all(test, unix))]
+use crate::config::file::stamp;
+#[cfg(all(test, unix))]
+use std::path::Path;
+#[cfg(all(test, unix))]
 #[path = "config_discovery_tests.rs"]
 mod discovery_tests;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "config_source_tests.rs"]
 mod tests;

@@ -12,6 +12,44 @@ use std::{sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
+async fn saved_default(
+    app: AppHandle,
+    state: Workspace,
+    original: Arc<PageLaunchScope>,
+    cancelled: CancellationToken,
+) -> cli_control::Result<String> {
+    let inputs = on_original_page(
+        app,
+        state.clone(),
+        original.clone(),
+        cancelled.clone(),
+        |window, _| source(&window, pulse_pty::profiles::ShellKind::Sh),
+    )
+    .await?;
+    let selection = state
+        .0
+        .profiles
+        .default_selection(
+            state.0.registry.clone(),
+            original,
+            inputs.directory,
+            inputs.path,
+            inputs.shell,
+        )
+        .await
+        .map_err(|_| cli_control::Error)?
+        .ok_or(cli_control::Error)?;
+    if cancelled.is_cancelled() {
+        return Err(cli_control::Error);
+    }
+    let value = serde_json::to_value(selection).map_err(|_| cli_control::Error)?;
+    let profile = value.as_str().ok_or(cli_control::Error)?;
+    if !profiles::valid(profile) {
+        return Err(cli_control::Error);
+    }
+    Ok(profile.to_owned())
+}
+
 #[path = "product_cli_approvals.rs"]
 mod approvals;
 #[path = "product_cli_new_window.rs"]
@@ -336,14 +374,18 @@ impl Actions {
                 .await;
             }
             let selected = if matches!(request.method(), "workspace.new-tab" | "workspace.split") {
-                Some(
-                    request
-                        .params()
-                        .get("profile")
-                        .and_then(Value::as_str)
-                        .ok_or(cli_control::Error)?
-                        .to_owned(),
-                )
+                Some(match request.params().get("profile") {
+                    Some(value) => value.as_str().ok_or(cli_control::Error)?.to_owned(),
+                    None => {
+                        saved_default(
+                            app.clone(),
+                            state.clone(),
+                            original.clone(),
+                            cancelled.clone(),
+                        )
+                        .await?
+                    }
+                })
             } else {
                 None
             };
@@ -651,16 +693,23 @@ impl Handler for Actions {
 }
 
 pub(super) fn start(app: &AppHandle, state: Workspace) -> cli_control::Result<Arc<Server>> {
-    let directory = app
-        .path()
-        .runtime_dir()
-        .map_err(|_| cli_control::Error)?
-        .join("pulseterm-workspace-cli");
+    if app.config().identifier != crate::cli_paths::APPLICATION_ID {
+        return Err(cli_control::Error);
+    }
+    let directory = crate::cli_paths::directory().map_err(|_| cli_control::Error)?;
     let approvals = state.0.cli_approvals.clone();
     let handler = Arc::new(Actions {
         app: app.clone(),
         state,
         approvals,
     });
-    Server::start(&directory, tauri::async_runtime::handle().inner(), handler).map(Arc::new)
+    #[cfg(target_os = "linux")]
+    let server = Server::start(&directory, tauri::async_runtime::handle().inner(), handler);
+    #[cfg(windows)]
+    let server = crate::native_cli_windows::start(
+        &directory,
+        tauri::async_runtime::handle().inner(),
+        handler,
+    );
+    server.map(Arc::new)
 }

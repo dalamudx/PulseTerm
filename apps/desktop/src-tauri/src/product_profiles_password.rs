@@ -6,7 +6,7 @@ use pulse_app::{
 };
 use pulse_store::vault_crypto::SecretBytes;
 use uuid::Uuid;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_password_tests.rs"]
 mod tests;
 struct WaitCancel {

@@ -1,5 +1,6 @@
 import { isCustomProfileId as isSavedProfile } from "./workspace-custom-profiles";
 import type { DefaultProfileId as ProfileKind } from "./workspace-profile-default";
+import { isProfileKind } from "./workspace-profiles";
 import { isWorkspaceNonce } from "./workspace-readiness";
 import { decodeWorkspaceSessions } from "./workspace-sessions";
 import {
@@ -135,8 +136,7 @@ export function decodeCliNewTab(value: unknown): Request {
       typeof body.ticket !== "string" ||
       !isWorkspaceNonce(body.ticket) ||
       typeof body.profile !== "string" ||
-      (!["bash", "zsh", "fish", "sh", "pwsh"].includes(body.profile) &&
-        !isSavedProfile(body.profile)) ||
+      (!isProfileKind(body.profile) && !isSavedProfile(body.profile)) ||
       (body.direction !== "row" && body.direction !== "column")
     )
       throw new Error("workspace.cli_invalid");
@@ -239,8 +239,7 @@ export function decodeCliNewTab(value: unknown): Request {
     typeof body.ticket !== "string" ||
     !isWorkspaceNonce(body.ticket) ||
     typeof body.profile !== "string" ||
-    (!["bash", "zsh", "fish", "sh", "pwsh"].includes(body.profile) &&
-      !isSavedProfile(body.profile))
+    (!isProfileKind(body.profile) && !isSavedProfile(body.profile))
   )
     throw new Error("workspace.cli_invalid");
   return {

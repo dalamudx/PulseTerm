@@ -1,7 +1,7 @@
 {
   "generatedFiles": {
     "NOTICE": "841c9ca3b1a3cfd5a4616ef20ba43fb0f4619ab1ecad6826ae2461777b84df9d",
-    "THIRD_PARTY.md": "0504e2a297a63f4eefb975aaab0fb613ec37f759009b951ded4b30cb7b202064",
+    "THIRD_PARTY.md": "8cdc9a7c3eb3a99042a2bfe361d665107ff5ed6f280580612957db888a860d13",
     "third-party/licenses/002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1.txt": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1",
     "third-party/licenses/0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13.txt": "0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13",
     "third-party/licenses/003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0.txt": "003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0",
@@ -442,34 +442,34 @@
   },
   "generator": "scripts/third-party.py",
   "inputs": {
-    "Cargo.lock": "0f4fb47aaa327aa1000f49745e26051f13cd6d05f12fbbddda580f104f598c34",
-    "Cargo.toml": "e3d7ab79023ae8ef9fa125d917c2744470953aef7009e1721429f5c54ec03588",
-    "apps/desktop/src-tauri/Cargo.toml": "7f67b223a84a7d77d37489a7886cd208be40b696155b6469c67c3bb9f86ba4d2",
-    "crates/pulse-app/Cargo.toml": "20b29527d8061809efbd6edad97c428ec8815bba3d0a0a39b10650bb49a12da5",
+    "Cargo.lock": "fc699a79f148dccbf728d6d7abdd2726f65eb3ec4007244a1beb775074dfbba6",
+    "Cargo.toml": "dcaabe81587fdbeb2f8ab57eba4dece6dda573b00cb31fc6e7b3fb09f3adaac5",
+    "apps/desktop/src-tauri/Cargo.toml": "d107710a2a4fe3de62fa82a09d8bc969c78c112fbd858ab43d576f095fb728a4",
+    "crates/pulse-app/Cargo.toml": "5fcc9af854c6e8914b5561ec941db00a56b0b1265214896b4ac71b415000cac8",
     "crates/pulse-cap/Cargo.toml": "85dbc17c0de165c424cd3622bbf535708af47cec0269336c70e78f1cd009aaff",
     "crates/pulse-core/Cargo.toml": "780c341d6a230ed6d0faa664786cd249810a0e0cfb5b13632cf7ee0ded5cfbc4",
     "crates/pulse-ipc/Cargo.toml": "a5080bc314cd7cde0fd25622630993546d2f5b7d04b41c2a7e6576004dc7e722",
-    "crates/pulse-platform/Cargo.toml": "d882933755c6db6cfee2e3b47e4fb638cb34afb95f0ea993fec63c98bb312eb9",
-    "crates/pulse-pty/Cargo.toml": "ca76edf7ff64c8973b32585980de88e87e07b5f64a1bf6614ab1aa909769c6a2",
+    "crates/pulse-platform/Cargo.toml": "3cf9a8afce72af2a54ba8557f25b36ba98d962d927dcc8100302ee4f58458b76",
+    "crates/pulse-pty/Cargo.toml": "10932e757c17414f6689ee0a1707b616f6115eb766ab0de8d90502b3c2754bdf",
     "crates/pulse-route/Cargo.toml": "02f156d607db532a2115992031e18759c3442927a667838206870850bf9a7daa",
     "crates/pulse-ssh/Cargo.toml": "da4b6575df9398e67aa61d666f0452161c40f5bb1822f4aae1b209bfda2f20c2",
-    "crates/pulse-store/Cargo.toml": "5fe311ce83f8afa8e9ac97153cf345dddeb1a639b0e22a026b4372716f2d94aa",
+    "crates/pulse-store/Cargo.toml": "69c1c5f649e30f5e18102666fb4d23d2c0f4d92c654ab0c7cc42260ae93f896c",
     "crates/pulse-term/Cargo.toml": "5b83bec972a63753f4efa0b4e94c99541ef74407f75e78f9df1275a042fadcb7",
     "deny.toml": "3070870bc9668ddabc7b904934b3982fe2435f9833db44a5e7c011a7939f9fdb",
     "package.json": "1e6925a74a1581c3f2a81650f7b4ee5d48d8faa2d4f2c667e9a07007a5db180d",
-    "pnpm-lock.yaml": "b03b872c202b1e64ae6c41437a47daed4c63ba2d042d2797f3bd5b294fea0699",
+    "pnpm-lock.yaml": "df0362227cfa74a42c963e6afe928ded40203c9d6a1ab29dfbf63eb1d80eed90",
     "pnpm-workspace.yaml": "25c8abe62df32175b07a1b73c1f865b84b699958219a4b76fea1d6740e7ad521",
     "scripts/third-party.py": "ef84a84e9fe47940796de02a459dc31606f3bbe8f15d35fc22cc47f1a54663fb",
     "scripts/third_party_sources.py": "f5d632a3bdf774e656f7bc8da5ba8140f319c8db59c906a56c6e04fa6c90d748",
     "third-party/supplemental-sources.json": "f45c6d9de4f2cb37adb50dc5c9c50bc226e48f4e11559fc57dcc8b5d7a04e6be",
-    "ui/package.json": "b2345481f7a9283c55547f80056d5baae8df425f659fd48f410a117c73b5c3c5",
+    "ui/package.json": "d85a65767dfe388c5b25ec38a32c9e436db82875f3f3c3f92b9a9df52b06da2a",
     "ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2",
     "ui/src/assets/fonts/jetbrains-mono/OFL.txt": "30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad",
     "ui/src/assets/fonts/jetbrains-mono/source.json": "ef8ab95d85a1b591ac8978e88b52271f2877dc8d26bd02ea1adca0729dd783af",
     "vendor/README.md": "29a521540eae5d9af826aa93143e52d988baeb977001e0f8322b9b0908518630",
     "vendor/alacritty_terminal.patch": "86c4bd8150b1c5f5b57c041f00f2eeaa585848cbf17a420100ae0828321a14c3",
     "vendor/alacritty_terminal.upstream.json": "489b4fee9ed7526a8e03326cba0ff9bc702b2727765723172bb494df4cc41f3b",
-    "xtask/Cargo.toml": "3613aa4590728a6bfb3a9f32bf7ebbbe9a8fb842192a0cd452df9e6263eb3d94"
+    "xtask/Cargo.toml": "ee7faedb44c8e8ec39a3650e5b9d8361b0f3a2d85a3a7e11f73a6b2e92835207"
   },
   "packages": [
     {
@@ -22601,7 +22601,7 @@
       "authors": "Evan You",
       "declaredLicense": "MIT",
       "ecosystem": "npm",
-      "id": "npm:vite@8.3.2",
+      "id": "npm:vite@8.3.3",
       "licenseTexts": [
         {
           "file": "third-party/licenses/a47172e44a86a7e2cd1c16282341f7726ec60caafe3a6166fe3e0602005b6fa6.txt",
@@ -22611,8 +22611,8 @@
       ],
       "name": "vite",
       "origin": {
-        "integrity": "sha512-SQr1x6W5vVSbROg7vsyXIaxK9b0G7zsT68acdWWRmnBUsgDieLCRG+Rep9WdZgcposvv/GSnr4GUUBqB3vXq6w==",
-        "url": "https://registry.npmjs.org/vite/-/vite-8.3.2.tgz"
+        "integrity": "sha512-cTAldKPImjg6c+gk48U19POPn3GCBzZwpdsN8ZMEEcbpes+6/wvfqUd0C2y3qYY4wsj8PwgFwrZ/1jBPVttMSg==",
+        "url": "https://registry.npmjs.org/vite/-/vite-8.3.3.tgz"
       },
       "repository": {
         "directory": "packages/vite",
@@ -22620,7 +22620,7 @@
         "url": "git+https://github.com/vitejs/vite.git"
       },
       "textStatus": "collected",
-      "version": "8.3.2"
+      "version": "8.3.3"
     },
     {
       "authors": "Anthony Fu <anthonyfu117@hotmail.com>",

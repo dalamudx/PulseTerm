@@ -1,29 +1,22 @@
 # 开发指南
 
+## 专项实现索引
 
-跨平台核心编译使用 `mise run check-core-features`，在当前运行平台检查 `pulse-store`、`pulse-pty`、`pulse-app` 的全部特性和测试目标，三平台 CI 均执行。依赖 Unix 私有目录或 `/bin/sh` 的测试只在 Unix 注册，平台无关授权／KDF／取消测试继续保留。Windows GNU 交叉检查只证明源码编译，不代表 Windows ACL、原子替换、ConPTY／IPC 或生产窗口实机验收通过。
-Windows 设置候选用 `mise run check-windows-settings` 检查：Linux／macOS 只运行纯文档测试，Windows 增加原生文件测试。仅验证特性引用同一 desktop 适配源码；尚未接入生产命令，保持 Windows 权限／持久化实机门禁。
-设置弹窗的分类、搜索与焦点规则见[工作区设置导航](../architecture/workspace-settings-navigation.md)。快捷键入口纳入键盘与剪贴板分类及本地搜索；进入时挂起设置，返回保留筛选、未保存草稿和焦点，不转移或续期任一编辑器的保存票据。导航不写配置；字段继续使用既有单次票据保存／恢复，关闭撤销迟到显示，失败后重读。只检查受影响编辑器、类型、产品构建及集中组件使用链，沿用现有前端 CI；原生键位探针同步导航后留待集中实窗验收，不新增 SSH 或全量矩阵。
-私钥导入定向验收使用 `mise run probe-workspace-key-import`：原页面显式解锁后以隔离 GTK 剪贴板粘贴固定加密 Ed25519，验锁定／错口令拒绝、双密文原子保存、刷新／独立进程精确字节与退出。截图须等输入清除，不能将导入成功当作 SSH 连接授权；默认构建不开放导入。夹具和剪贴板 helper 只创建于自有 `/data/temp` 目录并在实际退出后清理。
-后台视图按[调度说明](../architecture/terminal-background-views.md)做受影响检查；原生可见性开发仅运行Visibility／Pane两个Vitest文件、TypeScript／Biome／前端构建，以及CLI＋SSH原生库的`native_visibility::tests`。原生实窗、跨平台、WebGL及资源指标另验。现有CI自动覆盖前端和原生构建，不增加重型矩阵。
-历史容量设置保存在[terminal].history_limit，默认100000、可设1000～100000；新建本地／SSH会话生效，已有会话不缩容，16MiB冷区预算不变。按配置继承／保存恢复、冷热裁剪和EOF保留、原生同快照冻结及前端范围校验做直接检查；沿用现有CI，不因容量新增SSH认证矩阵。
-输入滚动偏好见[输入时回到底部](../architecture/terminal-input-scroll.md)：`[terminal].scroll_on_input` 默认true，支持明确false与恢复继承；新挂载视图采用该值，已有视图不在线切换。沿用既有CI，Linux原生PTY默认开启已通过，显式关闭／恢复与其他平台另验。
-输出滚动偏好见[新输出时回到底部](../architecture/terminal-output-scroll.md)：`[terminal].scroll_on_output` 默认false，保留SDK常规跟随；开启后有效输出完成解析时调用公开scrollToBottom，回看时也返回底部。与输入回底独立，保存后新挂载生效。v8封闭投影、继承恢复和旧页撤销沿用既有检查，取消／释放后迟到回调不得滚动；复用现有CI，不新增SSH矩阵。
-Backspace 编码见[实现说明](../architecture/terminal-backspace.md)：`[terminal].backspace_send` 默认 `del`，可选 `bs`，新挂载视图采用。只改可信无修饰且非组合输入的Backspace，字节仍经公开SDK进入既有onData／授权队列；不替换粘贴字节。仅做保存恢复、v10兼容与按键门禁检查，沿用既有CI；真实PTY／SSH、WebView和跨平台物理键另验。
-TERM-18 的成组设置见[TERM、Delete与Profile行为](../architecture/terminal-behavior.md)：`term_type`固定选择xterm-256color／xterm／vt100，与配色和历史容量同次读取后在新本地／SSH启动中冻结；本地Profile显式TERM环境优先。`delete_send`默认csi、可选del，普通可信Delete仍经SDK与既有输入授权；Profile可单次保存Option、Backspace、Delete稀疏覆盖。全局设置投影现为v13，分组／SSH入口的v2五项产品编辑与启动应用见下文。沿用现有CI，检查受影响功能，不增加SSH或全量矩阵。
-分组／SSH入口的[终端配色与行为覆盖](../architecture/terminal-scoped-behavior.md)以 v2 五字段统一编辑终端配色、TERM、Option／Meta、Backspace、Delete，按默认→用户→直属组→入口继承；显式null恢复继承，缺字段拒绝。保存通过原页票据和共享SQL事务验证组织源、成员关系及两层设置版本，保留其他字段。本地 Profile 另以稀疏 `appearance.colorPreset` 覆盖全局终端配色，缺省或null继承。GUI／CLI直连与跳板叶终端使用后端冻结基色；已有会话不在线换配置，祖先组不额外叠加。沿用现有CI，只验证受影响路径，真实SSH／原生WebView与跨平台效果另验。
+指南说明工具与开发流程；功能契约在架构文档，当前验收状态在[主计划](plan.md#15-动态交付清单与当前进度)和[验证记录](validation.md)。
 
-Option／Meta偏好见[macOS Option作为Meta键](../architecture/terminal-option-meta.md)：`[terminal].mac_option_as_meta`默认false，v9严格布尔投影，保存／恢复继承后新挂载视图采用该值。xterm公开macOptionIsMeta处理按键，不增加应用监听或输入权限；旧版投影缺字段按false，Profile显示合并保留该值。分组／SSH入口的[统一编辑与启动应用](../architecture/terminal-scoped-behavior.md)已接通，真实按键效果仍待验收。沿用既有CI，仅检查受影响设置和前端模块；真实macOS物理键、IME与原生WebView另验。
-回看后的手动入口见[回到最新输出](../architecture/terminal-output-scroll.md)：仅在当前窗格离开底部时显示，只滚动当前前端缓冲区；每窗格独立，支持点击和键盘激活，不更改自动回底设置，也不启用输入。沿用现有前端 CI，Linux生产WebView／真实PTY鼠标与键盘返回已通过，SSH和跨平台另验。
+| 范围 | 设计与验证入口 |
+|---|---|
+| 跨平台生产链 | [Windows 存储／Shell／原生验收](windows-product-core.md)、[CLI 控制](../architecture/windows-cli-control.md)、[Profile 环境刷新](../architecture/windows-profile-environment.md) |
+| SSH 文件来源 | [配置导入](../architecture/ssh-config-import.md#windows-来源与共享确认算法)；Windows 同源组件用 `mise run test-windows-ssh-config` |
+| 独立 Windows 前置包 | [无 Rust 存储测试包](../../scripts/windows-storage-probe/README.md)；不启动产品，不能替代普通用户生产验收 |
+| 设置与键盘 | [设置导航](../architecture/workspace-settings-navigation.md)、[快捷键来源](../architecture/keymap-source.md)、[TERM／Delete／Profile](../architecture/terminal-behavior.md)、[Backspace](../architecture/terminal-backspace.md)、[Option／Meta](../architecture/terminal-option-meta.md) |
+| 配色与继承 | [分组／SSH 行为覆盖](../architecture/terminal-scoped-behavior.md)；新会话冻结设置，旧会话不在线切换 |
+| 输入与滚动 | [IME 边界](../architecture/terminal-ime.md)、[输入回底](../architecture/terminal-input-scroll.md)、[输出／手动回底](../architecture/terminal-output-scroll.md)、[可视响铃](../architecture/terminal-bell.md) |
+| 页面与系统交互 | [后台视图](../architecture/terminal-background-views.md)、[链接检查与系统交接](../architecture/terminal-links.md) |
+| 私钥导入 | `mise run probe-workspace-key-import`：原页面授权、密文保存／重开与退出；截图前清除输入，导入不授予连接权限 |
+| 性能／资源 | [Linux 运行时评估](linux-runtime-performance-review.md)；受控缩放、交叉编译和 headless 不能代替系统输入／真实图形与平台验收 |
 
-可视响铃见[终端可视响铃](../architecture/terminal-bell.md)：只为当前挂载窗格的实时 BEL 显示固定提示，重复合并、点击清除，恢复回放与已取消输出不得触发；不启用输入或为后台标签重建订阅。沿用前端类型、直接单测及构建 CI，Linux生产WebView／真实PTY的合并清除及刷新静默已通过，SSH与系统通知另验。
-
-链接操作见[终端链接检查与系统交接](../architecture/terminal-links.md)：普通 HTTP／HTTPS、严格 IPv4／方括号 IPv6 的 IP:端口和 OSC8 共用完整目标检查；IP:端口明确按 HTTP 网页候选解释，不推断服务协议。显式复制和 Linux 系统打开独立确认；原生验证实际窗口、原页 nonce 与4096字节封闭目标，使用 GIO 默认 URI 接口而非命令行。每窗最多一个任务，容量保留至原生回调结束并纳入退出等待；Windows／macOS明确不可用。沿用现有检查入口，仅验证受影响路径，Linux生产WebView／真实PTY的链接检查与GTK剪贴板回读已通过，GIO经隔离处理器到图形Chrome的本机HTTP交接与退出也已通过，其他默认浏览器／网络环境、SSH及其他平台另验。 绝对文件路径（含完整单／双引号包围的带空格路径）使用独立来源标记，只读显示路径和行列、显式复制路径；不读取或打开文件，不把远程路径映射成本机路径。外部编辑器打开另需原生授权接线，OSC8文件目标不复用路径来源。
-
-
-入口或默认键位变化时，核对workspace-history-entry、命令目录／面板、keymap投影／表单和dispatcher；后端核对KeymapAction与封闭Capability目录。继承绑定参与冲突验证，Rust／TypeScript策略对照比较原始合并定义，不把编译后AST当源输入。find默认Ctrl/Meta+Shift+F仅终端聚焦时生效，保留Ctrl+F，禁用无旁路。复用既有CI，不增加回归矩阵。
-输入法应用层保护见[IME边界](../architecture/terminal-ime.md)。只对Composition、Chord／Dispatcher、ModalEscape、Palette及Surface桥接做受影响Vitest与TS／Biome／产品构建；系统IME、候选窗口位置／DPI和真实WebView另验，不将合成事件计为系统输入法通过。
-
+历史容量默认 100000（1000～100000 可设），新本地／SSH 会话采用，旧会话不缩容，冷区预算 16MiB。入口或默认键位变化需同步命令目录／面板、keymap、dispatcher、后端 Action／Capability，并比较 Rust／TS 原始策略定义。各项只运行受影响检查；注册和完整任务参数以 `.mise.toml` 为准。
 ## 1. 仓库结构
 
 ```
@@ -107,8 +100,8 @@ mise run terminal-vendor-check    # 检查211个源文件仅有批准的只读ge
 mise run terminal-vendor-test     # 独立锁文件运行上游178项测试
 mise run bindings                 # 从 Rust 命令表生成 IPC 类型、命令与事件
 mise run bindings-check           # 检查生成产物漂移，不覆盖源文件
-mise run audit                    # Rust＋前端独立完成；任一失败仍阻断，日志见 target/probes/dependency-audit/
-mise run audit-check              # 审计先失败仍执行下一项、无效回执和陈旧报告的子进程反例
+mise run audit                    # Rust＋前端独立完成；任一失败仍阻断，最新 summary 指向独立 runs/<UUID>/ 日志，旧批次保留于 target/probes/dependency-audit/
+mise run audit-check              # 审计先失败仍执行下一项、无效回执、跨批次日志保留与陈旧报告的子进程反例
 mise run third-party-write        # 校验锁定归档＋父包/VCS/内嵌commit/源码官方引用，生成NOTICE/清单/原文；需网络
 mise run third-party-check        # 39项行为反例＋离线摘要、来源关联和完整集合检查，不代表发行批准
 mise run third-party-release-check # 缺完整原文或只有许可链接仍失败，许可证政策另行审查
@@ -156,6 +149,13 @@ mise run probe-workspace-startup # release新进程参考：Profile可见、选�
 mise run probe-workspace-performance # Linux真实WebView整进程树PSS/RSS：单会话、十万行、20标签；采集完成与性能达标分别记录
 mise run probe-workspace-performance-release # 同场景release构建，记录原产品MB目标；软件渲染基线不能代替硬件/跨平台验收
 mise run probe-workspace-load # release真实cat 1GiB和Ctrl+C到cat物理退出延迟；不替代回显p95／完整屏幕状态／硬件验收
+mise run check-presentation-floor # 15项：像素时钟、PSS／映射、失败清理、锁定资源及公开策略请求／实际读回核验；不是产品性能
+PULSE_PRESENTATION_RUN=minimal-v1 mise run probe-presentation-floor # 原样像素helper：X11直接绘制／WebKit立即DOM／一帧DOM各两组100项
+PULSE_PRESENTATION_RUN=xterm-v1 PULSE_PRESENTATION_SUITE=xterm mise run probe-presentation-floor # 锁定xterm6.0.0页面内脏行／整屏回显对照；无PTY／生产IPC，不替代产品门禁
+PULSE_PRESENTATION_RUN=runtime-memory-v1 mise run probe-runtime-memory # 原生／最小WebKit／页面xterm镜像六组，全进程PSS/RSS；不是产品预算通过
+PULSE_WEBKIT_POLICY_RUN=public-policy-v1 mise run probe-webkit-policy # 夹具公开API默认／never／never／默认内存及像素对照，读取实际策略；不修改产品
+mise run check-tauri-memory # 同Tauri宿主采集收据、空白页零授权、早退／中断与旧收据拒绝9项回归
+PULSE_TAURI_MEMORY_RUN=same-host-v1 mise run probe-tauri-memory # 显式Linux验证feature；同二进制空白／工作区空窗ABBA，原生物理退出核查
 mise run probe-workspace-load-state # 独立验证构建：真实1GiB标记绘制后、刷新前核对原输出的可见网格／样式／光标／主备用屏；不证明隐藏解析器／全部历史
 mise run probe-workspace-echo # 100次原生XTest→PTY→字形像素回显p95；需X11/XTest开发库，输出原始像素／PTY JSON，helper在私有目录；软件环境不代表硬件验收
 mise run probe-ssh                # optional xtask SSH feature，隔离loopback pinned hostkey/auth/PTY/系统OpenSSH客户端验证
@@ -166,6 +166,7 @@ mise run probe-ssh-pressure       # 真远端window-aware生产者；ACK背压/d
 mise run probe-route-ssh-pressure # 上述三路径全部经HTTP→SOCKS真实代理链；独立JSON拒direct证据混用
 mise run probe-ssh-certificate    # 临时CA、principal/有效期/critical options/私钥持有证明
 mise run probe-ssh-agent          # 私有软件Agent，仅合成identity的签名/auth/删除/清理
+mise run test-ssh-agent-transport # 当前平台有界Agent协议/撤销/所选签名，Windows含自有命名管道夹具；非用户服务/GUI验收
 mise run probe-ssh-legacy         # 仅test profile旧KEX/MAC，安全default前后明确拒绝
 mise run probe-encoding-attachment # validation-only GBK actor/v2原子重绑/history/双坐标headless渲染
 mise run probe-encoding-window    # 显式encoding-probe build：固定分类GBK actor→真实Channel→DOM，两轮不同source/UTF8边界
@@ -320,13 +321,14 @@ pnpm tauri build                   # 本地打包
 
 ## 6. CI
 
-| 工作流 | 触发时机 | 内容 |
+| 已实现工作流 | 触发方式 | 范围与证据 |
 |---|---|---|
-| `ci.yml` | PR / 推送到 main | 在 Win / mac / Linux 三个平台上运行：fmt、clippy、nextest、依赖分层检查、cargo-deny、TS 类型检查、lint、Vitest、前端构建与体积检查、检查 codegen 产物是否最新 |
-| `interop.yml` | 每晚 / 手动 | 协议互通测试（Linux 上的 Docker）；在自托管的 Windows 机器上测试 RDP |
-| `bench.yml` | 每晚 | 启动时间、内存、吞吐、回显延迟的基准，和历史数据对比；退化超过 10% 时自动开 issue |
-| `e2e.yml` | 每晚 / 发布前 | Playwright + tauri-driver（Windows / Linux） |
-| `release.yml` | 推送 tag | 三平台打包、签名（Windows Authenticode；macOS Developer ID + 公证）、更新包签名（Tauri updater 密钥）、生成发布说明 |
+| [check.yml](../../.github/workflows/check.yml) | PR／push／手动 | 三平台核心与组件、Linux 产品实窗、release 负载；依赖审计和完整许可门禁保留，上传各自探针证据 |
+| [windows-product.yml](../../.github/workflows/windows-product.yml) | 相关路径 PR／手动 | MSVC 精确原生用例、PS5.1 采集回归、完整桌面检查与本地工作区构建，上传逐组原始日志 |
+
+接入远程后先运行这两个入口，按具体 job／步骤／收据判断，不以整个 workflow 的存在代替执行。当前审计与完整许可检查预计仍会失败；保留失败，禁止通过忽略步骤或删除依赖范围获得绿色状态。远程首次执行与普通用户 GUI／真实 GPU 验收分别登记。
+
+`interop.yml`、`bench.yml`、`e2e.yml` 和签名／公证／更新的 `release.yml` 尚未实现；它们属于计划目标，不是当前可运行 CI。发布前补齐真实平台、互通、性能、密钥配置及失败恢复，见[下一阶段计划](next-stage-plan.md)。
 
 ## 7. 发布
 

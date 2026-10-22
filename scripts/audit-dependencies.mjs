@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Run both dependency gates even when one fails; a report never grants release approval.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -32,10 +32,21 @@ export function auditDependencies({ cwd = ROOT, outputDir = join(cwd, 'target/pr
   runner = spawnSync, log = console.log } = {}) {
   mkdirSync(outputDir, { recursive: true });
   const summaryPath = join(outputDir, 'summary.json');
-  const report = { schemaVersion: 1, completed: false, passed: false, exitCode: 1,
+  const runId = randomUUID();
+  const runRelative = join('runs', runId);
+  const runDirectory = join(outputDir, runRelative);
+  const report = { schemaVersion: 2, runId, runDirectory: runRelative,
+    completed: false, passed: false, exitCode: 1,
     nodeVersion: process.version, checks: [] };
-  const persist = () => writeFileSync(summaryPath, `${JSON.stringify(report, null, 2)}\n`);
-  // Invalidate an older passing report before starting a command or reading inputs.
+  const encode = () => `${JSON.stringify(report, null, 2)}\n`;
+  // Invalidate latest before directory creation or input reads can fail.
+  writeFileSync(summaryPath, encode());
+  mkdirSync(join(outputDir, 'runs'), { recursive: true });
+  mkdirSync(runDirectory);
+  const persist = () => {
+    writeFileSync(join(runDirectory, 'summary.json'), encode());
+    writeFileSync(summaryPath, encode());
+  };
   persist();
   report.inputs = fingerprints(cwd);
   persist();
@@ -52,12 +63,12 @@ export function auditDependencies({ cwd = ROOT, outputDir = join(cwd, 'target/pr
     }
     const stdout = result.stdout ?? '';
     const stderr = result.stderr ?? '';
-    writeFileSync(join(outputDir, `${check.id}.stdout.log`), stdout);
-    writeFileSync(join(outputDir, `${check.id}.stderr.log`), stderr);
+    writeFileSync(join(runDirectory, `${check.id}.stdout.log`), stdout);
+    writeFileSync(join(runDirectory, `${check.id}.stderr.log`), stderr);
     const outcome = { id: check.id, command: [check.command, ...check.args],
       exitCode: result.status ?? null, signal: result.signal ?? null,
       passed: result.status === 0 && !result.error && !result.signal,
-      stdout: `${check.id}.stdout.log`, stderr: `${check.id}.stderr.log` };
+      stdout: join(runRelative, `${check.id}.stdout.log`), stderr: join(runRelative, `${check.id}.stderr.log`) };
     if (result.error) outcome.executionError = result.error.message;
     if (check.id === 'rust') {
       outcome.findings = {};
@@ -78,7 +89,7 @@ export function auditDependencies({ cwd = ROOT, outputDir = join(cwd, 'target/pr
     }
     report.checks.push(outcome);
     persist();
-    log(`[audit] ${check.id}: ${outcome.passed ? 'passed' : 'failed'}; exit=${outcome.exitCode}; logs=${relative(cwd, outputDir)}`);
+    log(`[audit] ${check.id}: ${outcome.passed ? 'passed' : 'failed'}; exit=${outcome.exitCode}; logs=${relative(cwd, runDirectory)}`);
   }
   report.inputsAfter = fingerprints(cwd);
   report.inputsChanged = JSON.stringify(report.inputs) !== JSON.stringify(report.inputsAfter);

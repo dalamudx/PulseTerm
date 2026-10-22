@@ -53,7 +53,7 @@ pub(super) fn requested(handle: &tauri::AppHandle, api: &tauri::ExitRequestApi, 
                     let _ = window.close();
                 }
             }
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             if let Ok(guard) = state.0.cli.lock()
                 && let Some(server) = guard.as_ref()
             {
@@ -78,7 +78,7 @@ pub(super) fn requested(handle: &tauri::AppHandle, api: &tauri::ExitRequestApi, 
     }
 }
 async fn physical(state: &Workspace) -> Result<()> {
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     let cli = state
         .0
         .cli
@@ -90,20 +90,20 @@ async fn physical(state: &Workspace) -> Result<()> {
         let native = native.ok_or("workspace.shutdown_failed")?;
         native.join().await.map_err(|_| "workspace.shutdown_failed")
     };
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     let profiles = state.0.profile_storage.shutdown();
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     let profiles = std::future::ready(Ok::<_, &'static str>(()));
     let (cli, windows, native, profiles, settings) = tokio::join!(
         async {
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             {
                 cli.ok_or("workspace.shutdown_failed")?
                     .shutdown()
                     .await
                     .map_err(|_| "workspace.shutdown_failed")
             }
-            #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+            #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
             {
                 Ok::<_, &'static str>(())
             }
@@ -213,6 +213,7 @@ mod tests {
         .await??;
         assert_eq!(sessions.lock().map_err(|_| "root poisoned")?.occupied(), 1);
         task.shutdown().await?; // The second source is fixture-owned, not an app resource.
+        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
         let cli = {
             struct NoActions;
             impl pulse_app::cli_control::Handler for NoActions {
@@ -242,7 +243,7 @@ mod tests {
             exit: ExitGate::new(),
             settings_io: Arc::new(settings::SettingsIo::new()),
             window_drains: Arc::new(app::WindowDrains::new()),
-            #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             cli: Mutex::new(Some(cli.0.clone())),
             profile_storage: profiles.shared_storage(),
         });
@@ -252,7 +253,7 @@ mod tests {
         let result = timeout(Duration::from_secs(5), physical(&state)).await?;
         state.0.exit.complete(result);
         result?;
-        #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
         {
             assert!(!cli.1.join("control.sock").exists());
             assert!(!cli.1.join("control.token").exists());

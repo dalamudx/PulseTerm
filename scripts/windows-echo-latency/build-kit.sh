@@ -40,9 +40,9 @@ cp /usr/share/common-licenses/GPL-3 "$kit/third-party/GPL-3.txt"
 printf '%s\n' 'Microsoft.Web.WebView2 1.0.4258.31' \
     'https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4258.31/microsoft.web.webview2.1.0.4258.31.nupkg' \
     'SHA256 56f7f4b8bf9aee4b8efefbbdd4f67d5f74ebd1b100ed0806da71bf76af481aa9' > "$kit/third-party/WebView2-source.txt"
-cp "$src/echo.html" "$src/run.ps1" "$src/README.md" "$kit/"
+cp "$src/echo.html" "$src/run.ps1" "$src/startup-diagnostics.ps1" "$src/collect-startup.ps1" "$src/README.md" "$kit/"
 cp -L "$xterm/xterm/lib/xterm.js" "$xterm/xterm/css/xterm.css" "$xterm/addon-webgl/lib/addon-webgl.js" "$kit/xterm/"
 cp -L "$xterm/xterm/LICENSE" "$kit/xterm/LICENSE-xterm"
 cp -L "$xterm/addon-webgl/LICENSE" "$kit/xterm/LICENSE-addon-webgl"
-(cd "$kit" && sha256sum echo-latency.exe echo-console.exe echo-webview2.exe WebView2Loader.dll run.ps1 echo.html > SHA256SUMS)
+(cd "$kit" && sha256sum echo-latency.exe echo-console.exe echo-webview2.exe WebView2Loader.dll run.ps1 startup-diagnostics.ps1 collect-startup.ps1 echo.html > SHA256SUMS)
 (cd "$out" && zip -qrX pulseterm-echo-latency.zip pulseterm-echo-latency && sha256sum pulseterm-echo-latency.zip)

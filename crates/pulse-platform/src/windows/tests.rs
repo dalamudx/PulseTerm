@@ -11,6 +11,39 @@ fn protected_creation_reopen_and_original_handle_validation() -> TestResult {
     Ok(())
 }
 #[test]
+fn prepare_creates_private_components_and_pins_the_entire_chain() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let parent = root.path().join("data");
+    let path = parent.join("workspace");
+    let guard = PrivateDirectory::prepare(&path)?;
+    guard.validate()?;
+    PrivateDirectory::open(&parent)?.validate()?;
+    PrivateDirectory::prepare(&path)?.validate()?;
+    assert!(std::fs::rename(&parent, root.path().join("moved")).is_err());
+    drop(guard);
+    std::fs::rename(&parent, root.path().join("moved"))?;
+    Ok(())
+}
+#[test]
+fn prepare_rejects_existing_broad_leaf_and_file_ancestors_without_repair() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let broad = root.path().join("broad");
+    sys::create_broad_fixture(&broad, false)?;
+    let before = sys::inspect(&open(&broad)?)?;
+    assert!(matches!(PrivateDirectory::prepare(&broad), Err(Location)));
+    let after = sys::inspect(&open(&broad)?)?;
+    assert!(before.owner == after.owner && before.acl == after.acl);
+    let file = root.path().join("file");
+    std::fs::write(&file, b"unchanged")?;
+    assert!(matches!(
+        PrivateDirectory::prepare(file.join("child")),
+        Err(Location)
+    ));
+    assert_eq!(std::fs::read(file)?, b"unchanged");
+    assert!(!broad.join("child").exists());
+    Ok(())
+}
+#[test]
 fn held_parent_and_leaf_cannot_be_renamed() -> TestResult {
     let root = tempfile::tempdir()?;
     let parent = root.path().join("parent");
@@ -19,8 +52,15 @@ fn held_parent_and_leaf_cannot_be_renamed() -> TestResult {
     let guard = PrivateDirectory::create(&path)?;
     assert!(std::fs::rename(&path, parent.join("moved")).is_err());
     assert!(std::fs::rename(&parent, root.path().join("moved-parent")).is_err());
+    assert!(std::fs::remove_dir(&path).is_err());
     guard.validate()?;
     first.validate()?;
+
+    drop(guard);
+    std::fs::rename(&path, parent.join("moved"))?;
+    first.validate()?;
+    drop(first);
+    std::fs::rename(&parent, root.path().join("moved-parent"))?;
     Ok(())
 }
 #[test]

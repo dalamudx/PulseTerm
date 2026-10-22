@@ -104,6 +104,12 @@ fn v4_steps() -> Vec<M<'static>> {
     steps
 }
 pub(crate) fn open(path: &Path) -> Result<Connection> {
+    open_admitted(path, None)
+}
+pub(crate) fn open_admitted(
+    path: &Path,
+    admission: Option<&dyn crate::database_admission::DatabaseAdmission>,
+) -> Result<Connection> {
     let mut steps = v4_steps();
     steps.push(M::up_with_hook(crate::ssh_key_identities::SCHEMA, |tx| {
         let owner = uuid::Uuid::new_v4();
@@ -112,7 +118,7 @@ pub(crate) fn open(path: &Path) -> Result<Connection> {
             .map(|_| ())
             .map_err(|_| rusqlite_migration::HookError::Hook("key_identity.source_rejected".into()))
     }));
-    let connection = open_with_migrations(path, &Migrations::new(steps), 5)?;
+    let connection = open_with_migrations(path, &Migrations::new(steps), 5, admission)?;
     let owner = uuid::Uuid::new_v4();
     let validated = crate::ssh_trust::load(&connection, owner)?;
     crate::ssh_identities::load(&connection, owner)?;
@@ -124,24 +130,25 @@ pub(crate) fn open(path: &Path) -> Result<Connection> {
 }
 #[cfg(test)]
 pub(crate) fn open_v4_trust_fixture(path: &Path) -> Result<Connection> {
-    open_with_migrations(path, &Migrations::new(v4_steps()), 4)
+    open_with_migrations(path, &Migrations::new(v4_steps()), 4, None)
 }
 #[cfg(all(test, feature = "ssh-trust"))]
 pub(crate) fn open_v3_fixture(path: &Path) -> Result<Connection> {
-    open_with_migrations(path, &Migrations::new(v3_steps()), 3)
+    open_with_migrations(path, &Migrations::new(v3_steps()), 3, None)
 }
 #[cfg(test)]
 pub(crate) fn open_v2_fixture(path: &Path) -> Result<Connection> {
-    open_with_migrations(path, &Migrations::new(v2_steps()), 2)
+    open_with_migrations(path, &Migrations::new(v2_steps()), 2, None)
 }
 #[cfg(test)]
 pub(crate) fn open_v1_fixture(path: &Path) -> Result<Connection> {
-    open_with_migrations(path, &Migrations::new(vec![M::up(SCHEMA)]), 1)
+    open_with_migrations(path, &Migrations::new(vec![M::up(SCHEMA)]), 1, None)
 }
 fn open_with_migrations(
     path: &Path,
     migrations: &Migrations<'_>,
     target: u32,
+    admission: Option<&dyn crate::database_admission::DatabaseAdmission>,
 ) -> Result<Connection> {
     private_file(path)?;
     let mut connection = Connection::open_with_flags(
@@ -154,7 +161,10 @@ fn open_with_migrations(
     connection
         .busy_timeout(Duration::from_millis(250))
         .map_err(|_| StoreError::Database)?;
-    migrate(&mut connection, path, migrations, target)?;
+    match admission {
+        Some(guard) => migrate_admitted(&mut connection, path, migrations, target, Some(guard))?,
+        None => migrate(&mut connection, path, migrations, target)?,
+    }
     let journal: String = connection
         .query_row("PRAGMA journal_mode=WAL", [], |row| row.get(0))
         .map_err(|_| StoreError::Database)?;
@@ -174,6 +184,15 @@ pub(crate) fn migrate(
     path: &Path,
     migrations: &Migrations<'_>,
     target: u32,
+) -> Result<()> {
+    migrate_admitted(connection, path, migrations, target, None)
+}
+pub(crate) fn migrate_admitted(
+    connection: &mut Connection,
+    path: &Path,
+    migrations: &Migrations<'_>,
+    target: u32,
+    admission: Option<&dyn crate::database_admission::DatabaseAdmission>,
 ) -> Result<()> {
     let version: u32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -200,14 +219,19 @@ pub(crate) fn migrate(
         let mut backup_path = path.as_os_str().to_os_string();
         backup_path.push(format!(".bak-{target}"));
         let backup_path = std::path::PathBuf::from(backup_path);
-        let mut options = OpenOptions::new();
-        options.create_new(true).read(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let file = options.open(&backup_path).map_err(|_| StoreError::Backup)?;
+        let native = admission.map(|guard| guard.backup(target)).transpose()?;
+        let file = if native.is_none() {
+            let mut options = OpenOptions::new();
+            options.create_new(true).read(true).write(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            Some(options.open(&backup_path).map_err(|_| StoreError::Backup)?)
+        } else {
+            None
+        };
         let mut dest = Connection::open_with_flags(
             &backup_path,
             OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -226,7 +250,11 @@ pub(crate) fn migrate(
             }
         }
         dest.close().map_err(|_| StoreError::Backup)?;
-        file.sync_all().map_err(|_| StoreError::Backup)?;
+        match (native, file) {
+            (Some(guard), None) => guard.sync()?,
+            (None, Some(file)) => file.sync_all().map_err(|_| StoreError::Backup)?,
+            _ => return Err(StoreError::Backup),
+        }
         #[cfg(unix)]
         {
             let parent = path.parent().ok_or(StoreError::Backup)?;

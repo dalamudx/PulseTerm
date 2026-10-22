@@ -40,7 +40,7 @@ pub fn validated_pins(snapshot: &TrustSnapshot) -> Result<Vec<HostPin>, HostKeyE
     }
     Ok(pins)
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use russh::keys::{Algorithm, PrivateKey};

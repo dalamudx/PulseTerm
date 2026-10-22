@@ -10,7 +10,7 @@ fn real_openssh_metadata_subset_agrees_on_order_context_and_quoting()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = tempfile::Builder::new()
         .prefix("pt-ssh-config-diff.")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(std::fs::canonicalize(std::env::temp_dir())?)?;
     let parts = root.path().join("parts");
     fs::create_dir(&parts)?;
     fs::write(parts.join("a.conf"), "User first\nHost other\nPort 99\n")?;

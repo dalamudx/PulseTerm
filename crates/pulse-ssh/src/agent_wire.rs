@@ -14,10 +14,10 @@ const MAX_PACKET: usize = 256 * 1024;
 const MAX_KEYS: u32 = 128;
 const MAX_FIELD: usize = 16 * 1024;
 pub(super) struct Wire {
-    stream: tokio::net::UnixStream,
+    stream: super::AgentStream,
 }
 impl Wire {
-    pub(super) fn new(stream: tokio::net::UnixStream) -> Self {
+    pub(super) fn new(stream: super::AgentStream) -> Self {
         Self { stream }
     }
     pub(super) async fn packet(

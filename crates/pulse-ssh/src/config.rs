@@ -1,4 +1,4 @@
-//! Bounded OpenSSH metadata resolution and explicit Unix read-only source confirmation; no execution.
+//! Bounded OpenSSH metadata resolution and reader-bound read-only sources; no execution.
 use crate::HostTarget;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -306,8 +306,14 @@ mod tests;
 #[cfg(unix)]
 #[path = "config_file.rs"]
 mod file;
+#[path = "config_source.rs"]
+mod sources;
 #[cfg(unix)]
-pub use file::sources::{ConfigDirectoryReader, ConfigFileSnapshot};
+pub use sources::{ConfigDirectoryReader, ConfigFileSnapshot};
+pub use sources::{
+    ConfigSourceDirectory, ConfigSourceFile, ConfigSourceFilesystem, SourceDirectoryReader,
+    SourceFileSnapshot,
+};
 /// Read only the fixed `config` in a backend-selected private SSH directory.
 /// Reject missing/unsafe files without writes. Include texts must be separately supplied;
 /// no Include file, identity key, environment variable or home directory is read implicitly.

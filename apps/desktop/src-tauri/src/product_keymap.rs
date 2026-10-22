@@ -1,11 +1,16 @@
 //! Current-page keymap tickets and root-owned IO. No caller paths or execution authority.
+#[cfg(windows)]
+use super::windows_keymap::{KeymapFile, KeymapSnapshot};
 use super::*;
 use pulse_app::registry::PageLaunchScope;
+#[cfg(not(windows))]
+use pulse_store::keymap_file::{KeymapFile, KeymapSnapshot};
 use pulse_store::{
     keymap::{KeymapAction, KeymapOverride, KeymapProjection},
-    keymap_file::{KeymapFile, KeymapFileError, KeymapMutation, KeymapSnapshot},
-    keymap_io::{KeymapIoError, KeymapIoOwner},
+    keymap_file::{KeymapFileError, KeymapMutation},
+    keymap_io::{KeymapIoError, KeymapIoOwner as NativeIoOwner},
 };
+type KeymapIoOwner = NativeIoOwner<KeymapFile>;
 use std::{
     future::Future,
     path::PathBuf,
@@ -203,7 +208,7 @@ impl KeymapOwner {
             .runtime
             .spawn_blocking(move || {
                 owner.check(&page, &cancelled)?;
-                let admitted = pulse_store::state_directory::prepare(&captured_directory)
+                let admitted = super::app_data::prepare(&captured_directory)
                     .map_err(|_| "workspace.keymap_unavailable")?;
                 owner.check(&page, &cancelled)?;
                 let file = KeymapFile::open_private(admitted)

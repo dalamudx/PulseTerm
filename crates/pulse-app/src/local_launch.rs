@@ -410,6 +410,9 @@ pub(crate) async fn start_page_stored_configured_local_with_preset(
         ShellKind::Fish => AutomaticShell::Fish,
         ShellKind::Sh => AutomaticShell::Sh,
         ShellKind::Pwsh => AutomaticShell::Pwsh,
+        ShellKind::PowerShell => AutomaticShell::PowerShell,
+        ShellKind::Cmd => AutomaticShell::Cmd,
+        ShellKind::Wsl => AutomaticShell::Wsl,
     };
     registry.check_launch_page(page)?;
     let snapshot = store.load_profile_editor(shell).await?;

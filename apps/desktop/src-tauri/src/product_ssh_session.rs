@@ -2,18 +2,18 @@
 use super::*;
 #[path = "product_ssh_route.rs"]
 pub(super) mod route;
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 use crate::ssh_session_adapter::requests::{SessionRequests, StartTarget};
 pub(super) struct SessionFactory {
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     requests: Arc<SessionRequests>,
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     routes: Arc<crate::ssh_session_adapter::route::requests::Bank>,
 }
 
 /// Freeze a display-only preference from the exact original page before dialing.
 /// A settings failure rejects startup; it never falls back to a different base.
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 pub(super) async fn startup_palette(
     app: &tauri::AppHandle,
     state: &Workspace,
@@ -70,39 +70,47 @@ pub(super) async fn startup_palette(
 }
 impl SessionFactory {
     pub(super) fn new(_registry: SessionRegistry, _owner: WindowToken) -> Self {
-        #[cfg(all(feature = "workspace-ssh", unix))]
+        #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
         let requests = SessionRequests::new(
             _registry,
             _owner,
             tauri::async_runtime::handle().inner().clone(),
         );
         Self {
-            #[cfg(all(feature = "workspace-ssh", unix))]
+            #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
             routes: crate::ssh_session_adapter::route::requests::Bank::new(
                 requests.startup_capacity(),
                 tauri::async_runtime::handle().inner().clone(),
             ),
-            #[cfg(all(feature = "workspace-ssh", unix))]
+            #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
             requests,
         }
     }
-    #[cfg(all(feature = "workspace-cli", feature = "workspace-ssh", unix))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        feature = "workspace-ssh",
+        any(unix, windows)
+    ))]
     pub(super) fn native_requests(&self) -> Arc<SessionRequests> {
         self.requests.clone()
     }
-    #[cfg(all(feature = "workspace-cli", feature = "workspace-ssh", unix))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        feature = "workspace-ssh",
+        any(unix, windows)
+    ))]
     pub(super) fn native_routes(&self) -> Arc<crate::ssh_session_adapter::route::requests::Bank> {
         self.routes.clone()
     }
     pub(super) fn retire(&self) {
-        #[cfg(all(feature = "workspace-ssh", unix))]
+        #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
         {
             self.routes.retire();
             self.requests.retire();
         }
     }
     pub(super) fn close(&self) {
-        #[cfg(all(feature = "workspace-ssh", unix))]
+        #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
         {
             self.routes.close();
             self.requests.close();
@@ -110,7 +118,7 @@ impl SessionFactory {
     }
     pub(super) async fn shutdown(&self) -> Result<()> {
         self.close();
-        #[cfg(all(feature = "workspace-ssh", unix))]
+        #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
         self.requests.shutdown().await?;
         Ok(())
     }
@@ -127,7 +135,7 @@ pub(super) struct Ticket {
     version: u8,
     token: String,
 }
-#[cfg(all(feature = "workspace-ssh", unix))]
+#[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
 fn canonical(text: &str, version: usize) -> Result<Uuid> {
     let uuid = Uuid::parse_str(text).map_err(|_| "workspace.denied")?;
     if text.len() != 36
@@ -148,12 +156,12 @@ pub(super) fn workspace_ssh_agent_interactive_session_begin(
     challenges: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection, challenges);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -199,12 +207,12 @@ pub(super) fn workspace_ssh_password_interactive_session_begin(
     challenges: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection, challenges);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -250,12 +258,12 @@ pub(super) fn workspace_ssh_private_key_interactive_session_begin(
     challenges: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection, challenges);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -294,12 +302,12 @@ pub(super) fn workspace_ssh_interactive_session_begin(
     challenges: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection, challenges);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -340,12 +348,12 @@ pub(super) async fn workspace_ssh_interactive_session_prepare(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = canonical(&token, 4)?;
         let requests = state.0.ssh_sessions.requests.clone();
@@ -388,12 +396,12 @@ pub(super) fn workspace_ssh_interactive_session_answer(
 ) -> Result<()> {
     let answers = zeroize::Zeroizing::new(answers);
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token, round, answers);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         state.0.ssh_sessions.requests.answer_interactive(
             &page,
@@ -411,12 +419,12 @@ pub(super) fn workspace_ssh_key_session_begin(
     selection: SavedSelection,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection.host, selection.identity);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -452,12 +460,12 @@ pub(super) async fn workspace_ssh_key_session_prepare(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = canonical(&token, 4)?;
         let requests = state.0.ssh_sessions.requests.clone();
@@ -498,12 +506,12 @@ pub(super) fn workspace_ssh_agent_session_begin(
     selection: SavedSelection,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -533,12 +541,12 @@ pub(super) async fn workspace_ssh_agent_session_prepare(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = canonical(&token, 4)?;
         let requests = state.0.ssh_sessions.requests.clone();
@@ -596,12 +604,12 @@ pub(super) fn workspace_ssh_session_begin(
     selection: SavedSelection,
 ) -> Result<Ticket> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, selection.host, selection.identity);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let host = canonical(&selection.host, 7)?;
         let identity = canonical(&selection.identity, 7)?;
@@ -638,12 +646,12 @@ pub(super) async fn workspace_ssh_session_prepare(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = canonical(&token, 4)?;
         let requests = state.0.ssh_sessions.requests.clone();
@@ -684,12 +692,12 @@ pub(super) async fn workspace_ssh_session_start(
     token: String,
 ) -> Result<String> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         let token = canonical(&token, 4)?;
         let selected = state.0.ssh_sessions.requests.selected_host(&page, token)?;
@@ -746,12 +754,12 @@ pub(super) fn workspace_ssh_session_cancel(
     token: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(not(all(feature = "workspace-ssh", unix)))]
+    #[cfg(not(all(feature = "workspace-ssh", any(unix, windows))))]
     {
         let _ = (page, token);
         Err("workspace.ssh_disabled")
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     {
         state
             .0
@@ -780,7 +788,7 @@ mod tests {
             .is_err()
         );
     }
-    #[cfg(all(feature = "workspace-ssh", unix))]
+    #[cfg(all(feature = "workspace-ssh", any(unix, windows)))]
     #[test]
     fn opaque_and_saved_namespaces_are_not_interchangeable() {
         let ticket = Uuid::new_v4().to_string();

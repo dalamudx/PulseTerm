@@ -46,6 +46,9 @@ fn shell_identity(kind: pulse_pty::profiles::ShellKind) -> AutomaticShell {
         ShellKind::Fish => AutomaticShell::Fish,
         ShellKind::Sh => AutomaticShell::Sh,
         ShellKind::Pwsh => AutomaticShell::Pwsh,
+        ShellKind::PowerShell => AutomaticShell::PowerShell,
+        ShellKind::Cmd => AutomaticShell::Cmd,
+        ShellKind::Wsl => AutomaticShell::Wsl,
     }
 }
 impl ProfileReader {
@@ -241,6 +244,6 @@ impl ProfileReader {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "product_profiles_lifecycle_tests.rs"]
 mod tests;

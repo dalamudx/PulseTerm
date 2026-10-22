@@ -9,11 +9,11 @@ pub(super) fn workspace_cli_answer(
     accept: bool,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     {
         cli::answer(&state, &page, &ticket, accept)
     }
-    #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+    #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
     {
         let _ = (page, ticket, accept);
         Err("workspace.unavailable")
@@ -30,7 +30,7 @@ pub(super) fn workspace_cli_selected(
     selected: bool,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     {
         let id = state
             .0
@@ -51,7 +51,7 @@ pub(super) fn workspace_cli_selected(
             .complete(&page, parsed, id.get(), selected)
             .map_err(|_| "workspace.denied")
     }
-    #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+    #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
     {
         let _ = (page, ticket, session, selected);
         Err("workspace.unavailable")
@@ -67,7 +67,7 @@ pub(super) fn workspace_cli_select_admit(
     session: String,
 ) -> Result<()> {
     let (_, page) = session::page(&window, &state, &nonce)?;
-    #[cfg(all(feature = "workspace-cli", target_os = "linux"))]
+    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
     {
         let id = state
             .0
@@ -88,7 +88,7 @@ pub(super) fn workspace_cli_select_admit(
             .admit(&page, parsed, id.get())
             .map_err(|_| "workspace.denied")
     }
-    #[cfg(not(all(feature = "workspace-cli", target_os = "linux")))]
+    #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
     {
         let _ = (page, ticket, session);
         Err("workspace.unavailable")

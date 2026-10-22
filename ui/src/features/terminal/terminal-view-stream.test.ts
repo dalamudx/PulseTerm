@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
+import { TerminalOutputTiming } from "./terminal-output-timing";
 import { type DrawnBoundary, TerminalViewStream } from "./terminal-view-stream";
 import { GenerationViewHost } from "./view-host";
 
@@ -29,7 +30,7 @@ function deferred() {
   });
   return { promise, resolve };
 }
-function fixture(beforeDraw?: () => void) {
+function fixture(beforeDraw?: () => void, timing?: TerminalOutputTiming) {
   const host = new GenerationViewHost(new AbortController().signal, vi.fn()),
     scope = host.begin(generation);
   const writes: Uint8Array[] = [],
@@ -66,6 +67,8 @@ function fixture(beforeDraw?: () => void) {
     16,
     callbacks,
     renderer,
+    undefined,
+    timing,
   );
   const bootstrap = async () => {
     for (let i = 0; i < 3; i++) await stream.enqueue(frame(i));
@@ -83,6 +86,41 @@ function fixture(beforeDraw?: () => void) {
     bootstrap,
   };
 }
+it("timing retains data coordinates and cannot record ACK completion before drawing", async () => {
+  const timing = new TerminalOutputTiming();
+  const f = fixture(undefined, timing);
+  await f.bootstrap();
+  await f.stream.enqueue(frame(3));
+  const gate = deferred();
+  f.renderer.draw.mockImplementation(async () => {
+    timing.opportunity();
+    await gate.promise;
+    timing.opportunity();
+  });
+  const pending = f.stream.enqueue(frame(4));
+  await vi.waitFor(() => expect(f.renderer.draw).toHaveBeenCalled());
+  expect(f.ack).toEqual([0, 1, 2, 3]);
+  expect(() => timing.snapshot()).toThrow("unavailable");
+  gate.resolve();
+  const receipt = await pending;
+  const snapshot = timing.snapshot();
+  expect(snapshot.batches).toHaveLength(1);
+  expect(snapshot.frames).toHaveLength(1);
+  expect(snapshot.frames[0]?.sequence).toBe(receipt?.sequence);
+  expect(snapshot.batches[0]?.frameCount).toBe(2);
+  expect(snapshot.frames[0]?.acknowledgeStartedMs).toBeGreaterThanOrEqual(
+    snapshot.batches[0]?.verifiedMs ?? Infinity,
+  );
+  expect(snapshot.frames[0]?.acknowledgeStartedMs).toBeLessThanOrEqual(
+    snapshot.frames[0]?.acknowledgedMs ?? -Infinity,
+  );
+  expect(snapshot.frames[0]?.acknowledgedMs).toBeGreaterThanOrEqual(
+    snapshot.batches[0]?.verifiedMs ?? Infinity,
+  );
+  f.stream.cancel();
+  expect(() => timing.snapshot()).toThrow("unavailable");
+});
+
 it("a viewport redraw holds live-output credit until stable drawing is verified", async () => {
   const f = fixture();
   await f.bootstrap();

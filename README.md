@@ -15,7 +15,7 @@ mise run bootstrap
 mise run check
 mise run test
 mise run probe
-mise run audit             # 包含原生可选依赖；当前存在待审批的依赖门禁，见验证记录
+mise run audit             # 维护公告与完整发行材料仍阻断，见依赖审计说明
 ```
 
 工具版本统一由 `.mise.toml` 管理；Rust/JS 库依赖分别由 Cargo 和 pnpm manifests/lockfiles 管理。探针输出位于 `target/probes/`，不会提交到仓库。

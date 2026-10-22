@@ -2,6 +2,8 @@
 
 CLI-01 的 Linux 本地工作区多窗口限定验收批次已完成：真实 WebView、合并回归、SHA 证据归档与清理通过。SSH 跨窗实际认证、跨平台验证及历史原生关闭 SIGSEGV 尚未解决。
 
+Windows 显式 `workspace-cli` 的暖传输已接线，复用以下窗口路由与原页批准；原生运行未验收。平台路径、账户与句柄边界见[Windows CLI 控制](windows-cli-control.md)。Windows 不具备本文件历史 Linux 批次的冷启动或实窗通过证据。
+
 `pulse windows` 仅列出已发布窗口标签，采用 Global／Safe 空参数 Capability。`pulse -w <标签> <动作>` 精确选择后端窗口；省略选择器只在恰好一个已发布窗口时有效，多窗时拒绝猜测焦点窗，未知或已关闭标签不回退。选择器在动作准入前剥离，窗口定位不授予 Capability、Vault、会话或凭据权限。
 
 暖启动 `pulse [-w <原窗标签>] new-window` 在原窗独立确认后只创建一个空工作区，返回后端标签。它不继承终端、Vault 或身份批准，新窗启动终端仍需自己的批准。取消、CLI 断连或原页导航不创建窗口。冷传输不支持 new-window、windows 或按未知标签创建替代窗；冷选择器只接受并标准化主窗 workspace。

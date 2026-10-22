@@ -5,10 +5,22 @@ use std::{
     os::windows::{ffi::OsStrExt, fs::OpenOptionsExt},
     path::{Component, Path, PathBuf, Prefix},
 };
+mod cold_cli;
+pub use cold_cli::{LocalControlPresence, WorkspaceGui, local_control_presence};
+mod database;
+mod read_only_directory;
+pub use database::{PrivateDatabase, PrivateDatabaseBackup};
+pub use read_only_directory::{ReadOnlyDirectory, ReadOnlyStamp};
+mod local_control;
 mod private_file;
 #[allow(unsafe_code)]
 mod sys;
 pub use crate::file_state::FileSnapshot;
+pub use crate::web_link::WebLinkError;
+pub use local_control::{
+    LocalControlIdentity, LocalControlToken, local_application_data_directory,
+    process_is_current_user, verify_single_instance_owner,
+};
 pub use private_file::AtomicFile;
 pub use private_file::{PrivateFile, PrivateFileError, PrivateFileResult};
 #[cfg(test)]
@@ -16,6 +28,26 @@ mod private_file_tests;
 #[cfg(test)]
 mod tests;
 
+/// Read the OS-selected system directory, independent of PATH and page input.
+/// Synchronous metadata only; grants no executable or launch authority.
+pub fn system_directory() -> DirectoryResult<PathBuf> {
+    sys::system_directory()
+}
+
+/// Read the current user's registered default WSL distribution name without executing WSL.
+/// Absence is distinct from an unreadable or malformed registry value.
+/// Callers must capture the returned name as literal argv before launch admission.
+pub fn default_wsl_distribution() -> DirectoryResult<Option<String>> {
+    sys::default_wsl_distribution()
+}
+/// Hand a caller-validated HTTP(S) URL to the system default handler without command arguments.
+/// Call only on a dedicated blocking thread. Authorization is checked after COM initialization,
+/// immediately before dispatch. Success means handler handoff, not browser or network completion.
+/// The caller must retain native I/O capacity through this call even if its waiter is cancelled.
+pub fn open_web_url(url: &str, authorize: impl FnOnce() -> bool) -> Result<(), WebLinkError> {
+    crate::web_link::validate(url)?;
+    sys::open_web_url(url, authorize)
+}
 struct BoundDirectory {
     file: File,
     path: PathBuf,
@@ -72,22 +104,36 @@ fn paths(path: &Path) -> DirectoryResult<Vec<PathBuf>> {
 }
 
 fn open(path: &Path) -> DirectoryResult<File> {
+    open_native(path).map_err(|_| Location)
+}
+
+fn open_native(path: &Path) -> std::io::Result<File> {
+    // Metadata-only access does not enforce the no-delete sharing restriction.
     OpenOptions::new()
-        .access_mode(0x00020080) // READ_CONTROL | FILE_READ_ATTRIBUTES, never data writes.
+        .access_mode(0x00020081) // READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY.
         .share_mode(3) // Read/write sharing, deliberately no FILE_SHARE_DELETE.
         .custom_flags(0x02200000) // BACKUP_SEMANTICS | OPEN_REPARSE_POINT.
         .open(path)
-        .map_err(|_| Location)
 }
 
 fn bind(
     paths: &[PathBuf],
     user: &[u8],
     private_leaf: bool,
+    create_missing: bool,
 ) -> DirectoryResult<Vec<BoundDirectory>> {
     let mut result = Vec::with_capacity(paths.len());
     for (i, p) in paths.iter().enumerate() {
-        let file = open(p)?;
+        let file = match open(p) {
+            Ok(file) => file,
+            Err(_) if create_missing && i > 0 => {
+                // Every parent has already been admitted and stays pinned in result.
+                // Existing entries are never repaired; creation must still reopen and validate.
+                sys::create_private(p, user)?;
+                open(p)?
+            }
+            Err(error) => return Err(error),
+        };
         let facts = sys::inspect(&file)?;
         policy::directory_attributes(facts.attributes)?;
         policy::admit_acl(
@@ -112,7 +158,18 @@ impl PrivateDirectory {
     pub fn open(path: impl AsRef<Path>) -> DirectoryResult<Self> {
         let user = sys::user()?;
         let result = Self {
-            chain: bind(&paths(path.as_ref())?, &user, true)?,
+            chain: bind(&paths(path.as_ref())?, &user, true, false)?,
+            user,
+        };
+        result.validate()?;
+        Ok(result)
+    }
+    /// Prepare absent components privately, keeping admitted ancestors pinned during creation.
+    /// Existing directories are only validated; this grants no page or SQLite authority.
+    pub fn prepare(path: impl AsRef<Path>) -> DirectoryResult<Self> {
+        let user = sys::user()?;
+        let result = Self {
+            chain: bind(&paths(path.as_ref())?, &user, true, true)?,
             user,
         };
         result.validate()?;
@@ -124,7 +181,7 @@ impl PrivateDirectory {
         let path = path.as_ref();
         let all = paths(path)?;
         let user = sys::user()?;
-        let _parents = bind(&all[..all.len() - 1], &user, false)?;
+        let _parents = bind(&all[..all.len() - 1], &user, false, false)?;
         sys::create_private(all.last().ok_or(Location)?, &user)?;
         Self::open(path)
     }

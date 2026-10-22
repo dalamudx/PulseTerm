@@ -1,4 +1,4 @@
-use super::{native::SettingsFile, *};
+use super::*;
 use pulse_platform::windows::PrivateDirectory;
 use pulse_store::{
     settings::SettingsResolver, settings_edit::TerminalSettingEdit as Edit,
@@ -13,7 +13,7 @@ fn missing_create_comment_preserving_save_remove_and_reopen() -> TestResult {
     let path = root.path().join("private");
     let directory = PrivateDirectory::create(&path)?;
     let file = SettingsFile::open_private(path.clone())?;
-    let missing = file.load()?;
+    let missing: SettingsSnapshot = file.load()?;
     assert!(!missing.exists());
     assert_eq!(missing.text(), "");
     let created =

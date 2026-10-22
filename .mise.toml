@@ -1,3 +1,6 @@
+[env]
+PULSETERM_POWERSHELL_TEST_VERSION = "7.6.0"
+
 [tools]
 rust = "1.95.0"
 node = "22.23.3"
@@ -16,13 +19,37 @@ run = ["cargo xtask check", "pnpm --filter ui check"]
 description = "Check all features and targets of the platform, store, PTY and application core on the current platform"
 run = "cargo check -p pulse-platform -p pulse-store -p pulse-pty -p pulse-app --all-features --all-targets --locked"
 
+[tasks.test-ssh-agent-transport]
+description = "Test bounded Agent transport and authorization on the current OS; Windows includes private named-pipe fixtures, not the user service or product GUI"
+run = "cargo test -p pulse-ssh --all-features --locked --lib agent::"
+
+[tasks.test-cli-transport]
+description = "Test authenticated Linux/Windows local control and native completion; private fixtures only, no GUI or cold-start acceptance"
+run = ["node --test scripts/test-cli-transport.test.mjs", "node scripts/test-cli-transport.mjs"]
+
+[tasks.test-windows-ssh-config]
+description = "Test four same-source Windows SSH config fixtures; exact identities required, no GUI or connection acceptance"
+run = ["node --test scripts/test-windows-ssh-config.test.mjs", "node scripts/test-windows-ssh-config.mjs"]
+
 [tasks.check-platform]
 description = "Strictly check platform policies; Windows also runs native private directory, file and atomic-save tests"
 run = ["cargo clippy -p pulse-platform --all-targets --locked -- -D warnings", "cargo test -p pulse-platform --all-targets --locked"]
 
 [tasks.check-windows-settings]
-description = "Check validation-only Windows settings adapter; native file tests run only on Windows"
+description = "Check production Windows settings adapter; native file cases execute only on Windows"
 run = ["cargo clippy -p xtask --features windows-settings-probe --all-targets --locked -- -D warnings", "cargo test -p xtask --features windows-settings-probe --bin xtask --locked windows_settings::"]
+
+[tasks.check-windows-product-runner]
+description = "Reject incomplete native test identities and preserve failed-run evidence without treating simulated runs as Windows acceptance"
+run = "node --test scripts/windows-product-probe/test-native.test.mjs"
+
+[tasks.test-windows-product]
+description = "Run exactly 22 native Windows production directory, settings, SQLite, keymap and discovery cases; no GUI or ordinary-user claim"
+run = "node scripts/windows-product-probe/test-native.mjs"
+
+[tasks.test-windows-product-runner]
+description = "Check PowerShell native capture with actual fast exits and failure receipts; Windows uses PS5.1"
+run = "node scripts/windows-product-probe/test-process.mjs"
 
 [tasks.check-ssh-adapters]
 description = "Strictly check standalone SSH probes and the complete production SSH workspace adapter"
@@ -1265,10 +1292,12 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$fixture_dir/target}"
 profile="${PULSE_PERFORMANCE_PROFILE:-dev}"
 case "$profile" in dev|release) ;; *) echo "Unsupported performance build profile: $profile" >&2; exit 1 ;; esac
 export PULSE_PERFORMANCE_PROFILE="$profile"
-pnpm --filter ui build
+pnpm --filter ui exec tsc --noEmit
+pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --profile "$profile" --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
 mkdir -p target/probes/workspace-performance
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-performance/wm.log python3 scripts/probe-workspace-performance.py
+timeout --kill-after=25s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-performance/wm.log python3 scripts/probe-workspace-performance.py
 """
 
 [tasks.probe-workspace-performance-release]
@@ -1400,6 +1429,24 @@ export PULSE_SSH_TEST_SERVER="$CARGO_TARGET_DIR/debug/xtask"
 timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-ssh-settings-wm.log python3 scripts/probe-workspace-cold-ssh.py
 """
 
+[tasks.check-echo-pacing]
+description = "Strictly compile actual X11 probe pacing and verify deterministic delays, paired means, fixed default and CLI rejection"
+run = """
+set -eu
+case "$(uname -s)" in Linux) ;; *) echo 'X11 pacing checks require Linux' >&2; exit 2 ;; esac
+mkdir -p /data/temp
+pacing_tmp=$(mktemp -d /data/temp/pulseterm-echo-pacing.XXXXXX)
+trap 'rm -rf -- "$pacing_tmp"' EXIT
+export TMPDIR="$pacing_tmp" TMP="$pacing_tmp" TEMP="$pacing_tmp"
+cc -std=c11 -O2 -Wall -Wextra -Werror scripts/test-workspace-echo-pacing.c -o "$pacing_tmp/pacing-check" $(pkg-config --cflags --libs x11 xtst)
+"$pacing_tmp/pacing-check"
+"""
+
+[tasks.check-workspace-echo-analysis]
+description = "Verify same-clock complete-sample echo correlation and nearest-rank segment statistics without claiming hardware acceptance"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = "python3 scripts/test-analyze-workspace-echo.py"
+
 [tasks.probe-workspace-echo]
 description = "Measure release XTest-to-PTY-to-glyph echo p95 against the 16ms target"
 env = { PULSE_LOAD_KIND = "echo", PULSE_LOAD_RUN = "echo-latest" }
@@ -1408,6 +1455,10 @@ run = "mise run probe-workspace-load"
 [tasks.windows-echo-kit]
 description = "Build the Windows real-GPU WebView2 echo kit (CC_WIN, CXX_WIN, WEBVIEW2_PACKAGE)"
 run = "sh scripts/windows-echo-latency/build-kit.sh target/windows-echo-kit"
+
+[tasks.windows-storage-kit]
+description = "Build existing Windows native storage prerequisite tests; no production startup or latency claim"
+run = "sh scripts/windows-storage-probe/build-kit.sh target/windows-storage-kit"
 
 [tasks.probe-workspace-load-state]
 description = "Compare the original drawn 1GiB screen against the actor before refresh"
@@ -1429,6 +1480,12 @@ if [ "${PULSE_LOAD_VERIFY:-0}" = 1 ]; then
   export VITE_LOAD_STATE_PROBE=1
   load_features="$load_features,workspace-load-state-probe"
 fi
+export VITE_ECHO_TIMING_PROBE=0
+if [ "${PULSE_ECHO_TIMING:-0}" = 1 ]; then
+  test "${PULSE_LOAD_KIND:-load}" = echo || { echo 'Echo timing is only supported by the fixed echo fixture' >&2; exit 2; }
+  export VITE_ECHO_TIMING_PROBE=1
+  load_features="$load_features,workspace-load-state-probe"
+fi
 pnpm --filter ui exec vite build --configLoader runner --outDir "$fixture_dir/ui-dist"
 export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$fixture_dir")
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --release --features "$load_features" --bin pulseterm-workspace --locked
@@ -1440,4 +1497,91 @@ if [ "${PULSE_LOAD_KIND:-load}" = echo ]; then
 fi
 cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o "$fixture_dir/x11-status" $(pkg-config --cflags --libs x11 atspi-2 gio-2.0 gobject-2.0 glib-2.0)
 timeout --kill-after=25s 720s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-load/wm.log python3 scripts/probe-workspace-load.py
+"""
+
+[tasks.check-presentation-floor]
+description = "Check fixed X11/WebKit pixel baseline receipts without product performance claims"
+run = "PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-presentation-floor.py"
+
+[tasks.check-tauri-memory]
+description = "Check same-host blank/workspace memory receipts, zero authority and failure cleanup"
+run = "PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-tauri-memory.py"
+
+[tasks.probe-tauri-memory]
+description = "Build explicit Linux diagnostic feature and compare blank/workspace idle PSS in the same Tauri binary"
+run = """
+set -eu
+case "$(uname -s)" in Linux) ;; *) echo 'Tauri memory comparison requires Linux/X11' >&2; exit 2 ;; esac
+mkdir -p /data/temp target/probes/tauri-memory
+tauri_memory_tmp=$(mktemp -d /data/temp/pulseterm-tauri-memory-build.XXXXXX)
+trap 'rm -rf -- "$tauri_memory_tmp"' EXIT
+export TMPDIR="$tauri_memory_tmp" TMP="$tauri_memory_tmp" TEMP="$tauri_memory_tmp" PYTHONDONTWRITEBYTECODE=1
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$tauri_memory_tmp/target}"
+export VITE_ECHO_TIMING_PROBE=0 VITE_LOAD_STATE_PROBE=0
+pnpm --filter ui exec tsc --noEmit
+pnpm --filter ui exec vite build --configLoader runner --outDir "$tauri_memory_tmp/ui-dist"
+export TAURI_CONFIG=$(printf '{"build":{"frontendDist":"%s/ui-dist"}}' "$tauri_memory_tmp")
+cargo build -p pulseterm-desktop --release --features workspace-runtime-memory-probe,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --locked
+tauri_memory_label="${PULSE_TAURI_MEMORY_RUN:-latest}"
+case "$tauri_memory_label" in ''|*[!a-zA-Z0-9-]*) echo 'invalid Tauri memory run label' >&2; exit 2 ;; esac
+export GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
+timeout --kill-after=25s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh "$tauri_memory_tmp/wm.log" python3 scripts/probe-tauri-memory.py --binary "$(realpath "$CARGO_TARGET_DIR/release/pulseterm-workspace")" --out "target/probes/tauri-memory/$tauri_memory_label"
+"""
+
+[tasks.probe-webkit-policy]
+description = "Diagnostic ABBA public WebKit acceleration-policy comparison; memory and pixel baselines, no product change"
+run = """
+set -eu
+case "$(uname -s)" in Linux) ;; *) echo 'WebKit policy comparison requires Linux/X11' >&2; exit 2 ;; esac
+mkdir -p /data/temp target/probes/presentation-floor
+policy_tmp=$(mktemp -d /data/temp/pulseterm-webkit-policy.XXXXXX)
+trap 'rm -rf -- "$policy_tmp"' EXIT
+export TMPDIR="$policy_tmp" TMP="$policy_tmp" TEMP="$policy_tmp" PYTHONDONTWRITEBYTECODE=1
+export GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
+cc -std=c11 -Wall -Wextra -Werror scripts/probe-presentation-floor.c -o "$policy_tmp/presentation-host" $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0 x11)
+cc -std=c11 -O2 -Wall -Wextra -Werror scripts/probe-workspace-echo.c -o "$policy_tmp/echo-pixels" $(pkg-config --cflags --libs x11 xtst)
+policy_label="${PULSE_WEBKIT_POLICY_RUN:-webkit-policy-latest}"
+case "$policy_label" in ''|*[!a-zA-Z0-9-]*) echo 'invalid WebKit policy run label' >&2; exit 2 ;; esac
+for policy_sample in memory pixels; do
+  for policy_group in a1-default b1-never b2-never a2-default; do
+    export PULSE_PRESENTATION_ACCELERATION="${policy_group#*-}"
+    set --
+    if [ "$policy_sample" = memory ]; then set -- --memory-only; fi
+    timeout --kill-after=25s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh "$policy_tmp/wm-$policy_sample-$policy_group.log" python3 scripts/probe-presentation-floor.py --host "$policy_tmp/presentation-host" --pixels "$policy_tmp/echo-pixels" --out "target/probes/presentation-floor/$policy_label-$policy_sample-$policy_group" --xterm-dir "$(realpath ui/node_modules/@xterm/xterm)" "$@"
+  done
+done
+"""
+
+[tasks.probe-runtime-memory]
+description = "Measure isolated native/GTK-WebKit/xterm process-tree memory; diagnostic only, no product gate"
+run = "PULSE_PRESENTATION_MEMORY=1 PULSE_PRESENTATION_SUITE=xterm PULSE_PRESENTATION_RUN=\"${PULSE_PRESENTATION_RUN:-runtime-memory-latest}\" mise run probe-presentation-floor"
+
+[tasks.probe-presentation-floor]
+description = "Compare native X11, immediate WebKit DOM and one-rAF DOM using the unchanged product pixel helper"
+run = """
+set -eu
+case "$(uname -s)" in Linux) ;; *) echo 'presentation baseline requires Linux/X11' >&2; exit 2 ;; esac
+mkdir -p /data/temp target/probes/presentation-floor
+floor_tmp=$(mktemp -d /data/temp/pulseterm-presentation-floor.XXXXXX)
+trap 'rm -rf -- "$floor_tmp"' EXIT
+export TMPDIR="$floor_tmp" TMP="$floor_tmp" TEMP="$floor_tmp" PYTHONDONTWRITEBYTECODE=1
+export GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
+cc -std=c11 -Wall -Wextra -Werror scripts/probe-presentation-floor.c -o "$floor_tmp/presentation-host" $(pkg-config --cflags --libs webkit2gtk-4.1 gtk+-3.0 x11)
+cc -std=c11 -O2 -Wall -Wextra -Werror scripts/probe-workspace-echo.c -o "$floor_tmp/echo-pixels" $(pkg-config --cflags --libs x11 xtst)
+floor_label="${PULSE_PRESENTATION_RUN:-latest}"
+case "$floor_label" in ''|*[!a-zA-Z0-9-]*) echo 'invalid presentation run label' >&2; exit 2 ;; esac
+floor_out="target/probes/presentation-floor/$floor_label"
+test ! -e "$floor_out"
+set --
+case "${PULSE_PRESENTATION_SUITE:-minimal}" in
+  minimal) ;;
+  xterm) set -- --xterm-dir "$(realpath ui/node_modules/@xterm/xterm)" ;;
+  *) echo 'invalid presentation suite' >&2; exit 2 ;;
+esac
+case "${PULSE_PRESENTATION_MEMORY:-0}" in
+  0) ;;
+  1) set -- "$@" --memory-only ;;
+  *) echo 'invalid presentation memory mode' >&2; exit 2 ;;
+esac
+timeout --kill-after=25s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh "$floor_tmp/wm.log" python3 scripts/probe-presentation-floor.py --host "$floor_tmp/presentation-host" --pixels "$floor_tmp/echo-pixels" --out "$floor_out" "$@"
 """

@@ -1,6 +1,60 @@
 //! Read-only load checks; compiled and registered only in the explicit probe build.
 use super::*;
+#[path = "output_timing_probe.rs"]
+mod output_timing;
+use output_timing::output_timings;
 
+#[cfg(target_os = "linux")]
+pub(super) struct NativeTiming {
+    records: Mutex<output_timing::NativeTimings>,
+}
+#[cfg(target_os = "linux")]
+impl NativeTiming {
+    pub(super) fn new(generation: u64) -> Option<Arc<Self>> {
+        (std::env::var("PULSE_ECHO_TIMING").as_deref() == Ok("1")).then(|| {
+            Arc::new(Self {
+                records: Mutex::new(output_timing::NativeTimings::new(generation)),
+            })
+        })
+    }
+    pub(super) fn now() -> u64 {
+        let time = rustix::time::clock_gettime(rustix::time::ClockId::Monotonic);
+        u64::try_from(time.tv_sec)
+            .ok()
+            .and_then(|sec| sec.checked_mul(1_000_000_000))
+            .and_then(|sec| {
+                u64::try_from(time.tv_nsec)
+                    .ok()
+                    .and_then(|ns| sec.checked_add(ns))
+            })
+            .unwrap_or(0)
+    }
+    pub(super) fn sending(&self, bytes: &[u8]) -> Option<u32> {
+        let now = Self::now();
+        self.records.lock().ok()?.sending(bytes, now)
+    }
+    pub(super) fn sent(&self, sequence: Option<u32>, success: bool) {
+        let now = Self::now();
+        if let Ok(mut records) = self.records.lock() {
+            records.sent(sequence, now, success);
+        }
+    }
+    pub(super) fn acknowledged(&self, sequence: u32, now: u64) {
+        if let Ok(mut records) = self.records.lock() {
+            records.acknowledged(sequence, now);
+        }
+    }
+    fn export(&self, browser: &output_timing::OutputTimings) -> Result<()> {
+        let report = self
+            .records
+            .lock()
+            .map_err(|_| "workspace.denied")?
+            .snapshot(browser)?;
+        let text = serde_json::to_string(&report).map_err(|_| "workspace.denied")?;
+        eprintln!("workspace.echo_native_timing:{text}");
+        Ok(())
+    }
+}
 fn drawing(
     value: &CaptureDrawing,
     source_is_utf8: bool,
@@ -92,6 +146,34 @@ pub(in crate::product_workspace) async fn workspace_terminal_load_compare(
         pulse_app::registry::VisibleComparison::Mismatch => Err("workspace.load_screen_mismatch"),
         pulse_app::registry::VisibleComparison::Stale => Err("workspace.load_screen_stale"),
     }
+}
+
+/// Bounded numeric diagnostics only; no I/O, input or session authorization is granted.
+#[tauri::command]
+pub(in crate::product_workspace) async fn workspace_terminal_load_timings(
+    window: WebviewWindow,
+    state: State<'_, Workspace>,
+    nonce: String,
+    connection: String,
+    timing: String,
+) -> Result<()> {
+    let (nonce, _) = page(&window, &state, &nonce)?;
+    let entry = state.0.terminals.entry(nonce, ticket(&connection)?)?;
+    if !entry.confirmed.load(std::sync::atomic::Ordering::SeqCst)
+        || !entry
+            .input_displayed
+            .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return Err("workspace.denied");
+    }
+    let report = output_timings(&timing)?;
+    #[cfg(target_os = "linux")]
+    if let Some(timing) = &entry.native_timing {
+        timing.export(&report)?;
+    }
+    let text = serde_json::to_string(&report).map_err(|_| "workspace.denied")?;
+    eprintln!("workspace.echo_timing:{text}");
+    Ok(())
 }
 
 #[cfg(test)]

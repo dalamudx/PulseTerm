@@ -1,6 +1,6 @@
 import type { DisplayPreferences } from "./features/terminal/display-preferences";
 import { displayPreferences } from "./features/terminal/display-preferences";
-import type { ProfileKind } from "./workspace-profiles";
+import { isProfileKind, type ProfileKind } from "./workspace-profiles";
 import { isWorkspaceNonce } from "./workspace-readiness";
 import {
   isTerminalPreset,
@@ -189,7 +189,7 @@ export function decodeProfileEditorOffer(value: unknown): ProfileEditorOffer {
   if (
     typeof r.ticket !== "string" ||
     !isWorkspaceNonce(r.ticket) ||
-    !["sh", "bash", "zsh", "fish", "pwsh"].includes(r.shell as string)
+    !isProfileKind(r.shell)
   )
     throw Error("profile.invalid");
   return Object.freeze({

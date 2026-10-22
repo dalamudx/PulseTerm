@@ -105,6 +105,63 @@ pub(crate) fn admit_acl(
     }
     Ok(())
 }
+/// Programs and their containing directory must not grant untrusted writes or new entries.
+/// Directory traversal admission alone permits FILE_ADD_FILE, which is FILE_WRITE_DATA on a file.
+pub(crate) fn program_acl(
+    owner: &[u8],
+    user: &[u8],
+    acl: Option<&[u8]>,
+    protected: bool,
+) -> DirectoryResult<()> {
+    admit_acl(owner, user, acl, protected, false)?;
+    let acl = acl.ok_or(Location)?;
+    let count = usize::from(u16::from_le_bytes([acl[4], acl[5]]));
+    let mut pos = 8;
+    for _ in 0..count {
+        let header = acl.get(pos..pos + 4).ok_or(Location)?;
+        let len = usize::from(u16::from_le_bytes([header[2], header[3]]));
+        let ace = acl.get(pos..pos + len).ok_or(Location)?;
+        let principal = sid(&ace[8..])?;
+        let creator_owner = principal == [1, 1, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0];
+        // Creator-owner placeholders apply only to children; other users cannot create children here.
+        if header[0] == 0
+            && !trusted_owner(principal, user)
+            && !(creator_owner && header[1] & 0x08 != 0)
+        {
+            let mask = u32::from_le_bytes([ace[4], ace[5], ace[6], ace[7]]);
+            if mask & !0xa01200a9 != 0 {
+                return Err(Location);
+            }
+        }
+        pos += len;
+    }
+    Ok(())
+}
+
+/// SQLite may create sidecars by inheriting the pinned private parent's ACL.
+/// Main databases, backups and ordinary text files still require protected DACLs.
+pub(crate) fn sqlite_sidecar_acl(
+    owner: &[u8],
+    user: &[u8],
+    acl: Option<&[u8]>,
+    protected: bool,
+) -> DirectoryResult<()> {
+    // All owner, ACE, full-control, deny and foreign-principal checks remain mandatory.
+    admit_acl(owner, user, acl, true, true)?;
+    if !protected {
+        let acl = acl.ok_or(Location)?;
+        let count = usize::from(u16::from_le_bytes([acl[4], acl[5]]));
+        let mut pos = 8;
+        for _ in 0..count {
+            let header = acl.get(pos..pos + 4).ok_or(Location)?;
+            if header[1] & 0x10 == 0 {
+                return Err(Location);
+            }
+            pos += usize::from(u16::from_le_bytes([header[2], header[3]]));
+        }
+    }
+    Ok(())
+}
 
 pub(crate) fn directory_attributes(attributes: u32) -> DirectoryResult<()> {
     if attributes & 0x10 == 0 || attributes & 0x400 != 0 {

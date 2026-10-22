@@ -4,18 +4,21 @@ param(
     [ValidateRange(20, 512)][int]$Samples = 100,
     [ValidateRange(1, 10)][int]$Rounds = 2,
     [string]$RuntimePath,
-    [switch]$DiagnoseWebGL
+    [switch]$DiagnoseWebGL,
+    [switch]$DiagnoseStartup
 )
 $ErrorActionPreference = 'Stop'
-Write-Host "echo-kit: webview2-process-v5"
+if ($DiagnoseWebGL -and $DiagnoseStartup) { throw 'Choose DiagnoseWebGL or DiagnoseStartup.' }
+Write-Host "echo-kit: webview2-startup-v7"
 $kit = $PSScriptRoot
+if (!$DiagnoseWebGL -and !$DiagnoseStartup) { $wt = (Get-Command wt.exe -CommandType Application -ErrorAction Stop).Source }
+if ($DiagnoseStartup) { . (Join-Path $kit 'startup-diagnostics.ps1') }
 $measure = Join-Path $kit 'echo-latency.exe'
 $echo = Join-Path $kit 'echo-console.exe'
 $web = Join-Path $kit 'echo-webview2.exe'
 foreach ($file in @($measure, $echo, $web, (Join-Path $kit 'WebView2Loader.dll'), (Join-Path $kit 'echo.html'))) {
     if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing kit file: $file. Extract the complete new zip." }
 }
-$wt = (Get-Command wt.exe -CommandType Application -ErrorAction Stop).Source
 if ($RuntimePath) {
     $RuntimePath = (Get-Item -LiteralPath $RuntimePath -ErrorAction Stop).FullName
     if (!(Test-Path -LiteralPath (Join-Path $RuntimePath 'msedgewebview2.exe') -PathType Leaf)) {
@@ -29,6 +32,8 @@ $profileRoot = Join-Path $env:TEMP ('pulseterm-echo-' + [guid]::NewGuid().ToStri
 New-Item -ItemType Directory -Path $profileRoot | Out-Null
 $page = ([Uri](Join-Path $kit 'echo.html')).AbsoluteUri
 $webWindow = $null
+$startupResults = @()
+$started = Get-Date
 
 function Measure-Target([string]$Label, [string]$Expect, [string]$Title) {
     & $measure --label $Label --expect $Expect --title $Title --samples $Samples --warmup $warmup --countdown 4 --diagnostic ([int][bool]$DiagnoseWebGL) --out (Join-Path $out "$Label.json")
@@ -63,26 +68,45 @@ function Stop-KitWebView {
 
 try {
     for ($round = 1; $round -le $Rounds; $round++) {
-        if (!$DiagnoseWebGL) {
+        if (!$DiagnoseWebGL -and !$DiagnoseStartup) {
             Start-Process -FilePath $wt -ArgumentList "-w new new-tab --title echo-wt --suppressApplicationTitle `"$echo`" $($Samples + $warmup)"
             Measure-Target "r$round-wt" 'WindowsTerminal.exe' 'echo-wt'
             Start-Sleep -Seconds 3
         }
-        $renderers = if ($DiagnoseWebGL) { @('webgl') } else { @('dom', 'webgl') }
+        $renderers = if ($DiagnoseStartup) { @('memory', 'dom', 'webgl') } elseif ($DiagnoseWebGL) { @('webgl') } else { @('dom', 'webgl') }
         foreach ($renderer in $renderers) {
             $label = "r$round-webview2-$renderer"
             $profile = Join-Path $profileRoot $label
             $log = Join-Path $out "$label-host.log"
-            $arguments = @('--url', "`"${page}?renderer=$renderer`"", '--profile', "`"$profile`"", '--log', "`"$log`"")
-            if ($DiagnoseWebGL) { $arguments += @('--diagnostic', '1') }
+            $address = if ($renderer -eq 'memory') { 'about:blank' } else { "${page}?renderer=$renderer" }
+            $arguments = @('--url', "`"$address`"", '--profile', "`"$profile`"", '--log', "`"$log`"")
+            if ($renderer -eq 'memory') { $arguments += @('--startup-memory', '1') }
+            elseif ($DiagnoseWebGL -or $DiagnoseStartup) { $arguments += @('--diagnostic', '1') }
             if ($RuntimePath) { $arguments += @('--runtime', "`"$RuntimePath`"") }
-            $webWindow = Start-Process -FilePath $web -ArgumentList $arguments -PassThru
             try {
-                $readyTitle = if ($DiagnoseWebGL) { "echo-$renderer-diagnostic" } else { "echo-$renderer" }
+                $webWindow = Start-Process -FilePath $web -ArgumentList $arguments -PassThru
+                $readyTitle = if ($renderer -eq 'memory') { 'echo-startup-ready' } elseif ($DiagnoseWebGL -or $DiagnoseStartup) { "echo-$renderer-diagnostic" } else { "echo-$renderer" }
                 Wait-WebView $webWindow $readyTitle $log
-                Measure-Target $label 'echo-webview2.exe' "echo-$renderer"
+                if ($DiagnoseStartup) {
+                    Start-Sleep -Seconds 2
+                    Wait-WebView $webWindow $readyTitle $log
+                    $startupResults += [pscustomobject]@{ label=$label; ready=$true; error=$null }
+                } else { Measure-Target $label 'echo-webview2.exe' "echo-$renderer" }
+            } catch {
+                if (!$DiagnoseStartup) { throw }
+                $startupResults += [pscustomobject]@{ label=$label; ready=$false; error=$_.Exception.Message }
+                Write-Warning "$label failed; continuing independent startup controls. See $log"
             } finally { Stop-KitWebView; $webWindow = $null; Start-Sleep -Seconds 1 }
         }
+    }
+    if ($DiagnoseStartup) {
+        [pscustomobject]@{ schemaVersion=1; diagnosticOnly=$true; latencyComparisonValid=$false; probes=$startupResults } |
+            ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $out 'startup-summary.json')
+        Save-StartupDiagnostics -Output $out -Kit $kit -Profile $profileRoot -Runtime $RuntimePath -Started $started
+        if (@($startupResults | Where-Object { !$_.ready }).Count) { throw 'Startup probes failed. See startup-summary.json and startup-system.json in the diagnostic archive.' }
+        Compress-Archive -Path "$out\*" -DestinationPath "$out.zip" -Force
+        Write-Host "Startup controls finished. Send this diagnostic archive back: $out.zip"
+        return
     }
 } catch {
     $failure = $_

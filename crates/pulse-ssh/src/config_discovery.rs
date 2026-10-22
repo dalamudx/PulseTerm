@@ -20,11 +20,11 @@ impl QueryBinding {
             && self.port == query.port
     }
 }
-struct Discovered {
-    root: File,
-    sources: Vec<Source>,
+struct Discovered<D: ConfigSourceDirectory> {
+    root: D,
+    sources: Vec<Source<D::Stamp>>,
     parsed: BTreeMap<String, Arc<Vec<Directive>>>,
-    dirs: BTreeMap<String, Stamp>,
+    dirs: BTreeMap<String, D::Stamp>,
     members: BTreeMap<String, Vec<Vec<u8>>>,
     entries: usize,
     name_bytes: usize,
@@ -32,7 +32,7 @@ struct Discovered {
     parse_bytes: usize,
     parse_lines: usize,
 }
-impl Discovered {
+impl<D: ConfigSourceDirectory> Discovered<D> {
     fn directory_members(&mut self, name: &str) -> Result<Vec<Vec<u8>>, ConfigError> {
         if let Some(names) = self.members.get(name) {
             return Ok(names.clone());
@@ -41,16 +41,9 @@ impl Discovered {
             return Err(ConfigError::Limit);
         }
         let opened = relative_dir(&self.root, name)?;
-        let before = stamp(&metadata(&opened)?);
-        let mut entries =
-            sys::Dir::read_from(&opened).map_err(|_| ConfigError::SourceUnavailable)?;
-        let mut names = Vec::new();
-        while let Some(entry) = entries.read() {
-            let entry = entry.map_err(|_| ConfigError::SourceUnavailable)?;
-            let value = entry.file_name().to_bytes();
-            if value == b"." || value == b".." {
-                continue;
-            }
+        let before = opened.stamp()?;
+        let mut names = opened.members(4096 - self.entries, MAX_TOTAL - self.name_bytes)?;
+        for value in &names {
             self.entries = self.entries.checked_add(1).ok_or(ConfigError::Limit)?;
             self.name_bytes = self
                 .name_bytes
@@ -59,14 +52,13 @@ impl Discovered {
             if self.entries > 4096 || self.name_bytes > MAX_TOTAL {
                 return Err(ConfigError::Limit);
             }
-            names.push(value.to_vec());
         }
-        if stamp(&metadata(&opened)?) != before {
+        if opened.stamp()? != before {
             return Err(ConfigError::SourceChanged);
         }
         if self
             .dirs
-            .insert(name.to_owned(), before)
+            .insert(name.to_owned(), before.clone())
             .is_some_and(|previous| previous != before)
         {
             return Err(ConfigError::SourceChanged);
@@ -76,7 +68,7 @@ impl Discovered {
         Ok(names)
     }
 }
-impl SourceProvider for Discovered {
+impl<D: ConfigSourceDirectory> SourceProvider for Discovered<D> {
     fn matching(&mut self, pattern: &str, steps: &mut usize) -> Result<Vec<String>, ConfigError> {
         if pattern.is_empty()
             || pattern.len() > 512
@@ -140,12 +132,12 @@ impl SourceProvider for Discovered {
         Ok(parsed)
     }
 }
-pub(super) fn capture(
-    reader: &ConfigDirectoryReader,
+pub(super) fn capture<B: ConfigSourceFilesystem>(
+    reader: &SourceDirectoryReader<B>,
     query: &ConfigQuery<'_>,
-) -> Result<ConfigFileSnapshot, ConfigError> {
+) -> Result<SourceFileSnapshot<B>, ConfigError> {
     let root = reader.current()?;
-    let mut dirs = BTreeMap::from([(String::new(), stamp(&metadata(&root)?))]);
+    let mut dirs = BTreeMap::from([(String::new(), root.stamp()?)]);
     let mut source_bytes = 0;
     let source = read_source(&root, "config", &mut dirs, &mut source_bytes)?;
     let mut parse_bytes = 0;
@@ -173,7 +165,7 @@ pub(super) fn capture(
         .map(|source| ProvidedConfigSource::new(&source.name, &source.bytes))
         .collect();
     let bundle = ConfigBundle::parse(&provider.sources[0].bytes, &supplied)?;
-    let snapshot = ConfigFileSnapshot {
+    let snapshot = SourceFileSnapshot {
         bundle,
         sources: provider.sources,
         dirs: provider.dirs,

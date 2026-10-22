@@ -37,7 +37,7 @@ pub enum PrivateFileError {
 /// Result of a regular-file primitive, without application authorization.
 pub type PrivateFileResult<T> = Result<T, PrivateFileError>;
 
-fn open_error(e: std::io::Error) -> PrivateFileError {
+pub(super) fn open_error(e: std::io::Error) -> PrivateFileError {
     match e.raw_os_error() {
         Some(2 | 3) => PrivateFileError::NotFound,
         Some(32 | 33) => PrivateFileError::Busy,
@@ -170,7 +170,7 @@ impl PrivateDirectory {
     }
 }
 impl PrivateFile<'_> {
-    fn validate(&self) -> PrivateFileResult<sys::Facts> {
+    pub(super) fn validate(&self) -> PrivateFileResult<sys::Facts> {
         self.directory
             .validate()
             .map_err(|_| PrivateFileError::Location)?;

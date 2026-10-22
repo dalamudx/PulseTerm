@@ -1,6 +1,7 @@
 name: Check
 
 on:
+  workflow_dispatch:
   push:
   pull_request:
 
@@ -27,10 +28,18 @@ jobs:
         run: mise run check
       - name: Check all core features and test targets on the runner platform
         run: mise run check-core-features
+      - name: Test Agent transport, bounds, revocation and selected-key signing on the runner platform
+        run: mise run test-ssh-agent-transport
       - name: Check native platform policy and private atomic-save boundaries
         run: mise run check-platform
       - name: Check Windows settings adapter and native-only file cases
         run: mise run check-windows-settings
+      - name: Test authenticated local-control transport and native completion
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        run: mise run test-cli-transport
+      - name: Verify Windows SSH config source identity, bounded reads and original-query confirmation
+        if: runner.os == 'Windows'
+        run: mise run test-windows-ssh-config
       - name: Verify static workspace translation coverage
         run: mise run workspace-language-check
       - name: Verify locked third-party inventory and original texts
@@ -527,6 +536,8 @@ jobs:
           name: terminal-probe-${{ matrix.os }}
           path: |
             target/probes/*.json
+            target/probes/windows-product-native/**
+            target/probes/windows-cli/**
             target/probes/dependency-audit/**
 
             target/probes/distribution-review*.log

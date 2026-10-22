@@ -1,12 +1,24 @@
 //! Bounded CLI discovery projection, not an executable path or a startup receipt.
+#[cfg(any(target_os = "linux", windows, test))]
 use serde_json::{Value, json};
 
-const KINDS: &[&str] = &["bash", "zsh", "fish", "sh", "pwsh"];
+#[cfg(any(target_os = "linux", windows, test))]
+const KINDS: &[&str] = &[
+    "bash",
+    "zsh",
+    "fish",
+    "sh",
+    "pwsh",
+    "powershell",
+    "cmd",
+    "wsl",
+];
 
 pub(super) fn valid(value: &str) -> bool {
     pulse_store::profile_default::DefaultProfileSelection::parse(value).is_some()
 }
 
+#[cfg(any(target_os = "linux", windows, test))]
 pub(super) fn project<'a>(offers: impl IntoIterator<Item = (&'a str, bool)>) -> Result<Value, ()> {
     let mut seen = Vec::new();
     let mut visible = Vec::new();
@@ -22,6 +34,7 @@ pub(super) fn project<'a>(offers: impl IntoIterator<Item = (&'a str, bool)>) -> 
     Ok(json!({"version":1,"profiles":visible}))
 }
 
+#[cfg(any(target_os = "linux", windows, test))]
 pub(super) fn decode(value: &Value) -> Result<Vec<&str>, ()> {
     let object = value.as_object().ok_or(())?;
     if object.len() != 2 || object.get("version") != Some(&json!(1)) {

@@ -4,6 +4,7 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,8 +15,22 @@ static uint64_t now_ns(void) {
     if (clock_gettime(CLOCK_MONOTONIC, &t)) exit(70);
     return (uint64_t)t.tv_sec * UINT64_C(1000000000) + (uint64_t)t.tv_nsec;
 }
+// Complementary pairs preserve a 20ms requested mean while varying input phase.
+static long inter_sample_pause(int index, int jitter, uint32_t *state, long *pair_first) {
+    if (!jitter) return 20000000;
+    if (!(index % 2)) {
+        *state ^= *state << 13;
+        *state ^= *state >> 17;
+        *state ^= *state << 5;
+        *pair_first = 5000000 + (long)(*state % UINT32_C(30000001));
+        return *pair_first;
+    }
+    return 40000000 - *pair_first;
+}
 int main(int argc, char **argv) {
-    if (argc != 7) return 71;
+    if (argc != 7 && argc != 8) return 71;
+    int jitter = argc == 8 && !strcmp(argv[7], "jitter");
+    if (argc == 8 && !jitter && strcmp(argv[7], "fixed")) return 72;
     Window window = strtoul(argv[1], NULL, 0);
     int x = atoi(argv[2]), y = atoi(argv[3]), width = atoi(argv[4]), height = atoi(argv[5]), count = atoi(argv[6]);
     if (x < 0 || y < 0 || width < 1 || width > 64 || height < 1 || height > 64 || count < 20 || count > 128) return 72;
@@ -28,7 +43,8 @@ int main(int argc, char **argv) {
     double times[128];
     uint64_t starts[128], observations[128];
     const struct timespec interval = { .tv_sec = 0, .tv_nsec = 500000 };
-    const struct timespec pause = { .tv_sec = 0, .tv_nsec = 20000000 };
+    long pauses[128], pair_first = 0;
+    uint32_t state = UINT32_C(0x6d2b79f5);
     for (int i = 0; i < count; i++) {
         XImage *before = XGetImage(display, window, x, y, (unsigned)width, (unsigned)height, AllPlanes, ZPixmap);
         if (!before) return 76;
@@ -50,7 +66,9 @@ int main(int argc, char **argv) {
         }
         XDestroyImage(before);
         if (!changed) { fprintf(stderr, "echo.no_glyph_change.%d\n", i); return 80; }
-        nanosleep(&pause, NULL);
+        pauses[i] = inter_sample_pause(i, jitter, &state, &pair_first);
+        struct timespec pause = { .tv_sec = 0, .tv_nsec = pauses[i] };
+        while (nanosleep(&pause, &pause)) if (errno != EINTR) return 81;
     }
     XCloseDisplay(display);
     printf("{\"samplesMs\":[");
@@ -59,6 +77,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < count; i++) printf("%s%llu", i ? "," : "", (unsigned long long)starts[i]);
     printf("],\"observedNs\":[");
     for (int i = 0; i < count; i++) printf("%s%llu", i ? "," : "", (unsigned long long)observations[i]);
+    printf("],\"pacingMode\":\"%s\",\"requestedPauseNs\":[", jitter ? "jitter" : "fixed");
+    for (int i = 0; i < count; i++) printf("%s%ld", i ? "," : "", pauses[i]);
     puts("]}");
     return 0;
 }

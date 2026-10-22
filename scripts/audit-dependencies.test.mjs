@@ -31,6 +31,7 @@ process.exitCode = row.code;
       const inFlight = JSON.parse(readFileSync(join(outputDir, 'summary.json'), 'utf8'));
       assert.equal(inFlight.completed, false);
       assert.equal(inFlight.passed, false);
+      assert.deepEqual(JSON.parse(readFileSync(join(outputDir, inFlight.runDirectory, 'summary.json'), 'utf8')), inFlight);
       before?.(command);
       const row = rows[command];
       if (row.launchError) throw Object.assign(new Error('fixture executable missing'), { code: 'ENOENT' });
@@ -54,7 +55,7 @@ test('Rust policy failure still runs JavaScript and preserves both actual exit r
   ]);
   assert.equal(report.checks[0].findings.rejected, 1);
   assert.equal(report.checks[1].passed, true);
-  assert.equal(readFileSync(join(f.outputDir, 'rust.stderr.log'), 'utf8'), 'error[rejected]: fixture license\n');
+  assert.equal(readFileSync(join(f.outputDir, report.checks[0].stderr), 'utf8'), 'error[rejected]: fixture license\n');
   assert.deepEqual(JSON.parse(readFileSync(join(f.outputDir, 'summary.json'), 'utf8')), report);
 });
 
@@ -74,7 +75,7 @@ test('missing executable replaces stale success and cannot skip the other audit'
   assert.match(report.checks[0].executionError, /missing/);
   assert.equal(report.checks[1].passed, true);
   assert.equal(report.passed, false);
-  assert.equal(readFileSync(join(f.outputDir, 'rust.stdout.log'), 'utf8'), '');
+  assert.equal(readFileSync(join(f.outputDir, report.checks[0].stdout), 'utf8'), '');
 });
 
 test('successful pnpm exit with empty, malformed, incomplete or inconsistent data fails closed', (t) => {
@@ -112,4 +113,44 @@ test('child termination cannot be represented as a successful audit', { skip: pr
   assert.equal(report.checks[0].signal, 'SIGTERM');
   assert.equal(report.checks[1].passed, true);
   assert.equal(report.passed, false);
+});
+
+
+test('later success keeps the previous failed receipt and all raw outputs byte-for-byte', (t) => {
+  const f = fixture(t);
+  const first = f.run({ cargo: { code: 1, stdout: 'first stdout\n', stderr: 'error[unmaintained]: first\n' }, pnpm: pnpm() });
+  const paths = [join(first.runDirectory, 'summary.json'), ...first.checks.flatMap(check => [check.stdout, check.stderr])];
+  const saved = paths.map(name => readFileSync(join(f.outputDir, name)));
+  const second = f.run({ cargo: { code: 0, stdout: 'second stdout\n' }, pnpm: pnpm() });
+  assert.equal(second.passed, true);
+  assert.notEqual(second.runId, first.runId);
+  paths.forEach((name, index) => assert.deepEqual(readFileSync(join(f.outputDir, name)), saved[index]));
+  assert.deepEqual(JSON.parse(readFileSync(join(f.outputDir, second.runDirectory, 'summary.json'), 'utf8')), second);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.outputDir, 'summary.json'), 'utf8')), second);
+});
+
+test('missing inputs leave an incomplete current run and preserve the previous success archive', (t) => {
+  const f = fixture(t);
+  const first = f.run({ cargo: { code: 0 }, pnpm: pnpm() });
+  rmSync(join(f.cwd, 'Cargo.lock'));
+  assert.throws(() => f.run({}), /ENOENT/);
+  const latest = JSON.parse(readFileSync(join(f.outputDir, 'summary.json'), 'utf8'));
+  assert.notEqual(latest.runId, first.runId);
+  assert.equal(latest.completed, false);
+  assert.equal(latest.passed, false);
+  assert.equal(latest.checks.length, 0);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.outputDir, latest.runDirectory, 'summary.json'), 'utf8')), latest);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.outputDir, first.runDirectory, 'summary.json'), 'utf8')), first);
+});
+
+test('run directory creation failure cannot leave a current passing receipt', (t) => {
+  const f = fixture(t);
+  mkdirSync(f.outputDir);
+  writeFileSync(join(f.outputDir, 'summary.json'), JSON.stringify({ passed: true, completed: true }));
+  writeFileSync(join(f.outputDir, 'runs'), 'fixture blocks directory creation');
+  assert.throws(() => f.run({}), /EEXIST/);
+  const latest = JSON.parse(readFileSync(join(f.outputDir, 'summary.json'), 'utf8'));
+  assert.equal(latest.passed, false);
+  assert.equal(latest.completed, false);
+  assert.equal(f.calls.length, 0);
 });

@@ -70,7 +70,10 @@ impl NativeBinding {
     }
     // Called only by the callback for this exact native window incarnation.
     // A builder error is not proof of native Destroyed. Keep directory credit and fail exit.
-    #[cfg(any(test, all(feature = "workspace-cli", target_os = "linux")))]
+    #[cfg(any(
+        test,
+        all(feature = "workspace-cli", any(target_os = "linux", windows))
+    ))]
     pub(crate) fn creation_failed(&self) -> Result<()> {
         let _ = self.revoke();
         let mut state = self.state.lock().map_err(|_| "workspace.shutdown_failed")?;

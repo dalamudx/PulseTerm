@@ -1,4 +1,9 @@
+#[path = "shell_metadata.rs"]
+mod shell_metadata;
 use crate::{DirectoryError::Location, DirectoryResult, policy};
+pub(super) use shell_metadata::{default_wsl_distribution, system_directory};
+#[path = "web_link.rs"]
+mod web_link;
 use std::{
     ffi::c_void,
     fs::File,
@@ -8,6 +13,13 @@ use std::{
     },
     path::Path,
     ptr, slice,
+};
+pub(super) use web_link::open_web_url;
+#[path = "local_control_native.rs"]
+mod local_control_native;
+pub(super) use local_control_native::{
+    control_pipe_present, local_application_data_directory, open_control_client,
+    open_control_token_for_delete, process_is_current_user, verify_single_instance_owner,
 };
 use windows_sys::Win32::{
     Foundation::{ERROR_ALREADY_EXISTS, ERROR_INSUFFICIENT_BUFFER, GetLastError, LocalFree},
@@ -78,6 +90,10 @@ pub(super) fn user() -> DirectoryResult<Vec<u8>> {
     }
     // SAFETY: Successful OpenProcessToken returns a newly owned non-pseudo token handle.
     let token = unsafe { OwnedHandle::from_raw_handle(raw) };
+    token_user(&token)
+}
+
+fn token_user(token: &OwnedHandle) -> DirectoryResult<Vec<u8>> {
     let mut size = 0;
     // SAFETY: A null zero-size output requests only the required buffer length from this owned token.
     let first = unsafe {
@@ -264,7 +280,7 @@ pub(super) fn inspect(file: &File) -> DirectoryResult<Facts> {
     })
 }
 
-fn sid_text(sid: &[u8]) -> DirectoryResult<String> {
+pub(super) fn sid_text(sid: &[u8]) -> DirectoryResult<String> {
     let sid = policy::sid(sid)?;
     let authority = sid[2..8].iter().fold(0u64, |n, b| (n << 8) | u64::from(*b));
     let mut s = format!("S-1-{authority}");

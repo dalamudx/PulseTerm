@@ -1,32 +1,29 @@
-//! Opt-in warm Linux CLI transport. No bootstrap, stale-endpoint deletion or arbitrary execution.
-//! Backend handlers must separately authorize the exact original target and native commit.
-use interprocess::{
-    local_socket::{
-        GenericFilePath, ListenerOptions,
-        tokio::{Listener, Stream, prelude::*},
-    },
-    os::unix::local_socket::ListenerOptionsExt,
-};
+//! Opt-in private local control transport; hello never grants GUI or execution authority.
+//! Platform adapters admit endpoints and peers; one shared bounded protocol supervises all actions.
+use interprocess::local_socket::tokio::{Listener, Stream as IpcStream, prelude::*};
 use pulse_ipc::cli::{self, Admission, Request, SessionAuth, WireBuffer};
 use serde_json::{Value, json};
 use std::{
-    fs::{self, Metadata, OpenOptions},
     future::Future,
-    io::{Read, Write},
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
-    path::{Path, PathBuf},
+    io,
     pin::Pin,
     sync::Arc,
+    task::{Context, Poll},
     time::Duration,
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     runtime::Handle,
     sync::watch,
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 use zeroize::{Zeroize, Zeroizing};
+#[cfg(target_os = "linux")]
+#[path = "cli_control_unix.rs"]
+mod platform;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 /// Static errors contain no token, parameters or user path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("cli.control_failed")]
@@ -47,92 +44,60 @@ pub trait Handler: Send + Sync + 'static {
 }
 const DEADLINE: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: usize = 8;
-struct Identity {
-    path: PathBuf,
-    device: u64,
-    inode: u64,
-}
-impl Identity {
-    fn new(path: PathBuf, metadata: &Metadata) -> Self {
-        Self {
-            path,
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        }
-    }
-    fn remove(&self) -> Result<()> {
-        match fs::symlink_metadata(&self.path) {
-            Ok(meta) if meta.dev() == self.device && meta.ino() == self.inode => {
-                fs::remove_file(&self.path).map_err(|_| Error)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            _ => Err(Error),
-        }
-    }
-}
-struct Endpoints {
-    socket: Option<Identity>,
-    token: Option<Identity>,
-}
-impl Endpoints {
-    fn cleanup(&mut self) -> Result<()> {
-        let socket = self
-            .socket
-            .take()
-            .map_or(Ok(()), |identity| identity.remove());
-        let token = self
-            .token
-            .take()
-            .map_or(Ok(()), |identity| identity.remove());
-        socket.and(token)
-    }
-}
-impl Drop for Endpoints {
+// Own every accepted/connected stream through cancellation as well as normal close.
+// Windows prevents the dependency from retaining a pipe in a detached flush thread.
+struct Stream(IpcStream);
+impl Drop for Stream {
     fn drop(&mut self) {
-        let _ = self.cleanup();
+        #[cfg(windows)]
+        {
+            let IpcStream::NamedPipe(stream) = &self.0;
+            let pipe: &interprocess::os::windows::named_pipe::tokio::DuplexPipeStream<
+                interprocess::os::windows::named_pipe::pipe_mode::Bytes,
+            > = stream.as_ref();
+            // Protocol receipts govern success. Cancellation closes immediately, without detached flush.
+            pipe.assume_flushed();
+        }
     }
 }
-/// Revocable service handle. Dropping/closing signals cancellation, never reports native completion.
-/// Join observers may cancel without canceling the independently owned supervisor.
-pub struct Server {
-    cancelled: CancellationToken,
-    finished: watch::Receiver<Option<Result<()>>>,
+impl AsyncRead for &Stream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut &self.get_mut().0).poll_read(cx, buffer)
+    }
 }
-impl Server {
-    /// Backend-supplied OS application runtime directory only; no client-selected path.
-    /// Occupied/unknown endpoints fail closed. Cold startup/election and crash recovery are separate.
-    pub fn start(directory: &Path, runtime: &Handle, handler: Arc<dyn Handler>) -> Result<Self> {
-        let directory = pulse_store::state_directory::prepare(directory).map_err(|_| Error)?;
-        let socket_path = directory.join("control.sock");
-        let token_path = directory.join("control.token");
-        for path in [&socket_path, &token_path] {
-            match fs::symlink_metadata(path) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                _ => return Err(Error),
-            }
-        }
-        let mut owned = Endpoints {
-            socket: None,
-            token: None,
-        };
-        let name = socket_path
-            .as_path()
-            .to_fs_name::<GenericFilePath>()
-            .map_err(|_| Error)?;
-        let listener = {
-            let _entered = runtime.enter();
-            ListenerOptions::new()
-                .name(name)
-                .mode(0o600)
-                .reclaim_name(false)
-                .try_overwrite(false)
-                .create_tokio()
-                .map_err(|_| Error)?
-        };
-        owned.socket = Some(Identity::new(
-            socket_path.clone(),
-            &fs::symlink_metadata(&socket_path).map_err(|_| Error)?,
-        ));
+impl AsyncWrite for &Stream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut &self.get_mut().0).poll_write(cx, bytes)
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut &self.get_mut().0).poll_flush(cx)
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut &self.get_mut().0).poll_shutdown(cx)
+    }
+}
+/// Trusted backend endpoint lifecycle; never implement from page-supplied paths or credentials.
+/// The desktop adapter retains native directory/file leases until every connection exits.
+pub trait NativeEndpoint: Send + 'static {
+    /// Admit actual kernel peer metadata before any hello or action. Hello is not Capability admission.
+    fn admit_peer(&self, stream: &IpcStream) -> Result<()>;
+    /// Release only this instance's endpoints after listener and all native handlers have exited.
+    /// Unknown/replaced endpoints must fail closed instead of deleting a later instance's files.
+    fn cleanup(&mut self) -> Result<()>;
+}
+/// Native-only per-instance hello secret. No Debug/serde; it never grants GUI or execution authority.
+pub struct TransportToken(Zeroizing<[u8; 64]>);
+impl TransportToken {
+    /// Generate the same bounded random hello token on every supported platform.
+    pub fn generate() -> Self {
         let mut secret = Zeroizing::new([0u8; 64]);
         for index in 0..2 {
             let mut bytes = *uuid::Uuid::new_v4().as_bytes();
@@ -142,30 +107,56 @@ impl Server {
             }
             bytes.zeroize();
         }
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&token_path)
-            .map_err(|_| Error)?;
-        owned.token = Some(Identity::new(
-            token_path,
-            &file.metadata().map_err(|_| Error)?,
-        ));
-        file.write_all(secret.as_ref()).map_err(|_| Error)?;
-        file.sync_all().map_err(|_| Error)?;
-        drop(file);
+        Self(secret)
+    }
+    /// Borrow only for protected native endpoint publication; never log or project these bytes.
+    pub fn bytes(&self) -> &[u8; 64] {
+        &self.0
+    }
+}
+
+/// Revocable service handle. Dropping/closing signals cancellation, never reports native completion.
+/// Join observers may cancel without canceling the independently owned supervisor.
+pub struct Server {
+    cancelled: CancellationToken,
+    finished: watch::Receiver<Option<Result<()>>>,
+}
+impl Server {
+    /// Backend-supplied OS application runtime directory only; no client-selected path.
+    /// Occupied/unknown endpoints fail closed. Cold startup/election and crash recovery are separate.
+    #[cfg(target_os = "linux")]
+    pub fn start(directory: &Path, runtime: &Handle, handler: Arc<dyn Handler>) -> Result<Self> {
+        let secret = TransportToken::generate();
+        let (listener, owned) = platform::listen(directory, runtime, secret.bytes())?;
+        Ok(Self::start_admitted(
+            listener,
+            secret,
+            Box::new(owned),
+            runtime,
+            handler,
+        ))
+    }
+    /// Mount an already admitted native listener and its original endpoint leases.
+    /// Only trusted backend adapters supply these objects; each action still needs GUI/Capability checks.
+    /// Shutdown retains the endpoint until all supervised operations physically finish.
+    pub fn start_admitted(
+        listener: Listener,
+        secret: TransportToken,
+        owned: Box<dyn NativeEndpoint>,
+        runtime: &Handle,
+        handler: Arc<dyn Handler>,
+    ) -> Self {
         let cancelled = CancellationToken::new();
         let stopping = cancelled.clone();
         let (done, finished) = watch::channel(None);
         runtime.spawn(async move {
-            let result = serve(listener, Arc::new(secret), handler, stopping, owned).await;
+            let result = serve(listener, Arc::new(secret.0), handler, stopping, owned).await;
             done.send_replace(Some(result));
         });
-        Ok(Self {
+        Self {
             cancelled,
             finished,
-        })
+        }
     }
     /// Revoke the listener and in-flight requests without claiming native completion.
     pub fn close(&self) {
@@ -193,7 +184,7 @@ async fn serve(
     secret: Arc<Zeroizing<[u8; 64]>>,
     handler: Arc<dyn Handler>,
     cancelled: CancellationToken,
-    mut endpoints: Endpoints,
+    mut endpoints: Box<dyn NativeEndpoint>,
 ) -> Result<()> {
     let mut tasks = JoinSet::new();
     let mut result = Ok(());
@@ -202,9 +193,9 @@ async fn serve(
             _=cancelled.cancelled()=>break,
             completed=tasks.join_next(),if !tasks.is_empty()=>{if completed.is_some_and(|outcome|outcome.is_err()){result=Err(Error);cancelled.cancel();break;}},
             stream=listener.accept()=>{
-                let Ok(stream)=stream else {result=Err(Error);cancelled.cancel();break;};
+                let Ok(stream)=stream.map(Stream) else {result=Err(Error);cancelled.cancel();break;};
                 if tasks.len()>=MAX_CONNECTIONS {drop(stream);continue;}
-                if stream.peer_creds().ok().and_then(|peer|peer.euid())!=Some(rustix::process::geteuid().as_raw()) {drop(stream);continue;}
+                if endpoints.admit_peer(&stream.0).is_err() {drop(stream);continue;}
                 let handler=handler.clone();let secret=secret.clone();let cancelled=cancelled.child_token();
                 tasks.spawn(async move {let _=connection(stream,secret,handler,cancelled).await;});
             }
@@ -312,6 +303,7 @@ pub struct Client {
 }
 impl Client {
     /// Authenticate once against the private endpoint without creating or repairing it.
+    #[cfg(target_os = "linux")]
     pub async fn connect(directory: &Path) -> Result<Self> {
         let stream = tokio::time::timeout(DEADLINE, authenticate(directory))
             .await
@@ -321,6 +313,40 @@ impl Client {
             next_id: 1,
         })
     }
+    /// Authenticate a platform-admitted, overlapped Windows handle with IDENTIFICATION QOS.
+    /// The trusted adapter must derive the pipe from its private directory and admit the actual PID.
+    /// No page/Capability authority is granted. Cancellation closes the handle without detached flush.
+    #[cfg(windows)]
+    pub async fn connect_native(
+        handle: std::os::windows::io::OwnedHandle,
+        secret: Zeroizing<Vec<u8>>,
+        admit_peer: impl FnOnce(u32) -> Result<()> + Send,
+    ) -> Result<Self> {
+        let stream = Stream(IpcStream::NamedPipe(handle.try_into().map_err(|_| Error)?));
+        if secret.len() != 64
+            || !secret
+                .iter()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+        {
+            return Err(Error);
+        }
+        admit_peer(
+            stream
+                .0
+                .peer_creds()
+                .map_err(|_| Error)?
+                .pid()
+                .ok_or(Error)?,
+        )?;
+        let stream = tokio::time::timeout(DEADLINE, authenticate_stream(stream, secret))
+            .await
+            .map_err(|_| Error)??;
+        Ok(Self {
+            stream: Some(stream),
+            next_id: 1,
+        })
+    }
+
     /// Invoke once with a fresh correlation ID; error or cancellation retires this client.
     pub async fn invoke(&mut self, method: &str, params: Value) -> Result<Value> {
         // Taking ownership also closes the stream when this waiter is dropped.
@@ -343,85 +369,19 @@ impl Client {
     }
 }
 /// Warm client. Endpoint validation never creates or repairs a directory/token.
+#[cfg(target_os = "linux")]
 pub async fn invoke(directory: &Path, method: &str, params: Value) -> Result<Value> {
     let budget = client_budget(method);
     tokio::time::timeout(budget, invoke_inner(directory, method, params))
         .await
         .map_err(|_| Error)?
 }
+#[cfg(target_os = "linux")]
 async fn authenticate(directory: &Path) -> Result<Stream> {
-    let socket = directory.join("control.sock");
-    let token = directory.join("control.token");
-    // Runtime is a backend-created private directory; reject links through every ancestor.
-    if !directory.is_absolute() {
-        return Err(Error);
-    }
-    let mut path = PathBuf::new();
-    for component in directory.components() {
-        match component {
-            std::path::Component::RootDir | std::path::Component::Normal(_) => {
-                path.push(component.as_os_str())
-            }
-            _ => return Err(Error),
-        }
-        let meta = fs::symlink_metadata(&path).map_err(|_| Error)?;
-        if !meta.is_dir() {
-            return Err(Error);
-        }
-        if meta.uid() != 0 && meta.uid() != rustix::process::geteuid().as_raw() {
-            return Err(Error);
-        }
-        if meta.mode() & 0o022 != 0 && !(meta.uid() == 0 && meta.mode() & 0o1777 == 0o1777) {
-            return Err(Error);
-        }
-    }
-    let meta = fs::symlink_metadata(directory).map_err(|_| Error)?;
-    if meta.uid() != rustix::process::geteuid().as_raw() || meta.mode() & 0o7777 != 0o700 {
-        return Err(Error);
-    }
-    let socket_meta = fs::symlink_metadata(&socket).map_err(|_| Error)?;
-    use std::os::unix::fs::FileTypeExt;
-    if !socket_meta.file_type().is_socket()
-        || socket_meta.uid() != meta.uid()
-        || socket_meta.mode() & 0o7777 != 0o600
-        || socket_meta.nlink() != 1
-    {
-        return Err(Error);
-    }
-    let token_meta = fs::symlink_metadata(&token).map_err(|_| Error)?;
-    if !token_meta.is_file()
-        || token_meta.uid() != meta.uid()
-        || token_meta.mode() & 0o7777 != 0o600
-        || token_meta.nlink() != 1
-        || token_meta.len() != 64
-    {
-        return Err(Error);
-    }
-    // O_NOFOLLOW closes the final-link boundary; the same-UID directory race is not claimed solved.
-    let file = OpenOptions::new()
-        .read(true)
-        .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32)
-        .open(&token)
-        .map_err(|_| Error)?;
-    let opened = file.metadata().map_err(|_| Error)?;
-    if opened.dev() != token_meta.dev() || opened.ino() != token_meta.ino() {
-        return Err(Error);
-    }
-    let mut secret = Zeroizing::new(Vec::with_capacity(65));
-    file.take(65).read_to_end(&mut secret).map_err(|_| Error)?;
-    if secret.len() != 64
-        || !secret
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-    {
-        return Err(Error);
-    }
-    let stream = Stream::connect(socket.to_fs_name::<GenericFilePath>().map_err(|_| Error)?)
-        .await
-        .map_err(|_| Error)?;
-    if stream.peer_creds().ok().and_then(|peer| peer.euid()) != Some(meta.uid()) {
-        return Err(Error);
-    }
+    let (stream, secret) = platform::connect(directory).await?;
+    authenticate_stream(stream, secret).await
+}
+async fn authenticate_stream(stream: Stream, secret: Zeroizing<Vec<u8>>) -> Result<Stream> {
     let mut hello = json!({"jsonrpc":"2.0","id":"hello","method":"hello","params":{"protocolVersion":1,"token":String::from_utf8(secret.to_vec()).map_err(|_|Error)?}});
     let wire = cli::encode(&hello).map_err(|_| Error)?;
     if let Some(Value::String(token)) = hello["params"]
@@ -446,6 +406,7 @@ async fn authenticate(directory: &Path) -> Result<Stream> {
     }
     Ok(stream)
 }
+#[cfg(target_os = "linux")]
 async fn invoke_inner(directory: &Path, method: &str, params: Value) -> Result<Value> {
     let stream = tokio::time::timeout(DEADLINE, authenticate(directory))
         .await
@@ -468,5 +429,5 @@ async fn invoke_stream(stream: &Stream, id: &str, method: &str, params: Value) -
     }
     response.get("result").cloned().ok_or(Error)
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests;

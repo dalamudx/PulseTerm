@@ -30,6 +30,9 @@ impl DefaultProfileSelection {
             "fish" => AutomaticShell::Fish,
             "sh" => AutomaticShell::Sh,
             "pwsh" => AutomaticShell::Pwsh,
+            "powershell" => AutomaticShell::PowerShell,
+            "cmd" => AutomaticShell::Cmd,
+            "wsl" => AutomaticShell::Wsl,
             _ => {
                 let id = Uuid::parse_str(value).ok()?;
                 return (id.get_version_num() == 7
