@@ -64,7 +64,7 @@ def connect():
     click('连接')
     wait(lambda: accessible('选择保存的SSH主机', 'focus'), 'host_ready')
     # The seeded entry has no saved password. Its explicit MFA option is last.
-    key('Tab', 'End', 'Tab', 'Tab', 'Return')
+    key('Tab', 'End', 'Tab', 'Tab', 'Tab', 'Return')
     wait(lambda: accessible('Account <literal>', 'focus'), 'first_question')
 
 def stop(process):
