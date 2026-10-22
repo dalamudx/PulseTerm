@@ -39,10 +39,13 @@ pub mod vault_password_handoff;
 pub mod window_action;
 /// Native-only multiwindow routing and lifecycle; labels never grant page authority.
 pub mod window_directory;
-#[cfg(all(test, unix))]
+#[cfg(test)]
 fn test_tempdir() -> std::io::Result<tempfile::TempDir> {
+    let root = std::env::temp_dir();
     // macOS exposes temporary storage through /var; private stores reject symlink ancestors.
-    tempfile::tempdir_in(std::env::temp_dir().canonicalize()?)
+    #[cfg(unix)]
+    let root = root.canonicalize()?;
+    tempfile::tempdir_in(root)
 }
 #[cfg(all(test, unix))]
 pub(crate) static VAULT_CRYPTO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

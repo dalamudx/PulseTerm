@@ -69,7 +69,7 @@ impl PasswordInteractiveSessionGesture {
             .begin_session_authorized(owner, page, approved)?;
         Ok(PasswordInteractiveSessionAction { action, deadline })
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn fixture_expire(&mut self) {
         self.capture.expires = Instant::now() - Duration::from_secs(1);
     }

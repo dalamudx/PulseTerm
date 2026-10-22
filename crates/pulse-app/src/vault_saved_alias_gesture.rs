@@ -135,7 +135,7 @@ impl SavedAliasGesture {
         }
         Ok((SavedSessionGesture { capture }, selected))
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn fixture_expire(&mut self) {
         self.expires = Instant::now();
     }
@@ -168,7 +168,7 @@ impl ColdSavedAliasIntent {
             )
             .map(|gesture| gesture.tighten_deadline(self.expires))
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn fixture_expire(&mut self) {
         self.expires = Instant::now();
     }

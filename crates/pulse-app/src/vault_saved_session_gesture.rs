@@ -159,7 +159,7 @@ impl SavedSessionGesture {
         }
     }
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 impl SavedSessionGesture {
     pub(crate) fn fixture_expire(&mut self) {
         self.capture.expires = Instant::now();

@@ -59,7 +59,7 @@ impl PrivateKeySessionGesture {
             .pin_original_epoch(selection.epoch))
     }
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 impl PrivateKeySessionGesture {
     pub(crate) fn fixture_expire(&mut self) {
         self.capture.expires = std::time::Instant::now();
