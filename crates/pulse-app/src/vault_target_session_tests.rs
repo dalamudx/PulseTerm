@@ -122,7 +122,7 @@ fn actual_ciphertext_session_role_original_epoch_page_cancel_lost_owner_and_nati
     runtime()?.block_on(async {
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

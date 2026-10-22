@@ -109,7 +109,7 @@ fn actual_ciphertext_explicit_action_exact_borrow_source_cancel_and_late_drain_n
     runtime()?.block_on(async {
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

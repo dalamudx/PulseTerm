@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use tokio::time::{Duration, timeout};
 #[tokio::test]
 async fn saved_custom_profile_runs_literals_with_frozen_colors_and_rejects_deleted_or_old_pages() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let db = dir.path().join("state.db");
     let (store, task) = StateStore::open(db.clone()).await.unwrap();

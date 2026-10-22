@@ -29,7 +29,7 @@ impl Fixture {
     async fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
         let page = page()?;
         let owner = PageVaultOwner::new(page.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

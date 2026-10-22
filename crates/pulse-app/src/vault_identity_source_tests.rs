@@ -16,7 +16,7 @@ fn authenticated_epoch_saved_filled_identity_source_and_retirement_are_independe
     runtime()?.block_on(async {
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let path = dir.join("state.db");
         let (store, worker) = StateStore::open(path.clone()).await?;

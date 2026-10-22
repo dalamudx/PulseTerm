@@ -102,7 +102,7 @@ fn foreign_same_empty_source_never_aliases_or_closes_either_worker() -> TestResu
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
         let operation = owner.begin(p.scope.clone())?;
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let a = pulse_store::state_directory::prepare(&root.path().join("a"))?;
         let b = pulse_store::state_directory::prepare(&root.path().join("b"))?;
         let (a, aw) = StateStore::open(a.join("state.db")).await?;
@@ -144,7 +144,7 @@ fn actual_create_unlock_refresh_lock_and_pending_retirement_remain_distinct() ->
     runtime()?.block_on(async {
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

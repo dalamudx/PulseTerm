@@ -30,7 +30,7 @@ async fn next(
 #[tokio::test]
 async fn private_stored_profile_pty_echo_survives_view_drop_refresh_and_ordered_eof() -> TestResult
 {
-    let dir = tempfile::tempdir()?;
+    let dir = crate::test_tempdir()?;
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))?;
     let program = dir.path().join("sh");
     std::fs::write(

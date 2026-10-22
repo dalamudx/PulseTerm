@@ -6,6 +6,11 @@ use pulse_pty::PtyCommand;
 use pulse_term::session::{Lifecycle, MAX_RESTORE_BYTES, SessionHandle};
 use serde_json::json;
 use std::time::{Duration, Instant};
+fn line_input(line: &str) -> Vec<u8> {
+    let mut bytes = line.as_bytes().to_vec();
+    bytes.push(if cfg!(windows) { b'\r' } else { b'\n' });
+    bytes
+}
 async fn visible(handle: &SessionHandle, marker: &str) -> Result<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -106,12 +111,12 @@ async fn detached_session() -> Result<serde_json::Value> {
     let before = registry.state(owner, id)?.parsed_bytes;
     ensure!(
         registry
-            .input_bound(owner, id, old.generation, b"exit\n".to_vec())
+            .input_bound(owner, id, old.generation, line_input("exit"))
             .await
             .is_err(),
         "old view input accepted"
     );
-    registry.input(owner, id, b"first\n".to_vec()).await?;
+    registry.input(owner, id, line_input("first")).await?;
     visible(&session, "DETACHED_FIRST").await?;
     let held = Instant::now();
     tokio::time::sleep(Duration::from_secs(6)).await;
@@ -120,7 +125,7 @@ async fn detached_session() -> Result<serde_json::Value> {
         registry.state(owner, id)?.lifecycle == Lifecycle::Running,
         "detached view timed out session"
     );
-    registry.input(owner, id, b"next\n".to_vec()).await?;
+    registry.input(owner, id, line_input("next")).await?;
     visible(&session, "DETACHED_NEXT").await?;
     let captured = registry.state(owner, id)?;
     ensure!(
@@ -167,7 +172,7 @@ async fn detached_session() -> Result<serde_json::Value> {
                     );
                     committed = true;
                     registry
-                        .input_bound(owner, id, fresh.generation, b"exit\n".to_vec())
+                        .input_bound(owner, id, fresh.generation, line_input("exit"))
                         .await?;
                 }
                 Part::Data => {
@@ -279,7 +284,7 @@ pub(crate) async fn wire_streaming_command(
                     );
                     shell_hint_count = Some(sampled.hints.markers.len());
                     registry
-                        .input(window, id, "literal ; $(input) 中\n".as_bytes().to_vec())
+                        .input(window, id, line_input("literal ; $(input) 中"))
                         .await?;
                 }
                 Part::Data => {
@@ -375,9 +380,7 @@ async fn streaming() -> Result<serde_json::Value> {
         .diagnostic_subscribe(20, MAX_HISTORY_BYTES, MAX_RESTORE_BYTES)
         .await
         .map_err(|e| anyhow::anyhow!("native first lease: {e}"))?;
-    handle
-        .input("literal ; $(input) 中\n".as_bytes().to_vec())
-        .await?;
+    handle.input(line_input("literal ; $(input) 中")).await?;
     tokio::time::timeout(Duration::from_secs(3), async {
         while old.output.len() != pulse_term::session::TRANSPORT_QUEUE_CAPACITY {
             tokio::time::sleep(Duration::from_millis(5)).await;

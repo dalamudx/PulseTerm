@@ -10,7 +10,7 @@ use tokio::time::{Duration, timeout};
 
 #[tokio::test(flavor = "current_thread")]
 async fn stored_tombstone_and_failed_store_never_fall_back_to_launch() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
     let registry = SessionRegistry::new();
@@ -21,7 +21,7 @@ async fn stored_tombstone_and_failed_store_never_fall_back_to_launch() {
         pane: None,
     };
     let size = TermSize::new(32, 8).unwrap();
-    let candidates = [ShellCandidate::new(ShellKind::Sh, "/bin/true".into()).unwrap()];
+    let candidates = [ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap()];
     let spec = StoredProfileLaunch {
         candidates: &candidates,
         kind: ShellKind::Sh,
@@ -69,7 +69,7 @@ async fn stored_tombstone_and_failed_store_never_fall_back_to_launch() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn closed_database_worker_is_not_an_empty_catalog() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
     let registry = SessionRegistry::new();
@@ -80,7 +80,7 @@ async fn closed_database_worker_is_not_an_empty_catalog() {
         pane: None,
     };
     task.shutdown().await.unwrap();
-    let candidates = [ShellCandidate::new(ShellKind::Sh, "/bin/true".into()).unwrap()];
+    let candidates = [ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap()];
     let spec = StoredProfileLaunch {
         candidates: &candidates,
         kind: ShellKind::Sh,
@@ -96,7 +96,7 @@ async fn closed_database_worker_is_not_an_empty_catalog() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn profile_offers_only_project_current_identities_without_paths() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
     let registry = SessionRegistry::new();
@@ -168,7 +168,7 @@ async fn stored_profile_palette_override_inheritance_and_reset_reach_real_osc_qu
         profile_editor::ProfileConfig,
         settings::{SettingsResolver, TerminalPreset},
     };
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
     let registry = SessionRegistry::new();

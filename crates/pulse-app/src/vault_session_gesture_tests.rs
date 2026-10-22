@@ -32,7 +32,7 @@ fn actual_epoch_gesture_is_key_free_single_use_and_cannot_borrow_a_later_unlock(
                 )
                 .is_err()
         );
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(allow()).await?;

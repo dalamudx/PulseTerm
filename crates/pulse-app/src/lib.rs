@@ -40,6 +40,11 @@ pub mod window_action;
 /// Native-only multiwindow routing and lifecycle; labels never grant page authority.
 pub mod window_directory;
 #[cfg(all(test, unix))]
+fn test_tempdir() -> std::io::Result<tempfile::TempDir> {
+    // macOS exposes temporary storage through /var; private stores reject symlink ancestors.
+    tempfile::tempdir_in(std::env::temp_dir().canonicalize()?)
+}
+#[cfg(all(test, unix))]
 pub(crate) static VAULT_CRYPTO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// Rust-only current-page Vault operations; no password IPC or SecretRef-use permission.
 pub mod vault_owner;

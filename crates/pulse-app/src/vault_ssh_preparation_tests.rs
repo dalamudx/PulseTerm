@@ -17,7 +17,7 @@ fn saved_source_native_guard_page_and_original_epoch_never_become_target_permiss
     runtime()?.block_on(async {
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

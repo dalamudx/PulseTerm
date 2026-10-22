@@ -108,7 +108,7 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        let dir = tempfile::tempdir()?;
+        let dir = crate::test_tempdir()?;
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))?;
         let file = ThemeFile::open_private(dir.path().to_path_buf(), Uuid::from_u128(1))?;
         file.save(&file.load()?, &document("initial")?)?;

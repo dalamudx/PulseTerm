@@ -75,7 +75,11 @@ def checked_inventory(root):
 
 
 def run(command, root):
-    result = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=60, check=True)
+    deadline = 300 if command[:2] == ['cargo', 'fetch'] else 60
+    try:
+        result = subprocess.run(command, cwd=root, text=True, capture_output=True, timeout=deadline, check=True)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f'{error}\n{error.stderr}') from error
     if len(result.stdout.encode()) > 8 * 1024 * 1024:
         raise ValueError('dependency graph output exceeds budget')
     return result.stdout
@@ -100,6 +104,7 @@ def review(root, runner=run, validate=checked_inventory):
     hosts = re.findall(r'^host: (\S+)$', rust, flags=re.MULTILINE)
     if len(hosts) != 1:
         raise ValueError('resolver host not reported by rustc')
+    runner(['cargo', 'fetch', '--locked'], root)
     for name, target, features, purpose in PROFILES:
         graphs = {}
         for mode, edges in EDGES.items():
@@ -159,7 +164,7 @@ def main():
     incomplete = {'schemaVersion': 1, 'completed': False, 'releaseApproved': False}
     output.write_text(json.dumps(incomplete, indent=2) + '\n')
     summary.write_text('Dependency review incomplete; no release approval.\n')
-    temp_root = Path('/data/temp')
+    temp_root = Path(tempfile.gettempdir())
     temp_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='distribution-review-', dir=temp_root) as scratch:
         prior = {key: os.environ.get(key) for key in ('TMPDIR', 'TMP', 'TEMP')}

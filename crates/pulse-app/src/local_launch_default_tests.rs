@@ -11,7 +11,7 @@ use tokio::time::{Duration, timeout};
 
 #[tokio::test(flavor = "current_thread")]
 async fn only_selected_current_catalog_identity_can_launch_with_default_options() {
-    assert!(std::path::Path::new("/bin/true").is_file());
+    assert!(std::path::Path::new("/usr/bin/true").is_file());
     let registry = SessionRegistry::new();
     let owner = registry.open_window().unwrap();
     let page = registry.activate_launch_page(owner).unwrap();
@@ -25,8 +25,8 @@ async fn only_selected_current_catalog_identity_can_launch_with_default_options(
     // must obtain ShellCandidates from the backend discovery, never from page input.
     catalog
         .reconcile(&[
-            ShellCandidate::new(ShellKind::Sh, "/bin/true".into()).unwrap(),
-            ShellCandidate::new(ShellKind::Bash, "/bin/false".into()).unwrap(),
+            ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap(),
+            ShellCandidate::new(ShellKind::Bash, "/usr/bin/false".into()).unwrap(),
         ])
         .unwrap();
     assert!(matches!(

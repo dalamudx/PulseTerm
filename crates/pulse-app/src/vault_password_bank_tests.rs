@@ -26,7 +26,7 @@ fn native_bank_exact_owner_page_single_use_active_cancel_and_timer_keep_actual_r
         let bank = PasswordWriteBank::new(&owner);
         let other_owner = PageVaultOwner::new(p.registry.clone());
         let other = PasswordWriteBank::new(&other_owner);
-        let root = tempfile::tempdir()?;
+        let root = crate::test_tempdir()?;
         let dir = pulse_store::state_directory::prepare(&root.path().join("state"))?;
         let (store, worker) = StateStore::open(dir.join("state.db")).await?;
         let empty = store.load_vault_ciphertext(Arc::new(|| true)).await?;

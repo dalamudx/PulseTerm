@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -16,8 +17,7 @@ spec.loader.exec_module(m)
 
 class ReviewTests(unittest.TestCase):
     def setUp(self):
-        Path('/data/temp').mkdir(exist_ok=True, parents=True)
-        self.temp = tempfile.TemporaryDirectory(prefix='distribution-review-test-', dir='/data/temp')
+        self.temp = tempfile.TemporaryDirectory(prefix='distribution-review-test-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         files = {
@@ -41,6 +41,9 @@ class ReviewTests(unittest.TestCase):
 
     def runner(self, command, root):
         self.commands.append(command)
+        if command[:2] == ['cargo', 'fetch']:
+            self.assertEqual(command, ['cargo', 'fetch', '--locked'])
+            return ''
         if command[:2] == ['cargo', '--version']:
             return 'cargo 1.95.0\n'
         if command[0] == 'rustc':
@@ -57,6 +60,8 @@ class ReviewTests(unittest.TestCase):
 
     def test_normal_build_and_conservative_frontend_remain_distinct(self):
         report, raw = self.review()
+        fetch = self.commands.index(['cargo', 'fetch', '--locked'])
+        self.assertLess(fetch, next(i for i, command in enumerate(self.commands) if command[:2] == ['cargo', 'tree']))
         self.assertFalse(report['releaseApproved'])
         self.assertTrue(report['completed'])
         self.assertEqual(len(raw), 10)
@@ -86,6 +91,22 @@ class ReviewTests(unittest.TestCase):
     def test_repeated_and_proc_macro_annotations(self):
         text = 'pulseterm-desktop v7.1.0 (/fixed/app)\ncompiler v1.0.0 (proc-macro)\ncompiler v1.0.0 (*)\n'
         self.assertEqual(len(m.parse_tree(text, {'cargo:compiler@1.0.0'}, {'cargo:pulseterm-desktop@7.1.0'})), 2)
+
+    def test_failed_process_preserves_native_error(self):
+        command = [sys.executable, '-c', 'import sys; sys.stderr.write("missing locked crate\\n"); sys.exit(23)']
+        with self.assertRaisesRegex(RuntimeError, 'missing locked crate') as caught:
+            m.run(command, self.root)
+        self.assertIsInstance(caught.exception.__cause__, subprocess.CalledProcessError)
+        self.assertEqual(caught.exception.__cause__.returncode, 23)
+
+    def test_failed_fetch_never_resolves_graphs(self):
+        def fail(command, root):
+            if command[:2] == ['cargo', 'fetch']:
+                raise subprocess.CalledProcessError(23, command)
+            return self.runner(command, root)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.review(fail)
+        self.assertFalse(any(command[:2] == ['cargo', 'tree'] for command in self.commands))
 
     def test_failed_cargo_does_not_retry_or_finish(self):
         def fail(command, root):

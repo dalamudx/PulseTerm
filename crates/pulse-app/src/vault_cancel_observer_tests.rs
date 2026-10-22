@@ -162,8 +162,8 @@ fn foreign_store_binding_closes_and_wakes_under_original_page_without_callbacks_
         let p = page()?;
         let owner = PageVaultOwner::new(p.registry.clone());
         let operation = owner.begin(p.scope.clone())?;
-        let a = tempfile::tempdir()?;
-        let b = tempfile::tempdir()?;
+        let a = crate::test_tempdir()?;
+        let b = crate::test_tempdir()?;
         let a_dir = pulse_store::state_directory::prepare(&a.path().join("state"))?;
         let b_dir = pulse_store::state_directory::prepare(&b.path().join("state"))?;
         let (store, task) = StateStore::open(a_dir.join("state.db")).await?;

@@ -1,4 +1,4 @@
-//! Stored startup → root handoff; /bin/true runs in a real PTY without reading user rc.
+//! Stored startup → root handoff; /usr/bin/true runs in a real PTY without reading user rc.
 #![allow(clippy::unwrap_used)]
 use super::*;
 use pulse_core::TermSize;
@@ -23,7 +23,7 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_tempdir().unwrap();
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
         let registry = SessionRegistry::new();
@@ -41,7 +41,7 @@ impl Fixture {
             window,
             page,
             root,
-            candidates: vec![ShellCandidate::new(ShellKind::Sh, "/bin/true".into()).unwrap()],
+            candidates: vec![ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap()],
             context: LocalSessionEnvironment {
                 application_version: "test-root".into(),
                 pane: None,

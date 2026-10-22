@@ -18,7 +18,7 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> std::result::Result<Self, Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
+        let directory = crate::test_tempdir()?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
