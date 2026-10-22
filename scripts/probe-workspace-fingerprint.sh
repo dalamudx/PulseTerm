@@ -36,7 +36,8 @@ start_server 1 "$fixture/key"
 start_app 1;open_hosts 1
 focus '显示名称';keys ctrl+a;type FINGERPRINT
 focus '主机地址';keys ctrl+a;type 127.0.0.1
-focus '端口';keys ctrl+a;type "$port"
+# Native numeric-input focus differs across WebKit versions; enter from the focused address.
+keys Tab ctrl+a;type "$port"
 focus '用户名';keys ctrl+a;type fixed
 timeout 3s "$fixture/x11-status" "$app" '添加' activate
 await_count hosts_operation_confirmed 2;sleep 0.2

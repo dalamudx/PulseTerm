@@ -167,12 +167,15 @@ with tempfile.TemporaryDirectory(prefix='workspace-load.', dir='/data/temp') as 
                 (OUT / 'full-native.json').write_text(json.dumps(complete, indent=2) + '\n')
                 report['fullCatElapsedMs'] = (complete['exitedNs'] - complete['startedNs']) / 1000000
                 image = OUT / 'complete.png'
-                text = fixture / 'complete-ocr'
+                text = OUT / 'complete-ocr'
+                ocr_image = OUT / 'complete-ocr.png'
 
                 def painted():
                     run('/usr/bin/import', '-window', xid, image)
-                    run('/usr/bin/env', 'OMP_THREAD_LIMIT=1', '/usr/bin/tesseract', image, text, '--psm', '6')
-                    return 'load complete' in text.with_suffix('.txt').read_text().lower()
+                    # The fixed single terminal ends at the window bottom; omit repeated flood rows from OCR.
+                    run('/usr/bin/convert', image, '-gravity', 'South', '-crop', '100%x25%+0+0', '+repage', '-resize', '300%', ocr_image)
+                    run('/usr/bin/env', 'OMP_THREAD_LIMIT=1', '/usr/bin/tesseract', ocr_image, text, '--psm', '6')
+                    return 'load complete 1073741824' in text.with_suffix('.txt').read_text().lower()
 
                 wait(painted, 'painted_completion', 30)
                 report.update(measurementsComplete=True, full1GiBCatExitedNormally=True, finalMarkerPainted=True)
