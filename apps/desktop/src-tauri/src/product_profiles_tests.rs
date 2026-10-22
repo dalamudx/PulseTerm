@@ -24,7 +24,7 @@ fn page() -> (
 fn candidates(root: &std::path::Path) -> std::io::Result<OsString> {
     let bin = root.join("bin");
     fs::create_dir(&bin)?;
-    for kind in ["bash", "sh"] {
+    for kind in ["bash", "zsh", "fish", "sh", "pwsh"] {
         let file = bin.join(kind);
         fs::write(&file, b"not executed")?;
         fs::set_permissions(file, fs::Permissions::from_mode(0o700))?;
@@ -46,6 +46,15 @@ async fn real_database_visibility_and_deletion_are_read_fresh_without_paths() ->
     store
         .edit_auto_profiles(AutoProfileEdit::Suppress(AutomaticShell::Sh))
         .await?;
+    for shell in [
+        AutomaticShell::Zsh,
+        AutomaticShell::Fish,
+        AutomaticShell::Pwsh,
+    ] {
+        store
+            .edit_auto_profiles(AutoProfileEdit::Suppress(shell))
+            .await?;
+    }
     let path = candidates(root.path())?;
     let (registry, _documents, _owner, scope) = page();
     let reader = Arc::new(ProfileReader::new());

@@ -23,7 +23,7 @@ fn fixture() -> std::io::Result<(tempfile::TempDir, PathBuf, OsString)> {
     let root = tempfile::tempdir()?;
     let bin = root.path().join("bin");
     fs::create_dir(&bin)?;
-    for name in ["bash", "sh"] {
+    for name in ["bash", "zsh", "fish", "sh", "pwsh"] {
         let path = bin.join(name);
         fs::write(&path, b"not executed")?;
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
@@ -155,7 +155,16 @@ async fn default_metadata_save_is_single_use_and_missing_hidden_defaults_do_not_
         .await?;
     assert_eq!(offer.selected, None);
     assert!(!offer.available);
-    assert_eq!(offer.offered.len(), 2);
+    assert_eq!(
+        offer.offered,
+        [
+            AutomaticShell::Bash,
+            AutomaticShell::Zsh,
+            AutomaticShell::Fish,
+            AutomaticShell::Sh,
+            AutomaticShell::Pwsh
+        ]
+    );
     reader
         .default_save(
             registry.clone(),
@@ -215,7 +224,15 @@ async fn default_metadata_save_is_single_use_and_missing_hidden_defaults_do_not_
         .await?;
     assert_eq!(offer.selected, Some(AutomaticShell::Bash));
     assert!(!offer.available);
-    assert_eq!(offer.offered, [AutomaticShell::Sh]);
+    assert_eq!(
+        offer.offered,
+        [
+            AutomaticShell::Zsh,
+            AutomaticShell::Fish,
+            AutomaticShell::Sh,
+            AutomaticShell::Pwsh
+        ]
+    );
     reader
         .default_save(
             registry.clone(),
@@ -390,7 +407,15 @@ async fn changed_visibility_and_discovery_reject_save_against_original_source() 
             None,
         )
         .await?;
-    assert_eq!(offer.offered, [AutomaticShell::Sh]);
+    assert_eq!(
+        offer.offered,
+        [
+            AutomaticShell::Zsh,
+            AutomaticShell::Fish,
+            AutomaticShell::Sh,
+            AutomaticShell::Pwsh
+        ]
+    );
     assert_eq!(
         reader
             .default_save(

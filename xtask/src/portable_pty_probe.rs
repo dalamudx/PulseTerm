@@ -114,7 +114,7 @@ fn next(rx: &mpsc::Receiver<std::io::Result<Vec<u8>>>) -> Result<Option<Vec<u8>>
     }
 }
 fn feed(
-    session: &mut PtySession,
+    mut session: Option<&mut PtySession>,
     terminal: &mut TerminalProbe,
     bytes: &[u8],
     total: &mut usize,
@@ -123,7 +123,10 @@ fn feed(
     ensure!(*total <= MAX_OUTPUT, "PTY output quota exceeded");
     terminal.feed(bytes);
     for reply in terminal.take_replies() {
-        session.write_input(reply.as_bytes())?;
+        session
+            .as_mut()
+            .context("unexpected terminal query after child exit")?
+            .write_input(reply.as_bytes())?;
     }
     Ok(())
 }
@@ -138,7 +141,7 @@ fn ready(
     loop {
         ensure!(Instant::now() < deadline, "ready deadline exceeded");
         let chunk = next(rx)?.context("EOF before ready")?;
-        feed(session, term, &chunk, total)?;
+        feed(Some(session), term, &chunk, total)?;
         let text = term
             .screen()
             .cells
@@ -150,6 +153,26 @@ fn ready(
             return Ok(());
         }
     }
+}
+fn close_and_drain(
+    session: PtySession,
+    rx: &mpsc::Receiver<std::io::Result<Vec<u8>>>,
+    pump: thread::JoinHandle<()>,
+    terminal: &mut TerminalProbe,
+    total: &mut usize,
+) -> Result<()> {
+    // ConPTY EOF can require closing the console, which must not block output draining.
+    let closer = thread::spawn(move || drop(session));
+    while let Some(bytes) = next(rx)? {
+        feed(None, terminal, &bytes, total)?;
+    }
+    pump.join()
+        .map_err(|_| anyhow::anyhow!("reader panicked"))?;
+    closer
+        .join()
+        .map_err(|_| anyhow::anyhow!("PTY close panicked"))?;
+    terminal.finish_input();
+    Ok(())
 }
 pub fn worker() -> Result<()> {
     std::fs::create_dir_all(super::root()?.join("target/probes"))?;
@@ -171,13 +194,17 @@ pub fn worker() -> Result<()> {
     // bytes or Win32 keyboard protocol support from this cooked-line test.
     let ending = if cfg!(windows) { "\r" } else { "\n" };
     session.write_input(format!("{LINE}{ending}").as_bytes())?;
-    while let Some(bytes) = next(&rx)? {
-        feed(&mut session, &mut terminal, &bytes, &mut total)?;
-    }
-    terminal.finish_input();
+    ready(
+        &mut session,
+        &rx,
+        &mut terminal,
+        "PORTABLE_OK 中",
+        &mut total,
+    )
+    .context("interactive completion marker")?;
     ensure!(session.wait()?.exit_code() == 7, "nonzero child exit lost");
-    pump.join()
-        .map_err(|_| anyhow::anyhow!("reader panicked"))?;
+    close_and_drain(session, &rx, pump, &mut terminal, &mut total)
+        .context("interactive output EOF and native close")?;
     let final_text = terminal
         .screen()
         .cells
@@ -189,7 +216,6 @@ pub fn worker() -> Result<()> {
         final_text.contains("PORTABLE_OK 中"),
         "native Unicode/output repaint lost"
     );
-    drop(session);
     let (mut held, rx, pump) = spawn("hold")?;
     let mut terminal = TerminalProbe::new(TermSize::new(80, 24)?, 0);
     let mut total = 0;
@@ -200,10 +226,8 @@ pub fn worker() -> Result<()> {
         held.terminate()?.exit_code() == first.exit_code(),
         "termination not idempotent"
     );
-    drop(held);
-    while next(&rx)?.is_some() {}
-    pump.join()
-        .map_err(|_| anyhow::anyhow!("reader panicked"))?;
+    close_and_drain(held, &rx, pump, &mut terminal, &mut total)
+        .context("terminated output EOF and native close")?;
     let cancellation = start.elapsed().as_millis();
     ensure!(cancellation < 2000, "direct-child teardown too slow");
     let report = json!({"schemaVersion":1,"platform":std::env::consts::OS,"nativeTerminal":true,"literalArgvCwdEnv":true,"canonicalInputUnicode":true,"nativeResize":true,"exitCode":7,"outputEof":true,"directChildTermination":true,"cancellationMs":cancellation,"queueChunks":2,"chunkBytes":4096,"limits":["Native dimension readback, not child-side get-console-size verification","Canonical input only; not raw keyboard/query delivery","No packaged conpty.dll or OpenConsole.exe; OS provider is tested","Direct child only; descendants and native GUI remain unverified"]});
