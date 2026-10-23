@@ -90,6 +90,8 @@ tauri-plugin-single-instance = { workspace = true, optional = true }
 gtk = { version = "=0.18.2", optional = true }
 webkit2gtk = { version = "=2.0.2", features = ["v2_28"], optional = true }
 zbus = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rustix = { workspace = true, optional = true }
 [build-dependencies]
 tauri-build = { workspace = true, optional = true }

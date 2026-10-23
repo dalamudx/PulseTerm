@@ -552,9 +552,7 @@ pub fn run() {
         any(target_os = "linux", target_os = "macos", windows)
     ))]
     let unsupported_startup = match crate::cli_startup::from_args(std::env::args_os().skip(1)) {
-        Ok(Some(action))
-            if cfg!(any(target_os = "linux", windows)) && action.supports_cold_transport() =>
-        {
+        Ok(Some(action)) if action.supports_cold_transport() => {
             if state.0.bootstrap.enqueue_first(action).is_err() {
                 eprintln!("workspace.startup_denied");
                 std::process::exit(1);

@@ -2,7 +2,7 @@
 
 [English](cli.en.md)
 
-当前为开发预览，尚未达到跨平台 Alpha 验收。本文描述已接通的 `pulse` 命令。Linux 有分项运行证据；Windows 控制与 macOS 暖控制入口已接线，原生 GUI 尚待验收。macOS 要求先正常打开配套工作区，不支持 CLI 冷启动。
+当前为开发预览，尚未达到跨平台 Alpha 验收。本文描述已接通的 `pulse` 命令。Linux 有分项运行证据；Windows／macOS 冷暖控制入口已接线，原生 GUI 尚待验收。
 
 ## 离线帮助和版本
 
@@ -106,7 +106,7 @@ pulse -w workspace profiles . -w workspace focus
 
 ## 冷启动与故障处理
 
-macOS 当前只接通暖控制：先正常打开配套工作区，再调用 CLI。缺少端点时直接失败，不启动 GUI；第二个 GUI 实例不能占用已有端点，也不转发启动参数。
+macOS 冷启动要求 `pulse` 与 `pulseterm-workspace` 位于同一安全目录；不搜索 `.app`、PATH 或其他安装位置，不通过 Shell 启动。程序必须是当前账户或 root 所有的单链接、可执行普通文件，不能带 setid，程序及祖先目录须通过写权限校验。不符合条件时先正常打开配套工作区，再使用暖控制；不自动修复权限。第二个 GUI 实例不能占用已有端点，也不转发启动参数。
 首次支持的动作可启动同目录的配套 `pulseterm-workspace`（Windows 为 `.exe`），再等待原页批准。`windows` 与 `new-window` 要求 GUI 已运行。冷启动不查找任意程序；Windows 拒绝第二个 GUI 实例的启动动作转发，并发冷起可能失败。
 
 | 情况 | 处理方式 |

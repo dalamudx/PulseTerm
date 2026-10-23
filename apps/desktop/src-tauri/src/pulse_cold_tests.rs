@@ -2,7 +2,8 @@
 use super::*;
 use std::os::unix::fs::{PermissionsExt, symlink};
 fn fixture() -> tempfile::TempDir {
-    let temp = tempfile::tempdir().unwrap();
+    let root = std::env::temp_dir().canonicalize().unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
     fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
     temp
 }

@@ -3,13 +3,10 @@ use std::{ffi::OsStr, process::ExitCode};
 mod cli_profiles;
 #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 mod cli_windows;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod pulse_cold;
 #[cfg(windows)]
 #[path = "pulse_warm_windows.rs"]
-mod pulse_cold;
-#[cfg(target_os = "macos")]
-#[path = "pulse_warm_macos.rs"]
 mod pulse_cold;
 
 mod cli_information;
@@ -18,7 +15,7 @@ mod pulse_agent_interactive_tests;
 mod pulse_chain;
 #[cfg(test)]
 mod pulse_password_interactive_tests;
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 fn startup_action(
     method: &str,
     params: &serde_json::Value,

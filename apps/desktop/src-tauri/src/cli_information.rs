@@ -40,7 +40,7 @@ Examples:
   $ pulse -w workspace focus
   $ pulse profiles . focus
 
-Linux and opt-in Windows builds support control. macOS requires a running GUI.
+Linux and opt-in Windows/macOS builds support control.
 Cold startup requires the matching pulseterm-workspace companion beside pulse;
 new-window and windows require a running GUI. Unsafe or stale endpoints fail.
 Windows/macOS native GUI acceptance is pending. Preview builds are not a release.
@@ -84,7 +84,7 @@ split 可省略 PROFILE，仅用已保存默认项；未设置或不可用时失
   $ pulse -w workspace focus
   $ pulse profiles . focus
 
-Linux 与显式 Windows 构建可使用控制入口；macOS 必须先打开配套 GUI。
+Linux 与显式 Windows／macOS 构建可使用控制入口。
 冷启动要求同目录下匹配的 pulseterm-workspace 配套程序；
 new-window 与 windows 要求 GUI 已运行。不安全或陈旧端点直接失败。
 Windows／macOS 原生 GUI 尚待验收，预览构建不代表正式发行。

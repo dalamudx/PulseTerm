@@ -1,4 +1,4 @@
-//! Closed Linux cold launcher. Fixed GUI sibling, no client path or shell.
+//! Closed Linux/macOS cold launcher. Fixed GUI sibling, no client path or shell.
 //! Endpoint observation may repeat, action/claim invocation may not. Correlation
 //! does not replace token authentication, original document or Capability checks.
 use serde_json::{Value, json};
@@ -103,7 +103,7 @@ pub(super) async fn dispatch_connected(
     let parcel = action.encode().map_err(|_| DENIED)?;
     let gui = gui_sibling(&std::env::current_exe().map_err(|_| DENIED)?)?;
     // No shell, PATH lookup, client executable, cwd or credential parameter.
-    // Single-instance plugin handles a simultaneous launch before window/setup.
+    // Linux single-instance ownership or macOS pre-window endpoint reservation rejects rivals.
     let mut child = Command::new(gui)
         .args(["--startup-actions", &parcel])
         .current_dir("/")

@@ -444,7 +444,7 @@
   "inputs": {
     "Cargo.lock": "00ee7680e51ef4d544b50a954fc0559b32b4c7c4ac1df8373e315b3432f7a0f0",
     "Cargo.toml": "19fb8558bdf6de161ac81824c66ac44626069490ad67f68c75a16a7ff8939f92",
-    "apps/desktop/src-tauri/Cargo.toml": "d107710a2a4fe3de62fa82a09d8bc969c78c112fbd858ab43d576f095fb728a4",
+    "apps/desktop/src-tauri/Cargo.toml": "ba3d19ad84fa082551f9a27e83d1d83ac76e893cd3e9afebe07b53844039722b",
     "crates/pulse-app/Cargo.toml": "5fcc9af854c6e8914b5561ec941db00a56b0b1265214896b4ac71b415000cac8",
     "crates/pulse-cap/Cargo.toml": "85dbc17c0de165c424cd3622bbf535708af47cec0269336c70e78f1cd009aaff",
     "crates/pulse-core/Cargo.toml": "780c341d6a230ed6d0faa664786cd249810a0e0cfb5b13632cf7ee0ded5cfbc4",
