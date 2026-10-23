@@ -48,6 +48,7 @@ async fn saved_custom_profile_runs_literals_with_frozen_colors_and_rejects_delet
         pane: None,
     };
     let spec = || CustomProfileLaunch {
+        cwd: None,
         id,
         context: &context,
         size: TermSize::new(80, 24).unwrap(),

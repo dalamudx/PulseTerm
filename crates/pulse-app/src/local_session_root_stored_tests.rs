@@ -50,6 +50,7 @@ impl Fixture {
     }
     fn spec(&self) -> StoredProfileLaunch<'_> {
         StoredProfileLaunch {
+            cwd: None,
             candidates: &self.candidates,
             kind: ShellKind::Sh,
             context: &self.context,

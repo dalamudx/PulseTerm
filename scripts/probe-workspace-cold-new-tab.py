@@ -125,3 +125,87 @@ def verify(mode, client, pulse, root, env, runtime, evidence, owned_guis, xdo, i
     if native:
         assert not os.path.exists(f"/proc/{native}"), "cold.native_not_reaped"
     (evidence / f"{prefix}-result.txt").write_text(f"primary_pid={app} native_pid={native} consent={mode} one_primary=true actual_exit=true endpoints_drained=true\n")
+
+
+def verify_directory(pulse, root, env, runtime, evidence, owned_guis, xdo):
+    """Reuse the real default editor and native lifecycle for cold/warm pulse ."""
+    import json
+    import runpy
+    from pathlib import Path
+    shared = runpy.run_path('scripts/probe-workspace-cold-split.py')
+    directory = root / 'CLI 中文 folder'
+    directory.mkdir(mode=0o700)
+    pid_file = root / 'unexpected-pty'
+    native = []
+    results = []
+
+    def launch():
+        return subprocess.Popen([str(pulse), '.'], cwd=directory, env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    client = launch()
+    try:
+        shared['verify_missing_default'](client, root, runtime, evidence, owned_guis, xdo)
+    finally:
+        if client.poll() is None:
+            client.kill()
+            client.wait(timeout=3)
+    shared['prepare_default'](pulse, root, env, runtime, evidence, owned_guis, xdo)
+    # Start the cancellation case warm; later cases still exercise cold bootstrap.
+    ready = subprocess.run([str(pulse), 'profiles'], env=env, capture_output=True, text=True, timeout=15)
+    assert ready.returncode == 0
+    first_app = wait(lambda: (owned_guis() or [None])[0])
+    wait(lambda: shared['_accessible'](first_app, 'POSIX sh'))
+    for scenario in ['cancel', 'refresh', 'missing', 'cold-approve', 'warm-approve']:
+        client = launch()
+        app = None
+        xid = None
+        try:
+            app = wait(lambda: (owned_guis() or [None])[0])
+            assert owned_guis() == [app]
+            xid = wait(lambda: shared['_window'](app, xdo))
+            xdo('windowactivate', '--sync', xid)
+            wait(lambda: shared['_accessible'](app, '允许 CLI 创建本地终端？'))
+            wait(lambda: shared['_accessible'](app, 'sh\n' + str(directory)))
+            assert (pid_file.read_text().splitlines() if pid_file.exists() else []) == native
+            subprocess.run(['/usr/bin/import', '-window', xid, str(evidence / f'cwd-{scenario}-consent.png')], check=True, timeout=3)
+            if scenario == 'refresh':
+                xdo('key', '--clearmodifiers', 'ctrl+shift+r')
+            else:
+                if scenario == 'missing':
+                    directory.rmdir()
+                button = '取消' if scenario == 'cancel' else '创建终端'
+                assert shared['_accessible'](app, button, 'focus')
+                xdo('key', '--clearmodifiers', 'space')
+            output, error = client.communicate(timeout=10)
+            (evidence / f'cwd-{scenario}-client.log').write_text(output + error)
+            accepted = scenario.endswith('approve')
+            assert (client.returncode == 0) == accepted
+            if accepted:
+                assert re.fullmatch(r'session [1-9][0-9]*\n', output)
+                wait(lambda: pid_file.exists() and len(pid_file.read_text().splitlines()) == len(native) + 1)
+                native = pid_file.read_text().splitlines()
+                assert len(set(native)) == len(native)
+                assert all(Path(f'/proc/{pid}/cwd').resolve(strict=True) == directory for pid in native)
+            else:
+                assert not output and not pid_file.exists()
+            results.append(dict(scenario=scenario, accepted=accepted, native_count=len(native), exact_directory_visible=True))
+            if scenario == 'missing':
+                directory.mkdir(mode=0o700)
+            if scenario != 'cold-approve':
+                shared['_close'](app, runtime, owned_guis, xdo)
+                assert all(not Path(f'/proc/{pid}').exists() for pid in native)
+        except Exception:
+            if client.poll() is not None:
+                output, error = client.communicate(timeout=3)
+                (evidence / f'cwd-{scenario}-failure-client.log').write_text(f'exit={client.returncode}\n' + output + error)
+            else:
+                (evidence / f'cwd-{scenario}-failure-client.log').write_text('client still pending\n')
+            if xid:
+                subprocess.run(['/usr/bin/import', '-window', xid, str(evidence / f'cwd-{scenario}-failure.png')], timeout=3, check=False, capture_output=True)
+            raise
+        finally:
+            if client.poll() is None:
+                client.kill()
+                client.wait(timeout=3)
+    (evidence / 'cwd-result.json').write_text(json.dumps(dict(missing_default_zero_pty=True, checks=results, native_exit=True, endpoints_drained=True), ensure_ascii=False, indent=2) + '\n')

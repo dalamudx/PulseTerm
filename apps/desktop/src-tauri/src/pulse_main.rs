@@ -15,6 +15,28 @@ mod pulse_agent_interactive_tests;
 mod pulse_chain;
 #[cfg(test)]
 mod pulse_password_interactive_tests;
+#[cfg(any(target_os = "linux", windows, test))]
+fn startup_action(
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<pulseterm_desktop::cli_startup::StartupAction, &'static str> {
+    use pulseterm_desktop::cli_startup::StartupAction;
+    if method != "workspace.new-tab" || params.get("cwd").is_none() {
+        return StartupAction::new(method, params).map_err(|_| "pulse.cold_denied");
+    }
+    let object = params.as_object().ok_or("pulse.cold_denied")?;
+    if object.keys().any(|key| key != "cwd" && key != "window") {
+        return Err("pulse.cold_denied");
+    }
+    let cwd = params["cwd"].as_str().ok_or("pulse.cold_denied")?;
+    pulse_app::local_launch::LaunchDirectory::parse(cwd).ok_or("pulse.cold_denied")?;
+    let mut bootstrap = serde_json::json!({});
+    if let Some(window) = params.get("window") {
+        bootstrap["window"] = window.clone();
+    }
+    // The directory is sent only after bootstrap on the same authenticated connection.
+    StartupAction::new("workspace.focus", &bootstrap).map_err(|_| "pulse.cold_denied")
+}
 fn method(args: impl IntoIterator<Item = std::ffi::OsString>) -> Option<&'static str> {
     let mut args = args.into_iter();
     let action = args.next()?;
@@ -103,6 +125,11 @@ fn request(
     Some((method, params))
 }
 fn base_request(args: Vec<std::ffi::OsString>) -> Option<(&'static str, serde_json::Value)> {
+    if args.len() == 1 && args[0] == OsStr::new(".") {
+        let directory = std::env::current_dir().ok()?;
+        let cwd = pulse_app::local_launch::LaunchDirectory::parse(directory.to_str()?)?;
+        return Some(("workspace.new-tab", serde_json::json!({"cwd":cwd.as_str()})));
+    }
     if args.first().is_some_and(|arg| arg == OsStr::new("ssh")) {
         let authentication = match args.get(4).and_then(|arg| arg.to_str()) {
             Some("--interactive") => Some("interactive"),
@@ -730,4 +757,43 @@ mod tests {
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+#[test]
+#[allow(clippy::unwrap_used)]
+fn current_directory_is_a_single_default_profile_action_and_never_in_gui_arguments() {
+    let directory = std::env::current_dir().unwrap();
+    let args = ["-w", "workspace", "."].map(std::ffi::OsString::from);
+    let steps = pulse_chain::parse(args).unwrap();
+    assert_eq!(steps.len(), 1);
+    let (method, params) = &steps[0];
+    assert_eq!(*method, "workspace.new-tab");
+    assert_eq!(params["cwd"], directory.to_str().unwrap());
+    assert_eq!(params["window"], "workspace");
+    assert!(params.get("profile").is_none());
+    let action = startup_action(method, params).unwrap();
+    assert_eq!(action.method(), "workspace.focus");
+    assert!(action.params().is_empty());
+    let parcel: serde_json::Value = serde_json::from_str(&action.encode().unwrap()).unwrap();
+    assert_eq!(parcel["params"], serde_json::json!({})); // Selection remains on the authenticated request above.
+    assert!(pulseterm_desktop::cli_startup::StartupAction::new(method, params).is_err());
+    for args in [
+        vec![".", ";", "focus"],
+        vec!["profiles", ".", "."],
+        vec![".", "--cwd", "elsewhere"],
+        vec!["/some/path"],
+    ] {
+        assert!(pulse_chain::parse(args.into_iter().map(std::ffi::OsString::from)).is_none());
+    }
+    for cwd in [".", "../relative", "", "/a\nb", "C:\\a\nb"] {
+        assert!(startup_action("workspace.new-tab", &serde_json::json!({"cwd":cwd})).is_err());
+    }
+    assert!(
+        startup_action(
+            "workspace.new-tab",
+            &serde_json::json!({"cwd":directory,"profile":"sh"})
+        )
+        .is_err()
+    );
 }

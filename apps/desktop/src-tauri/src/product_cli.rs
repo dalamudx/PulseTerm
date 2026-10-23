@@ -130,6 +130,7 @@ fn source(
     kind: pulse_pty::profiles::ShellKind,
 ) -> cli_control::Result<super::profiles::ProfileStart> {
     Ok(super::profiles::ProfileStart {
+        cwd: None,
         preset: pulse_store::settings::TerminalPreset::Classic.into(),
         directory: window
             .app_handle()
@@ -329,6 +330,22 @@ impl Actions {
                 Value::Object(request.params().clone()),
             )
             .map_err(|_| cli_control::Error)?;
+            if request.method() == "workspace.new-tab" && request.params().contains_key("cwd") {
+                // Directory requests follow a read-only cold bootstrap. Its document ACK
+                // can precede Profile rendering; wait on the same page, without replay.
+                tokio::time::timeout(
+                    Duration::from_secs(8),
+                    state.0.presentation.wait(
+                        &state.0.documents,
+                        state.0.owner,
+                        &original,
+                        &cancelled,
+                    ),
+                )
+                .await
+                .map_err(|_| cli_control::Error)?
+                .map_err(|_| cli_control::Error)?;
+            }
             if request.method() == "workspace.new-window" {
                 return new_window::run(app, state, original, cancelled, action).await;
             }
@@ -476,6 +493,7 @@ impl Actions {
             } else {
                 None
             };
+            let requested_cwd = request.params().get("cwd").cloned();
             let action = action.ok_or(cli_control::Error)?;
             let stop = cancelled.clone();
             let mut reservation = on_original_page(
@@ -489,6 +507,10 @@ impl Actions {
                         .map_err(|_| cli_control::Error)?;
                     let mut notice =
                         json!({"version":1,"ticket":reservation.id.to_string(),"profile":selected});
+                    if let Some(cwd) = requested_cwd {
+                        notice["version"] = json!(6);
+                        notice["cwd"] = cwd;
+                    }
                     if let Some(direction) = direction {
                         notice["direction"] = json!(direction);
                     }
@@ -526,11 +548,22 @@ impl Actions {
                 original.clone(),
                 cancelled.clone(),
                 move |window, current| {
-                    action
+                    let approved = action
                         .take_args(&current, launch_action)
                         .map_err(|_| cli_control::Error)?;
+                    let mut inputs =
+                        source(&window, kind.unwrap_or(pulse_pty::profiles::ShellKind::Sh))?;
+                    inputs.cwd = approved
+                        .get("cwd")
+                        .map(|value| {
+                            pulse_app::local_launch::LaunchDirectory::parse(
+                                value.as_str().ok_or(cli_control::Error)?,
+                            )
+                            .ok_or(cli_control::Error)
+                        })
+                        .transpose()?;
                     Ok((
-                        source(&window, kind.unwrap_or(pulse_pty::profiles::ShellKind::Sh))?,
+                        inputs,
                         window
                             .app_handle()
                             .path()
@@ -561,6 +594,7 @@ impl Actions {
                         original.clone(),
                         state.0.sessions.clone(),
                         super::profiles::custom_service::CustomStart {
+                            cwd: inputs.cwd,
                             source: (inputs.directory, inputs.path, inputs.shell),
                             id,
                             startup: inputs.preset,

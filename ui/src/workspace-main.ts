@@ -204,7 +204,7 @@ installCliNewTab(window, {
       },
       signal,
     ),
-  confirm: (profile, signal, direction, baseDirection) =>
+  confirm: (profile, signal, direction, baseDirection, cwd) =>
     workspaceDecision(
       document,
       {
@@ -213,11 +213,14 @@ installCliNewTab(window, {
           : direction
             ? "允许 CLI 创建分屏终端？"
             : "允许 CLI 创建本地终端？",
-        description: baseDirection
-          ? "先创建并呈现一个本地终端，再单独确认第二个分屏终端。取消第二步会保留首个会话；取消此步不会启动。"
-          : "CLI 请求启动已保存或后端发现的本地 Profile。确认后创建一个保留会话；取消或未确认不会启动。已有会话不受影响。",
-        preview:
-          direction || baseDirection
+        description: cwd
+          ? "仅本次使用 CLI 的当前工作目录，不修改保存的 Profile。取消或未确认不会启动。"
+          : baseDirection
+            ? "先创建并呈现一个本地终端，再单独确认第二个分屏终端。取消第二步会保留首个会话；取消此步不会启动。"
+            : "CLI 请求启动已保存或后端发现的本地 Profile。确认后创建一个保留会话；取消或未确认不会启动。已有会话不受影响。",
+        preview: cwd
+          ? `${profile}\n${cwd}`
+          : direction || baseDirection
             ? message(
                 "{0} · {1}",
                 profile,

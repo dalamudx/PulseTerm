@@ -19,7 +19,12 @@ impl ActionArgs for EmptyArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct NewTabArgs {
-    profile: String,
+    #[serde(default, deserialize_with = "optional_cli_profile")]
+    #[schemars(with = "String")]
+    profile: Option<String>,
+    #[serde(default, deserialize_with = "optional_cli_profile")]
+    #[schemars(with = "String")]
+    cwd: Option<String>,
 }
 #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 #[derive(Deserialize, JsonSchema)]
@@ -43,9 +48,18 @@ impl ActionArgs for SelectionArgs {
 #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
 impl ActionArgs for NewTabArgs {
     fn validate(&self) -> std::result::Result<(), pulse_cap::Error> {
-        pulse_store::profile_default::DefaultProfileSelection::parse(&self.profile)
-            .map(|_| ())
-            .ok_or(pulse_cap::Error::Args)
+        let valid = match (self.profile.as_deref(), self.cwd.as_deref()) {
+            (Some(profile), None) => {
+                pulse_store::profile_default::DefaultProfileSelection::parse(profile).is_some()
+            }
+            (None, Some(cwd)) => pulse_app::local_launch::LaunchDirectory::parse(cwd).is_some(),
+            _ => false,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(pulse_cap::Error::Args)
+        }
     }
 }
 #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
@@ -821,6 +835,50 @@ mod tests {
     }
 }
 
+#[cfg(all(test, feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[test]
+#[allow(clippy::unwrap_used)]
+fn current_directory_requires_cli_confirmation_and_cannot_expand_launch_authority() {
+    let c = catalogue(false).unwrap();
+    let path = std::env::current_dir().unwrap();
+    let cwd = path.to_str().unwrap();
+    assert_eq!(
+        c.policy("workspace.new-tab", Surface::Cli).unwrap(),
+        (Scope::Window, Risk::Confirm)
+    );
+    assert!(
+        c.validate_args(
+            "workspace.new-tab",
+            Surface::Cli,
+            serde_json::json!({"cwd":cwd})
+        )
+        .is_ok()
+    );
+    for value in [
+        serde_json::json!({}),
+        serde_json::json!({"cwd":null}),
+        serde_json::json!({"cwd":cwd,"profile":"sh"}),
+        serde_json::json!({"cwd":cwd,"profile":null}),
+        serde_json::json!({"cwd":cwd,"executable":"sh"}),
+        serde_json::json!({"cwd":cwd,"args":[]}),
+        serde_json::json!({"cwd":"relative"}),
+        serde_json::json!({"cwd":format!("{cwd}\n")}),
+        serde_json::json!({"cwd":format!("{cwd}\u{202e}")}),
+    ] {
+        assert!(
+            c.validate_args("workspace.new-tab", Surface::Cli, value)
+                .is_err()
+        );
+    }
+    assert!(
+        c.validate_args(
+            "workspace.split",
+            Surface::Cli,
+            serde_json::json!({"cwd":cwd,"direction":"row"})
+        )
+        .is_err()
+    );
+}
 #[cfg(test)]
 #[test]
 fn find_is_closed_window_ui_metadata_without_cli_authority()

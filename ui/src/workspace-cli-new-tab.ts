@@ -53,6 +53,7 @@ type Request =
   | {
       ticket: string;
       profile: ProfileKind;
+      cwd?: string;
       direction?: "row" | "column";
       baseDirection?: "row" | "column";
       targetSession?: string;
@@ -88,11 +89,11 @@ function savedId(value: unknown): value is string {
     )
   );
 }
-function text(value: unknown): value is string {
+function text(value: unknown, limit = 512): value is string {
   return (
     typeof value === "string" &&
     value.length > 0 &&
-    value.length <= 512 &&
+    value.length <= limit &&
     Array.from(value).every((character) => {
       const code = character.codePointAt(0) ?? 0;
       return code >= 32 && (code < 127 || code > 159);
@@ -122,6 +123,24 @@ function object(value: unknown): Record<string, unknown> {
 }
 export function decodeCliNewTab(value: unknown): Request {
   const body = object(value);
+  if (body.version === 6) {
+    if (
+      Object.keys(body).length !== 4 ||
+      typeof body.ticket !== "string" ||
+      !isWorkspaceNonce(body.ticket) ||
+      typeof body.profile !== "string" ||
+      (!isProfileKind(body.profile) && !isSavedProfile(body.profile)) ||
+      !text(body.cwd, 4096) ||
+      new TextEncoder().encode(body.cwd).length > 4096 ||
+      /[\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/u.test(body.cwd)
+    )
+      throw new Error("workspace.cli_invalid");
+    return {
+      ticket: body.ticket,
+      profile: body.profile as ProfileKind,
+      cwd: body.cwd,
+    };
+  }
   if (body.version === 5) {
     if (
       Object.keys(body).length !== 2 ||
@@ -269,6 +288,7 @@ export interface CliNewTabOptions {
     signal: AbortSignal,
     direction?: "row" | "column",
     baseDirection?: "row" | "column",
+    cwd?: string,
   ) => Promise<boolean>;
   answer: (nonce: string, ticket: string, accept: boolean) => Promise<unknown>;
   opened: (
@@ -474,11 +494,19 @@ export class CliNewTabController {
                   undefined,
                   request.baseDirection,
                 )
-              : await options.confirm(
-                  request.profile,
-                  controller.signal,
-                  request.direction,
-                );
+              : request.cwd
+                ? await options.confirm(
+                    request.profile,
+                    controller.signal,
+                    undefined,
+                    undefined,
+                    request.cwd,
+                  )
+                : await options.confirm(
+                    request.profile,
+                    controller.signal,
+                    request.direction,
+                  );
       if (
         this.pending !== pending ||
         controller.signal.aborted ||

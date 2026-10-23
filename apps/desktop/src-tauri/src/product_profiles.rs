@@ -20,6 +20,7 @@ struct StoreState {
 }
 /// Discovery and startup parameters belong solely to the native adapter.
 pub(super) struct ProfileStart {
+    pub cwd: Option<pulse_app::local_launch::LaunchDirectory>,
     pub preset: pulse_store::settings::TerminalStartup,
     pub directory: PathBuf,
     pub path: OsString,
@@ -549,6 +550,7 @@ impl ProfileReader {
                 pane: None,
             };
             let spec = pulse_app::local_launch::StoredProfileLaunch {
+                cwd: source.cwd.as_ref(),
                 candidates: &candidates,
                 kind: source.kind,
                 context: &context,

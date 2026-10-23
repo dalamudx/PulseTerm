@@ -149,6 +149,7 @@ pub(super) async fn workspace_custom_profile_open(
                 scope,
                 state.0.sessions.clone(),
                 profiles::custom_service::CustomStart {
+                    cwd: None,
                     source,
                     id,
                     startup,
@@ -485,6 +486,7 @@ pub(super) async fn workspace_profile_visibility(
     {
         let (_, scope) = page(&window, &state, &nonce)?;
         let source = super::profiles::ProfileStart {
+            cwd: None,
             preset: pulse_store::settings::TerminalPreset::Classic.into(),
             directory: window
                 .app_handle()
@@ -523,6 +525,7 @@ pub(super) async fn workspace_session_open(
         let (nonce, scope) = page(&window, &state, &nonce)?;
         let kind = kind(&selection.kind)?;
         let mut source = profiles::ProfileStart {
+            cwd: None,
             preset: pulse_store::settings::TerminalPreset::Classic.into(),
             directory: window
                 .app_handle()

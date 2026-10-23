@@ -18,6 +18,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = OsString>) -> Option<Vec<Step
         let prefix = usize::from(args[cursor] == OsStr::new("-w")) * 2;
         let action = args.get(cursor + prefix)?.to_str()?;
         let width = match action {
+            "." if cursor == 0 && args.len() == prefix + 1 => 1,
             "focus" | "profiles" | "windows" | "new-window" => 1,
             "new-tab" | "focus-tab" => 2,
             "open" if args.get(cursor + prefix + 1)? == OsStr::new("--host") => 3,

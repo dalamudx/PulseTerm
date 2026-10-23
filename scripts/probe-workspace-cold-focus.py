@@ -14,7 +14,7 @@ import time
 # Adopt the cold GUI when its CLI parent exits so actual GUI exit is waitable.
 assert ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) == 0
 cold_action = sys.argv[1] if len(sys.argv) == 2 else "focus"
-assert len(sys.argv) <= 2 and (cold_action in {"focus", "profiles", "new-tab-cancel", "new-tab-disconnect", "new-tab-refresh", "new-tab-approve", "open-cancel", "open-disconnect", "open-refresh", "open-approve", "concurrent-ff", "concurrent-pp", "concurrent-fp", "sensitive-cancel", "sensitive-disconnect", "sensitive-refresh", "sensitive-approve", "chain-syntax", "multiwindow"} or cold_action in {f"{kind}-{direction}-{scenario}" for kind in ["split", "chain"] for direction in ["row", "column"] for scenario in ["cancel", "partial", "disconnect", "refresh", "approve"]})
+assert len(sys.argv) <= 2 and (cold_action in {"focus", "profiles", "new-tab-cancel", "new-tab-disconnect", "new-tab-refresh", "new-tab-approve", "open-cancel", "open-disconnect", "open-refresh", "open-approve", "concurrent-ff", "concurrent-pp", "concurrent-fp", "sensitive-cancel", "sensitive-disconnect", "sensitive-refresh", "sensitive-approve", "chain-syntax", "multiwindow", "cwd"} or cold_action in {f"{kind}-{direction}-{scenario}" for kind in ["split", "chain"] for direction in ["row", "column"] for scenario in ["cancel", "partial", "disconnect", "refresh", "approve"]})
 default_split = os.environ.get("PULSE_CLI_PROBE_SPLIT_DEFAULT")
 assert default_split is None or (default_split == "saved" and cold_action.startswith(("split-", "chain-"))) or (default_split == "unset" and cold_action.startswith("split-")), "cold.invalid_default_split_mode"
 evidence_prefix = f"cli-cold-{cold_action}"
@@ -60,7 +60,7 @@ shell = bin_dir / "sh"
 shell.write_text('#!/bin/sh\nprintf "unexpected shell\\n" > "$PULSETERM_FIXTURE_PID"\nexit 0\n')
 shell.chmod(0o700)
 env.update(PATH=str(bin_dir), SHELL=str(shell), PULSETERM_FIXTURE_PID=str(root / "unexpected-pty"))
-if cold_action.startswith(("new-tab-", "open-", "sensitive-")):
+if cold_action.startswith(("new-tab-", "open-", "sensitive-")) or cold_action == "cwd":
     shell.write_text('#!/bin/sh\nprintf "%s\\n" "$$" >> "$PULSETERM_FIXTURE_PID"\nprintf "cold-new-tab-ready\\r\\n"\nwhile IFS= read -r line; do printf "%s\\n" "$line" >> "$PULSETERM_FIXTURE_PID.input"; printf "cold-echo:%s\\r\\n" "$line"; done\n')
 if cold_action.startswith(("split-", "chain-")) or cold_action == "multiwindow":
     shell.write_text('#!/bin/sh\nprintf "%s\\n" "$$" >> "$PULSETERM_FIXTURE_PID"\nprintf "cold-split-ready:%s\\r\\n" "$$"\nwhile IFS= read -r line; do printf "%s\\n" "$line" >> "$PULSETERM_FIXTURE_PID.$$.input"; printf "cold-echo:%s\\r\\n" "$line"; done\n')
@@ -112,6 +112,11 @@ try:
             assert time.monotonic() < deadline, "cold.decoy_timeout"
             time.sleep(0.025)
     xdo("windowactivate", "--sync", decoy_xid)
+    if cold_action == "cwd":
+        import runpy
+        runpy.run_path("scripts/probe-workspace-cold-new-tab.py")["verify_directory"](pulse, root, env, runtime, evidence, owned_guis, xdo)
+        print("workspace.cli_current_directory_consent_no_fallback_cold_warm_native_exit_confirmed")
+        sys.exit(0)
     if cold_action == "multiwindow":
         import runpy
         runpy.run_path("scripts/probe-workspace-multiwindow.py")["verify"](pulse, root, env, runtime, evidence, owned_guis, xdo, identity)

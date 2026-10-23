@@ -124,6 +124,8 @@ export const terminalEnglish = {
   "允许 CLI 创建本地终端？": "Allow CLI to create a local terminal?",
   "先创建并呈现一个本地终端，再单独确认第二个分屏终端。取消第二步会保留首个会话；取消此步不会启动。":
     "Create and show the first local terminal, then confirm the second split terminal separately. Cancelling the second step retains the first session; cancelling this step starts nothing.",
+  "仅本次使用 CLI 的当前工作目录，不修改保存的 Profile。取消或未确认不会启动。":
+    "Use the CLI working directory for this terminal only, without changing the saved Profile. Cancelling or withholding approval starts nothing.",
   "CLI 请求启动已保存或后端发现的本地 Profile。确认后创建一个保留会话；取消或未确认不会启动。已有会话不受影响。":
     "CLI requests a saved or backend-discovered local Profile. Confirm to create a retained session; cancelling or leaving it unconfirmed starts nothing. Existing sessions are unaffected.",
   创建首个终端: "Create first terminal",

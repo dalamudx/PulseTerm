@@ -1,7 +1,6 @@
 //! Closed Linux cold launcher. Fixed GUI sibling, no client path or shell.
 //! Endpoint observation may repeat, action/claim invocation may not. Correlation
 //! does not replace token authentication, original document or Capability checks.
-use pulseterm_desktop::cli_startup::StartupAction;
 use serde_json::{Value, json};
 use std::{
     fs, io,
@@ -97,7 +96,7 @@ pub(super) async fn dispatch_connected(
         let value = client.invoke(method, params).await.map_err(|_| DENIED)?;
         return Ok((value, client));
     }
-    let action = StartupAction::new(method, &params).map_err(|_| DENIED)?;
+    let action = super::startup_action(method, &params)?;
     if !action.supports_cold_transport() {
         return Err(DENIED);
     }
@@ -145,6 +144,11 @@ pub(super) async fn dispatch_connected(
         )
         .await
         .map_err(|_| DENIED)?;
+    let value = if action.method() != method {
+        client.invoke(method, params).await.map_err(|_| DENIED)?
+    } else {
+        value
+    };
     Ok((value, client))
 }
 pub(super) async fn dispatch(directory: &Path, method: &str, params: Value) -> Result<Value> {

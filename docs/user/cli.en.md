@@ -49,6 +49,17 @@ On Windows with a discovered Windows PowerShell Profile:
 
 Approve new terminals in the original GUI window. The CLI waits for presentation before returning `session N`. Use `focus-tab N` to select that session within the window that owns it.
 
+## Start in the current directory
+
+```sh
+pulse .
+pulse -w workspace .
+```
+
+Uses the saved default Profile and waits for approval in the original window, showing both the identity and CLI working directory. Missing, hidden, deleted or unavailable defaults fail without selecting another shell. The directory applies only to this launch; saved Profile settings remain unchanged. Missing or inaccessible directories fail without falling back to the home directory.
+
+Use this form alone, without another path or an action chain. The directory must have a lossless Unicode representation, fit within 4096 UTF-8 bytes and contain no control or hidden direction characters. Windows accepts local drive paths only. Cold startup opens an empty workspace, then requests approval over the same authenticated connection; the path never enters GUI startup arguments. Cancellation, navigation or closing the original page revokes the pending approval.
+
 ## Choose a window
 
 ```sh
@@ -87,7 +98,7 @@ pulse profiles ';' focus
 pulse -w workspace profiles . -w workspace focus
 ```
 
-`.` and `;` are separate arguments between complete actions. Quote the semicolon so your shell does not execute it. A lone `pulse .` is not part of the current syntax.
+`.` and `;` separate complete actions. Quote the semicolon so your shell does not execute it. Used alone, `pulse .` starts a terminal in the current directory; that form cannot be chained.
 
 A chain accepts at most 8 actions and 64 arguments. All syntax is checked before the first action starts. Specify `-w` for each action that needs it; selection is not inherited by later steps. A cold first action and its continuation use the same connection.
 

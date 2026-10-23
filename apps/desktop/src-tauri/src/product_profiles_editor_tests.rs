@@ -138,6 +138,7 @@ async fn editor_denies_foreign_window_expiry_and_missing_cwd_never_falls_back() 
                 p,
                 root.clone(),
                 ProfileStart {
+                    cwd: None,
                     preset: pulse_store::settings::TerminalPreset::Classic.into(),
                     directory: s.0,
                     path: s.1,
@@ -201,6 +202,7 @@ async fn saved_literal_arguments_cwd_environment_reach_native_child_and_appearan
             p.clone(),
             root.clone(),
             ProfileStart {
+                cwd: None,
                 preset: pulse_store::settings::TerminalPreset::Classic.into(),
                 directory: s.0.clone(),
                 path: s.1.clone(),

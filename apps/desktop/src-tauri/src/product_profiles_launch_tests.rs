@@ -53,6 +53,7 @@ async fn supervised_product_start_uses_fresh_store_and_rejects_retired_page_befo
         Handle::current(),
     )));
     let source = || ProfileStart {
+        cwd: None,
         preset: pulse_store::settings::TerminalPreset::Classic.into(),
         directory: temp.path().join("state"),
         path: path.clone(),
@@ -163,6 +164,7 @@ async fn prepared_private_source_hands_off_real_pty_and_is_not_a_permission_snap
         pane: None,
     };
     let spec = StoredProfileLaunch {
+        cwd: None,
         candidates: &candidates,
         kind: ShellKind::Sh,
         context: &context,
@@ -205,6 +207,7 @@ async fn visibility_edit_is_path_free_discovery_bound_and_survives_private_datab
     let (registry, documents, owner, scope) = page();
     let reader = Arc::new(ProfileReader::new());
     let source = |kind| ProfileStart {
+        cwd: None,
         preset: pulse_store::settings::TerminalPreset::Classic.into(),
         directory: directory.clone(),
         path: path.clone(),
@@ -347,6 +350,7 @@ async fn visibility_edit_cannot_revive_deletion_or_substitute_another_source_dir
         .await?;
     let expected = store.load_auto_profiles().await?;
     let source = |directory| ProfileStart {
+        cwd: None,
         preset: pulse_store::settings::TerminalPreset::Classic.into(),
         directory,
         path: path.clone(),

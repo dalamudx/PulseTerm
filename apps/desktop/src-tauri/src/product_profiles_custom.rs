@@ -78,6 +78,7 @@ impl CustomAction {
     }
 }
 pub(crate) struct CustomStart {
+    pub cwd: Option<pulse_app::local_launch::LaunchDirectory>,
     pub source: (PathBuf, OsString, Option<PathBuf>),
     pub id: Uuid,
     pub startup: pulse_store::settings::TerminalStartup,
@@ -111,6 +112,7 @@ impl ProfileReader {
                 pane: None,
             };
             let spec = pulse_app::local_launch::CustomProfileLaunch {
+                cwd: source.cwd.as_ref(),
                 id: source.id,
                 context: &context,
                 size: pulse_core::TermSize::new(80, 24).map_err(|_| "workspace.unavailable")?,

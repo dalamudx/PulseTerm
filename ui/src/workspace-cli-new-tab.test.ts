@@ -571,3 +571,61 @@ it("cold followup freezes pane identity through the independent confirmation", a
   expect(f.opened).not.toHaveBeenCalled();
   f.life.abort();
 });
+
+it("directory requests preserve exact Unicode and reject extra authority or hidden text", () => {
+  const value = {
+    version: 6,
+    ticket,
+    profile: "sh",
+    cwd: "/项目/space folder",
+  };
+  expect(decodeCliNewTab(value)).toEqual({
+    ticket,
+    profile: "sh",
+    cwd: value.cwd,
+  });
+  for (const extra of [
+    { cwd: "" },
+    { cwd: null },
+    { cwd: "/bad\npath" },
+    { cwd: "/hidden\u202epath" },
+    { cwd: `/${"界".repeat(1400)}` },
+    { direction: "row" },
+    { executable: "sh" },
+    { version: 1 },
+  ]) {
+    expect(() => decodeCliNewTab({ ...value, ...extra })).toThrow();
+  }
+});
+it("directory approval shows the exact path but returns only the original ticket and decision", async () => {
+  const f = fixture();
+  const cwd = "/项目/space folder";
+  const job = f.controller.request({ version: 6, ticket, profile: "sh", cwd });
+  expect(f.confirm).toHaveBeenCalledExactlyOnceWith(
+    "sh",
+    expect.any(AbortSignal),
+    undefined,
+    undefined,
+    cwd,
+  );
+  f.decide(false);
+  await job;
+  expect(f.answer).toHaveBeenCalledExactlyOnceWith(nonce, ticket, false);
+  expect(f.opened).not.toHaveBeenCalled();
+  f.life.abort();
+});
+it("navigation cannot transfer a directory approval to the new page", async () => {
+  const f = fixture();
+  const job = f.controller.request({
+    version: 6,
+    ticket,
+    profile: "sh",
+    cwd: "/workspace",
+  });
+  f.current(undefined);
+  f.decide(true);
+  await job;
+  expect(f.answer).not.toHaveBeenCalled();
+  expect(f.opened).not.toHaveBeenCalled();
+  f.life.abort();
+});

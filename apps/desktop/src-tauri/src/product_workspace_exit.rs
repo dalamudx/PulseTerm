@@ -200,6 +200,7 @@ mod tests {
             pane: None,
         };
         let spec = StoredProfileLaunch {
+            cwd: None,
             candidates: &candidates,
             kind: ShellKind::Sh,
             context: &context,

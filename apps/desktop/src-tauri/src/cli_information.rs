@@ -31,7 +31,9 @@ New sessions, SSH and new windows require approval in the original GUI window.
 Pass -w before each action when selecting among multiple windows.
 Chains allow at most 8 actions and 64 arguments. Quote ';' in your shell.
 A failed step stops the chain; completed sessions remain. There is no rollback
-or automatic retry of an uncertain action. A lone '.' is not an action.
+or automatic retry of an uncertain action.
+Use pulse [-w WINDOW] . alone to start the saved default in the CLI's current
+working directory after GUI approval. No saved settings change; do not chain it.
 
 Examples:
   $ pulse profiles
@@ -74,7 +76,8 @@ split 可省略 PROFILE，仅用已保存默认项；未设置或不可用时失
 多窗口时，在每个动作前分别指定 -w；窗口标签不授予会话或凭据权限。
 命令链最多 8 步、64 个参数；分号须在 Shell 中加引号。
 失败立即停止后续步骤，已完成的会话保留；不回滚或自动重试不确定的动作。
-单独的 '.' 不是动作。
+单独使用 pulse [-w WINDOW] .，批准后用已保存默认身份在 CLI 当前目录启动。
+仅覆盖本次工作目录，不修改保存设置；此形式不参与命令链。
 
 示例：
   $ pulse profiles

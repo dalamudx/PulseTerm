@@ -35,6 +35,34 @@ pub enum LocalStartError {
     #[error("local launch supervisor unavailable")]
     Worker,
 }
+/// A bounded literal directory for one explicitly approved local launch.
+/// Parsing does not check existence or grant launch authority; native spawn still fails closed.
+/// Deliberately no Debug/Serialize: local paths must not leak into diagnostic records.
+#[derive(Clone)]
+pub struct LaunchDirectory(String);
+impl LaunchDirectory {
+    /// Check bounded absolute native path syntax without accessing the filesystem.
+    pub fn parse(value: &str) -> Option<Self> {
+        use std::path::{Component, Path};
+        if value.len() > 4096 || !Path::new(value).is_absolute()
+            || value.chars().any(|c| c.is_control() || matches!(c, '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}'))
+            || Path::new(value).components().any(|part| matches!(part, Component::CurDir | Component::ParentDir))
+        {
+            return None;
+        }
+        #[cfg(windows)]
+        if !matches!(Path::new(value).components().next(), Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), std::path::Prefix::Disk(_) | std::path::Prefix::VerbatimDisk(_)))
+        {
+            return None;
+        }
+        Some(Self(value.to_owned()))
+    }
+    /// Borrow the literal path for approval display or an authorized launch.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 /// A committed actor; the background supervisor continues to own and join the native child.
 /// A caller must explicitly retire this session from the registry after observing completion.
@@ -337,6 +365,8 @@ pub fn start_page_default_profile_local(
 /// Construct only from backend state; never deserialize candidate paths from a page.
 #[derive(Clone, Copy)]
 pub struct StoredProfileLaunch<'a> {
+    /// One-shot directory override, already approved by the native caller; never persisted.
+    pub cwd: Option<&'a LaunchDirectory>,
     /// Current backend-discovered executable candidates.
     pub candidates: &'a [ShellCandidate],
     /// Stable catalog identity selected by the page.
@@ -423,7 +453,10 @@ pub(crate) async fn start_page_stored_configured_local_with_preset(
     config.validate()?;
     let options = AutoProfileLaunch {
         args: config.args.into_iter().map(Into::into).collect(),
-        cwd: config.cwd.map(Into::into),
+        cwd: spec
+            .cwd
+            .map(|cwd| cwd.as_str().into())
+            .or_else(|| config.cwd.map(Into::into)),
         env: config
             .env
             .into_iter()
@@ -455,6 +488,8 @@ pub(crate) async fn start_page_stored_configured_local_with_preset(
 /// Backend-selected persistent custom Profile identity and local runtime context.
 /// This structure is never accepted from a page; only the opaque ID comes from IPC.
 pub struct CustomProfileLaunch<'a> {
+    /// One-shot directory override, already approved by the native caller; never persisted.
+    pub cwd: Option<&'a LaunchDirectory>,
     /// UUID of a saved, active custom Profile.
     pub id: uuid::Uuid,
     /// Backend-owned application and CLI routing environment.
@@ -489,7 +524,10 @@ pub async fn start_page_custom_local_with_preset(
     let config = &draft.config;
     let mut command = PtyCommand::new(draft.executable.clone());
     command.args = config.args.iter().map(Into::into).collect();
-    command.cwd = config.cwd.as_ref().map(Into::into);
+    command.cwd = spec
+        .cwd
+        .map(|cwd| cwd.as_str().into())
+        .or_else(|| config.cwd.as_ref().map(Into::into));
     command.env = config
         .env
         .iter()

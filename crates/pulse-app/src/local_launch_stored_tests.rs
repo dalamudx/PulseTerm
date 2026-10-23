@@ -23,6 +23,7 @@ async fn stored_tombstone_and_failed_store_never_fall_back_to_launch() {
     let size = TermSize::new(32, 8).unwrap();
     let candidates = [ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap()];
     let spec = StoredProfileLaunch {
+        cwd: None,
         candidates: &candidates,
         kind: ShellKind::Sh,
         context: &context,
@@ -82,6 +83,7 @@ async fn closed_database_worker_is_not_an_empty_catalog() {
     task.shutdown().await.unwrap();
     let candidates = [ShellCandidate::new(ShellKind::Sh, "/usr/bin/true".into()).unwrap()];
     let spec = StoredProfileLaunch {
+        cwd: None,
         candidates: &candidates,
         kind: ShellKind::Sh,
         context: &context,
@@ -180,6 +182,7 @@ async fn stored_profile_palette_override_inheritance_and_reset_reach_real_osc_qu
     };
     let candidates = [ShellCandidate::new(ShellKind::Sh, "/bin/sh".into()).unwrap()];
     let spec = StoredProfileLaunch {
+        cwd: None,
         candidates: &candidates,
         kind: ShellKind::Sh,
         context: &context,
@@ -254,6 +257,135 @@ theme={mode="system",light="catppuccin_latte",dark="dracula"}
         registry.reap_closed(ready.id).unwrap();
     }
     registry.retire_window_views(owner).unwrap();
+    drop(store);
+    task.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn one_shot_directory_overrides_automatic_and_custom_profiles_without_persistence_or_fallback()
+ {
+    use pulse_store::{
+        custom_profiles::{CustomProfileDraft, CustomProfileEdit},
+        profile_editor::ProfileConfig,
+    };
+    let dir = crate::test_tempdir().unwrap();
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    let work = dir.path().join("中文 workspace");
+    std::fs::create_dir(&work).unwrap();
+    let cwd = LaunchDirectory::parse(work.to_str().unwrap()).unwrap();
+    let (store, task) = StateStore::open(dir.path().join("state.db")).await.unwrap();
+    let config = ProfileConfig {
+        cwd: Some(dir.path().to_str().unwrap().into()),
+        args: vec!["-c".into(), "test \"$PWD\" = \"$EXPECTED_CWD\"".into()],
+        env: vec![("EXPECTED_CWD".into(), cwd.as_str().into())],
+        ..ProfileConfig::default()
+    };
+    let before = store.load_profile_editor(AutomaticShell::Sh).await.unwrap();
+    store
+        .save_profile_editor(before, config.clone(), || true)
+        .await
+        .unwrap();
+    let before = store.load_custom_profiles().await.unwrap();
+    let created = store
+        .edit_custom_profiles(
+            before,
+            CustomProfileEdit::Create(CustomProfileDraft {
+                name: "cwd override".into(),
+                executable: "/bin/sh".into(),
+                hidden: false,
+                config: config.clone(),
+            }),
+            || true,
+        )
+        .await
+        .unwrap();
+    let id = created.profiles()[0].id();
+    let registry = SessionRegistry::new();
+    let owner = registry.open_window().unwrap();
+    let page = registry.activate_launch_page(owner).unwrap();
+    let context = LocalSessionEnvironment {
+        application_version: "cwd-test".into(),
+        pane: None,
+    };
+    let candidates = [ShellCandidate::new(ShellKind::Sh, "/bin/sh".into()).unwrap()];
+    let spec = StoredProfileLaunch {
+        cwd: Some(&cwd),
+        candidates: &candidates,
+        kind: ShellKind::Sh,
+        context: &context,
+        size: TermSize::new(32, 8).unwrap(),
+        history: 16,
+    };
+    for custom in [false, true] {
+        let pending = if custom {
+            start_page_custom_local_with_preset(
+                &registry,
+                &page,
+                &store,
+                CustomProfileLaunch {
+                    cwd: Some(&cwd),
+                    id,
+                    context: &context,
+                    size: spec.size,
+                    store_retention: Box::new(()),
+                },
+                pulse_store::settings::TerminalPreset::Classic.into(),
+            )
+            .await
+            .unwrap()
+            .0
+        } else {
+            start_page_stored_default_profile_local(&registry, &page, &store, spec)
+                .await
+                .unwrap()
+        };
+        let ready = timeout(Duration::from_secs(5), pending.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        let receipt = timeout(Duration::from_secs(5), ready.completion)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(receipt.native.exit_code, 0);
+        registry.reap_closed(ready.id).unwrap();
+    }
+    assert_eq!(
+        store
+            .load_profile_editor(AutomaticShell::Sh)
+            .await
+            .unwrap()
+            .config(),
+        config
+    );
+    assert_eq!(
+        store
+            .load_custom_profiles()
+            .await
+            .unwrap()
+            .active(id)
+            .unwrap()
+            .draft()
+            .config,
+        config
+    );
+    std::fs::remove_dir(work).unwrap();
+    if let Ok(pending) =
+        start_page_stored_default_profile_local(&registry, &page, &store, spec).await
+    {
+        assert!(
+            timeout(Duration::from_secs(5), pending.wait())
+                .await
+                .unwrap()
+                .is_err()
+        );
+    }
+    let _new_page = registry.activate_launch_page(owner).unwrap();
+    assert!(matches!(
+        start_page_stored_default_profile_local(&registry, &page, &store, spec).await,
+        Err(LocalStartError::Registry(_))
+    ));
     drop(store);
     task.shutdown().await.unwrap();
 }

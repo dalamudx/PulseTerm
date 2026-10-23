@@ -953,6 +953,23 @@ run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features wo
 description = "Verify actual cold CLI password/Agent three-peer route, locked/unlocked/first-peer cancellations zero auth, per-peer targets and keys, exact two pins, refresh and parent stream exit"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "cargo build -p xtask --bin xtask --features ssh-private-key-probe --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "PULSE_COLD_SSH_ROUTE=1 timeout --kill-after=5s 100s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cold-agent-route-wm.log python3 scripts/probe-workspace-cold-ssh.py"]
 
+[tasks.probe-workspace-cli-directory]
+description = "Verify pulse . default identity, visible Unicode directory, cancellation/navigation/missing-directory rejection, cold/warm PTY cwd and exit"
+run = [
+  "pnpm --filter ui build",
+  "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked",
+  "mkdir -p target/probes",
+  "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)",
+  '''
+set -eu
+fixture=$(mktemp -d /data/temp/cli-cwd.XXXXXX)
+trap 'rm -rf -- "$fixture"' EXIT
+export TMPDIR="$fixture" TMP="$fixture" TEMP="$fixture" PYTHONDONTWRITEBYTECODE=1
+export PULSE_CLI_PROBE_BIN_DIR="${CARGO_TARGET_DIR:-target}/debug" PULSE_CLI_PROBE_RUN="cwd-$(basename "$fixture")"
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x800x24' dbus-run-session -- sh scripts/probe-window-x11.sh "target/probes/$PULSE_CLI_PROBE_RUN-wm.log" python3 scripts/probe-workspace-cold-focus.py cwd
+''',
+]
+
 [tasks.probe-workspace-cold-split]
 description = "Verify cold CLI split two independent consents, precise initial session, partial cancellation, both directions, independent native inputs, refresh and full exit"
 run = ["pnpm --filter ui build", "cargo build -p pulseterm-desktop --features workspace-cli,workspace-ssh --bin pulseterm-workspace --bin pulse --locked", "mkdir -p target/probes", "cc -Wall -Wextra -Werror scripts/probe-x11-status.c -o target/probes/x11-status $(pkg-config --cflags --libs atspi-2 gio-2.0 gobject-2.0 glib-2.0)", "sh scripts/probe-workspace-cold-split.sh"]
@@ -1749,6 +1766,7 @@ run = [
   "mise run probe-workspace-cold-ssh-agent",
   "mise run probe-workspace-cold-ssh-route",
   "mise run probe-workspace-cold-split",
+  "mise run probe-workspace-cli-directory",
   "mise run probe-workspace-cli-chain",
   "mise run probe-workspace-cli-multiwindow",
   "mise run probe-workspace-cli-multiwindow-ssh",

@@ -64,6 +64,7 @@ async fn private_stored_profile_pty_echo_survives_view_drop_refresh_and_ordered_
             &store,
             &root,
             StoredProfileLaunch {
+                cwd: None,
                 candidates: &candidates,
                 kind: ShellKind::Sh,
                 context: &context,
