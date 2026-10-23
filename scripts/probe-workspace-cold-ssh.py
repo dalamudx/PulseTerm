@@ -346,7 +346,7 @@ def unlock_without_confirming():
     def vault_available():
         label = '已解锁 · 不代表允许 SSH 使用凭据'
         visible = accessible(label)
-        inspected = accessible(label, 'inspect')
+        inspected = accessible(label, 'inspect-tree')
         (evidence / (prefix+'-vault-accessibility.json')).write_text(json.dumps({
             'visibleExitCode': visible.returncode, 'inspectExitCode': inspected.returncode,
             'states': inspected.stdout.strip(),
