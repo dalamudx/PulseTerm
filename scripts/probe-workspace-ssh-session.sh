@@ -66,7 +66,13 @@ click_sidebar(){
  case "$1" in host)label='管理 SSH 主机';direction=4;;vault)label='管理保险库';direction=5;;*)return 2;;esac
  timeout 3s xdotool mousemove --window "$xid" 150 400 click --repeat 12 --delay 10 "$direction"
  shot sidebar
- timeout 3s "$fixture/x11-status" "$app" "$label" focus
+ timeout 3s sh -c '
+  until "$1" "$2" "$3" focus > "$4" 2>&1;do sleep 0.1;done
+ ' sh "$fixture/x11-status" "$app" "$label" "target/probes/workspace-ssh-session-sidebar-status-$probe_mode.txt" || {
+  echo "workspace.ssh_sidebar_not_focusable.$label" >&2
+  cat "target/probes/workspace-ssh-session-sidebar-status-$probe_mode.txt" >&2
+  return 1
+ }
  keys space
 }
 visible(){
