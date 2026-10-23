@@ -12,6 +12,7 @@ static gboolean action_mode;
 static gboolean focus_mode;
 static gboolean bounds_mode;
 static gboolean inspect_mode;
+static gboolean tree_mode;
 static gboolean combo_inspect_mode;
 static gboolean checkbox_inspect_mode;
 static gboolean combo_bounds_mode;
@@ -129,10 +130,19 @@ static gboolean matches(AtspiAccessible *node, const char *expected, unsigned de
     GError *error = NULL;
     AtspiStateSet *states = atspi_accessible_get_state_set(node);
     gboolean showing = states && atspi_state_set_contains(states, ATSPI_STATE_SHOWING);
+    gboolean sensitive = !states || atspi_state_set_contains(states, ATSPI_STATE_EDITABLE);
+    if (tree_mode) {
+        AtspiRole role = atspi_accessible_get_role(node, &error);
+        sensitive = sensitive || error || role == ATSPI_ROLE_PASSWORD_TEXT;
+        fprintf(stderr, "node=%u depth=%u role=%d showing=%d sensitive=%d role_error=%d\n", 1024 - remaining, depth, role, showing, sensitive, error != NULL);
+        g_clear_error(&error);
+    }
     if (states) g_object_unref(states);
     if (showing || inspect_mode) {
         char *name = atspi_accessible_get_name(node, &error);
         gboolean found = !error && name && strcmp(name, expected) == 0;
+        /* Structure only: never emit names, text values or editable-field lengths. */
+        if (tree_mode) fprintf(stderr, "name_bytes=%ld name_match=%d name_error=%d\n", !sensitive && name ? (long)strlen(name) : -1L, found, error != NULL);
         g_clear_error(&error);
         g_free(name);
         if (found && activate_match(node)) return TRUE;
@@ -141,6 +151,7 @@ static gboolean matches(AtspiAccessible *node, const char *expected, unsigned de
             int length = atspi_text_get_character_count(text, &error);
             char *value = !error && length > 0 && length <= 512 ? atspi_text_get_text(text, 0, length, &error) : NULL;
             found = !error && value && strcmp(value, expected) == 0;
+            if (tree_mode) fprintf(stderr, "text_chars=%d text_match=%d text_error=%d\n", sensitive ? -1 : length, found, error != NULL);
             g_clear_error(&error);
             g_free(value);
             g_object_unref(text);
@@ -148,6 +159,7 @@ static gboolean matches(AtspiAccessible *node, const char *expected, unsigned de
         }
     }
     int count = atspi_accessible_get_child_count(node, &error);
+    if (tree_mode) fprintf(stderr, "children=%d children_error=%d\n", count, error != NULL);
     if (error || count < 0 || (unsigned)count > remaining) {
         g_clear_error(&error);
         return FALSE;
@@ -200,14 +212,15 @@ static gboolean matches_frame(AtspiAccessible *node, const char *frame, const ch
 }
 
 int main(int argc, char **argv) {
-    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "bounds-combo") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "inspect-combo") != 0 && strcmp(argv[3], "inspect-checkbox") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
+    if ((argc != 3 && argc != 4) || !argv[1][0] || !argv[2][0] || (argc == 4 && strcmp(argv[3], "activate") != 0 && strcmp(argv[3], "focus") != 0 && strcmp(argv[3], "bounds") != 0 && strcmp(argv[3], "bounds-combo") != 0 && strcmp(argv[3], "inspect") != 0 && strcmp(argv[3], "inspect-tree") != 0 && strcmp(argv[3], "inspect-combo") != 0 && strcmp(argv[3], "inspect-checkbox") != 0 && strcmp(argv[3], "description") != 0 && strcmp(argv[3], "readonly-text") != 0 && strncmp(argv[3], "select=", 7) != 0)) return 2;
     action_mode = argc == 4 && strcmp(argv[3], "activate") == 0;
     focus_mode = argc == 4 && strcmp(argv[3], "focus") == 0;
     combo_bounds_mode = argc == 4 && strcmp(argv[3], "bounds-combo") == 0;
     bounds_mode = combo_bounds_mode || (argc == 4 && strcmp(argv[3], "bounds") == 0);
     combo_inspect_mode = argc == 4 && strcmp(argv[3], "inspect-combo") == 0;
     checkbox_inspect_mode = argc == 4 && strcmp(argv[3], "inspect-checkbox") == 0;
-    inspect_mode = combo_inspect_mode || checkbox_inspect_mode || (argc == 4 && strcmp(argv[3], "inspect") == 0);
+    tree_mode = argc == 4 && strcmp(argv[3], "inspect-tree") == 0;
+    inspect_mode = tree_mode || combo_inspect_mode || checkbox_inspect_mode || (argc == 4 && strcmp(argv[3], "inspect") == 0);
     description_mode = argc == 4 && strcmp(argv[3], "description") == 0;
     readonly_text_mode = argc == 4 && strcmp(argv[3], "readonly-text") == 0;
     char *end = NULL;

@@ -126,7 +126,7 @@ def authenticate():
 def refused(streams):
     def visible_refusal():
         visible = run([str(helper), str(app.pid), failure], False)
-        inspected = run([str(helper), str(app.pid), failure, 'inspect'], False)
+        inspected = run([str(helper), str(app.pid), failure, 'inspect-tree'], False)
         (evidence / f'refusal-{streams}-accessibility.json').write_text(json.dumps({
             'stage': stage, 'visibleExitCode': visible.returncode,
             'inspectExitCode': inspected.returncode,
