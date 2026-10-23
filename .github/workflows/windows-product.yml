@@ -28,8 +28,9 @@ jobs:
       - name: Native tests
         shell: pwsh
         run: |
-          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'pulse-product-core'
-          New-Item -ItemType Directory -Force -Path $env:TMPDIR | Out-Null
+          # Shared runner temp ancestors fail the production private-directory policy.
+          $env:TMPDIR = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('PulseTerm-native-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $env:TMPDIR | Out-Null
           $env:TEMP = $env:TMPDIR
           $env:TMP = $env:TMPDIR
           try {
