@@ -343,6 +343,8 @@ pnpm tauri build                   # 本地打包
 
 当前远端为 [GitHub 仓库](https://github.com/dalamudx/PulseTerm)，工作流入口统一在 `.github/workflows/`。按具体 job／步骤／收据判断实际结果；现有维护公告与完整许可原文缺口继续阻断发行，不通过忽略步骤或删除依赖范围获得绿色状态。
 
+日常检查关闭 Rust 调试符号与增量编译，并缓存 Cargo 依赖和 `target/debug`；缓存按平台、架构、锁文件及构建配置隔离，命中后仍执行全部检查。`cargo-deny` 仅由 `mise run audit` 按固定版本安装，日常构建不再安装审计工具。
+
 三平台核心／组件和 Windows MSVC 工作流不代替普通用户 GUI、系统 IME 或真实 GPU 验收。Python 与其他工具版本统一由 `.mise.toml` 安装，避免系统 Python 缺少 `tomllib` 导致许可检查未执行。
 跨平台外部互通、真实硬件性能及签名／公证／更新发布仍需专门环境和流程；手动 Linux 验收不代表这些门禁完成。见[下一阶段计划](next-stage-plan.md)。
 
