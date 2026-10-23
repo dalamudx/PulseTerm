@@ -28,6 +28,7 @@ jobs:
       - name: Native tests
         shell: pwsh
         run: |
+          . ./scripts/windows-product-probe/current-user-owner.ps1
           # Shared runner temp ancestors fail the production private-directory policy.
           $env:TMPDIR = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('PulseTerm-native-' + [Guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $env:TMPDIR | Out-Null
@@ -40,6 +41,7 @@ jobs:
             $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
             Write-Host "Default file owner matches current account: $($fileOwner.Equals($account))"
             Remove-Item -LiteralPath $ownerProbe
+            if (-not $fileOwner.Equals($account)) { throw 'Fixture default owner is not the current account.' }
             mise run test-windows-product
             if ($LASTEXITCODE -ne 0) { throw 'Native product cases failed.' }
             mise run test-windows-product-runner
