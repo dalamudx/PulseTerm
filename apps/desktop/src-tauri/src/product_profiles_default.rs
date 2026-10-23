@@ -61,7 +61,10 @@ fn as_shell(kind: pulse_pty::profiles::ShellKind) -> AutomaticShell {
     }
 }
 // Native CLI reads do not replace a GUI editor's default-selection ticket.
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 impl ProfileReader {
     pub(in super::super) async fn default_selection(
         self: &Arc<Self>,

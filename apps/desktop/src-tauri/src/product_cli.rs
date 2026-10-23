@@ -726,10 +726,24 @@ impl Handler for Actions {
     }
 }
 
-pub(super) fn start(app: &AppHandle, state: Workspace) -> cli_control::Result<Arc<Server>> {
+#[cfg(target_os = "macos")]
+pub(super) fn prepare(app: &AppHandle) -> cli_control::Result<cli_control::PreparedServer> {
     if app.config().identifier != crate::cli_paths::APPLICATION_ID {
         return Err(cli_control::Error);
     }
+    let directory = crate::cli_paths::directory().map_err(|_| cli_control::Error)?;
+    Server::prepare(&directory, tauri::async_runtime::handle().inner())
+}
+
+pub(super) fn start(
+    app: &AppHandle,
+    state: Workspace,
+    #[cfg(target_os = "macos")] prepared: cli_control::PreparedServer,
+) -> cli_control::Result<Arc<Server>> {
+    if app.config().identifier != crate::cli_paths::APPLICATION_ID {
+        return Err(cli_control::Error);
+    }
+    #[cfg(any(target_os = "linux", windows))]
     let directory = crate::cli_paths::directory().map_err(|_| cli_control::Error)?;
     let approvals = state.0.cli_approvals.clone();
     let handler = Arc::new(Actions {
@@ -745,5 +759,7 @@ pub(super) fn start(app: &AppHandle, state: Workspace) -> cli_control::Result<Ar
         tauri::async_runtime::handle().inner(),
         handler,
     );
+    #[cfg(target_os = "macos")]
+    let server = Ok(prepared.start(handler));
     server.map(Arc::new)
 }

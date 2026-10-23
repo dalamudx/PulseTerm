@@ -1,14 +1,26 @@
 //! Desktop adapter. Native dependencies are opt-in for headless core checks.
 
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 pub mod cli_bootstrap;
 #[cfg(test)]
 mod cli_information;
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 pub mod cli_paths;
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 pub mod cli_presentation;
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 pub mod cli_selection;
 #[cfg(feature = "workspace-cli")]
 pub mod cli_startup;

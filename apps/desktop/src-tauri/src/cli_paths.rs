@@ -18,7 +18,13 @@ pub fn directory() -> Result<PathBuf, &'static str> {
             .map(|root| root.join(APPLICATION_ID).join("cli"))
             .map_err(|_| "pulse.runtime_unavailable")
     }
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(target_os = "macos")]
+    {
+        pulse_platform::macos::local_control_root()
+            .map(|root| root.join("pulseterm-workspace-cli"))
+            .map_err(|_| "pulse.runtime_unavailable")
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         Err("pulse.runtime_unavailable")
     }

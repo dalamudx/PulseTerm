@@ -23,6 +23,14 @@ run = "cargo check -p pulse-platform -p pulse-store -p pulse-pty -p pulse-app --
 description = "Test bounded Agent transport and authorization on the current OS; Windows includes private named-pipe fixtures, not the user service or product GUI"
 run = "cargo test -p pulse-ssh --all-features --locked --lib agent::"
 
+[tasks.check-workspace-cli-product]
+description = "Strictly compile both workspace CLI combinations and run product/CLI regressions; no GUI automation"
+run = [
+  "cargo check -p pulseterm-desktop --all-targets --features workspace-cli --locked",
+  "cargo clippy -p pulseterm-desktop --all-targets --features workspace-cli,workspace-ssh --locked -- -D warnings",
+  "cargo test -p pulseterm-desktop --lib --bin pulse --features workspace-cli,workspace-ssh --locked",
+]
+
 [tasks.test-cli-transport]
 description = "Test authenticated Linux/macOS/Windows local control and native completion; private fixtures only, no GUI or cold-start acceptance"
 run = ["node --test scripts/test-cli-transport.test.mjs", "node scripts/test-cli-transport.mjs"]

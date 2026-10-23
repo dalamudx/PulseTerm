@@ -23,7 +23,10 @@ pub(crate) fn test_application() -> Arc<Application> {
         exit: exit::ExitGate::new(),
         settings_io: Arc::new(settings::SettingsIo::new()),
         window_drains: Arc::new(WindowDrains::new()),
-        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+        #[cfg(all(
+            feature = "workspace-cli",
+            any(target_os = "linux", target_os = "macos", windows)
+        ))]
         cli: Mutex::new(None),
         profile_storage: Arc::new(profiles::ProfileStorage::new()),
     })
@@ -41,7 +44,10 @@ pub(super) struct Application {
     pub(super) exit: exit::ExitGate,
     pub(super) settings_io: Arc<settings::SettingsIo>,
     pub(super) window_drains: Arc<WindowDrains>,
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     pub(super) cli: Mutex<Option<Arc<pulse_app::cli_control::Server>>>,
     #[cfg(any(unix, windows))]
     pub(super) profile_storage: Arc<profiles::ProfileStorage>,
@@ -95,7 +101,10 @@ impl Workspace {
             return Err("workspace.denied");
         }
         let registry = application.registry.clone();
-        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+        #[cfg(all(
+            feature = "workspace-cli",
+            any(target_os = "linux", target_os = "macos", windows)
+        ))]
         let documents = application.documents.clone();
         let vault = pulse_app::vault_owner::PageVaultOwner::new(registry.clone());
         let vault_handoff = pulse_app::vault_handoff::VaultHandoffBank::new(&vault);
@@ -117,13 +126,25 @@ impl Workspace {
             vault_handoff,
             password_writes,
             private_key_writes,
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(
+                feature = "workspace-cli",
+                any(target_os = "linux", target_os = "macos", windows)
+            ))]
             bootstrap: crate::cli_bootstrap::Bank::default(),
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(
+                feature = "workspace-cli",
+                any(target_os = "linux", target_os = "macos", windows)
+            ))]
             presentation: crate::cli_presentation::Presentation::default(),
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(
+                feature = "workspace-cli",
+                any(target_os = "linux", target_os = "macos", windows)
+            ))]
             selections: Arc::new(crate::cli_selection::Selections::new(documents, owner)),
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(
+                feature = "workspace-cli",
+                any(target_os = "linux", target_os = "macos", windows)
+            ))]
             cli_approvals: Arc::new(cli::Approvals::default()),
             terminals: Arc::new(terminal::TerminalBank::new()),
             visibility: crate::native_visibility::NativeWatcher::new(),
@@ -156,7 +177,10 @@ impl Workspace {
 
     fn revoke_window(&self) -> Result<()> {
         self.0.visibility.close();
-        #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+        #[cfg(all(
+            feature = "workspace-cli",
+            any(target_os = "linux", target_os = "macos", windows)
+        ))]
         {
             let _ = self.0.bootstrap.close();
             let _ = self.0.presentation.close();

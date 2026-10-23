@@ -72,7 +72,10 @@ impl NativeBinding {
     // A builder error is not proof of native Destroyed. Keep directory credit and fail exit.
     #[cfg(any(
         test,
-        all(feature = "workspace-cli", any(target_os = "linux", windows))
+        all(
+            feature = "workspace-cli",
+            any(target_os = "linux", target_os = "macos", windows)
+        )
     ))]
     pub(crate) fn creation_failed(&self) -> Result<()> {
         let _ = self.revoke();

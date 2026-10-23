@@ -2,7 +2,7 @@
 
 [简体中文](cli.md)
 
-This is a development preview, pending cross-platform Alpha acceptance. This guide describes the implemented `pulse` interface. Linux has scoped runtime evidence; Windows control is wired but native GUI acceptance is pending. macOS control commands are unavailable.
+This is a development preview, pending cross-platform Alpha acceptance. This guide describes the implemented `pulse` interface. Linux has scoped runtime evidence; Windows control and macOS warm control are wired, pending native GUI acceptance. On macOS, open the companion workspace normally first; CLI cold startup is unavailable.
 
 ## Offline help and version
 
@@ -106,6 +106,7 @@ Each step waits for a confirmed result. Rejection, timeout, disconnection or an 
 
 ## Cold startup and troubleshooting
 
+macOS currently supports warm control only: open the companion workspace normally before using the CLI. A missing endpoint fails without launching a GUI. A secondary GUI cannot claim an occupied endpoint or forward startup arguments.
 Supported first actions can start the fixed `pulseterm-workspace` companion beside the CLI (`.exe` on Windows), then wait for original-page approval. `windows` and `new-window` require a running GUI. Cold startup never searches for arbitrary programs. Windows rejects startup-action forwarding from secondary GUI instances; concurrent cold launches can fail.
 
 | Symptom | What to do |

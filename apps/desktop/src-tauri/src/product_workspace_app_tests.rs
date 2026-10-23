@@ -193,7 +193,10 @@ async fn independent_keymap_pages_reject_stale_save_and_survive_other_window_ret
     Ok(())
 }
 
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 fn cli_action(
     application: &Application,
     page: &Arc<pulse_app::registry::PageLaunchScope>,
@@ -208,7 +211,10 @@ fn cli_action(
     )
     .unwrap()
 }
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 #[tokio::test]
 async fn simultaneous_window_cli_confirmations_and_retirement_cannot_consume_foreign_bank()
 -> TestResult {
@@ -241,7 +247,10 @@ async fn simultaneous_window_cli_confirmations_and_retirement_cannot_consume_for
     application.settings_io.shutdown().await?;
     Ok(())
 }
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 #[tokio::test]
 async fn navigation_and_old_cli_reservation_drop_cannot_revoke_other_or_replacement_bank()
 -> TestResult {

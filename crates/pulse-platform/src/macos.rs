@@ -1,5 +1,7 @@
-//! Restricted macOS system web handoff; no page, file or executable authority.
+//! Restricted macOS system metadata and web handoff; no page, file or executable authority.
+mod local_control;
 pub use crate::web_link::WebLinkError;
+pub use local_control::local_control_root;
 use objc2::MainThreadMarker;
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSString, NSURL};

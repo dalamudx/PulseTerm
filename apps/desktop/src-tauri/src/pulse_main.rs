@@ -1,12 +1,15 @@
-//! Bounded Linux/Windows CLI; cold actions retain original-page admission and explicit GUI approval.
+//! Bounded local CLI; actions retain original-page admission and explicit GUI approval.
 use std::{ffi::OsStr, process::ExitCode};
 mod cli_profiles;
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 mod cli_windows;
 #[cfg(target_os = "linux")]
 mod pulse_cold;
 #[cfg(windows)]
 #[path = "pulse_warm_windows.rs"]
+mod pulse_cold;
+#[cfg(target_os = "macos")]
+#[path = "pulse_warm_macos.rs"]
 mod pulse_cold;
 
 mod cli_information;
@@ -233,7 +236,7 @@ fn session(value: &serde_json::Value) -> Option<String> {
     }
     Some(id.to_owned())
 }
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 fn selected(value: &serde_json::Value, expected: &str) -> bool {
     let Some(object) = value.as_object() else {
         return false;
@@ -246,7 +249,7 @@ fn selected(value: &serde_json::Value, expected: &str) -> bool {
         && object.get("session").and_then(serde_json::Value::as_str) == Some(expected)
         && session(&serde_json::json!({"session":expected})).is_some()
 }
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 fn receipt(method: &str, params: &serde_json::Value, value: serde_json::Value) -> Option<String> {
     match method {
         "workspace.focus" if value == serde_json::json!({"focusRequested":true}) => {
@@ -299,7 +302,7 @@ async fn main() -> ExitCode {
         );
         return ExitCode::from(2);
     };
-    #[cfg(any(target_os = "linux", windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     {
         let Ok(directory) = pulseterm_desktop::cli_paths::directory() else {
             eprintln!("pulse: no private runtime directory");
@@ -336,7 +339,7 @@ async fn main() -> ExitCode {
         }
         ExitCode::SUCCESS
     }
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let _ = steps;
         eprintln!("pulse: CLI is not available on this platform");

@@ -58,7 +58,10 @@ impl<T: Clone> Contexts<T> {
             .ok_or("workspace.denied")
     }
     // Native-only metadata routing. Callers still recheck directory/page/source authority.
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     pub(super) fn for_native_label(&self, label: &WindowLabel) -> Result<T> {
         self.0
             .lock()

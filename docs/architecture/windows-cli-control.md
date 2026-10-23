@@ -18,7 +18,9 @@ GUI 与 `pulse` 从系统 `FOLDERID_LocalAppData` 解析固定应用 `dev.pulset
 
 Unix 适配为 Linux／macOS 共用同一协议：私有目录、内核对端有效 UID、hello token 与身份匹配后清理规则相同。macOS 在已准入的私有父目录内创建 socket，以不跟随符号链接的方式设置 0600 并复核 inode，再发布 token；不修改进程 umask，不修复旧端点，也不承诺消除同账户文件替换的全部竞争。11 项既有协议用例已在 Linux 与 macOS 原生通过（CI `39951225330`）。
 
-`Server::prepare` 可在创建窗口前排他预留同一端点，但不开始认证或执行 handler；`PreparedServer::start` 消费该租约并进入既有监督循环。未激活时放弃租约会关闭 listener，再按身份清理 socket／token；替换者保留。客户端仍受原有握手期限约束。两项新增生命周期回归在 Linux 通过，macOS 原生验证待完成。这里只接通组件；macOS GUI 端点目录、单实例接线、冷启动与完整产品入口仍未开放。
+`Server::prepare` 在创建窗口前排他预留同一端点，但不开始认证或执行 handler；`PreparedServer::start` 消费该租约并进入既有监督循环。未激活时放弃租约会关闭 listener，再按身份清理 socket／token；替换者保留。客户端仍受原有握手期限约束。含两项新增生命周期回归的 13 项协议用例已在 Linux／macOS 原生通过（CI `39954848476`）；这不是 GUI 验收。
+
+macOS 显式 `workspace-cli` 构建从 Darwin `confstr(_CS_DARWIN_USER_TEMP_DIR)` 读取当前账户的系统临时根，解析系统 `/var` 别名后选择固定子目录 `pulseterm-workspace-cli`；不使用 HOME／TMPDIR／XDG 覆盖值。系统查询只返回元数据，原有逐层目录、所有者、权限与文件身份准入仍必需。GUI 在创建 WebView 前预留端点，窗口发布后才激活服务，并纳入共享 CLI／原生退出监督。第二实例拒绝，不启用上游 macOS 公共路径单实例插件，不删除旧端点或转发参数。客户端只连接已有端点并复用当前连接执行命令链；冷启动暂不开放。暖 GUI、原页批准、目录交接和物理退出仍待 macOS 实窗验收。
 Windows 的控制流关闭显式标记为不执行依赖的后台 flush。正常成功仍要求调用方实际收到协议收据；取消可丢弃未确认写入。所有接受和连接的 stream 都通过同一关闭包装，避免未知 peer、认证失败或取消路径把句柄留在游离的 FlushFileBuffers 工作线程。它不改变终端流、SSH 或其他库的关闭行为。
 
 ## 产品范围

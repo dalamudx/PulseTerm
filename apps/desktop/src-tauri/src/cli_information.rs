@@ -40,10 +40,10 @@ Examples:
   $ pulse -w workspace focus
   $ pulse profiles . focus
 
-Linux and opt-in Windows builds support control. macOS control is unavailable.
+Linux and opt-in Windows builds support control. macOS requires a running GUI.
 Cold startup requires the matching pulseterm-workspace companion beside pulse;
 new-window and windows require a running GUI. Unsafe or stale endpoints fail.
-Windows native GUI acceptance is pending. Preview builds are not a release.
+Windows/macOS native GUI acceptance is pending. Preview builds are not a release.
 Help/version are offline and never read tokens or start a GUI.
 Exit codes: 0 confirmed result, 1 failure/unconfirmed action, 2 invalid syntax.
 中文帮助: pulse --help=zh-CN
@@ -84,10 +84,10 @@ split 可省略 PROFILE，仅用已保存默认项；未设置或不可用时失
   $ pulse -w workspace focus
   $ pulse profiles . focus
 
-Linux 与显式 Windows 构建可使用控制入口；macOS 控制尚不可用。
+Linux 与显式 Windows 构建可使用控制入口；macOS 必须先打开配套 GUI。
 冷启动要求同目录下匹配的 pulseterm-workspace 配套程序；
 new-window 与 windows 要求 GUI 已运行。不安全或陈旧端点直接失败。
-Windows 原生 GUI 尚待验收，预览构建不代表正式发行。
+Windows／macOS 原生 GUI 尚待验收，预览构建不代表正式发行。
 帮助和版本离线返回，不读取 token 或启动 GUI。
 退出码：0 已确认结果，1 失败／未确认动作，2 语法无效。
 English help: pulse --help

@@ -21,7 +21,10 @@ mod agent_identities;
 mod app;
 #[path = "product_capabilities.rs"]
 mod capabilities;
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 #[path = "product_cli.rs"]
 mod cli;
 #[path = "product_cli_answer.rs"]
@@ -90,7 +93,10 @@ use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEven
 use uuid::Uuid;
 use window_state::State;
 
-#[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+#[cfg(all(
+    feature = "workspace-cli",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 #[path = "product_workspace_new_window.rs"]
 mod new_window;
 #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
@@ -122,13 +128,25 @@ struct Inner {
     password_writes: pulse_app::vault_password_handoff::PasswordWriteBank,
     private_key_writes: pulse_app::vault_key_write_handoff::PrivateKeyWriteBank,
     owner: WindowToken,
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     bootstrap: crate::cli_bootstrap::Bank,
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     presentation: crate::cli_presentation::Presentation,
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     selections: Arc<crate::cli_selection::Selections>,
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     cli_approvals: Arc<cli::Approvals>,
     terminals: Arc<terminal::TerminalBank>,
     visibility: Arc<crate::native_visibility::NativeWatcher>,
@@ -195,22 +213,34 @@ impl Workspace {
         match event {
             PageLoadEvent::Started => {
                 record_startup(StartupStage::PageStarted);
-                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+                #[cfg(all(
+                    feature = "workspace-cli",
+                    any(target_os = "linux", target_os = "macos", windows)
+                ))]
                 self.0.bootstrap.started().map_err(|_| "workspace.denied")?;
                 self.0
                     .documents
                     .started(self.0.owner)
                     .map_err(|_| "workspace.denied")?;
-                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+                #[cfg(all(
+                    feature = "workspace-cli",
+                    any(target_os = "linux", target_os = "macos", windows)
+                ))]
                 self.0
                     .presentation
                     .navigation()
                     .map_err(|_| "workspace.denied")?;
                 #[cfg(any(unix, windows))]
                 self.0.profiles.retire_read_waiters();
-                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+                #[cfg(all(
+                    feature = "workspace-cli",
+                    any(target_os = "linux", target_os = "macos", windows)
+                ))]
                 cli::retire(self);
-                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+                #[cfg(all(
+                    feature = "workspace-cli",
+                    any(target_os = "linux", target_os = "macos", windows)
+                ))]
                 self.0.selections.retire();
                 self.0.ssh_trust.retire();
                 self.0.ssh_sessions.retire();
@@ -263,7 +293,10 @@ impl Workspace {
                     .documents
                     .finished(self.0.owner)
                     .map_err(|_| "workspace.denied")?;
-                #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+                #[cfg(all(
+                    feature = "workspace-cli",
+                    any(target_os = "linux", target_os = "macos", windows)
+                ))]
                 self.0
                     .bootstrap
                     .finished(&self.0.documents, self.0.owner)
@@ -385,13 +418,19 @@ fn workspace_cli_ready_impl(
     }
     let url = window.url().map_err(|_| "workspace.denied")?;
     let (_, scope) = current_document(&state.0.documents, state.0.owner, &url, &nonce)?;
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     state
         .0
         .presentation
         .mark(&state.0.documents, state.0.owner, scope)
         .map_err(|_| "workspace.denied")?;
-    #[cfg(not(all(feature = "workspace-cli", any(target_os = "linux", windows))))]
+    #[cfg(not(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    )))]
     drop(scope);
     eprintln!("workspace.cli_presentation_ready");
     record_startup(StartupStage::CliPageReady);
@@ -484,7 +523,10 @@ pub fn run() {
             exit: exit::ExitGate::new(),
             settings_io: Arc::new(settings::SettingsIo::new()),
             window_drains: Arc::new(app::WindowDrains::new()),
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(
+                feature = "workspace-cli",
+                any(target_os = "linux", target_os = "macos", windows)
+            ))]
             cli: Mutex::new(None),
             #[cfg(any(unix, windows))]
             profile_storage: profiles.shared_storage(),
@@ -505,9 +547,14 @@ pub fn run() {
         }
     };
     record_startup(StartupStage::ServicesReady);
-    #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+    #[cfg(all(
+        feature = "workspace-cli",
+        any(target_os = "linux", target_os = "macos", windows)
+    ))]
     let unsupported_startup = match crate::cli_startup::from_args(std::env::args_os().skip(1)) {
-        Ok(Some(action)) if action.supports_cold_transport() => {
+        Ok(Some(action))
+            if cfg!(any(target_os = "linux", windows)) && action.supports_cold_transport() =>
+        {
             if state.0.bootstrap.enqueue_first(action).is_err() {
                 eprintln!("workspace.startup_denied");
                 std::process::exit(1);
@@ -660,11 +707,15 @@ pub fn run() {
             record_startup(StartupStage::SetupEntered);
             #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
             single_instance::verify_owner(app.handle())?;
-            record_startup(StartupStage::InstanceVerified);
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", target_os = "macos", windows)))]
             if unsupported_startup {
                 return Err("workspace.startup_unavailable".into());
             }
+            // macOS has no forwarding plugin: reserve the private endpoint before any WebView.
+            // Failure below drops the unactivated lease and preserves replaced/unknown files.
+            #[cfg(all(feature = "workspace-cli", target_os = "macos"))]
+            let cli_endpoint = cli::prepare(app.handle())?;
+            record_startup(StartupStage::InstanceVerified);
             // WebKit uses app_data_dir for its storage and otherwise creates it
             // with the process umask (typically 0755). Admit/create it privately
             // before constructing any WebView. Never chmod an existing directory.
@@ -738,10 +789,18 @@ pub fn run() {
                 .ok_or("workspace.denied")?
                 .publish()?;
             record_startup(StartupStage::WindowPublished);
-            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", windows)))]
+            #[cfg(all(feature = "workspace-cli", any(target_os = "linux", target_os = "macos", windows)))]
             {
-                let server = cli::start(app.handle(), (*state).clone())?;
-                *state.0.cli.lock().map_err(|_| "workspace.cli_failed")? = Some(server);
+                // Acquire the owner slot before spawning the service so failed installation
+                // cannot leave an untracked server accepting authenticated requests.
+                let mut slot = state.0.cli.lock().map_err(|_| "workspace.cli_failed")?;
+                let server = cli::start(
+                    app.handle(),
+                    (*state).clone(),
+                    #[cfg(target_os = "macos")]
+                    cli_endpoint,
+                )?;
+                *slot = Some(server);
                 record_startup(StartupStage::EndpointPublished);
             }
             #[cfg(all(feature = "workspace-runtime-memory-probe", target_os = "linux"))]
