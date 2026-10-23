@@ -21,6 +21,7 @@ Unix 适配为 Linux／macOS 共用同一协议：私有目录、内核对端有
 `Server::prepare` 在创建窗口前排他预留同一端点，但不开始认证或执行 handler；`PreparedServer::start` 消费该租约并进入既有监督循环。未激活时放弃租约会关闭 listener，再按身份清理 socket／token；替换者保留。客户端仍受原有握手期限约束。含两项新增生命周期回归的 13 项协议用例已在 Linux／macOS 原生通过（CI `39954848476`）；这不是 GUI 验收。
 
 macOS 显式 `workspace-cli` 构建从 Darwin `confstr(_CS_DARWIN_USER_TEMP_DIR)` 读取当前账户的系统临时根，解析系统 `/var` 别名后选择固定子目录 `pulseterm-workspace-cli`；不使用 HOME／TMPDIR／XDG 覆盖值。系统查询只返回元数据，原有逐层目录、所有者、权限与文件身份准入仍必需。GUI 在创建 WebView 前预留端点，窗口发布后才激活服务，并纳入共享 CLI／原生退出监督。第二实例拒绝，不启用上游 macOS 公共路径单实例插件，不删除旧端点或转发参数。客户端复用 Unix 冷启动实现：已有端点只尝试一次认证，失败不冷回退；端点确实缺失时，仅启动 `pulse` 同目录的固定 GUI 同伴，使用相同的程序所有权、祖先目录、链接数、setid 和写权限拒绝规则。八秒内等待发布后，以同一认证连接认领原页面动作；并发第二实例不能转发或接管票据。仅支持同目录开发／安装布局，不通过 LaunchServices、PATH 或任意 `.app` 搜索程序。暖 GUI、原页批准、目录交接和物理退出仍待 macOS 实窗验收。
+macOS 原生 CI `40011009741` 已通过 Darwin 目录查询、13 项协议／端点预留、两种 CLI 完整目标检查、CLI＋SSH 严格编译，以及 332 项产品和 34 项 CLI 回归；4 项既有忽略用例未计入通过。生产与验证 Context 分属独立二进制后重复 Info.plist 已消除；真实 PTY 夹具使用 `/usr/bin/true`，不修改生产程序选择。上述为原生组件／编译证据，不替代 GUI 冷暖启动与物理退出验收。
 验证宿主与生产工作区分别在自己的二进制入口调用 `generate_context!`，再把 Context 交给各自库入口。macOS 开发构建会嵌入进程级 Info.plist，不能在同一库中生成两份；不以 `test = true` 关闭生产元数据嵌入。验证入口仍用根配置，生产入口仍用 `workspace/tauri.conf.json`，并在启动前拒绝继承验证窗口、身份、CSP 或 capabilities；命令注册与资源路径保持独立。
 Windows 的控制流关闭显式标记为不执行依赖的后台 flush。正常成功仍要求调用方实际收到协议收据；取消可丢弃未确认写入。所有接受和连接的 stream 都通过同一关闭包装，避免未知 peer、认证失败或取消路径把句柄留在游离的 FlushFileBuffers 工作线程。它不改变终端流、SSH 或其他库的关闭行为。
 

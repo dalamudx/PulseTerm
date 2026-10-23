@@ -1,6 +1,6 @@
 # 下一阶段开发计划：跨平台补齐与 Alpha 收敛
 
-状态：已批准，实施中。Windows 本地、SSH／配置导入及 CLI 冷暖入口已接线，22 项 MSVC 前置及完整桌面构建通过；普通用户实窗和完整性能尚未验收。macOS 共享控制／端点预留原生回归通过，冷暖产品入口已接线、待原生产品验证。当前实现与原生入口见 [Windows 生产链](windows-product-core.md)及[CLI 控制](../architecture/windows-cli-control.md)。v1.0 的 P0/P1 范围遵循[功能规格](../product/features.md)，完成状态以[动态交付清单](plan.md#15-动态交付清单与当前进度)和[验证记录](validation.md)为准。
+状态：已批准，实施中。Windows 本地、SSH／配置导入及 CLI 冷暖入口已接线，22 项 MSVC 前置及完整桌面构建通过；普通用户实窗和完整性能尚未验收。macOS 共享控制／端点预留原生回归通过，冷暖产品入口的原生编译、332 项产品与 34 项 CLI 回归已通过；GUI 实窗仍待验收。当前实现与原生入口见 [Windows 生产链](windows-product-core.md)及[CLI 控制](../architecture/windows-cli-control.md)。v1.0 的 P0/P1 范围遵循[功能规格](../product/features.md)，完成状态以[动态交付清单](plan.md#15-动态交付清单与当前进度)和[验证记录](validation.md)为准。
 
 ## 1. 目标与当前判断
 
@@ -12,7 +12,7 @@
 | Linux Vault／SSH／CLI | 保存与临时目标、密码／私钥／软件 Agent、联合 MFA、跳板及 CLI 原窗口批准等已有对应范围证据 | 外部网络／企业 MFA／系统与硬件 Agent、跨平台、部分密钥及完整异常压力；软件 RSA 安全阻塞仍保留 |
 | Windows 存储基础 | 原 v3 管理员 39/39 通过保持独立；生产设置、键位、私有目录与 SQLite 准入／线程生命周期已接线。22 项 MSVC 前置通过（提权 runner，夹具进程显式选择当前账户为新文件默认所有者，不修复已有文件权限） | 普通用户 GUI、数据库侧文件实机行为与持续资源回收仍待验收；runner 结果不等于普通用户环境 |
 | Windows 产品 | 本地 Shell、ConPTY、PATH 刷新、SSH／配置导入和冷暖 CLI 已接线，共享回归和完整目标交叉检查通过，见[生产链](windows-product-core.md) | 普通用户首次启动、WSL、真实输入／刷新／重开／物理退出，原生 SSH／CLI／导入 GUI 与完整性能 |
-| macOS | 三平台日常原生 CI 通过；共享 IPC／端点预留 13 项原生用例通过；HTTP(S)系统交接已用主线程 AppKit 接线，冷暖 CLI 产品入口已接线并纳入既有窗口／原页批准／退出监督 | CLI 完整产品原生编译与回归正在验证；系统目录查询、实际 GUI 冷暖启动、Shell／输入／权限／生命周期及性能证据未闭合 |
+| macOS | 三平台日常原生 CI 通过；共享 IPC／端点预留 13 项原生用例、Darwin 系统目录查询、CLI 两种完整目标检查和严格编译、332 项产品及 34 项 CLI 回归通过（CI `40011009741`，4 项既有忽略）；HTTP(S)系统交接已用主线程 AppKit 接线 | 实际 GUI 冷暖启动、明确批准、目录交接、Shell／输入／权限／窗口生命周期和性能证据未闭合；原生组件测试不代表实窗通过 |
 | 性能 | 显示缓存、分段回显、同宿主最小页、调度 ABBA 和公开策略对照已完成，见[性能评估](linux-runtime-performance-review.md) | 当前内存和回显均未达标；需要真实图形环境及受支持运行时评估，不抬高预算或削弱解析／恢复／ACK |
 | 合规与发布 | 八项精确版本例外已批准；Vite 8.3.3 的 JavaScript 审计为零；独立审计批次与失败原文保留 | 五项 Rust 维护公告、21 项许可原文、GNU 包来源、MPL 源码渠道及签名／更新仍开放，见[依赖审计](dependency-audit.md) |
 
