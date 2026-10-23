@@ -152,17 +152,23 @@ static gboolean matches(AtspiAccessible *node, const char *expected, unsigned de
         g_clear_error(&error);
         return FALSE;
     }
-    for (int index = 0; index < count; ++index) {
-        if (g_get_monotonic_time() >= deadline) return FALSE;
-        AtspiAccessible *child = atspi_accessible_get_child_at_index(node, index, &error);
-        if (error || !child) {
+    /* Search modal controls before unrelated background content within the same budget. */
+    for (unsigned pass = 0; pass < 2; ++pass) {
+        for (int index = 0; index < count; ++index) {
+            if (g_get_monotonic_time() >= deadline) return FALSE;
+            AtspiAccessible *child = atspi_accessible_get_child_at_index(node, index, &error);
+            if (error || !child) {
+                g_clear_error(&error);
+                if (child) g_object_unref(child);
+                continue;
+            }
+            AtspiRole role = atspi_accessible_get_role(child, &error);
+            gboolean modal = !error && (role == ATSPI_ROLE_DIALOG || role == ATSPI_ROLE_ALERT);
             g_clear_error(&error);
-            if (child) g_object_unref(child);
-            continue;
+            gboolean found = modal == (pass == 0) && matches(child, expected, depth + 1);
+            g_object_unref(child);
+            if (found) return TRUE;
         }
-        gboolean found = matches(child, expected, depth + 1);
-        g_object_unref(child);
-        if (found) return TRUE;
     }
     return FALSE;
 }
@@ -238,7 +244,7 @@ int main(int argc, char **argv) {
         }
         g_object_unref(desktop);
     }
-    if (!found) fprintf(stderr, "selected_applications=%u visited_nodes=%u\n", selected_applications, 1024 - remaining);
+    if (!found) fprintf(stderr, "selected_applications=%u visited_nodes=%u deadline_reached=%d node_limit_reached=%d\n", selected_applications, 1024 - remaining, g_get_monotonic_time() >= deadline, remaining == 0);
     atspi_exit();
     return found ? 0 : 1;
 }
