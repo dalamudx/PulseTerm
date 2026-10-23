@@ -1686,6 +1686,7 @@ run = [
 [tasks.ci-workspace]
 description = "Linux workspace integration"
 run = [
+  "sh scripts/test-probe-x11-status.sh",
   "mise run probe-workspace-close-duplicate",
   "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked",
   "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked",

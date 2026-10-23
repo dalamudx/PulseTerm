@@ -128,6 +128,17 @@ static gboolean matches(AtspiAccessible *node, const char *expected, unsigned de
     if (depth > 32 || remaining == 0 || g_get_monotonic_time() >= deadline) return FALSE;
     --remaining;
     GError *error = NULL;
+    AtspiRole initial_role = atspi_accessible_get_role(node, &error);
+    if (!error && initial_role == ATSPI_ROLE_STATUS_BAR) {
+        AtspiText *cached_text = atspi_accessible_get_text_iface(node);
+        if (cached_text) g_object_unref(cached_text);
+        else {
+            /* Empty live regions may retain an interface list from before their text update. */
+            atspi_accessible_clear_cache_single(node);
+            if (tree_mode) fprintf(stderr, "status_cache_refreshed=1\n");
+        }
+    }
+    g_clear_error(&error);
     AtspiStateSet *states = atspi_accessible_get_state_set(node);
     gboolean showing = states && atspi_state_set_contains(states, ATSPI_STATE_SHOWING);
     gboolean sensitive = !states || atspi_state_set_contains(states, ATSPI_STATE_EDITABLE);
