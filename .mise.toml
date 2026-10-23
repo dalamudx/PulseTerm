@@ -24,7 +24,7 @@ description = "Test bounded Agent transport and authorization on the current OS;
 run = "cargo test -p pulse-ssh --all-features --locked --lib agent::"
 
 [tasks.test-cli-transport]
-description = "Test authenticated Linux/Windows local control and native completion; private fixtures only, no GUI or cold-start acceptance"
+description = "Test authenticated Linux/macOS/Windows local control and native completion; private fixtures only, no GUI or cold-start acceptance"
 run = ["node --test scripts/test-cli-transport.test.mjs", "node scripts/test-cli-transport.mjs"]
 
 [tasks.test-windows-ssh-config]

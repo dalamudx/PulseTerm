@@ -1,9 +1,8 @@
-//! Existing Linux ownership/mode/peer checks, endpoint identity cleanup and token reads.
+//! Private Unix ownership/mode/peer checks, endpoint identity cleanup and token reads.
 use super::{Error, IpcStream, Listener, NativeEndpoint, Result};
-use interprocess::{
-    local_socket::{GenericFilePath, ListenerOptions, tokio::prelude::*},
-    os::unix::local_socket::ListenerOptionsExt,
-};
+use interprocess::local_socket::{GenericFilePath, ListenerOptions, tokio::prelude::*};
+#[cfg(target_os = "linux")]
+use interprocess::os::unix::local_socket::ListenerOptionsExt;
 use std::{
     fs::{self, Metadata, OpenOptions},
     io::{Read, Write},
@@ -85,18 +84,39 @@ pub(super) fn listen(
         .map_err(|_| Error)?;
     let listener = {
         let _entered = runtime.enter();
-        ListenerOptions::new()
+        let options = ListenerOptions::new()
             .name(name)
-            .mode(0o600)
             .reclaim_name(false)
-            .try_overwrite(false)
-            .create_tokio()
-            .map_err(|_| Error)?
+            .try_overwrite(false);
+        #[cfg(target_os = "linux")]
+        let options = options.mode(0o600);
+        options.create_tokio().map_err(|_| Error)?
     };
     owned.socket = Some(Identity::new(
         socket_path.clone(),
         &fs::symlink_metadata(&socket_path).map_err(|_| Error)?,
     ));
+    #[cfg(target_os = "macos")]
+    {
+        // macOS cannot chmod an unbound socket. The admitted parent is already private;
+        // set the new socket's mode without following links before publishing any token.
+        use rustix::fs::{AtFlags, CWD, Mode, chmodat};
+        chmodat(
+            CWD,
+            &socket_path,
+            Mode::RUSR | Mode::WUSR,
+            AtFlags::SYMLINK_NOFOLLOW,
+        )
+        .map_err(|_| Error)?;
+        let metadata = fs::symlink_metadata(&socket_path).map_err(|_| Error)?;
+        let identity = owned.socket.as_ref().ok_or(Error)?;
+        if metadata.dev() != identity.device
+            || metadata.ino() != identity.inode
+            || metadata.mode() & 0o7777 != 0o600
+        {
+            return Err(Error);
+        }
+    }
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)

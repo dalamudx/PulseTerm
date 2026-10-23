@@ -59,7 +59,7 @@ jobs:
         run: |
           case "$RUNNER_OS" in
             Linux) mise run test-cli-transport; mise run ci-unix; mise run ci-product ;;
-            macOS) mise run ci-unix ;;
+            macOS) mise run test-cli-transport; mise run ci-unix ;;
             Windows) mise run check-windows-settings; mise run test-cli-transport; mise run test-windows-ssh-config ;;
           esac
       - name: Evidence

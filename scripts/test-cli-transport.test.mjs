@@ -20,7 +20,7 @@ for (const [label, patch, platform = 'linux'] of [
   ['launch error', { error: new Error('fixture.spawn') }],
   ['missing summary', { stdout: '' }],
   ['multiple summaries', { stdout: summary() + summary() }],
-  ['unsupported platform', {}, 'darwin'],
+  ['unsupported platform', {}, 'freebsd'],
 ]) {
   test(`reject ${label}`, () => assert.equal(transportPassed({ ...valid, ...patch }, platform), false));
 }

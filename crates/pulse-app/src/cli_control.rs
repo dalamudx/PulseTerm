@@ -19,10 +19,10 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use zeroize::{Zeroize, Zeroizing};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "cli_control_unix.rs"]
 mod platform;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::Path;
 /// Static errors contain no token, parameters or user path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -124,7 +124,7 @@ pub struct Server {
 impl Server {
     /// Backend-supplied OS application runtime directory only; no client-selected path.
     /// Occupied/unknown endpoints fail closed. Cold startup/election and crash recovery are separate.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn start(directory: &Path, runtime: &Handle, handler: Arc<dyn Handler>) -> Result<Self> {
         let secret = TransportToken::generate();
         let (listener, owned) = platform::listen(directory, runtime, secret.bytes())?;
@@ -303,7 +303,7 @@ pub struct Client {
 }
 impl Client {
     /// Authenticate once against the private endpoint without creating or repairing it.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub async fn connect(directory: &Path) -> Result<Self> {
         let stream = tokio::time::timeout(DEADLINE, authenticate(directory))
             .await
@@ -369,14 +369,14 @@ impl Client {
     }
 }
 /// Warm client. Endpoint validation never creates or repairs a directory/token.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn invoke(directory: &Path, method: &str, params: Value) -> Result<Value> {
     let budget = client_budget(method);
     tokio::time::timeout(budget, invoke_inner(directory, method, params))
         .await
         .map_err(|_| Error)?
 }
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn authenticate(directory: &Path) -> Result<Stream> {
     let (stream, secret) = platform::connect(directory).await?;
     authenticate_stream(stream, secret).await
@@ -406,7 +406,7 @@ async fn authenticate_stream(stream: Stream, secret: Zeroizing<Vec<u8>>) -> Resu
     }
     Ok(stream)
 }
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn invoke_inner(directory: &Path, method: &str, params: Value) -> Result<Value> {
     let stream = tokio::time::timeout(DEADLINE, authenticate(directory))
         .await

@@ -4,20 +4,22 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 import { nativeTestsPassed } from './verify-native-tests.mjs';
+const UNIX_PROTOCOL_TESTS = [
+  'actual_private_auth_known_action_and_unknown_args_denied',
+  'preauth_bad_secret_duplicates_and_oversized_frames_never_dispatch',
+  'occupied_endpoint_never_rewrites_token',
+  'eof_cancels_but_native_credit_stays_until_actual_exit',
+  'unsafe_directory_and_symlink_token_are_not_repaired',
+  'cancelled_shutdown_observer_does_not_release_native_operation_or_socket',
+  'gui_response_budget_does_not_extend_other_commands_or_wire_deadline',
+  'actual_socket_gui_commands_wait_past_wire_deadline',
+  'cold_bootstrap_uses_bounded_confirmation_response_not_handshake_budget',
+  'continuous_client_calls_are_independent_and_denial_closes_transport',
+  'continuous_client_cannot_follow_replaced_server_instance',
+].map(name => `cli_control::tests::${name}`);
 export const PROTOCOL_TESTS = {
-  linux: [
-    'actual_private_auth_known_action_and_unknown_args_denied',
-    'preauth_bad_secret_duplicates_and_oversized_frames_never_dispatch',
-    'occupied_endpoint_never_rewrites_token',
-    'eof_cancels_but_native_credit_stays_until_actual_exit',
-    'unsafe_directory_and_symlink_token_are_not_repaired',
-    'cancelled_shutdown_observer_does_not_release_native_operation_or_socket',
-    'gui_response_budget_does_not_extend_other_commands_or_wire_deadline',
-    'actual_socket_gui_commands_wait_past_wire_deadline',
-    'cold_bootstrap_uses_bounded_confirmation_response_not_handshake_budget',
-    'continuous_client_calls_are_independent_and_denial_closes_transport',
-    'continuous_client_cannot_follow_replaced_server_instance',
-  ].map(name => `cli_control::tests::${name}`),
+  linux: UNIX_PROTOCOL_TESTS,
+  darwin: UNIX_PROTOCOL_TESTS,
   win32: [
     'authenticated_native_pipe_calls_once_and_shutdown_releases_namespace',
     'wrong_token_cannot_reach_handler_and_stale_token_is_never_repaired',
@@ -38,7 +40,7 @@ export function coldPlatformPassed(result) {
   return nativeTestsPassed(result, COLD_PLATFORM_CASES);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (!['linux', 'win32'].includes(process.platform)) {
+  if (!['linux', 'darwin', 'win32'].includes(process.platform)) {
     console.error('cli.transport.unsupported_platform');
     process.exitCode = 2;
   } else {

@@ -1,8 +1,11 @@
 //! Runtime-neutral application composition for supervised local terminal sessions.
 #![forbid(unsafe_code)]
 pub mod attachment;
-/// Opt-in Linux/Windows local control transport; authentication is not effect authorization.
-#[cfg(all(feature = "cli-control", any(target_os = "linux", windows)))]
+/// Opt-in Linux/macOS/Windows local control transport; authentication is not effect authorization.
+#[cfg(all(
+    feature = "cli-control",
+    any(target_os = "linux", target_os = "macos", windows)
+))]
 pub mod cli_control;
 /// Trusted runtime scheduling for a registered local PTY; no frontend command surface.
 pub mod local_launch;

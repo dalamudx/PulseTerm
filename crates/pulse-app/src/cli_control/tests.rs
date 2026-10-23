@@ -52,7 +52,7 @@ fn handler(stall: bool) -> Arc<TestHandler> {
 fn directory() -> std::io::Result<tempfile::TempDir> {
     let directory = tempfile::Builder::new()
         .prefix("cli-control-")
-        .tempdir_in("/data/temp")?;
+        .tempdir_in(fs::canonicalize(std::env::temp_dir())?)?;
     fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
     Ok(directory)
 }
@@ -85,6 +85,14 @@ async fn actual_private_auth_known_action_and_unknown_args_denied() -> TestResul
     let directory = directory()?;
     let handler = handler(false);
     let server = Server::start(directory.path(), &Handle::current(), handler.clone())?;
+    assert_eq!(
+        fs::symlink_metadata(directory.path().join("control.sock"))?.mode() & 0o7777,
+        0o600
+    );
+    assert_eq!(
+        fs::symlink_metadata(directory.path().join("control.token"))?.mode() & 0o7777,
+        0o600
+    );
     assert_eq!(
         invoke(directory.path(), "workspace.focus", json!({})).await?,
         json!({"focusRequested":true})
