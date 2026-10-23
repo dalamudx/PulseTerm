@@ -36,7 +36,7 @@ fn shell(root: &std::path::Path) -> std::io::Result<OsString> {
     fs::create_dir(&bin)?;
     let file = bin.join("sh");
     // Fixed noninteractive fixture: never executes user startup files.
-    fs::write(&file, b"#!/bin/sh\nexec /bin/true\n")?;
+    fs::write(&file, b"#!/bin/sh\nexec /usr/bin/true\n")?;
     fs::set_permissions(file, fs::Permissions::from_mode(0o700))?;
     Ok(bin.into_os_string())
 }
