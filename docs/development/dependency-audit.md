@@ -14,7 +14,7 @@
 
 ## 当前维护链
 
-最近已核验批次的 Rust 审计退出 1，包含五项维护公告；JavaScript 退出 0，各严重级别计数为零。此结果有固定源码／输入范围，不代表之后任意依赖状态。
+`ctutils` 已从 0.4.2 升级到 0.4.4，修复 RUSTSEC-2026-0385；本批锁图仅更新该组件及归档摘要。联网审计不再报告该漏洞，Rust 仍因五项维护公告退出 1；JavaScript 退出 0，各严重级别计数为零。存储与 SSH 回归、锁定归属材料生成和离线校验通过，其他发行门禁保持有效。
 
 | 公告 | 锁定组件 | 依赖入口与迁移边界 |
 |---|---|---|
@@ -36,6 +36,6 @@
 
 收据均位于被 Git 忽略的 `target/probes/`，远程 CI 重新生成并上传本次证据：
 
-- `dependency-audit/runs/87c8cb59-1c5f-4caa-ab95-156ad3921f07/`：最近核验的五公告／零 JavaScript 漏洞批次。
+- `dependency-audit/runs/af64ff47-297e-4a98-803c-fd74c593485e/`：ctutils 补丁后的五公告／零 JavaScript 漏洞批次；补丁、测试和归属收据见 `ctutils-security-update/verification-v1.json`。
 - `dependency-audit/maintenance-review-v1/`：输入指纹、来源、回归及独立日志布局核验；`before-runner-fix/` 保留 schema 1 原始失败。
 - `dependency-audit-acceptance.json`：初始执行器的历史范围。旧的 8 项许可／2 项维护结果不能覆盖当前状态。

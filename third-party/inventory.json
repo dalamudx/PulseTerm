@@ -1,7 +1,7 @@
 {
   "generatedFiles": {
     "NOTICE": "841c9ca3b1a3cfd5a4616ef20ba43fb0f4619ab1ecad6826ae2461777b84df9d",
-    "THIRD_PARTY.md": "8cdc9a7c3eb3a99042a2bfe361d665107ff5ed6f280580612957db888a860d13",
+    "THIRD_PARTY.md": "a9d10a553b4514e46cb672c4f7f3a43b8080db21da6e27f904531bea5e401005",
     "third-party/licenses/002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1.txt": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1",
     "third-party/licenses/0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13.txt": "0034712d5e97a4f5b900a160a5c19d582b740d8e0638b4e44fd07e7b492dcd13",
     "third-party/licenses/003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0.txt": "003736bc98408b53511b9cc8ff5d1af3bf0a8f17d53841cc39d8ab1b96a195b0",
@@ -442,7 +442,7 @@
   },
   "generator": "scripts/third-party.py",
   "inputs": {
-    "Cargo.lock": "fc699a79f148dccbf728d6d7abdd2726f65eb3ec4007244a1beb775074dfbba6",
+    "Cargo.lock": "00ee7680e51ef4d544b50a954fc0559b32b4c7c4ac1df8373e315b3432f7a0f0",
     "Cargo.toml": "19fb8558bdf6de161ac81824c66ac44626069490ad67f68c75a16a7ff8939f92",
     "apps/desktop/src-tauri/Cargo.toml": "d107710a2a4fe3de62fa82a09d8bc969c78c112fbd858ab43d576f095fb728a4",
     "crates/pulse-app/Cargo.toml": "5fcc9af854c6e8914b5561ec941db00a56b0b1265214896b4ac71b415000cac8",
@@ -3145,7 +3145,7 @@
       ],
       "declaredLicense": "Apache-2.0 OR MIT",
       "ecosystem": "cargo",
-      "id": "cargo:ctutils@0.4.2",
+      "id": "cargo:ctutils@0.4.4",
       "licenseTexts": [
         {
           "file": "third-party/licenses/cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30.txt",
@@ -3160,12 +3160,12 @@
       ],
       "name": "ctutils",
       "origin": {
-        "archiveSha256": "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e",
-        "url": "https://static.crates.io/crates/ctutils/ctutils-0.4.2.crate"
+        "archiveSha256": "12218662ccac37d9714f2191252553d67585b97df8c839cbe49e0bde278dc865",
+        "url": "https://static.crates.io/crates/ctutils/ctutils-0.4.4.crate"
       },
       "repository": "https://github.com/RustCrypto/utils",
       "textStatus": "collected",
-      "version": "0.4.2"
+      "version": "0.4.4"
     },
     {
       "authors": [
