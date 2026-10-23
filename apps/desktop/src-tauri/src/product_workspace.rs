@@ -493,9 +493,8 @@ async fn workspace_profiles(
 }
 
 /// Preview-only separate runner; none of the validation commands are mounted.
-pub fn run() {
+pub fn run(context: tauri::Context<tauri::Wry>) {
     record_startup(StartupStage::RunEntered);
-    let context = tauri::generate_context!("workspace/tauri.conf.json");
     if !isolated_config(context.config()) {
         eprintln!("workspace.configuration_denied");
         record_startup(StartupStage::ConfigurationDenied);

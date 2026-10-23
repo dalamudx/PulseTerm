@@ -719,7 +719,7 @@ fn export_bindings(check: bool) -> ProbeResult<()> {
 }
 
 /// Launch the local-only validation app. No product sessions are exposed yet.
-pub fn run() {
+pub fn run(context: tauri::Context<tauri::Wry>) {
     let args: Vec<String> = std::env::args().collect();
     let cli_window = args.iter().any(|a| a == "--probe-cli-window");
     if args.iter().any(|a| a == "--cli-window-helper") {
@@ -838,7 +838,7 @@ pub fn run() {
             app.state::<WindowSessions>().install(&window)?;
             Ok(())
         })
-        .build(tauri::generate_context!());
+        .build(context);
     match result {
         Ok(app) => app.run(|handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
