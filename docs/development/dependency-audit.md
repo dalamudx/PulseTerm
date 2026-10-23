@@ -24,7 +24,7 @@
 | [RUSTSEC-2026-0370](https://rustsec.org/advisories/RUSTSEC-2026-0370) | `zvariant 5.15.0` | 同一 D-Bus 链 |
 | [RUSTSEC-2026-0372](https://rustsec.org/advisories/RUSTSEC-2026-0372) | `zvariant_derive 5.15.0` | 同一 D-Bus 链 |
 
-`zbus 6` 将后三项整合为内部模块／宏，但插件 2.5.3 的 Linux manifest 仍要求 zbus 5；只升级本项目直接依赖不能清除旧链。迁移须覆盖插件 API、实际 bus-name／PID、生命周期、冷启动转发和原页面授权。最近查询 Tauri 2.12.4、插件 2.5.3 和 Specta rc.25 未发现可直接替换的兼容组合；上游版本变化后重查，不自动添加公告 ignore 或宏 vendor。
+`zbus 6` 将后三项整合为内部模块／宏，但插件 2.5.3 的 Linux manifest 仍要求 zbus 5；只升级本项目直接依赖不能清除旧链。迁移须覆盖插件 API、实际 bus-name／PID、生命周期、冷启动转发和原页面授权。最新兼容单实例插件仍为 2.5.3（3.0.0-alpha.3 不作为稳定替代）；新发布 Specta rc.27 的 `function` 特性仍直接启用 `paste`，tauri-specta 已有 rc.26，但没有证据表明升级这组反射库能消除该公告。`russh-util` 最新仍为 0.52.0，发布 VCS 标记 dirty 的许可来源缺口未消除。相关来源见 `target/probes/release-upstream-followup/verification-v1.json`。上游版本变化后重查，不自动添加公告 ignore 或宏 vendor。
 
 ## 许可与发行
 
