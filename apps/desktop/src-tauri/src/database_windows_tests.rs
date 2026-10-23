@@ -27,7 +27,9 @@ async fn native_worker_persists_profiles_and_releases_file_and_directory_after_s
 -> TestResult {
     let (_root, directory) = directory()?;
     let path = directory.join("state.db");
-    let (store, task) = StateStore::open_admitted(path.clone(), admit, ()).await?;
+    let (store, task) = StateStore::open_admitted(path.clone(), admit, ())
+        .await
+        .map_err(|error| format!("open fresh worker: {error}"))?;
     let checked: Result<_, StoreError> = async {
         let before = store.load_auto_profiles().await?;
         let mut next = before.clone();
@@ -77,8 +79,10 @@ async fn native_worker_persists_profiles_and_releases_file_and_directory_after_s
 #[tokio::test]
 async fn native_migration_creates_a_readable_private_backup_of_the_old_schema() -> TestResult {
     let (_root, directory) = directory()?;
-    seed_v1(&directory)?;
-    let (store, task) = StateStore::open_admitted(directory.join("state.db"), admit, ()).await?;
+    seed_v1(&directory).map_err(|error| format!("seed old schema: {error}"))?;
+    let (store, task) = StateStore::open_admitted(directory.join("state.db"), admit, ())
+        .await
+        .map_err(|error| format!("open migrating worker: {error}"))?;
     let loaded = store.load_auto_profiles().await;
     task.shutdown().await?;
     assert_eq!(loaded?, AutoProfilePreferences::default());

@@ -34,6 +34,12 @@ jobs:
           $env:TEMP = $env:TMPDIR
           $env:TMP = $env:TMPDIR
           try {
+            $ownerProbe = Join-Path $env:TMPDIR 'default-owner-probe'
+            [IO.File]::WriteAllBytes($ownerProbe, [byte[]]@())
+            $fileOwner = (Get-Acl -LiteralPath $ownerProbe).GetOwner([System.Security.Principal.SecurityIdentifier])
+            $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+            Write-Host "Default file owner matches current account: $($fileOwner.Equals($account))"
+            Remove-Item -LiteralPath $ownerProbe
             mise run test-windows-product
             if ($LASTEXITCODE -ne 0) { throw 'Native product cases failed.' }
             mise run test-windows-product-runner
