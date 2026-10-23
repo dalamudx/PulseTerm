@@ -75,7 +75,12 @@ with tempfile.TemporaryDirectory(prefix='joint-server.', dir=temp_root) as direc
     (work / 'Cargo.lock').write_bytes(lock_bytes)
     task = work / 'xtask'
     task.mkdir()
-    (task / 'Cargo.toml').write_text((root / 'xtask' / 'Cargo.toml').read_text() +
+    task_manifest = re.sub(
+        r'(\bpath\s*=\s*)"([^"]+)"',
+        lambda match: match[1] + json.dumps(str((root / 'xtask' / match[2]).resolve(strict=True))),
+        (root / 'xtask' / 'Cargo.toml').read_text(),
+    )
+    (task / 'Cargo.toml').write_text(task_manifest +
         '\n[[bin]]\nname = "xtask"\npath = ' + json.dumps(str(root / 'xtask' / 'src' / 'main.rs')) + '\n')
     subprocess.run(['cargo', 'build', '--offline', '--manifest-path', str(task / 'Cargo.toml'),
                     '--features', 'ssh-target-probe', '--target-dir', str(work / 'target')],
