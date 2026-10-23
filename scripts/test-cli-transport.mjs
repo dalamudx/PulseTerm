@@ -16,6 +16,8 @@ const UNIX_PROTOCOL_TESTS = [
   'cold_bootstrap_uses_bounded_confirmation_response_not_handshake_budget',
   'continuous_client_calls_are_independent_and_denial_closes_transport',
   'continuous_client_cannot_follow_replaced_server_instance',
+  'reserved_endpoint_is_exclusive_and_cleans_only_original_files',
+  'reserved_endpoint_authenticates_only_after_activation',
 ].map(name => `cli_control::tests::${name}`);
 export const PROTOCOL_TESTS = {
   linux: UNIX_PROTOCOL_TESTS,
@@ -61,7 +63,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       && coldPlatformPassed(run(['-p', 'pulse-platform', '--lib', 'windows::cold_cli::tests::'])));
     const passed = protocolPassed && coldPassed;
     console.log(JSON.stringify({ component: 'cli-transport', platform: process.platform,
-      expected: process.platform === 'win32' ? 3 : 11, passed,
+      expected: PROTOCOL_TESTS[process.platform].length, passed,
       nativeColdPlatformCases: process.platform === 'win32' ? COLD_PLATFORM_CASES.length : 0,
       nativeExecution: true, guiValidated: false, coldStartValidated: false }));
     if (!passed) process.exitCode = 1;

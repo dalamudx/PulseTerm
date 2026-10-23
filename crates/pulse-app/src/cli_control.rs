@@ -115,6 +115,29 @@ impl TransportToken {
     }
 }
 
+/// Exclusive Unix endpoint reserved before window creation. No authentication or handler runs yet.
+/// Dropping it closes the listener and removes only its original socket/token identities.
+/// The caller must retain the application runtime until the activated server finishes shutdown.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct PreparedServer {
+    listener: Listener,
+    secret: TransportToken,
+    owned: platform::Endpoints,
+    runtime: Handle,
+}
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl PreparedServer {
+    /// Consume the reservation once and begin the existing supervised authentication/action loop.
+    pub fn start(self, handler: Arc<dyn Handler>) -> Server {
+        Server::start_admitted(
+            self.listener,
+            self.secret,
+            Box::new(self.owned),
+            &self.runtime,
+            handler,
+        )
+    }
+}
 /// Revocable service handle. Dropping/closing signals cancellation, never reports native completion.
 /// Join observers may cancel without canceling the independently owned supervisor.
 pub struct Server {
@@ -126,15 +149,20 @@ impl Server {
     /// Occupied/unknown endpoints fail closed. Cold startup/election and crash recovery are separate.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn start(directory: &Path, runtime: &Handle, handler: Arc<dyn Handler>) -> Result<Self> {
+        Ok(Self::prepare(directory, runtime)?.start(handler))
+    }
+    /// Exclusively reserve an OS-selected private Unix endpoint without accepting authentication.
+    /// Existing or stale endpoints are rejected without repair. Reservation grants no action authority.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn prepare(directory: &Path, runtime: &Handle) -> Result<PreparedServer> {
         let secret = TransportToken::generate();
         let (listener, owned) = platform::listen(directory, runtime, secret.bytes())?;
-        Ok(Self::start_admitted(
+        Ok(PreparedServer {
             listener,
             secret,
-            Box::new(owned),
-            runtime,
-            handler,
-        ))
+            owned,
+            runtime: runtime.clone(),
+        })
     }
     /// Mount an already admitted native listener and its original endpoint leases.
     /// Only trusted backend adapters supply these objects; each action still needs GUI/Capability checks.

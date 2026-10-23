@@ -81,6 +81,52 @@ async fn hello(stream: &Stream, directory: &Path) -> Result<()> {
     Ok(())
 }
 #[tokio::test]
+async fn reserved_endpoint_is_exclusive_and_cleans_only_original_files() -> TestResult {
+    let directory = directory()?;
+    let socket = directory.path().join("control.sock");
+    let token = directory.path().join("control.token");
+    let reserved = Server::prepare(directory.path(), &Handle::current())?;
+    let original = fs::symlink_metadata(&token)?;
+    assert!(Server::prepare(directory.path(), &Handle::current()).is_err());
+    assert_eq!(fs::symlink_metadata(&token)?.ino(), original.ino());
+    drop(reserved);
+    assert!(!socket.try_exists()?);
+    assert!(!token.try_exists()?);
+
+    let reserved = Server::prepare(directory.path(), &Handle::current())?;
+    fs::rename(&token, directory.path().join("original.token"))?;
+    fs::write(&token, b"replacement must survive")?;
+    drop(reserved);
+    assert!(!socket.try_exists()?);
+    assert_eq!(fs::read(&token)?, b"replacement must survive");
+    Ok(())
+}
+#[tokio::test]
+async fn reserved_endpoint_authenticates_only_after_activation() -> TestResult {
+    let directory = directory()?;
+    let handler = handler(false);
+    let reserved = Server::prepare(directory.path(), &Handle::current())?;
+    let mut connecting = Box::pin(Client::connect(directory.path()));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(30), &mut connecting)
+            .await
+            .is_err()
+    );
+    let server = reserved.start(handler.clone());
+    let mut client = connecting.await?;
+    assert_eq!(handler.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        client.invoke("workspace.focus", json!({})).await?,
+        json!({"focusRequested":true})
+    );
+    assert_eq!(handler.calls.load(Ordering::SeqCst), 1);
+    drop(client);
+    server.shutdown().await?;
+    assert!(!directory.path().join("control.sock").try_exists()?);
+    assert!(!directory.path().join("control.token").try_exists()?);
+    Ok(())
+}
+#[tokio::test]
 async fn actual_private_auth_known_action_and_unknown_args_denied() -> TestResult {
     let directory = directory()?;
     let handler = handler(false);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { transportPassed, coldPlatformPassed, COLD_PLATFORM_CASES, PROTOCOL_TESTS } from './test-cli-transport.mjs';
-const summary = (passed = 11, failed = 0, ignored = 0) => `test result: ok. ${passed} passed; ${failed} failed; ${ignored} ignored; 0 measured; 314 filtered out; finished in 0.01s\n`;
+const summary = (passed = PROTOCOL_TESTS.linux.length, failed = 0, ignored = 0) => `test result: ok. ${passed} passed; ${failed} failed; ${ignored} ignored; 0 measured; 314 filtered out; finished in 0.01s\n`;
 const output = names => names.map(name => `test ${name} ... ok\n`).join('') + summary(names.length);
 const valid = { status: 0, signal: null, stdout: output(PROTOCOL_TESTS.linux) };
 for (const [platform, names] of Object.entries(PROTOCOL_TESTS)) {
@@ -11,9 +11,9 @@ for (const [platform, names] of Object.entries(PROTOCOL_TESTS)) {
 }
 for (const [label, patch, platform = 'linux'] of [
   ['zero tests', { stdout: summary(0) }],
-  ['partial scope', { stdout: summary(10) }],
-  ['ignored native case', { stdout: summary(11, 0, 1) }],
-  ['failed native case', { stdout: summary(11, 1, 0) }],
+  ['partial scope', { stdout: summary(PROTOCOL_TESTS.linux.length - 1) }],
+  ['ignored native case', { stdout: summary(PROTOCOL_TESTS.linux.length, 0, 1) }],
+  ['failed native case', { stdout: summary(PROTOCOL_TESTS.linux.length, 1, 0) }],
   ['nonzero exit', { status: 101 }],
   ['unknown exit', { status: null }],
   ['signal', { signal: 'SIGTERM' }],

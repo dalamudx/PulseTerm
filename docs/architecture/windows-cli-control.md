@@ -16,8 +16,9 @@ GUI 与 `pulse` 从系统 `FOLDERID_LocalAppData` 解析固定应用 `dev.pulset
 
 共享协议保留 8 个连接、帧长与请求数上限、相关 ID、重放防护、独立 Capability 和原页批准。监听关闭先撤销操作，再等待所有 handler 实际结束，最后回收本实例 token。取消 shutdown 等待者不会终止监督任务或提前释放文件／目录租约。文件被替换时返回冲突，绝不删除替换者；崩溃留下的旧文件拒绝自动修复。
 
+Unix 适配为 Linux／macOS 共用同一协议：私有目录、内核对端有效 UID、hello token 与身份匹配后清理规则相同。macOS 在已准入的私有父目录内创建 socket，以不跟随符号链接的方式设置 0600 并复核 inode，再发布 token；不修改进程 umask，不修复旧端点，也不承诺消除同账户文件替换的全部竞争。11 项既有协议用例已在 Linux 与 macOS 原生通过（CI `39951225330`）。
 
-Unix 适配现在为 Linux／macOS 共用同一协议：私有目录、内核对端有效 UID、hello token 与身份匹配后清理规则相同。macOS 在已准入的私有父目录内创建 socket，以不跟随符号链接的方式设置 0600 并复核 inode，再发布 token；不修改进程 umask，不修复旧端点，也不承诺消除同账户文件替换的全部竞争。11 项协议用例复用于两平台，Linux 本地通过，macOS 原生执行待 CI 确认。这里只接通组件；macOS GUI 端点目录、单实例证明、冷启动与完整产品入口仍未开放。
+`Server::prepare` 可在创建窗口前排他预留同一端点，但不开始认证或执行 handler；`PreparedServer::start` 消费该租约并进入既有监督循环。未激活时放弃租约会关闭 listener，再按身份清理 socket／token；替换者保留。客户端仍受原有握手期限约束。两项新增生命周期回归在 Linux 通过，macOS 原生验证待完成。这里只接通组件；macOS GUI 端点目录、单实例接线、冷启动与完整产品入口仍未开放。
 Windows 的控制流关闭显式标记为不执行依赖的后台 flush。正常成功仍要求调用方实际收到协议收据；取消可丢弃未确认写入。所有接受和连接的 stream 都通过同一关闭包装，避免未知 peer、认证失败或取消路径把句柄留在游离的 FlushFileBuffers 工作线程。它不改变终端流、SSH 或其他库的关闭行为。
 
 ## 产品范围
@@ -36,9 +37,9 @@ Windows 的控制流关闭显式标记为不执行依赖的后台 flush。正常
 
 ## 检查与原生验收
 
-`mise run test-cli-transport` 先运行执行器反例，再按平台执行组件：Linux 11 项真实控制协议，Windows 同源 `xtask --features windows-cli-probe` 的 3 项管道及 `pulse-platform` 的 4 项冷启动租约夹具。三组均通过共享校验器逐项核对完整名称，拒绝同数错名、重复、缺行、零／部分、忽略／测量、非零／未知退出及额外摘要。夹具不启动 GUI，不代替实际冷启动验收。
+`mise run test-cli-transport` 先运行执行器反例，再按平台执行组件：Linux／macOS 13 项真实控制协议，Windows 同源 `xtask --features windows-cli-probe` 的 3 项管道及 `pulse-platform` 的 4 项冷启动租约夹具。各组通过共享校验器逐项核对完整名称，拒绝同数错名、重复、缺行、零／部分、忽略／测量、非零／未知退出及额外摘要。夹具不启动 GUI，不代替实际冷启动验收。
 
-Windows 原生用例分别覆盖 hello 不执行操作与 namespace 重开、错误／陈旧 token、取消 shutdown 等待者后原生任务和 token 保留。`pulse-platform` 另有 3 项目录 namespace／账户查询、token 排他创建／读取及替换不删除用例。三平台 CI 的组件步骤只在 Linux／Windows 执行；尚未触发远程 CI。
+Windows 原生用例分别覆盖 hello 不执行操作与 namespace 重开、错误／陈旧 token、取消 shutdown 等待者后原生任务和 token 保留。`pulse-platform` 另有 3 项目录 namespace／账户查询、token 排他创建／读取及替换不删除用例。CI `39951225330` 的 Windows 传输收据确认 3 项管道和 4 项冷启动底层用例原生通过；GUI 和普通用户端到端验收仍待完成。
 
 本批 Linux 共享路径四项实窗已完成：focus／profiles 冷起后各三次暖聚焦且零 PTY；原页批准一个新终端；多窗取消／断连／导航零创建、精确标签与外窗会话拒绝、两条独立输入／刷新保留 PID、主窗先关及最后窗口关闭后端点回收。四个 GUI 和三个 PTY 均实际退出。它们只证明本地 Linux 共享路径兼容，不证明 Windows 命名管道或实际账户行为。
 
