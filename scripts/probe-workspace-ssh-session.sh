@@ -62,6 +62,16 @@ await_count(){
  done
 }
 await_peer(){ step=$1;expected=$2;attempt=0;while [ "$(peer_count "$step")" -lt "$expected" ];do kill -0 "$peer";[ "$attempt" -lt 80 ]||{ echo "fixture.ssh_session_timeout.$step" >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done; }
+focus_control(){
+ timeout 3s sh -c '
+  until "$1" "$2" "$3" focus > "$4" 2>&1;do sleep 0.1;done
+ ' sh "$fixture/x11-status" "$app" "$1" "target/probes/workspace-ssh-session-control-status-$probe_mode.txt" || {
+  echo "workspace.ssh_control_not_focusable.$1" >&2
+  cat "target/probes/workspace-ssh-session-control-status-$probe_mode.txt" >&2
+  return 1
+ }
+}
+press_control(){ focus_control "$1";keys space; }
 click_sidebar(){
  case "$1" in host)label='管理 SSH 主机';direction=4;;vault)label='管理保险库';direction=5;;*)return 2;;esac
  timeout 3s xdotool mousemove --window "$xid" 150 400 click --repeat 12 --delay 10 "$direction"
@@ -106,20 +116,20 @@ if [ "$mode" = cli ];then
 fi
 # Unlock only through the existing master-password UI with actual keyboard and frontend confirmation.
 click_sidebar vault;await_count vault_state_locked 1;sleep 0.2
-keys shift+Tab shift+Tab shift+Tab ctrl+a;type fixed-target-master;keys Tab Return
-await_count vault_front_confirmed 1;sleep 0.2;keys shift+Tab Return;await_count vault_state_available 1;sleep 0.2;keys Escape
+focus_control '主密码';keys ctrl+a;type fixed-target-master;press_control '解锁保险库'
+await_count vault_front_confirmed 1;press_control '重新读取状态';await_count vault_state_available 1;press_control '关闭'
 if [ "$mode" = cli ];then
  . scripts/probe-workspace-cli-ssh-approval.sh
 else
-# Existing host management returns focus to the original button; previous Tab is distinct Connect.
-click_sidebar host;await_count hosts_operation_confirmed 1;keys Escape
-if [ "$mode" = commands ];then keys ctrl+shift+p;sleep 0.2;type connect;keys Return;else keys shift+Tab Return;fi
+# Open and close the manager through its visible controls, then use the distinct Connect action.
+click_sidebar host;await_count hosts_operation_confirmed 1;press_control '完成'
+if [ "$mode" = commands ];then keys ctrl+shift+p;sleep 0.2;type connect;keys Return;else press_control '连接';fi
 sleep 0.2
 # Saved hosts without a default identity require an explicit selection.
-keys Tab Home Tab;sleep 0.2
+focus_control '选择保存的SSH身份';keys Home Tab
 # Full identity label is visible in the retained raw screenshot; OCR adds L at I_ glyph.
 visible selection GUI_HOST IDENTITY
-keys Tab Tab Return
+press_control '连接'
 fi
 if [ "$mode" = cancel ];then
  await_peer ssh_handshake_stream_owned 1
@@ -127,8 +137,8 @@ if [ "$mode" = cancel ];then
  attempt=0;while [ "$(peer_count ssh_handshake_stream_exited)" -lt 1 ];do [ "$attempt" -lt 20 ]||{ echo fixture.ssh_cancel_exit_exceeded_two_seconds >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done
  [ "$(count "$opened")" -eq 0 ];[ "$(peer_count "$authenticated")" -eq 0 ]
  # Reuse admission only after actual I/O exit; no re-unlock or new epoch is granted.
- click_sidebar host;await_count hosts_operation_confirmed 3;keys Escape shift+Tab Return;sleep 0.2
- keys Tab Home Tab Tab Tab Return;await_peer ssh_handshake_stream_owned 2
+ click_sidebar host;await_count hosts_operation_confirmed 3;press_control '完成';press_control '连接'
+ focus_control '选择保存的SSH身份';keys Home Tab;press_control '连接';await_peer ssh_handshake_stream_owned 2
  keys ctrl+shift+r
  attempt=0;while [ "$(peer_count ssh_handshake_stream_exited)" -lt 2 ];do [ "$attempt" -lt 20 ]||{ echo fixture.ssh_navigation_exit_exceeded_two_seconds >&2;exit 1;};attempt=$((attempt+1));sleep 0.1;done
  await_count profiles_listed 2
