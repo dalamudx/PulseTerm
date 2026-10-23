@@ -1074,7 +1074,7 @@ run = [
   "pnpm --filter ui build",
   "cargo build -p xtask --features ssh-target-probe --locked",
   "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulse --bin pulseterm-workspace --locked",
-  "timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-interactive-wm.log bash scripts/probe-workspace-route-interactive.sh",
+  "timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh route",
 ]
 
 
@@ -1085,7 +1085,7 @@ run = [
   "pnpm --filter ui build",
   "cargo build -p xtask --features ssh-target-probe --locked",
   "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulse --bin pulseterm-workspace --locked",
-  "timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/temporary-interactive-wm.log sh scripts/probe-workspace-temporary-interactive.sh",
+  "timeout --kill-after=5s 120s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/temporary-interactive-wm.log sh scripts/probe-workspace-ssh-interactive.sh temporary",
 ]
 
 [tasks.probe-workspace-key-interactive]
@@ -1100,7 +1100,7 @@ trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask"
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/key-interactive-wm.log sh scripts/probe-workspace-key-interactive.sh
+timeout --kill-after=5s 150s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/key-interactive-wm.log sh scripts/probe-workspace-ssh-interactive.sh key
 """
 
 
@@ -1117,7 +1117,7 @@ trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-key-interactive-test-server.json
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-key-interactive-wm.log sh scripts/probe-workspace-cli-key-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-key-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh cli-key
 """
 
 
@@ -1134,7 +1134,7 @@ trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/route-key-interactive-test-server.json
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-key-interactive-wm.log sh scripts/probe-workspace-route-key-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-key-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh route-key
 """
 
 [tasks.probe-workspace-password-interactive]
@@ -1152,7 +1152,7 @@ cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspa
 cargo test -p xtask --features ssh-target-probe --locked password_joint_requires_actual_partial_success_and_mfa
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/workspace-password-interactive/server-provenance.json password
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-password-interactive-wm.log sh scripts/probe-workspace-password-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/workspace-password-interactive-wm.log sh scripts/probe-workspace-ssh-interactive.sh password
 """
 
 [tasks.probe-workspace-agent-interactive]
@@ -1168,7 +1168,7 @@ trap 'rm -rf -- "$fixture_dir"' EXIT
 export TMPDIR="$fixture_dir" TMP="$fixture_dir" TEMP="$fixture_dir"
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/agent-interactive-test-server.json
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/agent-interactive-wm.log sh scripts/probe-workspace-agent-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/agent-interactive-wm.log sh scripts/probe-workspace-ssh-interactive.sh agent
 """
 
 
@@ -1186,7 +1186,7 @@ pnpm --filter ui build
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-agent-interactive-test-server.json
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-agent-interactive-wm.log sh scripts/probe-workspace-cli-agent-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-agent-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh cli-agent
 """
 
 [tasks.probe-workspace-cli-password-interactive]
@@ -1203,7 +1203,7 @@ pnpm --filter ui build
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/cli-password-interactive-test-server.json password
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-password-interactive-wm.log sh scripts/probe-workspace-cli-password-interactive.sh
+timeout --kill-after=5s 180s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/cli-password-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh cli-password
 """
 
 [tasks.probe-workspace-route-password-interactive]
@@ -1220,7 +1220,7 @@ pnpm --filter ui build
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml --features workspace-cli,workspace-ssh,tauri/custom-protocol --bin pulseterm-workspace --bin pulse --locked
 python3 scripts/build-key-interactive-fixture.py "$fixture_dir/xtask" target/probes/route-password-interactive-test-server.json password
 export PULSE_SSH_FIXTURE_EXECUTABLE="$fixture_dir/xtask"
-timeout --kill-after=5s 240s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-password-interactive-wm.log sh scripts/probe-workspace-route-password-interactive.sh
+timeout --kill-after=5s 240s xvfb-run -a -s '-screen 0 1280x900x24' dbus-run-session -- sh scripts/probe-window-x11.sh target/probes/route-password-interactive-wm.log sh scripts/probe-workspace-cli-interactive.sh route-password
 """
 
 
@@ -1596,10 +1596,8 @@ run = [
   "mise run check",
   "mise run check-core-features",
   "mise run test-ssh-agent-transport",
-  "mise run check-platform",
-  "mise run check-windows-settings",
+  "cargo clippy -p pulse-platform --all-targets --locked -- -D warnings",
   "mise run workspace-language-check",
-  "mise run third-party-check",
   "mise run terminal-vendor-check",
   "mise run terminal-vendor-test",
   "mise run test",
@@ -1626,6 +1624,21 @@ run = [
   "mise exec -- cargo test -p pulseterm-desktop --features desktop --locked",
 ]
 
+[tasks.ci-product]
+description = "Linux production adapter and SSH authorization tests without GUI automation"
+run = [
+  "mise run check-ssh-adapters",
+  "cargo test -p pulse-store --features ssh-trust --locked",
+  "cargo test -p pulse-ssh --all-features --locked",
+  "cargo test -p pulse-app --features ssh-use --locked",
+  "cargo test -p pulseterm-desktop --lib --features workspace --locked",
+  "cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked",
+]
+
+[tasks.ci-load]
+description = "Linux release load and startup acceptance"
+run = ["mise run probe-workspace-load-state", "mise run probe-workspace-startup"]
+
 [tasks.ci-unix]
 description = "Unix platform probes"
 run = [
@@ -1643,8 +1656,6 @@ run = [
 description = "Linux protocol and native probes"
 env = { PULSE_NATIVE_PARALLEL_CYCLES = "2" }
 run = [
-  "mise run distribution-review",
-  "mise run audit-check",
   "mise run probe-native-parallel",
   "mise run probe-theme-file",
   "mise run probe-software",
@@ -1660,10 +1671,6 @@ run = [
   "mise run probe-ssh-config",
   "mise run probe-ssh-config-page",
   "mise run probe-ssh-first-pin",
-  "mise exec -- cargo test -p pulse-store --features ssh-trust --locked",
-  "mise exec -- cargo test -p pulse-ssh --all-features --locked",
-  "mise exec -- cargo test -p pulse-app --features ssh-use --locked",
-  "mise run check-ssh-adapters",
   "mise run check-startup-diagnostics",
   "sudo mkdir -p /run/sshd",
   "mise run probe-ssh-system",
@@ -1684,12 +1691,13 @@ run = [
 ]
 
 [tasks.ci-workspace]
-description = "Linux workspace integration"
+description = "All Linux GUI acceptance suites (manual; select a smaller suite for development)"
+run = ["mise run ci-auth", "mise run ci-cli", "mise run ci-terminal", "mise run ci-catalogue"]
+
+[tasks.ci-auth]
+description = "Linux auth GUI acceptance"
 run = [
   "sh scripts/test-probe-x11-status.sh",
-  "mise run probe-workspace-close-duplicate",
-  "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace --locked",
-  "mise exec -- cargo test -p pulseterm-desktop --lib --features workspace-ssh --locked",
   "mise run probe-workspace-fingerprint",
   "mise run probe-workspace-ssh-session",
   "mise run probe-workspace-ssh-interactive",
@@ -1705,17 +1713,19 @@ run = [
   "mise run probe-workspace-cli-password-interactive",
   "mise run probe-workspace-route-password-interactive",
   "mise run probe-workspace-route-agent-interactive",
-  "mise run probe-workspace-settings-contract",
-  "mise run probe-workspace-scroll-settings",
-  "mise run probe-workspace-history-stop",
-  "mise run probe-workspace-ime",
-  "mise run probe-workspace-fcitx-input",
-  "mise run probe-workspace-ssh-settings",
   "mise run probe-workspace-ssh-private-key-session",
-  "mise run probe-workspace-reload",
-  "mise run probe-workspace-terminal",
-  "mise run probe-keymap",
-  "mise run probe-workspace-commands",
+  "mise run probe-workspace-temporary-ssh",
+  "mise run probe-workspace-ssh-route",
+  "mise run probe-workspace-ssh-agent",
+  "mise run probe-workspace-ssh-agent-route",
+  "mise run probe-workspace-key-import",
+  "mise run probe-workspace-vault",
+  "mise run probe-workspace-vault-revocation",
+]
+
+[tasks.ci-cli]
+description = "Linux cli GUI acceptance"
+run = [
   "mise run probe-workspace-cli",
   "mise run probe-workspace-single-instance",
   "mise run probe-workspace-cold-focus",
@@ -1743,23 +1753,48 @@ run = [
   "mise run probe-workspace-cli-multiwindow",
   "mise run probe-workspace-cli-multiwindow-ssh",
   "mise run probe-workspace-saved-ssh-alias",
+  "mise run probe-workspace-clipboard",
+  "mise run probe-workspace-right-click-paste",
+  "mise run probe-workspace-nested-cli",
+]
+
+[tasks.ci-terminal]
+description = "Linux terminal GUI acceptance"
+run = [
+  "mise run probe-workspace-close-duplicate",
+  "mise run probe-workspace-scroll-settings",
+  "mise run probe-workspace-history-stop",
+  "mise run probe-workspace-ime",
+  "mise run probe-workspace-fcitx-input",
+  "mise run probe-workspace-reload",
+  "mise run probe-workspace-terminal",
+  "mise run probe-keymap",
+  "mise run probe-workspace-commands",
   "mise run probe-workspace-keymap",
   "mise run probe-workspace-keymap-state",
   "mise run probe-workspace-resize-lifecycle",
-  "mise run probe-workspace-clipboard",
   "mise run probe-workspace-bracketed-paste",
   "mise run probe-workspace-vim",
   "mise run probe-workspace-history-copy",
   "mise run probe-workspace-selection-copy",
-  "mise run probe-workspace-right-click-paste",
+  "mise run probe-workspace-page-readiness",
+  "mise run probe-workspace-dpi",
+  "mise run probe-workspace-ligatures",
+  "mise run probe-workspace-split",
+  "mise run probe-workspace-nested",
+  "mise run probe-workspace-tabs",
+]
+
+[tasks.ci-catalogue]
+description = "Linux catalogue GUI acceptance"
+run = [
+  "mise run probe-workspace-settings-contract",
+  "mise run probe-workspace-ssh-settings",
   "mise run probe-workspace-profiles",
   "mise run probe-workspace-profile-default",
   "mise run probe-workspace-profile-editor",
   "mise run probe-workspace-profile-lifecycle",
   "mise run probe-workspace-settings",
-  "mise run probe-workspace-page-readiness",
-  "mise run probe-workspace-dpi",
-  "mise run probe-workspace-ligatures",
   "mise run probe-workspace-hosts",
   "mise run probe-workspace-catalogue-batch",
   "mise run probe-workspace-organization",
@@ -1767,27 +1802,16 @@ run = [
   "mise run probe-workspace-quick-connect",
   "mise run probe-workspace-fuzzy-search",
   "mise run probe-workspace-host-endpoints",
-  "mise run probe-workspace-temporary-ssh",
   "mise run probe-workspace-ssh-profiles",
   "mise run probe-workspace-ssh-jump-config",
-  "mise run probe-workspace-ssh-route",
   "mise run probe-workspace-ssh-config",
   "mise run probe-ssh-config-import",
   "mise run probe-workspace-ssh-config-import",
   "mise run probe-workspace-ssh-config-status",
-  "mise run probe-workspace-ssh-agent",
-  "mise run probe-workspace-ssh-agent-route",
   "mise run probe-workspace-identities",
   "mise run probe-workspace-key-identities",
-  "mise run probe-workspace-key-import",
   "mise run probe-workspace-identity-password",
-  "mise run probe-workspace-vault",
-  "mise run probe-workspace-vault-revocation",
   "mise run probe-workspace-labels",
-  "mise run probe-workspace-split",
-  "mise run probe-workspace-nested",
-  "mise run probe-workspace-nested-cli",
-  "mise run probe-workspace-tabs",
 ]
 
 [tasks.ci-window]

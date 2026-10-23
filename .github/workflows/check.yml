@@ -3,10 +3,14 @@ name: Check
 on:
   workflow_dispatch:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -15,6 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Linux dependencies
@@ -24,7 +29,7 @@ jobs:
           sudo install -d -m 1777 /data/temp
           sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends fonts-droid-fallback fonts-noto-mono fonts-urw-base35 libwebkit2gtk-4.1-dev libgtk-3-dev at-spi2-core xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr openssh-client openssh-server vim less htop tmux strace ibus ibus-gtk3 ibus-libpinyin fcitx5 fcitx5-pinyin fcitx5-frontend-gtk3 tesseract-ocr-chi-sim fonts-noto-cjk
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev openssh-client
       - uses: jdx/mise-action@v3
       - name: Temporary storage
         if: runner.os != 'Windows'
@@ -37,111 +42,63 @@ jobs:
             printf '%s=%s\n' "$name" "$scratch" >> "$GITHUB_ENV"
           done
       - run: mise run bootstrap
-        id: bootstrap
-      - name: Core
-        run: mise run ci-core
-      - name: CLI transport
-        if: runner.os == 'Linux' || runner.os == 'Windows'
-        run: mise run test-cli-transport
-      - name: Windows config
-        if: runner.os == 'Windows'
-        run: mise run test-windows-ssh-config
-      - name: Unix
-        if: runner.os != 'Windows'
-        run: mise run ci-unix
-      - name: Linux protocols
-        if: runner.os == 'Linux'
-        run: mise run ci-linux
-      - name: Workspace
-        if: runner.os == 'Linux'
-        run: mise run ci-workspace
-      - name: Appearance
-        if: runner.os == 'Linux'
-        run: mise run ci-appearance
-      - name: Validation windows
-        if: runner.os == 'Linux'
-        run: mise run ci-window
-      - name: License texts
-        if: ${{ !cancelled() && runner.os == 'Linux' && steps.bootstrap.outcome == 'success' }}
-        run: mise run third-party-release-check
-      - name: Audit
-        if: ${{ !cancelled() && runner.os == 'Linux' && steps.bootstrap.outcome == 'success' }}
-        run: mise run audit
+      - run: mise run ci-core
+      - name: Platform
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) mise run test-cli-transport; mise run ci-unix; mise run ci-product ;;
+            macOS) mise run ci-unix ;;
+            Windows) mise run check-windows-settings; mise run test-cli-transport; mise run test-windows-ssh-config ;;
+          esac
       - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminal-probe-${{ matrix.os }}
+          name: checks-${{ matrix.os }}
           path: |
-            target/probes/*.json
-            target/probes/profile-store/**
-            target/probes/windows-product-native/**
-            target/probes/windows-cli/**
-            target/probes/dependency-audit/**
-            target/probes/distribution-review*.log
-            target/probes/distribution-review*.md
-            target/probes/distribution-review-graphs/**
-            target/probes/third-party-*.log
-            target/probes/workspace-*.log
-            target/probes/workspace-profiles-round-*.png
-            target/probes/workspace-fingerprint-*
-            target/probes/workspace-ssh-*
-            target/probes/workspace-*-interactive/**
-            target/probes/*-interactive-*
-            target/probes/workspace-close-duplicate-*.png
-            target/probes/window-manager.log
-            target/probes/window-external-actions.log
+            target/probes/**/*.json
+            target/probes/**/*.log
           if-no-files-found: ignore
-      - name: Attribution
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: third-party-${{ matrix.os }}
-          path: |
-            NOTICE
-            THIRD_PARTY.md
-            third-party/**
-          if-no-files-found: error
 
-  terminal-load:
-    name: Linux load
+  release-gates:
+    name: Release gates
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
       - name: Temporary storage
         run: |
           sudo install -d -m 1777 /data/temp
-          load_tmp=$(mktemp -d /data/temp/pulseterm-load-ci.XXXXXX)
-          echo "TMPDIR=$load_tmp" >> "$GITHUB_ENV"
-          echo "TMP=$load_tmp" >> "$GITHUB_ENV"
-          echo "TEMP=$load_tmp" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_DIR=$load_tmp/target" >> "$GITHUB_ENV"
-      - uses: jdx/mise-action@v3
-      - name: Linux dependencies
-        timeout-minutes: 15
-        run: |
-          sudo sed -i 's|http://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends fonts-droid-fallback fonts-noto-mono fonts-urw-base35 libwebkit2gtk-4.1-dev libgtk-3-dev at-spi2-core xvfb dbus-x11 openbox x11-utils xdotool imagemagick tesseract-ocr
+          scratch=$(mktemp -d /data/temp/pulseterm-release.XXXXXX)
+          for name in TMPDIR TMP TEMP; do
+            printf '%s=%s\n' "$name" "$scratch" >> "$GITHUB_ENV"
+          done
       - run: mise run bootstrap
-      - name: Load and startup
+        id: bootstrap
+      - name: Attribution
+        run: mise run third-party-check
+      - name: Dependency scope
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: mise run distribution-review
+      - name: License texts
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: mise run third-party-release-check
+      - name: Audit
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
         run: |
-          mise run probe-workspace-load-state
-          mise run probe-workspace-startup
+          mise run audit-check
+          mise run audit
       - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminal-load-linux
+          name: release-gates
           path: |
-            target/probes/workspace-load/**
-            target/probes/workspace-startup/**
-          if-no-files-found: warn
-      - name: Cleanup
-        if: always()
-        run: |
-          case "$TMPDIR" in
-            /data/temp/pulseterm-load-ci.*) rm -rf -- "$TMPDIR" ;;
-            *) exit 1 ;;
-          esac
+            target/probes/dependency-audit/**
+            target/probes/distribution-review*
+            target/probes/third-party*
+            NOTICE
+            THIRD_PARTY.md
+            third-party/**

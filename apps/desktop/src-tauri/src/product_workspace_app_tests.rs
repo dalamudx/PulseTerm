@@ -127,6 +127,7 @@ async fn native_context_retirement_keeps_other_reader_and_same_real_sql_worker_u
 #[tokio::test]
 async fn independent_keymap_pages_reject_stale_save_and_survive_other_window_retirement()
 -> TestResult {
+    let _serial = KEYMAP_TESTS.lock().await;
     let application = application();
     let (a, _, page_a) = window(&application);
     let (b, _, page_b) = window(&application);

@@ -304,7 +304,7 @@ pnpm tauri build                   # 本地打包
 
 ### 通用
 - 提交信息遵循 Conventional Commits（`feat(ssh): …`、`fix(term): …`）。scope 使用 crate 名去掉 `pulse-` 前缀，或前端的功能模块名。**提交信息只描述技术或产品变更，禁止排期、日期、Sprint、周数或里程碑安排等描述。**
-- 发现代码、分析符号引用/调用关系及依赖影响优先使用 Astrolabe；写入前读取当前文件，写入后请求诊断并运行针对性编译与测试。语言服务器不可用时不得把空诊断视为通过，也不得未经授权自动安装。
+- 代码发现和调用关系使用当前 FFF／ast-sgrep 工具，写入前核对源码，修改后运行针对性检查。语言服务器不可用不算通过，也不得未经授权安装。
 - 采用主干开发：功能分支保持短小，通过 PR 合并到 `main`，采用 squash 合并。PR 要引用对应的功能 ID（例如 `SSH-04`）。
 - 改动影响架构时，先在 `docs/architecture/decisions.md` 登记 ADR；修改 IPC 协议、数据库 schema 或 action id 时，要在 PR 中单独说明兼容性影响。
 
@@ -319,17 +319,32 @@ pnpm tauri build                   # 本地打包
 | 界面交互 | 组件测试；关键流程要有端到端测试 |
 | 性能敏感路径 | 运行 `cargo xtask bench` 并把结果贴在 PR 中。不允许超出 features.md §18 的预算 |
 
+日常运行 `mise run check` 与改动涉及的测试；不要求每次改动跑完整实窗矩阵。`ci-core` 是三平台基础检查，`ci-product` 是 Linux 完整产品适配和 SSH 授权回归，不依赖 OCR 或图形窗口。
+
+| 专项入口 | 使用场景 |
+|---|---|
+| `mise run ci-linux` | SSH 互通、压力及原生协议探针 |
+| `mise run ci-auth` | 信任、Vault、认证、MFA 与原生连接退出 |
+| `mise run ci-cli` | CLI 冷暖启动、路由与窗口批准 |
+| `mise run ci-terminal` | 终端、输入法、复制粘贴、刷新和关闭 |
+| `mise run ci-catalogue` | Profile、Host、Identity、设置与配置导入 |
+| `mise run ci-appearance` / `ci-window` | 外观及独立验证窗口 |
+| `mise run ci-load` | release 1GiB 负载与启动采样 |
+
+具体问题优先运行已有的单个 `probe-*` 任务。`ci-workspace` 保留为四组 GUI 套件的串行总入口，不再随 push 自动执行。手动 Validation 的 `all` 会独立运行全部专项组，一组失败不遮住其他组。专项未运行就是未验证；现有 AT-SPI 间歇故障、性能、原生使用链和发行阻塞继续保留，不能因默认检查变少而标为通过。
+
 ## 6. CI
 
 | 已实现工作流 | 触发方式 | 范围与证据 |
 |---|---|---|
-| [check.yml](../../.github/workflows/check.yml) | PR／push／手动 | 三平台核心与组件、Linux 产品实窗、release 负载；依赖审计和完整许可门禁保留，上传各自探针证据 |
+| [check.yml](../../.github/workflows/check.yml) | PR／main push／手动 | 三平台核心与组件、平台测试；Linux 产品与 SSH 授权回归。发行归属、依赖范围、许可原文与审计在独立 job，失败仍阻断发行 |
+| [validation.yml](../../.github/workflows/validation.yml) | 仅手动 | 按需选择协议、认证、CLI、终端、目录管理、外观、验证窗口或负载；选择 all 时分组并行，保留各组证据 |
 | [windows-product.yml](../../.github/workflows/windows-product.yml) | 相关路径 PR／手动 | MSVC 精确原生用例、PS5.1 采集回归、完整桌面检查与本地工作区构建，上传逐组原始日志 |
 
 当前远端为 [GitHub 仓库](https://github.com/dalamudx/PulseTerm)，工作流入口统一在 `.github/workflows/`。按具体 job／步骤／收据判断实际结果；现有维护公告与完整许可原文缺口继续阻断发行，不通过忽略步骤或删除依赖范围获得绿色状态。
 
 三平台核心／组件和 Windows MSVC 工作流不代替普通用户 GUI、系统 IME 或真实 GPU 验收。Python 与其他工具版本统一由 `.mise.toml` 安装，避免系统 Python 缺少 `tomllib` 导致许可检查未执行。
-`interop.yml`、`bench.yml`、`e2e.yml` 和签名／公证／更新的 `release.yml` 尚未实现；它们属于计划目标，不是当前可运行 CI。发布前补齐真实平台、互通、性能、密钥配置及失败恢复，见[下一阶段计划](next-stage-plan.md)。
+跨平台外部互通、真实硬件性能及签名／公证／更新发布仍需专门环境和流程；手动 Linux 验收不代表这些门禁完成。见[下一阶段计划](next-stage-plan.md)。
 
 ## 7. 发布
 
