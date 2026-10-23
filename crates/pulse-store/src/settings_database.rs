@@ -7,12 +7,23 @@ use crate::{
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
 use uuid::Uuid;
+fn sql_error(_stage: &'static str, _error: rusqlite::Error) -> StoreError {
+    // Synthetic tests only: no SQL message, path or settings contents.
+    #[cfg(test)]
+    if let rusqlite::Error::SqliteFailure(code, _) = &_error {
+        eprintln!(
+            "store.settings_sql_failure stage={_stage} primary={:?} extended={}",
+            code.code, code.extended_code
+        );
+    }
+    StoreError::Database
+}
 pub(crate) fn load(
     connection: &Connection,
     scope: SettingsScope,
 ) -> Result<ScopedSettingsSnapshot> {
     let key = scope.key()?;
-    let row:Option<(i64,Vec<u8>)>=connection.query_row("SELECT length(CAST(value AS BLOB)),substr(CAST(value AS BLOB),1,8193) FROM app_state WHERE key=?1",[key],|row|Ok((row.get(0)?,row.get(1)?))).optional().map_err(|_|StoreError::Database)?;
+    let row:Option<(i64,Vec<u8>)>=connection.query_row("SELECT length(CAST(value AS BLOB)),substr(CAST(value AS BLOB),1,8193) FROM app_state WHERE key=?1",[key],|row|Ok((row.get(0)?,row.get(1)?))).optional().map_err(|error| sql_error("read", error))?;
     match row {
         None => Ok(ScopedSettingsSnapshot::empty(scope)),
         Some((length, bytes)) if (0..=RECORD_LIMIT as i64).contains(&length) => {
@@ -41,7 +52,7 @@ pub(crate) fn write(
         revision,
         patch,
     };
-    transaction.execute("INSERT INTO app_state(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",rusqlite::params![scope.key()?,next.encode()?]).map_err(|_|StoreError::Database)?;
+    transaction.execute("INSERT INTO app_state(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",rusqlite::params![scope.key()?,next.encode()?]).map_err(|error| sql_error("write", error))?;
     Ok(next)
 }
 pub(crate) fn edit(
@@ -50,12 +61,14 @@ pub(crate) fn edit(
     edit: ScopedSettingsEdit,
 ) -> Result<ScopedSettingsSnapshot> {
     let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)
-        .map_err(|_| StoreError::Database)?;
+        .map_err(|error| sql_error("edit.begin", error))?;
     let current = load(&transaction, scope)?;
     let mut patch = current.patch.clone();
     edit.apply(&mut patch)?;
     let next = write(&transaction, scope, current, patch)?;
-    transaction.commit().map_err(|_| StoreError::Database)?;
+    transaction
+        .commit()
+        .map_err(|error| sql_error("edit.commit", error))?;
     Ok(next)
 }
 pub(crate) fn replace(
@@ -64,13 +77,15 @@ pub(crate) fn replace(
     patch: SettingsPatch,
 ) -> Result<ScopedSettingsSnapshot> {
     let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)
-        .map_err(|_| StoreError::Database)?;
+        .map_err(|error| sql_error("replace.begin", error))?;
     let current = load(&transaction, expected.scope)?;
     if current.revision != expected.revision || current.patch != expected.patch {
         return Err(StoreError::SettingsConflict);
     }
     let next = write(&transaction, expected.scope, current, patch)?;
-    transaction.commit().map_err(|_| StoreError::Database)?;
+    transaction
+        .commit()
+        .map_err(|error| sql_error("replace.commit", error))?;
     Ok(next)
 }
 pub(crate) fn layers(
@@ -79,9 +94,11 @@ pub(crate) fn layers(
     host: Option<Uuid>,
 ) -> Result<SettingsLayers> {
     let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Deferred)
-        .map_err(|_| StoreError::Database)?;
+        .map_err(|error| sql_error("layers.begin", error))?;
     let result = read_layers(&transaction, group, host)?;
-    transaction.commit().map_err(|_| StoreError::Database)?;
+    transaction
+        .commit()
+        .map_err(|error| sql_error("layers.commit", error))?;
     Ok(result)
 }
 pub(crate) fn read_layers(

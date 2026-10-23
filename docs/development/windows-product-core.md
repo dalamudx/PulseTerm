@@ -1,6 +1,6 @@
 # Windows 生产链与原生验收
 
-Windows 本地、SSH 和 CLI 入口已接线并完成共享回归及 GNU 交叉检查，尚未取得当前生产链的 MSVC／普通用户实窗验收。原存储 v3 的管理员环境 39/39 只证明当时的存储基础，不能覆盖新增生产用例。阶段退出条件见[下一阶段计划](next-stage-plan.md)。
+Windows 本地、SSH 和 CLI 入口已接线。22 项 MSVC 生产前置用例及完整桌面检查／构建已通过（CI `39951227031`，提权 runner，夹具进程明确选择当前账户为新文件默认所有者）；普通用户实窗尚待验收。原存储 v3 的管理员环境 39/39 只证明当时的存储基础。后续日常 CI `39964720241` 在独立 worker 并发设置编辑出现 `store.database_failed`，具体 SQLite 阶段仍在调查，不能以旧成功覆盖。阶段退出条件见[下一阶段计划](next-stage-plan.md)。
 
 ## 实现范围
 
@@ -13,16 +13,16 @@ Windows 本地、SSH 和 CLI 入口已接线并完成共享回归及 GNU 交叉�
 | SSH | 显式 `workspace-ssh` 接入密码、私钥、Agent、MFA、临时目标、跳板和配置导入；保持实际 peer、Vault epoch 和退出监督 | [Windows SSH](../architecture/windows-ssh-product.md) |
 | CLI | 显式 `workspace-cli` 接入账户核验命名管道、精确窗口路由和固定同伴冷启动；部分／陈旧端点不修复，二实例参数转发拒绝 | [Windows CLI](../architecture/windows-cli-control.md) |
 
-普通 `workspace` 不自动启用 SSH／CLI，现有本地验证包范围不变。CLI 支持离线双语帮助／版本，以及使用已保存默认身份的分屏；缺少默认项不回退，读取不覆盖 GUI 编辑票据，冷分屏仍需两次批准。`pulse .` 当前目录交接尚未实现。使用方式见[CLI 手册](../user/cli.md)。
+普通 `workspace` 不自动启用 SSH／CLI，现有本地验证包范围不变。CLI 支持离线双语帮助／版本，以及使用已保存默认身份的分屏；缺少默认项不回退，读取不覆盖 GUI 编辑票据，冷分屏仍需两次批准。`pulse .` 当前目录交接已实现，Linux 冷暖与拒绝实窗通过，Windows 实窗仍待验收。使用方式见[CLI 手册](../user/cli.md)。
 
 ## 原生 CI 入口
 
 | 入口 | 执行范围 | 证据边界 |
 |---|---|---|
-| [check.yml](../../.github/workflows/check.yml) | 三平台核心、平台策略、Agent；Linux／Windows CLI 组件；Windows 配置来源；Linux 产品探针 | runner 权限及虚拟显示不代表普通用户、系统 IME 或真实 GPU |
+| [check.yml](../../.github/workflows/check.yml) | 三平台核心、平台策略、Agent；Linux／macOS／Windows CLI 组件；Windows 配置来源；Linux 产品探针 | runner 权限及虚拟显示不代表普通用户、系统 IME 或真实 GPU |
 | [windows-product.yml](../../.github/workflows/windows-product.yml) | MSVC 核心用例、PowerShell 5.1 采集、前端生成、完整桌面检查和本地工作区构建 | 可手动执行；上传逐组收据，不发布验证包或登记 GUI 通过 |
 | `mise run test-windows-product` | 固定 MSVC，逐项核对 22 项生产目录／设置／SQLite／键位／发现用例 | 零／部分／忽略／错名／重复／未知退出均失败；取消不能证明线程结束 |
-| `mise run test-cli-transport` | Linux 11 项协议；Windows 3 项同源管道及 4 项冷启动元数据夹具 | 不启动 GUI；元数据夹具不等于 CreateProcess 验收 |
+| `mise run test-cli-transport` | Linux／macOS 13 项协议与端点预留；Windows 3 项同源管道及 4 项冷启动元数据夹具 | 不启动 GUI；元数据夹具不等于 CreateProcess 验收 |
 | `mise run test-windows-ssh-config` | Windows 4 项同源来源／Include／替换保护夹具 | 不读取密钥，不代表 GUI 导入或 SSH 连接验收 |
 
 基础验证沿用 `mise run check`、`test`、`probe`、`audit`。组件执行器共用精确测试身份校验；Windows 核心收据保存独立 runId、源码指纹、stdout／stderr 和退出状态，失败撤销 latest 成功指针，历史批次保留。原生完成状态未知时停止后续组并保留夹具。

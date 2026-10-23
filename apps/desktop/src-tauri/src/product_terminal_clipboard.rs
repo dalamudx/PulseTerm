@@ -1,21 +1,28 @@
 //! One-use clipboard reads bound to a confirmed input view; native callbacks own credit.
 use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(target_os = "linux", test))]
 use tokio::sync::OwnedSemaphorePermit;
+#[cfg(any(target_os = "linux", test))]
 const CLIPBOARD_DEADLINE: Duration = Duration::from_secs(5);
 #[derive(Clone)]
 pub(super) struct Grant {
     id: Uuid,
     nonce: Uuid,
+    #[cfg(any(target_os = "linux", test))]
     connection: Uuid,
+    #[cfg(any(target_os = "linux", test))]
     pub(super) expires: tokio::time::Instant,
     cancelled: Arc<AtomicBool>,
+    #[cfg(any(target_os = "linux", test))]
     started: bool,
 }
+#[cfg(any(target_os = "linux", test))]
 pub(super) struct ReadJob {
     grant: Grant,
     _credit: OwnedSemaphorePermit,
 }
+#[cfg(any(target_os = "linux", test))]
 impl ReadJob {
     pub(super) fn current(&self, bank: &TerminalBank) -> Result<()> {
         if self.grant.cancelled.load(Ordering::SeqCst)
@@ -27,6 +34,7 @@ impl ReadJob {
     }
 }
 impl TerminalBank {
+    #[cfg(any(target_os = "linux", test))]
     fn clipboard_current(&self, nonce: Uuid, connection: Uuid) -> Result<()> {
         let entry = self.entry(nonce, connection)?;
         let _admission = entry
@@ -44,6 +52,7 @@ impl TerminalBank {
             .check_current()
             .map_err(|_| "workspace.denied")
     }
+    #[cfg(any(target_os = "linux", test))]
     pub(super) fn prepare_clipboard(&self, nonce: Uuid, connection: Uuid) -> Result<Uuid> {
         self.clipboard_current(nonce, connection)?;
         let mut slot = self.clipboard.lock().map_err(|_| "workspace.unavailable")?;
@@ -76,6 +85,7 @@ impl TerminalBank {
         }
         Ok(())
     }
+    #[cfg(any(target_os = "linux", test))]
     pub(super) fn begin_clipboard(&self, nonce: Uuid, id: Uuid) -> Result<ReadJob> {
         let mut slot = self.clipboard.lock().map_err(|_| "workspace.unavailable")?;
         let grant = slot
