@@ -124,7 +124,18 @@ def authenticate():
     fill('Second verification code', '654321')
     click('提交本轮回答')
 def refused(streams):
-    wait(lambda: accessible(failure), 'refused')
+    def visible_refusal():
+        visible = run([str(helper), str(app.pid), failure], False)
+        inspected = run([str(helper), str(app.pid), failure, 'inspect'], False)
+        (evidence / f'refusal-{streams}-accessibility.json').write_text(json.dumps({
+            'stage': stage, 'visibleExitCode': visible.returncode,
+            'inspectExitCode': inspected.returncode,
+            'states': inspected.stdout.decode(errors='replace').strip(),
+            'visibleDiagnostic': visible.stderr.decode(errors='replace').strip(),
+            'inspectDiagnostic': inspected.stderr.decode(errors='replace').strip(),
+        }, indent=2) + '\n')
+        return visible.returncode == 0
+    wait(visible_refusal, 'refused')
     wait(lambda: remote('ssh_password_joint_stream_exited') == streams, 'drained')
     assert native('ssh_session_opened') == 0 and snapshot() == baseline
     click('取消')
