@@ -87,6 +87,7 @@ jobs:
             target/probes/workspace-fingerprint-*
             target/probes/workspace-ssh-*
             target/probes/workspace-*-interactive/**
+            target/probes/*-interactive-*
             target/probes/workspace-close-duplicate-*.png
             target/probes/window-manager.log
             target/probes/window-external-actions.log

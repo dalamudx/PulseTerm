@@ -343,7 +343,17 @@ def unlock_without_confirming():
     xdo('key','--clearmodifiers','ctrl+a')
     xdo('type','--clearmodifiers','fixed-target-master')
     click('解锁保险库')
-    wait(lambda: accessible('已解锁 · 不代表允许 SSH 使用凭据').returncode == 0, 'vault_available')
+    def vault_available():
+        label = '已解锁 · 不代表允许 SSH 使用凭据'
+        visible = accessible(label)
+        inspected = accessible(label, 'inspect')
+        (evidence / (prefix+'-vault-accessibility.json')).write_text(json.dumps({
+            'visibleExitCode': visible.returncode, 'inspectExitCode': inspected.returncode,
+            'states': inspected.stdout.strip(),
+            'visibleDiagnostic': visible.stderr.strip(), 'inspectDiagnostic': inspected.stderr.strip(),
+        }, indent=2) + '\n')
+        return visible.returncode == 0
+    wait(vault_available, 'vault_available')
     assert pending_is_quiet(before) and client.poll() is None
     click('关闭')
     wait(lambda: accessible('查看目标').returncode == 0,'distinct_click')
