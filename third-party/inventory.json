@@ -443,7 +443,7 @@
   "generator": "scripts/third-party.py",
   "inputs": {
     "Cargo.lock": "00ee7680e51ef4d544b50a954fc0559b32b4c7c4ac1df8373e315b3432f7a0f0",
-    "Cargo.toml": "19fb8558bdf6de161ac81824c66ac44626069490ad67f68c75a16a7ff8939f92",
+    "Cargo.toml": "43f10f9e3861171f9226c0bc8e78bb882828db4a284aad90f8983af3053b9d6f",
     "apps/desktop/src-tauri/Cargo.toml": "ba3d19ad84fa082551f9a27e83d1d83ac76e893cd3e9afebe07b53844039722b",
     "crates/pulse-app/Cargo.toml": "5fcc9af854c6e8914b5561ec941db00a56b0b1265214896b4ac71b415000cac8",
     "crates/pulse-cap/Cargo.toml": "85dbc17c0de165c424cd3622bbf535708af47cec0269336c70e78f1cd009aaff",

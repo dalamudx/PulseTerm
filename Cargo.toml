@@ -42,7 +42,7 @@ tempfile = "3"
 base64 = "=0.22.1"
 thiserror = "2"
 objc2 = { version = "=0.6.4", default-features = false, features = ["std"] }
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWorkspace"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSPasteboard"] }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSURL"] }
 tauri = "=2.12.4"
 tauri-plugin-single-instance = "=2.5.3"

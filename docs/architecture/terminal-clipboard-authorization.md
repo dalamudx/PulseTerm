@@ -6,9 +6,9 @@
 
 右键粘贴只在已启用偏好、当前可输入 Surface、可见页面及真实右键事件中开始。终端处于鼠标报告模式时保留原报告行为，不读取剪贴板。读取结果进入原 PasteGate：最多 1012 UTF-8 字节，C0／C1 不支持项拒绝，多行仍须原页面和原视图的独立批准。读取本身不授权提交，输入仍须后端 verified Commit ACK 和 capture 确认。
 
-Linux 产品使用 `workspace_terminal_clipboard_prepare/read/cancel` 与异步 GTK `request_text`。准备固定原 WindowToken、page nonce、connection、已确认输入及五秒期限；随机一次性票据既不能换连接也不能重用。读开始、实际回调时都重验原连接与输入授权，回调还检查窗口焦点和当前页面。换页、resize、取消、关闭、过期或无法核实的状态拒绝晚到文本。新命令只返回该次明确读取的纯文本，不扩大终端 OSC 52 权限。
+Linux 与 macOS 产品复用 `workspace_terminal_clipboard_prepare/read/cancel`。准备固定原 WindowToken、page nonce、connection、已确认输入及五秒期限；随机一次性票据既不能换连接也不能重用。Linux 使用异步 GTK `request_text`；macOS 在主线程使用 AppKit `NSPasteboard`，只请求 `public.utf8-plain-text`，检查原生数据长度后才复制并严格解码 UTF-8。实际读取前后都重验原连接、输入授权、窗口焦点和当前页面。换页、resize、取消、关闭、过期或无法核实的状态拒绝晚到文本；命令只返回该次明确读取的纯文本，不扩大 OSC 52 权限。
 
-原生读全局单槽的 OwnedSemaphorePermit 由真正的 GTK 回调持有。前端超时或等待者取消可以撤销发布，不能提前释放额度；应用退出 barrier 等待实际读取结束。GTK 本身不提供可同步终止的文本请求或预先限制文本长度的接口，返回后才检查字节预算；期限不等于资源退出证明，回调未结束时仍需等待。非 Linux 的产品原生读取当前固定拒绝；独立浏览器 Surface 保留浏览器自身权限策略下的读取，不能作为跨平台产品验收。
+原生读全局单槽的 OwnedSemaphorePermit 由真正的 GTK 回调或 macOS 主线程读取闭包持有。前端超时或等待者取消可以撤销发布，不能提前释放额度；应用退出 barrier 等待实际读取结束。GTK 请求和 AppKit 原生读取都不提供这里可用的同步取消；期限不等于资源退出证明。系统提供者可能先分配原生文本，1012 字节检查限制返回和后续复制，不主张限制系统自身的分配。Windows 产品原生读取仍固定拒绝；独立浏览器 Surface 的权限策略不能代替平台产品验收。macOS 新增夹具使用独立命名剪贴板检查编码、预算和撤权，不访问用户的通用剪贴板；原生测试与真实右键、多行批准和退出使用链分别验收。
 
 当前 WebKit 在实际权限信号之前拒绝 Clipboard API 读取，未采用的全局 JavaScript 访问或单次 WebKit 许可候选均不启用。失败阶段只留固定状态证据，不记录剪贴板文本、票据或终端内容。
 

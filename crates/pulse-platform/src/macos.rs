@@ -1,4 +1,6 @@
-//! Restricted macOS system metadata and web handoff; no page, file or executable authority.
+//! Restricted macOS system integration; callers retain page authorization and native I/O credit.
+mod clipboard;
+pub use clipboard::{ClipboardReadError, read_clipboard_text};
 mod local_control;
 pub use crate::web_link::WebLinkError;
 pub use local_control::local_control_root;
