@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 -NativeOnly
 
 当前 checkout 的 GNU 验证 ZIP 仍受原始许可缺口阻断，本文运行步骤不代表已有可分发包。在具备 `.mise.toml` 工具及 Visual Studio C++／Windows SDK 的原生构建环境，可使用 `mise run test-windows-product`。该任务固定 MSVC 目标并逐项核对清单；不启动 GUI，也不产生普通用户验收或性能成绩。
 
-手动 `windows-product.yml` 还运行 `mise run probe-windows-product-window`，使用本次构建的真实工作区及 Windows UI Automation，核对后端发现的可见 Profile 按钮，明确调用一次 Command Prompt 按钮并等待15秒内出现唯一存活的 `cmd.exe` 子进程；不直接传递可执行路径或调用启动命令。正常关窗后检查零退出、原生排空标记与已观察到的Shell／WebView子进程退出；失败保留日志／可取得的窗口截图，强制清理不能算通过。收据逐次保存于 `target/probes/windows-product-window/<runId>/`，记录提权状态及Shell PID；仅在全新GitHub runner执行，拒绝已有产品数据，结束回收本次目录。已有最小窗口通过记录保持原范围，新增真实Shell步骤仍待原生验收；此入口不验证普通用户、键盘输入／回显、刷新、剪贴板、完整进程树或性能。
+手动 `windows-product.yml` 还运行 `mise run probe-windows-product-window`，使用本次构建的真实工作区及 Windows UI Automation，核对后端发现的可见 Profile 按钮，明确调用一次 Command Prompt 按钮并等待15秒内出现唯一存活的 `cmd.exe` 子进程；不直接传递可执行路径或调用启动命令。正常关窗后检查零退出、原生排空标记与已观察到的Shell／WebView子进程退出；失败保留日志／可取得的窗口截图，强制清理不能算通过。收据逐次保存于 `target/probes/windows-product-window/<runId>/`，记录提权状态及Shell PID；仅在全新GitHub runner执行，拒绝已有产品数据，结束回收本次目录。已有最小窗口通过记录保持原范围，真实Shell启动／正常关闭已在CI `40110510592`通过；此入口不验证普通用户、键盘输入／回显、刷新、剪贴板、完整进程树或性能。
 `target/probes/windows-product-native.json` 指向本次结果，独立目录 `target/probes/windows-product-native/<runId>/` 保存每组原始输出和摘要。失败同样生成新结果，保留旧批次；未知退出／超时不继续使用同一夹具。CI 上传完整结果目录。
 
 `mise run check-windows-product-runner` 是跨平台替身回归，不能当作 Windows 实机用例通过。

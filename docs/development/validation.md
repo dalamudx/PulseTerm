@@ -4,6 +4,12 @@
 
 当前测试选择与 CI 入口见[开发指南 §5–6](guide.md#5-测试要求)。本文是历史验收记录，不是每次改动都要执行的任务清单。
 
+## Windows 真实界面选择Shell与正常关闭
+
+`fa55f770` 扩展同一手动窗口检查：准确调用一次可见Command Prompt按钮，拒绝选择前已有cmd或一次选择产生多个cmd，十五秒内确认唯一存活Shell。CI `40110510592` 的PowerShell 5.1实际解析／执行、23项原生前置、完整MSVC检查／构建均通过。收据记录cmd PID 1568；原始日志有一次 `workspace.session_opened`、`workspace.profile_selected.cmd` 及正常关闭排空序列，9个已观察子进程退出，无强制回收、残留目录或清理错误。23项测试身份、9份源码摘要与日志顺序已独立复核，归档于 `target/probes/windows-product-window/shell-start-v1/accepted/40110510592/`。
+
+本机11项执行器与基础检查通过；PowerShell工具下载超时，原失败保留，本机未运行解析器。实际解析及行为由上述Windows原生结果确认。提权runner不能替代普通用户，键盘输入／回显、刷新、剪贴板和性能仍待验收。
+
 ## Windows 长 PATH 发现修复与最小真实窗口验收
 
 `457c6f22` 将 Windows PATH 发现预算从复用Unix的64段改为独立256段，保留64KiB总量、候选／路径预算及超限整体拒绝。旧runner继承PATH有76段；阶段诊断捕获 `profile.discovery_limit`，新增65／256段晚出现候选及首匹配优先回归在修复前失败。修复后50项PTY回归、完整产品严格检查和基础检查通过。`af7919f2` 同步原生清单为23项，11项执行器回归通过；此前漏同步清单而提前拒绝的CI `40107472037` 以及两轮实际发现失败均独立保留。
