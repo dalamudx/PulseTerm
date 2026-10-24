@@ -52,7 +52,7 @@ description = "Reject incomplete native test identities and preserve failed-run 
 run = "node --test scripts/windows-product-probe/test-native.test.mjs"
 
 [tasks.probe-windows-product-window]
-description = "Disposable Windows CI: actual workspace Profile controls and normal native shutdown; no ordinary-user or PTY acceptance"
+description = "Disposable Windows CI: visible Profile selection, actual cmd startup and normal shutdown; no ordinary-user, input or performance acceptance"
 run = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/windows-product-probe/window-smoke.ps1"
 
 [tasks.test-windows-product]

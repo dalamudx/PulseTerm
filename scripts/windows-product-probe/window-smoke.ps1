@@ -24,6 +24,7 @@ $original = @{ TMPDIR = $env:TMPDIR; TMP = $env:TMP; TEMP = $env:TEMP }
 $env:TMPDIR = $tempRoot; $env:TMP = $tempRoot; $env:TEMP = $tempRoot
 $app = $null; $started = $false; $stdout = $null; $stderr = $null; $failure = $null
 $ready = $false; $normalExit = $false; $drained = $false; $forced = $false
+$shellStarted = $false; $shellProcessId = $null
 $children = @{}; $cleanupErrors = @(); $visibleProfiles = @()
 function Remember-Children {
     if (!$app) { return }
@@ -76,13 +77,28 @@ try {
         if (!$ready) { Start-Sleep -Milliseconds 250 }
     } while (!$ready -and [DateTime]::UtcNow -lt $deadline)
     if (!$ready) { throw 'No visible enabled backend-discovered Profile button within 60 seconds.' }
+    $commandButtons = @($buttons | Where-Object { $_.Current.Name -eq 'Command Prompt' -and $_.Current.IsEnabled -and !$_.Current.IsOffscreen })
+    if ($commandButtons.Count -ne 1) { throw 'Expected exactly one visible enabled Command Prompt Profile button.' }
+    Remember-Children
+    if (@($children.Values | Where-Object { !$_.HasExited -and $_.ProcessName -eq 'cmd' }).Count) { throw 'Unexpected shell before explicit Profile selection.' }
+    $commandButtons[0].GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $shellDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+        if ($app.HasExited) { throw 'Product exited before the selected shell started.' }
+        Remember-Children
+        $shells = @($children.Values | Where-Object { !$_.HasExited -and $_.ProcessName -eq 'cmd' })
+        if ($shells.Count -gt 1) { throw 'One Profile selection created multiple command processors.' }
+        if ($shells.Count -eq 1) { $shellStarted = $true; $shellProcessId = $shells[0].Id }
+        else { Start-Sleep -Milliseconds 250 }
+    } while (!$shellStarted -and [DateTime]::UtcNow -lt $shellDeadline)
+    if (!$shellStarted) { throw 'Selected Command Prompt Profile did not create a live cmd process within 15 seconds.' }
     Remember-Children
     if (!$app.CloseMainWindow()) { throw 'Could not request native window close.' }
     if (!$app.WaitForExit(30000)) { throw 'Product did not exit within 30 seconds after close.' }
     $normalExit = $app.ExitCode -eq 0
     if (!$normalExit) { throw 'Product returned a nonzero exit code.' }
     foreach ($child in $children.Values) {
-        if (!$child.WaitForExit(10000)) { throw 'An observed WebView descendant remained after product exit.' }
+        if (!$child.WaitForExit(10000)) { throw 'An observed product descendant remained after product exit.' }
     }
     if (!$stderr.Wait(5000) -or !$stdout.Wait(5000)) { throw 'Output capture did not finish.' }
     $lines = $stderr.GetAwaiter().GetResult() -split '\r?\n'
@@ -92,7 +108,7 @@ try {
     $drained = $true
 } catch {
     $failure = $_.Exception.Message
-    # Diagnostic only: capture this empty product window, without dumping arbitrary UI text.
+    # Diagnostic only: capture this disposable fixture window, without dumping arbitrary UI text.
     try {
         if ($window) {
             Add-Type -AssemblyName System.Drawing
@@ -143,13 +159,13 @@ finally {
             }
         }
     }
-    $passed = $ready -and $normalExit -and $drained -and !$forced -and !$failure -and $cleanupErrors.Count -eq 0
+    $passed = $ready -and $shellStarted -and $normalExit -and $drained -and !$forced -and !$failure -and $cleanupErrors.Count -eq 0
     $receipt = [ordered]@{
         schemaVersion=1; runId=$runId; executableSha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
         elevatedRunner=$elevated; ordinaryUserAcceptance=$false; readyProfileButtons=$visibleProfiles
         workspaceVisible=$ready; normalExit=$normalExit; nativeLifecycleMarkersVerified=$drained
         observedDescendants=$children.Count; observedDescendantsCompletionConfirmed=(!$forced -and $normalExit -and !$cleanupErrors.Count)
-        sessionStarted=$false; clipboardValidated=$false; performanceValidated=$false
+        sessionStarted=$shellStarted; shellProcessId=$shellProcessId; inputValidated=$false; clipboardValidated=$false; performanceValidated=$false
         remainingFixturePaths=@(@($tempRoot) + @($dataRoots) | Where-Object { Test-Path -LiteralPath $_ })
         forcedCleanup=$forced; error=$failure; cleanupErrors=$cleanupErrors; passed=$passed
     }
