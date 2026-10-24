@@ -678,6 +678,7 @@ impl ProfileReader {
             &candidates,
         )
         .await
+        .inspect_err(|_| eprintln!("workspace.profiles_catalogue_failed"))
         .map_err(|_| "workspace.unavailable")?;
         self.check(&registry, &page)?;
         Ok(offers
@@ -709,6 +710,7 @@ impl ProfileReader {
             let candidates = {
                 let _ = (path, shell);
                 let system = pulse_platform::windows::system_directory()
+                    .inspect_err(|_| eprintln!("workspace.profiles_system_directory_failed"))
                     .map_err(|_| "workspace.unavailable")?;
                 let programs = std::env::var_os("ProgramFiles").map(PathBuf::from);
                 let distribution = pulse_platform::windows::default_wsl_distribution()
@@ -720,7 +722,9 @@ impl ProfileReader {
                     distribution.as_deref(),
                 )
             };
-            candidates.map_err(|_| "workspace.unavailable")
+            candidates
+                .inspect_err(|error| eprintln!("workspace.profiles_discovery_failed.{error}"))
+                .map_err(|_| "workspace.unavailable")
         })
         .await?;
         self.check(registry, page)?;
@@ -740,8 +744,11 @@ impl ProfileReader {
         let store = self
             .store
             .get_or_try_init(|| async {
-                let directory =
-                    blocking(credit.clone(), move || super::app_data::prepare(&directory)).await?;
+                let directory = blocking(credit.clone(), move || {
+                    super::app_data::prepare(&directory)
+                        .inspect_err(|_| eprintln!("workspace.profiles_directory_failed"))
+                })
+                .await?;
                 self.check(registry, page)?;
                 #[cfg(unix)]
                 let opened = StateStore::open(directory.join("state.db")).await;
@@ -752,7 +759,9 @@ impl ProfileReader {
                     credit.clone(),
                 )
                 .await;
-                let (store, task) = opened.map_err(|_| "workspace.unavailable")?;
+                let (store, task) = opened
+                    .inspect_err(|error| eprintln!("workspace.profiles_store_open_failed.{error}"))
+                    .map_err(|_| "workspace.unavailable")?;
                 if self.closed.load(Ordering::SeqCst) || self.storage.is_closed() {
                     task.shutdown().await.map_err(|_| "workspace.unavailable")?;
                     return Err("workspace.denied");

@@ -34,9 +34,14 @@ pub(super) fn admit(path: &Path) -> Result<Box<dyn DatabaseAdmission>> {
         return Err(StoreError::Location);
     }
     let parent = path.parent().ok_or(StoreError::Location)?;
-    let directory = PrivateDirectory::open(parent).map_err(|_| StoreError::Location)?;
+    let directory = PrivateDirectory::open(parent)
+        .inspect_err(|_| eprintln!("workspace.database_directory_admission_failed"))
+        .map_err(|_| StoreError::Location)?;
     Ok(Box::new(Admission(
-        directory.database().map_err(|_| StoreError::Location)?,
+        directory
+            .database()
+            .inspect_err(|_| eprintln!("workspace.database_file_admission_failed"))
+            .map_err(|_| StoreError::Location)?,
     )))
 }
 
