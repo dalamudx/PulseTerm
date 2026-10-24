@@ -18,7 +18,7 @@ export function runNative({ root, platform = process.platform, invoke = spawnSyn
   fs.mkdirSync(output, { recursive: true });
   const report = {
     schemaVersion: 2, runId, target, platform, nativeCorePassed: false,
-    selectedNativeTests: 22, verifiedNativeTests: 0,
+    selectedNativeTests: 23, verifiedNativeTests: 0,
     productionStartupValidated: false, ordinaryUserProductAcceptance: 'pending',
     nativeProcessCompletionConfirmed: true, sourceHashes: {}, groups: [], error: null,
     limits: ['Runner privileges do not establish ordinary-user acceptance', 'GUI, ConPTY, WSL and performance are not exercised by this task'],
@@ -26,7 +26,7 @@ export function runNative({ root, platform = process.platform, invoke = spawnSyn
   try {
     if (platform !== 'win32') throw new Error('Native Windows is required; this is not an acceptance pass.');
     const tests = definitions(root);
-    if (tests.length !== 22 || new Set(tests.map(t => t.name)).size !== 22) throw new Error('Review selected native coverage');
+    if (tests.length !== 23 || new Set(tests.map(t => t.name)).size !== 23) throw new Error('Review selected native coverage');
     for (const file of ['Cargo.lock', 'scripts/verify-native-tests.mjs', 'scripts/windows-product-probe/test-native.mjs', 'scripts/windows-product-probe/test-scope.mjs', ...groups.map(g => g.file)]) {
       report.sourceHashes[file] = sha(fs.readFileSync(path.join(root, file)));
     }
@@ -66,7 +66,7 @@ export function runNative({ root, platform = process.platform, invoke = spawnSyn
       if (!report.nativeProcessCompletionConfirmed) break;
     }
     if (report.groups.length !== groups.length || report.groups.some(g => !g.passed)
-        || report.verifiedNativeTests !== 22) throw new Error('Selected native groups did not all pass; inspect raw group logs.');
+        || report.verifiedNativeTests !== 23) throw new Error('Selected native groups did not all pass; inspect raw group logs.');
     report.nativeCorePassed = true;
   } catch (error) { report.error = error.message; }
   finally {

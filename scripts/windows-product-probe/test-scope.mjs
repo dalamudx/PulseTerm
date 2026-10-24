@@ -6,7 +6,7 @@ export const groups = [
   { binary: 'xtask-tests.exe', target: 'xtask', file: 'apps/desktop/src-tauri/src/product_app_data_windows_tests.rs', prefix: 'workspace_app_data::windows_tests::', count: 2 },
   { binary: 'xtask-tests.exe', target: 'xtask', file: 'apps/desktop/src-tauri/src/database_windows_tests.rs', prefix: 'workspace_database::tests::', count: 5 },
   { binary: 'xtask-tests.exe', target: 'xtask', file: 'apps/desktop/src-tauri/src/keymap_file_windows_tests.rs', prefix: 'windows_keymap::tests::', count: 4 },
-  { binary: 'pty-tests.exe', target: 'pulse_pty', file: 'crates/pulse-pty/src/profiles_windows.rs', prefix: 'profiles::windows::tests::', count: 4 },
+  { binary: 'pty-tests.exe', target: 'pulse_pty', file: 'crates/pulse-pty/src/profiles_windows.rs', prefix: 'profiles::windows::tests::', count: 5 },
 ];
 export function definitions(root) {
   return groups.flatMap(group => {

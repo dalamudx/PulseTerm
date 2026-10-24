@@ -47,11 +47,13 @@ test('zero, ignored, failed, measured and duplicate summaries reject', () => {
     output.replace('2 passed', '0 passed'), output + output,
   ]) assert.throws(() => verifyGroup(broken, expected));
 });
-test('22 selected identities and UTF-8 logs produce a bounded native-core receipt', t => {
+test('23 selected identities and UTF-8 logs produce a bounded native-core receipt', t => {
   const { root, invoke } = fixture(t);
   const report = runNative({ root, platform: 'win32', invoke });
   assert.equal(report.nativeCorePassed, true);
-  assert.equal(report.verifiedNativeTests, 22);
+  assert.equal(report.verifiedNativeTests, 23);
+  assert.equal(report.selectedNativeTests, 23);
+  assert.equal(report.groups.flatMap(group => group.tests).filter(name => name === 'profiles::windows::tests::long_windows_path_finds_late_pwsh_and_keeps_first_match').length, 1);
   assert.equal(report.productionStartupValidated, false);
   assert.equal(report.ordinaryUserProductAcceptance, 'pending');
   assert.equal(report.nativeProcessCompletionConfirmed, true);
@@ -69,7 +71,7 @@ test('nonzero native result preserves all group evidence without success', t => 
     return count++ === 0 ? { ...result, status: 101 } : result;
   } });
   assert.equal(report.nativeCorePassed, false);
-  assert.equal(report.verifiedNativeTests, 15);
+  assert.equal(report.verifiedNativeTests, 16);
   assert.equal(report.groups.length, 5);
   assert.equal(report.groups[0].exitCode, 101);
   assert.match(report.groups[0].error, /101/);

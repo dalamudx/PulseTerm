@@ -10,7 +10,7 @@ const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 export function assemble(root, artifactsDirectory, kit, compilerDocs) {
   const artifacts = ['xtask-tests','core-tests','xtask-main','workspace-main'].flatMap(name => fs.readFileSync(path.join(artifactsDirectory, name+'.jsonl'),'utf8').split('\n').filter(Boolean).map(JSON.parse)).filter(a => a.reason === 'compiler-artifact');
   const tests = definitions(root);
-  if (tests.length !== 22) throw new Error('Review selected native coverage');
+  if (tests.length !== 23) throw new Error('Review selected native coverage');
   fs.mkdirSync(kit,{recursive:true});
   for (const [target, test, name] of [['xtask',true,'xtask-tests.exe'],['pulse_pty',true,'pty-tests.exe'],['xtask',false,'backend-probe.exe'],['pulseterm-workspace',false,'PulseTerm-Workspace.exe']]) {
     const candidates = [...new Set(artifacts.filter(a => a.target.name === target && a.profile.test === test && a.executable?.endsWith('.exe')).map(a=>a.executable))];

@@ -30,7 +30,7 @@ try {
     $manifest=Get-Content -Encoding UTF8 -LiteralPath (Join-Path $kit 'native-tests.json') -Raw | ConvertFrom-Json
     $build=Get-Content -Encoding UTF8 -LiteralPath (Join-Path $kit 'build-info.json') -Raw | ConvertFrom-Json
     $expected=@($manifest.tests)
-    if ($manifest.schemaVersion -ne 1 -or $expected.Count -ne 22 -or @($expected.name|Sort-Object -Unique).Count -ne $expected.Count) { throw 'Review native coverage manifest.' }
+    if ($manifest.schemaVersion -ne 1 -or $expected.Count -ne 23 -or @($expected.name|Sort-Object -Unique).Count -ne $expected.Count) { throw 'Review native coverage manifest.' }
     New-Item -ItemType Directory -Path $fixture | Out-Null
     $created=$true; $env:TEMP=$fixture; $env:TMP=$fixture; $env:PULSETERM_PRODUCT_PROBE_ROOT=$fixture
     foreach ($binary in @('xtask-tests.exe','pty-tests.exe')) {
@@ -80,7 +80,7 @@ finally {
     }
     $corePassed=$corePassed -and $exited -and $created -and $removed -and !$cleanupErrors.Count
     $runs=@(); if (Get-Variable ProductRuns -Scope Script -ErrorAction SilentlyContinue) { $runs=@($script:ProductRuns) }
-    $summary=[pscustomobject]@{schemaVersion=1;scope='Selected Windows production storage/Profile prerequisites and direct-child ConPTY; GUI behavior requires manual evidence';build=$build;windowsVersion=[Environment]::OSVersion.VersionString;elevatedAdministrator=$role;nativeCorePassed=$corePassed;nativeCasesExpected=22;nativeCases=$nativeCases;conpty=$nativeReport;workspaceRuns=$windowRuns;productionStartupValidated=$false;ordinaryUserProductAcceptance='pending';latencyComparisonValid=$false;error=if($failure){$failure.Exception.Message}else{$null};processRuns=$runs;cleanup=[pscustomobject]@{processExited=$exited;fixtureCreated=$created;fixtureRemoved=$removed;fixture=$fixture;errors=$cleanupErrors}}
+    $summary=[pscustomobject]@{schemaVersion=1;scope='Selected Windows production storage/Profile prerequisites and direct-child ConPTY; GUI behavior requires manual evidence';build=$build;windowsVersion=[Environment]::OSVersion.VersionString;elevatedAdministrator=$role;nativeCorePassed=$corePassed;nativeCasesExpected=23;nativeCases=$nativeCases;conpty=$nativeReport;workspaceRuns=$windowRuns;productionStartupValidated=$false;ordinaryUserProductAcceptance='pending';latencyComparisonValid=$false;error=if($failure){$failure.Exception.Message}else{$null};processRuns=$runs;cleanup=[pscustomobject]@{processExited=$exited;fixtureCreated=$created;fixtureRemoved=$removed;fixture=$fixture;errors=$cleanupErrors}}
     [IO.File]::WriteAllText((Join-Path $out 'product-summary.json'),($summary|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
     Compress-Archive -Path "$out\*" -DestinationPath "$out.zip" -Force
     Write-Host "Send this product prerequisite archive back: $out.zip"

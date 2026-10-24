@@ -56,7 +56,7 @@ description = "Disposable Windows CI: actual workspace Profile controls and norm
 run = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/windows-product-probe/window-smoke.ps1"
 
 [tasks.test-windows-product]
-description = "Run exactly 22 native Windows production directory, settings, SQLite, keymap and discovery cases; no GUI or ordinary-user claim"
+description = "Run exactly 23 native Windows production directory, settings, SQLite, keymap and discovery cases; no GUI or ordinary-user claim"
 run = "node scripts/windows-product-probe/test-native.mjs"
 
 [tasks.test-windows-product-runner]

@@ -16,6 +16,6 @@ Windows 自动 Shell 发现与实际 PTY 启动均使用锁定 `portable-pty 0.9
 
 纯元数据用例覆盖系统 Shell 身份、WSL 固定发行版、路径预算，以及 PATH 迁移后 PowerShell 7 的实际候选更新、隐藏状态和删除墓碑。它们可以在 Linux 执行，但不算 Windows 注册表／ConPTY 验收。Windows PTY 构建会实际求值静态日志断言；Windows 目标完整桌面检查已通过，保留既有平台功能警告。
 
-Windows 原生验收入口、组包与采集器逐项要求 22 个测试名称／结果，其中包含 4 项发现用例。旧 21 项清单与旧回传保持原范围，不能用旧成功收据覆盖新范围。Linux真实执行49项PTY回归（含4项纯发现／迁移用例）、11项执行器回归通过；Windows PTY全部目标严格检查、Linux正式生产组合全部目标严格Clippy、基础check及39项归属回归与材料复查通过，结果与清理记录归档到 `target/probes/windows-profile-environment/verification-v1.json`。
+Windows 原生验收入口、组包与采集器现逐项要求23个测试名称／结果，其中5项为发现用例，包含长 PATH 晚出现候选及首匹配优先。旧21／22项清单与回传保持原范围，不能用旧成功收据覆盖新范围。此前环境刷新批次及清理记录见 `target/probes/windows-profile-environment/verification-v1.json`；长 PATH 修复与原生复验见 `target/probes/windows-product-window/long-path-fix-v1/`。
 
 待真实 Windows 普通用户验证：保持 PulseTerm 运行时更新可识别 Shell 的用户 PATH，重新发现并明确批准启动，核对新会话 PATH、旧会话不变、隐藏／删除保持，以及环境注册表读取失败的行为。该批不变更系统策略或用户注册表来伪造原生通过；MSVC／普通用户实机及发行许可门禁仍保留。
