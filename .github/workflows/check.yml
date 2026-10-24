@@ -93,6 +93,9 @@ jobs:
       - name: Dependency scope
         if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
         run: mise run distribution-review
+      - name: Rust MPL source companion
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: mise run distribution-sources
       - name: License texts
         if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
         run: mise run third-party-release-check
@@ -109,6 +112,7 @@ jobs:
           path: |
             target/probes/dependency-audit/**
             target/probes/distribution-review*
+            target/probes/distribution-sources/**
             target/probes/third-party*
             NOTICE
             THIRD_PARTY.md

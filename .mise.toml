@@ -1040,6 +1040,11 @@ description = "Review frozen candidate target dependency scopes without granting
 env = { PYTHONDONTWRITEBYTECODE = "1" }
 run = ["python3 scripts/test-distribution-review.py", "python3 scripts/distribution-review.py"]
 
+[tasks.distribution-sources]
+description = "Prepare checksum-verified Rust MPL sources without approving publication"
+env = { PYTHONDONTWRITEBYTECODE = "1" }
+run = ["python3 scripts/test-distribution-sources.py", "python3 scripts/distribution-sources.py"]
+
 [tasks.third-party-release-check]
 description = "Reject incomplete attribution texts, including link-only supplements; policy remains separate"
 env = { PYTHONDONTWRITEBYTECODE = "1" }

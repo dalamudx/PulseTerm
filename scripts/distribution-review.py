@@ -12,10 +12,10 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = (
     ('linux-x64', 'x86_64-unknown-linux-gnu', 'workspace-cli,workspace-ssh', 'candidate'),
-    ('windows-msvc-x64', 'x86_64-pc-windows-msvc', 'workspace-ssh', 'candidate'),
-    ('macos-arm64', 'aarch64-apple-darwin', 'workspace-ssh', 'candidate'),
-    ('macos-x64', 'x86_64-apple-darwin', 'workspace-ssh', 'candidate'),
-    ('windows-gnu-comparison', 'x86_64-pc-windows-gnu', 'workspace-ssh', 'comparison-only'),
+    ('windows-msvc-x64', 'x86_64-pc-windows-msvc', 'workspace-cli,workspace-ssh', 'candidate'),
+    ('macos-arm64', 'aarch64-apple-darwin', 'workspace-cli,workspace-ssh', 'candidate'),
+    ('macos-x64', 'x86_64-apple-darwin', 'workspace-cli,workspace-ssh', 'candidate'),
+    ('windows-gnu-comparison', 'x86_64-pc-windows-gnu', 'workspace-cli,workspace-ssh', 'comparison-only'),
 )
 EDGES = {'normal': 'normal,no-proc-macro', 'combined': 'normal,build'}
 PATTERN = re.compile(r'([A-Za-z0-9_-]+) v([^\s()]+)(?: \([^\r\n]*\))?(?: \(\*\))?')
@@ -150,7 +150,7 @@ def markdown(report):
     for p in report['profiles']:
         lines.append(f'| {p["name"]} | {len(p["normalNonProcMacroCargo"])} | {len(p["additionalBuildOrProcMacroCargo"])} | {retained} | {len(p["incompleteTextComponents"])} |')
     lines.extend(['', f'Workspace text gate remains unchanged: {len(report["workspaceMissingTexts"])} incomplete components.',
-                  'Windows GNU is a comparison, not an adopted distribution toolchain. Non-Linux CLI is not selected.',
+                  'All candidate profiles include CLI and SSH. Windows GNU remains a comparison, not an adopted distribution toolchain.',
                   'Foreign target resolution is not foreign native build evidence. Cargo graphs also contain compile-time code.',
                   'All npm packages and assets are retained. Bundler output has not been pruned or approved.',
                   'Actual binary links, system libraries, license acceptance, maintenance, packaging and signing remain unreviewed.', ''])

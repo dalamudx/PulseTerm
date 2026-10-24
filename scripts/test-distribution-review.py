@@ -50,6 +50,7 @@ class ReviewTests(unittest.TestCase):
             return 'rustc 1.95.0\nhost: x86_64-unknown-linux-gnu\n'
         self.assertIn('--frozen', command)
         self.assertIn('--no-default-features', command)
+        self.assertEqual(command[command.index('--features') + 1], 'workspace-cli,workspace-ssh')
         text = 'pulseterm-desktop v7.1.0 (/fixed/app)\nordinary v1.0.0\n'
         if command[command.index('--edges') + 1] == 'normal,build':
             text += 'compiler v1.0.0 (proc-macro)\n'
@@ -71,8 +72,7 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(profile['additionalBuildOrProcMacroCargo'], ['cargo:compiler@1.0.0'])
             self.assertIn('npm:declared-dev@1.0.0', profile['allSelectedComponents'])
             self.assertEqual(len(profile['incompleteTextComponents']), 2)
-            if not profile['name'].startswith('linux'):
-                self.assertNotIn('workspace-cli', profile['features'])
+            self.assertEqual(profile['features'], ['workspace-cli', 'workspace-ssh'])
         self.assertEqual(report['profiles'][-1]['purpose'], 'comparison-only')
 
     def test_unknown_component_rejected(self):
