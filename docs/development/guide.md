@@ -339,7 +339,7 @@ pnpm tauri build                   # 本地打包
 |---|---|---|
 | [check.yml](../../.github/workflows/check.yml) | PR／main push／手动 | 三平台核心与组件、平台测试；Linux 产品与 SSH 授权回归。发行归属、依赖范围、许可原文与审计在独立 job，失败仍阻断发行 |
 | [validation.yml](../../.github/workflows/validation.yml) | 仅手动 | 按需选择协议、认证、CLI、终端、目录管理、外观、验证窗口或负载；选择 all 时分组并行，保留各组证据 |
-| [windows-product.yml](../../.github/workflows/windows-product.yml) | 相关路径 PR／手动 | MSVC 精确原生用例、PS5.1 采集回归、完整桌面检查与本地工作区构建，上传逐组原始日志 |
+| [windows-product.yml](../../.github/workflows/windows-product.yml) | 相关路径 PR／手动 | MSVC 精确原生用例、PS5.1 采集回归、完整桌面检查与本地工作区构建；仅手动增加真实窗口加载与正常关闭，上传逐组／窗口证据 |
 
 当前远端为 [GitHub 仓库](https://github.com/dalamudx/PulseTerm)，工作流入口统一在 `.github/workflows/`。按具体 job／步骤／收据判断实际结果；现有维护公告与完整许可原文缺口继续阻断发行，不通过忽略步骤或删除依赖范围获得绿色状态。
 

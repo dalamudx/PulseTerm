@@ -51,6 +51,10 @@ run = ["cargo clippy -p xtask --features windows-settings-probe --all-targets --
 description = "Reject incomplete native test identities and preserve failed-run evidence without treating simulated runs as Windows acceptance"
 run = "node --test scripts/windows-product-probe/test-native.test.mjs"
 
+[tasks.probe-windows-product-window]
+description = "Disposable Windows CI: actual workspace Profile controls and normal native shutdown; no ordinary-user or PTY acceptance"
+run = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/windows-product-probe/window-smoke.ps1"
+
 [tasks.test-windows-product]
 description = "Run exactly 22 native Windows production directory, settings, SQLite, keymap and discovery cases; no GUI or ordinary-user claim"
 run = "node scripts/windows-product-probe/test-native.mjs"

@@ -20,7 +20,7 @@ Windows 本地、SSH 和 CLI 入口已接线。22 项 MSVC 生产前置用例及
 | 入口 | 执行范围 | 证据边界 |
 |---|---|---|
 | [check.yml](../../.github/workflows/check.yml) | 三平台核心、平台策略、Agent；Linux／macOS／Windows CLI 组件；Windows 配置来源；Linux 产品探针 | runner 权限及虚拟显示不代表普通用户、系统 IME 或真实 GPU |
-| [windows-product.yml](../../.github/workflows/windows-product.yml) | MSVC 核心用例、PowerShell 5.1 采集、前端生成、完整桌面检查和本地工作区构建 | 可手动执行；上传逐组收据，不发布验证包或登记 GUI 通过 |
+| [windows-product.yml](../../.github/workflows/windows-product.yml) | MSVC 核心用例、PowerShell 5.1 采集、前端生成、完整桌面检查和本地工作区构建；手动运行时另查实际窗口 Profile 控件与正常关闭 | 上传逐组／窗口收据，不发布验证包，不代表普通用户、PTY 或完整 GUI 验收 |
 | `mise run test-windows-product` | 固定 MSVC，逐项核对 22 项生产目录／设置／SQLite／键位／发现用例 | 零／部分／忽略／错名／重复／未知退出均失败；取消不能证明线程结束 |
 | `mise run test-cli-transport` | Linux／macOS 13 项协议与端点预留；Windows 3 项同源管道及 4 项冷启动元数据夹具 | 不启动 GUI；元数据夹具不等于 CreateProcess 验收 |
 | `mise run test-windows-ssh-config` | Windows 4 项同源来源／Include／替换保护夹具 | 不读取密钥，不代表 GUI 导入或 SSH 连接验收 |

@@ -62,6 +62,11 @@ jobs:
         run: mise exec -- cargo check -p pulseterm-desktop --features workspace-cli,workspace-ssh --all-targets --locked
       - name: Build
         run: mise exec -- cargo build -p pulseterm-desktop --features workspace --bin pulseterm-workspace --locked
+      - name: Production window
+        if: github.event_name == 'workflow_dispatch'
+        timeout-minutes: 3
+        shell: powershell
+        run: mise run probe-windows-product-window
       - name: Evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,4 +75,5 @@ jobs:
           path: |
             target/probes/windows-product-native.json
             target/probes/windows-product-native/
+            target/probes/windows-product-window/
           if-no-files-found: warn
