@@ -1,11 +1,13 @@
 //! Bounded Windows executable discovery. Reads metadata only; never executes a candidate.
-use super::{MAX_EXECUTABLE_BYTES, MAX_PATH_COMPONENTS, ProfileError, ShellCandidate, ShellKind};
+use super::{MAX_EXECUTABLE_BYTES, ProfileError, ShellCandidate, ShellKind};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
     path::{Path, PathBuf},
 };
 
+// Windows toolchains commonly add more entries than the Unix discovery budget allows.
+const MAX_WINDOWS_PATH_COMPONENTS: usize = 256;
 #[cfg(windows)]
 const _: () = assert!((log::STATIC_MAX_LEVEL as usize) <= (log::LevelFilter::Debug as usize));
 
@@ -75,7 +77,7 @@ pub fn discover_windows_shells(
     )?;
     admit(ShellKind::Wsl, system_directory.join("wsl.exe"))?;
     for (index, directory) in std::env::split_paths(path).enumerate() {
-        if index >= MAX_PATH_COMPONENTS {
+        if index >= MAX_WINDOWS_PATH_COMPONENTS {
             return Err(ProfileError::DiscoveryLimit);
         }
         if directory.is_absolute() {
@@ -149,6 +151,41 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn long_windows_path_finds_late_pwsh_and_keeps_first_match() -> TestResult {
+        let (root, system, _) = fixture()?;
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        for directory in [&first, &second] {
+            std::fs::create_dir(directory)?;
+            std::fs::write(directory.join("pwsh.exe"), b"metadata only; must never run")?;
+        }
+        for count in [65, 256] {
+            let mut paths = vec![root.path().join("missing"); count - 2];
+            paths.extend([first.clone(), second.clone()]);
+            let discovered =
+                discover_windows_shells(&std::env::join_paths(paths)?, &system, None, None)?;
+            assert!(
+                discovered
+                    .iter()
+                    .any(|candidate| candidate.kind() == ShellKind::Cmd)
+            );
+            assert!(
+                discovered
+                    .iter()
+                    .any(|candidate| candidate.kind() == ShellKind::PowerShell)
+            );
+            assert_eq!(
+                discovered
+                    .iter()
+                    .find(|candidate| candidate.kind() == ShellKind::Pwsh)
+                    .ok_or("late PATH candidate missing")?
+                    .executable(),
+                first.join("pwsh.exe"),
+            );
+        }
+        Ok(())
+    }
+    #[test]
     fn relative_system_locations_and_unbounded_paths_are_rejected() -> TestResult {
         let (_root, system, _) = fixture()?;
         assert!(
@@ -156,6 +193,15 @@ mod tests {
         );
         assert!(matches!(
             discover_windows_shells(OsStr::new(&"x".repeat(64 * 1024 + 1)), &system, None, None),
+            Err(ProfileError::DiscoveryLimit)
+        ));
+        let over_budget = std::env::join_paths(vec![system.clone(); 257])?;
+        assert!(matches!(
+            discover_windows_shells(&over_budget, &system, None, None),
+            Err(ProfileError::DiscoveryLimit)
+        ));
+        assert!(matches!(
+            discover_windows_shells(OsStr::new("invalid\0path"), &system, None, None),
             Err(ProfileError::DiscoveryLimit)
         ));
         Ok(())

@@ -26,7 +26,7 @@ Windows 本地、SSH 和 CLI 入口已接线。22 项 MSVC 生产前置用例及
 | `mise run test-windows-ssh-config` | Windows 4 项同源来源／Include／替换保护夹具 | 不读取密钥，不代表 GUI 导入或 SSH 连接验收 |
 
 
-首次手动实窗 CI `40104139514` 的 MSVC 前置、检查与构建通过；WebView2 已显示生产页面并确认原页，Profile 读取却返回 `workspace.unavailable`，截图显示“无法读取本地 Profile”。未出现可用 Profile，夹具在原60秒期限后强制回收，正常关闭未执行，不登记为关闭故障或 GUI 通过。诊断继续细分目录／数据库准入、发现和投影阶段，只记录固定代码，不包含路径、环境值或记录内容。
+手动实窗 CI `40104139514`／`40105898443` 的 MSVC 前置、检查与构建通过，WebView2 已显示生产页面并确认原页；后者将 Profile 失败定位为 `profile.discovery_limit`。runner 继承 PATH 有76段，Windows 发现却复用了 Unix 的64段预算。现将 Windows 预算独立为256段，保留64KiB总量、单个路径预算和超限整体拒绝。65／256段晚出现候选与首匹配优先回归在修复前复现失败；修复后的50项PTY回归、严格检查及基础检查通过，实际窗口复验仍待执行。两次旧窗口均由夹具强制回收，正常关闭未执行，不登记为关闭故障或 GUI 通过。
 基础验证沿用 `mise run check`、`test`、`probe`、`audit`。组件执行器共用精确测试身份校验；Windows 核心收据保存独立 runId、源码指纹、stdout／stderr 和退出状态，失败撤销 latest 成功指针，历史批次保留。原生完成状态未知时停止后续组并保留夹具。
 
 远程已切换为 [GitHub](https://github.com/dalamudx/PulseTerm)，使用 `.github/workflows/` 的三平台与 MSVC 入口。按实际运行收据回写本页和[验证记录](validation.md)，不以工作流存在、headless 或交叉编译替代原生实窗验收。
