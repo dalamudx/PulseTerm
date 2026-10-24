@@ -1,6 +1,7 @@
-//! Native filesystem and restricted web handoff primitives; no page or credential authority.
+//! Native filesystem and restricted system integration; no page or credential authority.
 #![deny(unsafe_code)]
 
+pub mod clipboard;
 #[cfg(any(windows, test))]
 mod file_state;
 #[cfg(target_os = "macos")]

@@ -3,19 +3,7 @@ use objc2::MainThreadMarker;
 use objc2_app_kit::NSPasteboard;
 use objc2_foundation::NSString;
 
-/// Fixed failures; clipboard bytes are never included in errors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ClipboardReadError {
-    /// The original caller is no longer authorized.
-    #[error("clipboard.denied")]
-    Denied,
-    /// The main thread or valid UTF-8 plain text is unavailable.
-    #[error("clipboard.unavailable")]
-    Unavailable,
-    /// The native text exceeds the caller's byte budget.
-    #[error("clipboard.too_large")]
-    TooLarge,
-}
+pub use crate::clipboard::ClipboardReadError;
 
 /// Read only general UTF-8 plain text on the main thread after authorization.
 /// Recheck authorization before returning; the native call itself is not cancellable.

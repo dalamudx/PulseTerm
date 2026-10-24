@@ -6,9 +6,9 @@
 
 右键粘贴只在已启用偏好、当前可输入 Surface、可见页面及真实右键事件中开始。终端处于鼠标报告模式时保留原报告行为，不读取剪贴板。读取结果进入原 PasteGate：最多 1012 UTF-8 字节，C0／C1 不支持项拒绝，多行仍须原页面和原视图的独立批准。读取本身不授权提交，输入仍须后端 verified Commit ACK 和 capture 确认。
 
-Linux 与 macOS 产品复用 `workspace_terminal_clipboard_prepare/read/cancel`。准备固定原 WindowToken、page nonce、connection、已确认输入及五秒期限；随机一次性票据既不能换连接也不能重用。Linux 使用异步 GTK `request_text`；macOS 在主线程使用 AppKit `NSPasteboard`，只请求 `public.utf8-plain-text`，检查原生数据长度后才复制并严格解码 UTF-8。实际读取前后都重验原连接、输入授权、窗口焦点和当前页面。换页、resize、取消、关闭、过期或无法核实的状态拒绝晚到文本；命令只返回该次明确读取的纯文本，不扩大 OSC 52 权限。
+三平台产品复用 `workspace_terminal_clipboard_prepare/read/cancel`。准备固定原 WindowToken、page nonce、connection、已确认输入及五秒期限；随机一次性票据既不能换连接也不能重用。Linux 使用异步 GTK `request_text`；macOS 在主线程使用 AppKit `NSPasteboard`，只请求 `public.utf8-plain-text`，检查原生数据长度后才复制并严格解码 UTF-8。Windows 在窗口线程只请求 `CF_UNICODETEXT`，按实际内存大小和字节预算约束 UTF-16 扫描，要求 NUL 终止与严格 UTF-16，并在转换后核对1012字节 UTF-8 上限；不重试系统剪贴板占用，不修改或释放系统持有的数据。实际读取前后都重验原连接、输入授权、窗口焦点和当前页面。换页、resize、取消、关闭、过期或无法核实的状态拒绝晚到文本；命令只返回该次明确读取的纯文本，不扩大 OSC 52 权限。
 
-原生读全局单槽的 OwnedSemaphorePermit 由真正的 GTK 回调或 macOS 主线程读取闭包持有。前端超时或等待者取消可以撤销发布，不能提前释放额度；应用退出 barrier 等待实际读取结束。GTK 请求和 AppKit 原生读取都不提供这里可用的同步取消；期限不等于资源退出证明。系统提供者可能先分配原生文本，1012 字节检查限制返回和后续复制，不主张限制系统自身的分配。Windows 产品原生读取仍固定拒绝；独立浏览器 Surface 的权限策略不能代替平台产品验收。macOS 新增夹具使用独立命名剪贴板检查编码、预算和撤权，不访问用户的通用剪贴板；原生测试与真实右键、多行批准和退出使用链分别验收。
+原生读全局单槽的 OwnedSemaphorePermit 由真正的 GTK 回调或 macOS／Windows 窗口线程读取闭包持有。前端超时或等待者取消可以撤销发布，不能提前释放额度；应用退出 barrier 等待实际读取结束。GTK 请求、AppKit 和 Win32 原生读取都不提供这里可用的同步取消；期限不等于资源退出证明。系统提供者可能先分配原生文本，1012字节检查限制返回和后续复制，不主张限制系统自身的分配。Win32 内存锁和打开的剪贴板在原生作用域结束时归还，关闭失败不发布文本。独立浏览器 Surface 的权限策略不能代替平台产品验收。macOS 私有命名剪贴板夹具已在原生 CI 通过，未访问用户的通用剪贴板；Windows 新增无授权拒绝和 UTF-16 边界夹具，仍待原生执行。两平台真实右键、多行批准、取消／刷新和退出使用链继续独立验收。
 
 当前 WebKit 在实际权限信号之前拒绝 Clipboard API 读取，未采用的全局 JavaScript 访问或单次 WebKit 许可候选均不启用。失败阶段只留固定状态证据，不记录剪贴板文本、票据或终端内容。
 

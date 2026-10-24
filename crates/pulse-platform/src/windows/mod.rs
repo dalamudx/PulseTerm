@@ -1,4 +1,5 @@
-//! Windows local private directories and file slots. Synchronous; dispatch off GUI/runtime threads.
+//! Windows private filesystem and restricted system integration.
+//! Dispatch filesystem operations off GUI/runtime threads; clipboard reads use the window thread.
 use crate::{DirectoryError::Location, DirectoryResult, policy};
 use std::{
     fs::{File, OpenOptions},
@@ -15,6 +16,17 @@ mod local_control;
 mod private_file;
 #[allow(unsafe_code)]
 mod sys;
+pub use crate::clipboard::ClipboardReadError;
+
+/// Read only CF_UNICODETEXT, bounded and strictly decoded, after original-view authorization.
+/// The caller dispatches on the window thread and retains native credit until return.
+/// Clipboard access is not retried or synchronously cancelled; no clipboard data is changed.
+pub fn read_clipboard_text(
+    max_bytes: usize,
+    authorize: impl FnMut() -> bool,
+) -> Result<String, ClipboardReadError> {
+    sys::read_clipboard_text(max_bytes, authorize)
+}
 pub use crate::file_state::FileSnapshot;
 pub use crate::web_link::WebLinkError;
 pub use local_control::{

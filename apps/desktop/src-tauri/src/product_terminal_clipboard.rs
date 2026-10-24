@@ -1,28 +1,28 @@
 //! One-use clipboard reads bound to a confirmed input view; native callbacks own credit.
 use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 use tokio::sync::OwnedSemaphorePermit;
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 const CLIPBOARD_DEADLINE: Duration = Duration::from_secs(5);
 #[derive(Clone)]
 pub(super) struct Grant {
     id: Uuid,
     nonce: Uuid,
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     connection: Uuid,
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     pub(super) expires: tokio::time::Instant,
     cancelled: Arc<AtomicBool>,
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     started: bool,
 }
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 pub(super) struct ReadJob {
     grant: Grant,
     _credit: OwnedSemaphorePermit,
 }
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
 impl ReadJob {
     pub(super) fn current(&self, bank: &TerminalBank) -> Result<()> {
         if self.grant.cancelled.load(Ordering::SeqCst)
@@ -34,7 +34,7 @@ impl ReadJob {
     }
 }
 impl TerminalBank {
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     fn clipboard_current(&self, nonce: Uuid, connection: Uuid) -> Result<()> {
         let entry = self.entry(nonce, connection)?;
         let _admission = entry
@@ -52,7 +52,7 @@ impl TerminalBank {
             .check_current()
             .map_err(|_| "workspace.denied")
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     pub(super) fn prepare_clipboard(&self, nonce: Uuid, connection: Uuid) -> Result<Uuid> {
         self.clipboard_current(nonce, connection)?;
         let mut slot = self.clipboard.lock().map_err(|_| "workspace.unavailable")?;
@@ -85,7 +85,7 @@ impl TerminalBank {
         }
         Ok(())
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows, test))]
     pub(super) fn begin_clipboard(&self, nonce: Uuid, id: Uuid) -> Result<ReadJob> {
         let mut slot = self.clipboard.lock().map_err(|_| "workspace.unavailable")?;
         let grant = slot
@@ -116,7 +116,7 @@ pub(in super::super) fn workspace_terminal_clipboard_prepare(
     connection: String,
 ) -> Result<String> {
     let (nonce, _) = page(&window, &state, &nonce)?;
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     {
         state
             .0
@@ -124,7 +124,7 @@ pub(in super::super) fn workspace_terminal_clipboard_prepare(
             .prepare_clipboard(nonce, ticket(&connection)?)
             .map(|id| id.to_string())
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let _ = (nonce, connection);
         Err("workspace.denied")
@@ -196,9 +196,12 @@ pub(in super::super) async fn workspace_terminal_clipboard_read(
             .await
             .map_err(|_| "workspace.clipboard_unavailable")?
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
+        #[cfg(target_os = "macos")]
         use pulse_platform::macos::{ClipboardReadError, read_clipboard_text};
+        #[cfg(windows)]
+        use pulse_platform::windows::{ClipboardReadError, read_clipboard_text};
         let state = state.inner().clone();
         let job = state.0.terminals.begin_clipboard(nonce, id)?;
         let source = window.clone();
@@ -224,7 +227,7 @@ pub(in super::super) async fn workspace_terminal_clipboard_read(
             .await
             .map_err(|_| "workspace.clipboard_unavailable")?
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let _ = (nonce, id);
         Err("workspace.denied")

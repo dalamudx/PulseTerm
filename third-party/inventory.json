@@ -449,7 +449,7 @@
     "crates/pulse-cap/Cargo.toml": "85dbc17c0de165c424cd3622bbf535708af47cec0269336c70e78f1cd009aaff",
     "crates/pulse-core/Cargo.toml": "780c341d6a230ed6d0faa664786cd249810a0e0cfb5b13632cf7ee0ded5cfbc4",
     "crates/pulse-ipc/Cargo.toml": "a5080bc314cd7cde0fd25622630993546d2f5b7d04b41c2a7e6576004dc7e722",
-    "crates/pulse-platform/Cargo.toml": "3cf9a8afce72af2a54ba8557f25b36ba98d962d927dcc8100302ee4f58458b76",
+    "crates/pulse-platform/Cargo.toml": "a0a92518b08a5d35227c247314197731b9d48d2507c3d3bb0b549842ff3d54f7",
     "crates/pulse-pty/Cargo.toml": "10932e757c17414f6689ee0a1707b616f6115eb766ab0de8d90502b3c2754bdf",
     "crates/pulse-route/Cargo.toml": "02f156d607db532a2115992031e18759c3442927a667838206870850bf9a7daa",
     "crates/pulse-ssh/Cargo.toml": "da4b6575df9398e67aa61d666f0452161c40f5bb1822f4aae1b209bfda2f20c2",

@@ -1,3 +1,6 @@
+#[path = "clipboard.rs"]
+mod clipboard;
+pub(super) use clipboard::read_clipboard_text;
 #[path = "shell_metadata.rs"]
 mod shell_metadata;
 use crate::{DirectoryError::Location, DirectoryResult, policy};
