@@ -26,7 +26,7 @@ Windows 本地、SSH 和 CLI 入口已接线。22 项 MSVC 生产前置用例及
 | `mise run test-windows-ssh-config` | Windows 4 项同源来源／Include／替换保护夹具 | 不读取密钥，不代表 GUI 导入或 SSH 连接验收 |
 
 
-手动实窗 CI `40104139514`／`40105898443` 的 MSVC 前置、检查与构建通过，WebView2 已显示生产页面并确认原页；后者将 Profile 失败定位为 `profile.discovery_limit`。runner 继承 PATH 有76段，Windows 发现却复用了 Unix 的64段预算。现将 Windows 预算独立为256段，保留64KiB总量、单个路径预算和超限整体拒绝。65／256段晚出现候选与首匹配优先回归在修复前复现失败；修复后的50项PTY回归、严格检查及基础检查通过，实际窗口复验仍待执行。两次旧窗口均由夹具强制回收，正常关闭未执行，不登记为关闭故障或 GUI 通过。
+Windows 长 PATH 修复（`457c6f22`）及23项清单同步（`af7919f2`）已在 CI `40108240544` 原生通过：五组23项测试身份及9份源码摘要匹配，完整 MSVC 检查／构建通过；真实工作区显示 PowerShell 7、Windows PowerShell 和 cmd，正常关窗后原生排空与7个已观察 WebView 子进程退出均确认，无强制清理或残留目录。提权 runner 未启动 PTY，不计作普通用户、输入／刷新或性能验收。原64段 PATH 预算导致的两轮发现失败，以及漏同步清单而提前停止的记录均保留，见 `target/probes/windows-product-window/`；最终收据见 `accepted/40108240544/verification.json`。
 基础验证沿用 `mise run check`、`test`、`probe`、`audit`。组件执行器共用精确测试身份校验；Windows 核心收据保存独立 runId、源码指纹、stdout／stderr 和退出状态，失败撤销 latest 成功指针，历史批次保留。原生完成状态未知时停止后续组并保留夹具。
 
 远程已切换为 [GitHub](https://github.com/dalamudx/PulseTerm)，使用 `.github/workflows/` 的三平台与 MSVC 入口。按实际运行收据回写本页和[验证记录](validation.md)，不以工作流存在、headless 或交叉编译替代原生实窗验收。
